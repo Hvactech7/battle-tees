@@ -668,9 +668,18 @@ function handleCourseResult(m){
   clearTimeout(p.timer);delete pendingCourse[m.rid];
   p.res(m);
 }
-function piCourseLookup(q,lat,lon){
-  return new Promise((res,rej)=>{
+async function waitForRelay(ms){
+  const until=Date.now()+ms;
+  for(;;){
     const ws=(sockOpen&&sock)||((lobbySock&&lobbySock.readyState===1)?lobbySock:null);
+    if(ws)return ws;
+    if(Date.now()>=until)return null;
+    await new Promise(r=>setTimeout(r,300));
+  }
+}
+async function piCourseLookup(q,lat,lon){
+  const ws=await waitForRelay(6000);
+  return new Promise((res,rej)=>{
     if(!ws)return rej(new Error('relay offline'));
     const rid='r'+Math.random().toString(36).slice(2,8);
     pendingCourse[rid]={res,timer:setTimeout(()=>{delete pendingCourse[rid];rej(new Error('timeout'));},20000)};
