@@ -27,7 +27,7 @@
     --line:#d9ded9; --bg:#f4f6f4; --card:#ffffff;
     --red:#b3261e; --red-lt:#fdecea;
   }
-  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
   html,body{height:100%}
   body{font-family:Inter,-apple-system,sans-serif;background:var(--bg);color:var(--ink);
     -webkit-user-select:none;user-select:none;overscroll-behavior:none;
@@ -358,8 +358,24 @@ function onlineList(){
   return nearby.map(p=>({...p,near:!!(myCoords&&p.lat!=null&&kmBetween(myCoords[0],myCoords[1],p.lat,p.lon)<5)}))
     .sort((a,b)=>(b.near?1:0)-(a.near?1:0));
 }
-let addingPlayer=false;
-function toggleAddPlayer(){addingPlayer=!addingPlayer;render();}
+let addingPlayer=false,editingPlayer=null;
+function toggleAddPlayer(){addingPlayer=!addingPlayer;editingPlayer=null;render();}
+function startEditPlayer(id){editingPlayer=id;addingPlayer=false;render();}
+function cancelEditPlayer(){editingPlayer=null;render();}
+function saveEditPlayer(){
+  const n=document.getElementById('epName'),x=document.getElementById('epIdx');
+  const name=(n&&n.value||'').trim();
+  const id=editingPlayer;
+  editingPlayer=null;
+  if(!name||!id){render();return;}
+  set(()=>{
+    const e=S.playerLib.find(p=>p.id===id);
+    if(!e)return;
+    e.name=name;
+    e.index=+((x&&x.value)||e.index)||e.index;
+    S.players.forEach(p=>{if(p.libId===id){p.name=e.name;p.index=e.index;}});
+  });
+}
 function addManualPlayer(){
   const n=document.getElementById('npName'),x=document.getElementById('npIdx');
   const name=(n&&n.value||'').trim();
@@ -586,9 +602,23 @@ function vHome(){
         <button class="ghost" onclick="toggleAddPlayer()">Cancel</button>
       </div>`
     :`<button class="ghost mt" onclick="toggleAddPlayer()">Add player</button>`}
-    ${S.playerLib.length?S.playerLib.map(e=>`<div class="row">
+    ${S.playerLib.length?S.playerLib.map(e=>editingPlayer===e.id?`
+      <div class="row" style="background:var(--green-lt);border-radius:10px;padding:9px 12px;border-top:none;margin:2px 0">
+        <div class="grid2" style="flex:1">
+          <div><div class="tiny">Name</div><input id="epName" type="text" value="${esc(e.name)}"></div>
+          <div><div class="tiny">Handicap index</div><input id="epIdx" type="text" inputmode="decimal" value="${e.index}"></div>
+        </div>
+      </div>
+      <div class="row" style="border-top:none">
+        <button class="ghost sel" style="flex:1" onclick="saveEditPlayer()">Save</button>
+        <button class="ghost" onclick="cancelEditPlayer()">Cancel</button>
+      </div>`
+    :`<div class="row">
       <div><b>${esc(e.name)}</b><div class="tiny">Index ${e.index}${e.teeName?` · prefers ${esc(e.teeName)} tees`:''}</div></div>
-      <button class="ghost danger" onclick="delPlayer('${e.id}')">✕</button></div>`).join('')
+      <span style="display:flex;gap:6px">
+        <button class="ghost" onclick="startEditPlayer('${e.id}')">Edit</button>
+        <button class="ghost danger" onclick="delPlayer('${e.id}')">✕</button>
+      </span></div>`).join('')
     :'<div class="tiny">Golfers you set up in a round are saved here automatically.</div>'}
   </div>
   <div class="card"><h2>New round</h2>
