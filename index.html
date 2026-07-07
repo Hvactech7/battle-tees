@@ -119,16 +119,17 @@
 const LS_KEY='wolfGolfV1';
 const HOLES=18;
 
+// Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
 function courseTealBend(){return {id:'teal-bend',name:'Teal Bend GC',
-  teeSets:[{id:'tb-blk',name:'Black',rating:73.9,slope:134},{id:'tb-blu',name:'Blue',rating:71.7,slope:129},{id:'tb-wht',name:'White',rating:69.3,slope:120}],
-  holes:[{par:4,si:5},{par:5,si:7},{par:4,si:13},{par:3,si:17},{par:4,si:11},{par:4,si:9},{par:4,si:3},{par:5,si:1},{par:3,si:15},
-         {par:5,si:8},{par:4,si:6},{par:3,si:18},{par:4,si:16},{par:4,si:2},{par:4,si:4},{par:3,si:14},{par:5,si:12},{par:4,si:10}]};}
+  teeSets:[{id:'tb-blk',name:'Black',rating:74.0,slope:135},{id:'tb-blu',name:'Blue',rating:72.0,slope:130},{id:'tb-bwc',name:'Blue/White Combo',rating:70.9,slope:127},{id:'tb-wht',name:'White',rating:69.4,slope:120},{id:'tb-wgc',name:'White/Gold Combo',rating:66.5,slope:114},{id:'tb-w-bwc',name:'Blue/White Combo (W)',rating:76.8,slope:136},{id:'tb-w-wht',name:'White (W)',rating:74.5,slope:132},{id:'tb-w-wgc',name:'White/Gold Combo (W)',rating:71.1,slope:122}],
+  holes:[{par:4,si:5},{par:5,si:11},{par:4,si:13},{par:3,si:15},{par:4,si:9},{par:4,si:3},{par:4,si:1},{par:5,si:7},{par:3,si:17},
+         {par:5,si:12},{par:4,si:6},{par:3,si:16},{par:4,si:18},{par:4,si:2},{par:4,si:4},{par:3,si:14},{par:5,si:8},{par:4,si:10}]};}
 function courseRanchoSolano(){return {id:'rancho-solano',name:'Rancho Solano GC',
-  teeSets:[{id:'rs-ch',name:'Championship',rating:71.6,slope:132},{id:'rs-rg',name:'Regular',rating:69.6,slope:126},{id:'rs-gd',name:'Gold',rating:67.7,slope:118},{id:'rs-rd',name:'Red',rating:65.9,slope:112}],
+  teeSets:[{id:'rs-blu',name:'Blue',rating:71.8,slope:133},{id:'rs-bwc',name:'Blue/White Combo',rating:70.9,slope:131},{id:'rs-wht',name:'White',rating:70.0,slope:128},{id:'rs-gd',name:'Gold',rating:67.8,slope:120},{id:'rs-rd',name:'Red',rating:65.7,slope:112},{id:'rs-w-wht',name:'White (W)',rating:75.5,slope:135},{id:'rs-w-gd',name:'Gold (W)',rating:72.9,slope:128},{id:'rs-w-rd',name:'Red (W)',rating:70.3,slope:123}],
   holes:[{par:5,si:3},{par:4,si:15},{par:4,si:1},{par:4,si:13},{par:3,si:7},{par:4,si:17},{par:5,si:5},{par:3,si:11},{par:4,si:9},
          {par:5,si:8},{par:4,si:2},{par:3,si:4},{par:4,si:6},{par:4,si:14},{par:3,si:18},{par:4,si:16},{par:5,si:12},{par:4,si:10}]};}
 function courseDarkHorse(){return {id:'darkhorse',name:'DarkHorse GC',
-  teeSets:[{id:'dh-blk',name:'Black',rating:75.0,slope:139},{id:'dh-cop',name:'Copper',rating:72.2,slope:136},{id:'dh-blu',name:'Blue',rating:70.9,slope:130},{id:'dh-wht',name:'White',rating:68.8,slope:126}],
+  teeSets:[{id:'dh-blk',name:'Black',rating:74.6,slope:137},{id:'dh-cop',name:'Copper',rating:73.1,slope:134},{id:'dh-blu',name:'Blue',rating:71.7,slope:130},{id:'dh-wht',name:'White',rating:69.5,slope:127},{id:'dh-rd',name:'Red',rating:64.4,slope:115},{id:'dh-w-blu',name:'Blue (W)',rating:77.4,slope:138},{id:'dh-w-wht',name:'White (W)',rating:75.0,slope:133},{id:'dh-w-rd',name:'Red (W)',rating:69.4,slope:125}],
   holes:[{par:4,si:10},{par:4,si:16},{par:3,si:8},{par:5,si:2},{par:4,si:4},{par:3,si:18},{par:5,si:6},{par:4,si:14},{par:4,si:12},
          {par:4,si:13},{par:5,si:1},{par:4,si:9},{par:3,si:11},{par:4,si:17},{par:4,si:3},{par:3,si:7},{par:4,si:5},{par:5,si:15}]};}
 function builtinCourses(){return [courseTealBend(),courseRanchoSolano(),courseDarkHorse()];}
@@ -136,7 +137,7 @@ function clone(o){return JSON.parse(JSON.stringify(o));}
 function defaultCourse(){return courseTealBend();}
 function defaultConfig(){
   return {
-    lens:'net', allowance:100, carryTies:false, last2LastPlace:true, _v:2,
+    lens:'net', allowance:100, carryTies:false, last2LastPlace:true, _v:3,
     pts:{partnerWin:1, fieldBeatsPartners:2, loneWin:2, fieldBeatsLone:1, blindWin:3, fieldBeatsBlind:1, ctp:1},
     track:{bunker:false,chips:false,pen:false},
   };
@@ -166,6 +167,21 @@ function load(){
       if(!s.config.track)s.config.track={bunker:false,chips:false,pen:false};
       if(!s.share)s.share={on:false,code:null};
       if(!s.me)s.me={name:'',index:10};
+      if((s.config._v||2)<3){
+        s.config._v=3;
+        const fresh=builtinCourses();
+        fresh.forEach(fc=>{const i=s.courses.findIndex(c=>c.id===fc.id);if(i>=0)s.courses[i]=fc;});
+        const af=fresh.find(fc=>fc.id===s.course.id);
+        if(af){
+          const oldTees=s.course.teeSets;
+          s.course=clone(af);
+          s.players.forEach(p=>{
+            const old=oldTees.find(t=>t.id===p.tee);
+            const match=old&&s.course.teeSets.find(t=>t.name.toLowerCase()===old.name.toLowerCase());
+            p.tee=match?match.id:s.course.teeSets[Math.min(1,s.course.teeSets.length-1)].id;
+          });
+        }
+      }
       if(!s.courses){
         s.courses=builtinCourses();
         if(s.course.name==='Sample Course'){
