@@ -695,10 +695,12 @@ async function useFoundCourse(idx){
   try{g=await piCourseLookup(c.name,c.lat,c.lon);}catch(e){}
   if(g&&g.ok&&g.course&&g.course.holes&&g.course.teeSets.length){
     syncLib();
+    const parts=String(g.matched||'').split(' - ');
+    const shownName=(parts.length===2&&parts[0].trim()===parts[1].trim())?parts[0].trim():(g.matched||g.course.name);
     S.course={id:'ghin-'+Date.now(),name:g.course.name,
       teeSets:g.course.teeSets.map((t,i)=>({id:'t'+Date.now()+i,name:t.name,rating:+t.rating||72,slope:+t.slope||113})),
-      holes:g.course.holes,
-      _note:`Loaded from USGA/GHIN: ${g.matched}${g.city?` (${g.city}, ${g.state})`:''} — pars, stroke indexes, tee ratings and slopes all included.`};
+      holes:g.course.holes,_noteOk:true,
+      _note:`Loaded from USGA/GHIN: ${shownName}${g.city?` (${g.city}, ${String(g.state||'').replace('US-','')})`:''} — pars, stroke indexes, tee ratings and slopes all included.`};
     const t=S.course.teeSets[Math.min(1,S.course.teeSets.length-1)].id;
     S.players.forEach(p=>p.tee=t);
     finder={status:'idle',choices:[],error:''};
@@ -758,7 +760,7 @@ function vCourse(){
     <input type="number" value="${t.slope}" style="width:20%" onchange="chTee(${i},'slope',this.value)" title="Slope">
     <button class="ghost danger" onclick="delTee(${i})">✕</button></div>`).join('');
   return topbar('Course setup','','home')+`<main>
-  ${c._note?`<div class="banner wolf">${esc(c._note)} <button class="ghost" style="margin-left:6px" onclick="set(()=>delete S.course._note)">Got it</button></div>`:''}
+  ${c._note?`<div class="banner ${c._noteOk?'ok':'wolf'}">${c._noteOk?'✓ ':''}${esc(c._note)} <button class="ghost" style="margin-left:6px" onclick="set(()=>{delete S.course._note;delete S.course._noteOk;})">Got it</button></div>`:''}
   <div class="card"><h2>Name</h2><input type="text" value="${esc(c.name)}" onchange="set(()=>S.course.name=this.value)" oninput="S.course.name=this.value;save()"></div>
   <div class="card"><h2>Tee sets — name · rating · slope</h2>${tees}
     <button class="ghost mt" onclick="addTee()">Add tee set</button>
