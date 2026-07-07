@@ -376,7 +376,23 @@ function onlineList(){
   return nearby.map(p=>({...p,near:!!(myCoords&&p.lat!=null&&kmBetween(myCoords[0],myCoords[1],p.lat,p.lon)<5)}))
     .sort((a,b)=>(b.near?1:0)-(a.near?1:0));
 }
-let addingPlayer=false,editingPlayer=null;
+let addingPlayer=false,editingPlayer=null,scanOpen=false,scanShown=[];
+function toggleScan(){
+  scanOpen=!scanOpen;
+  if(scanOpen){sendHello();grabCoords();}
+  render();
+}
+function savePresencePlayer(j){
+  const n=(scanShown||[])[j];
+  if(!n)return;
+  set(()=>{
+    let e=S.playerLib.find(x=>x.name.trim().toLowerCase()===n.name.trim().toLowerCase());
+    if(!e){e={id:'pl'+Date.now()+Math.floor(Math.random()*1e4)};S.playerLib.push(e);}
+    e.name=n.name;
+    e.index=+n.index||10;
+    if(n.tee)e.teeName=n.tee;
+  });
+}
 function toggleAddPlayer(){addingPlayer=!addingPlayer;editingPlayer=null;render();}
 function startEditPlayer(id){editingPlayer=id;addingPlayer=false;render();}
 function cancelEditPlayer(){editingPlayer=null;render();}
@@ -565,7 +581,12 @@ function vHome(){
   ${inRound?`<div class="card"><h2>Round in progress</h2>
     <div class="muted mb">${esc(S.course.name)} · thru ${S.round.holes.filter(r=>r.confirmed).length} holes</div>
     <button class="big" onclick="go('hole')">Continue round</button>
-    <button class="big warn mt" onclick="endRound()">End round now</button></div>`:''}
+    <button class="big warn mt" onclick="endRound()">End round now</button>
+    ${S.share.on?`<div class="row mt" style="border-top:1px solid var(--line)">
+        <span class="tiny">Live sync · <b class="num" style="font-size:16px;letter-spacing:2px">${esc(S.share.code)}</b> ${sockOpen?'<span style="color:var(--green-mid)">● connected</span>':'<span style="color:var(--red)">○ reconnecting…</span>'}</span>
+        <button class="ghost danger" onclick="leaveShare()">Leave</button></div>`
+      :`<button class="ghost mt" style="width:100%" onclick="shareRound()">Share this round with other phones</button>`}
+  </div>`:''}
   <div class="card"><h2>Course</h2>
     ${S.courses.map((c,i)=>{
       const par=c.holes.reduce((a,h)=>a+h.par,0);
@@ -589,24 +610,6 @@ function vHome(){
       <button class="ghost" onclick="cancelFind()">Dismiss</button></div>`:''}
     ${S.round.started?`<div class="tiny mt">Switching courses re-scores the round in progress against the new card.</div>`:''}
   </div>
-  <div class="card"><h2>Live round sync</h2>
-    ${S.share.on?`
-      <div class="center"><span class="bigscore num" style="letter-spacing:6px">${esc(S.share.code)}</span>
-        <div class="tiny mt">${sockOpen?'<span style="color:var(--green-mid)">● live — connected to the Pi</span>':'<span style="color:var(--red)">○ reconnecting…</span>'}</div>
-        <div class="tiny mt">Everyone else: open the app, tap Join, enter this code. Anyone in the round can enter scores, picks and stats — all phones stay in step.</div>
-      </div>
-      <button class="ghost danger mt" style="width:100%" onclick="leaveShare()">Leave shared round</button>`
-    :`
-      <div class="tiny">Add nearby players in round setup and their phones get an invitation automatically when you start. Invitations to you pop up at the top of this screen.</div>
-      ${S.round.started?`<button class="ghost mt" style="width:100%" onclick="shareRound()">Share this phone's current round</button>`:''}
-      <details class="mt"><summary class="tiny" style="cursor:pointer;color:var(--ink3)">Join with a code (backup if invitations don't appear)</summary>
-        <div class="row" style="border:none">
-          <input type="text" id="joincode" placeholder="ABCDE" maxlength="8" autocapitalize="characters" style="width:46%;text-transform:uppercase;font-family:Rajdhani,sans-serif;font-size:20px;letter-spacing:3px">
-          <button class="ghost sel" style="flex:1" onclick="joinRound()">Join</button>
-        </div>
-        <div class="tiny">Joining replaces this phone's current round with the shared one.</div>
-      </details>`}
-  </div>
   <div class="card"><h2>Players</h2>
     ${S.me.name?(editingMe?`
       <div class="row" style="background:var(--green-lt);border-radius:10px;padding:9px 12px;border-top:none;margin:2px 0">
@@ -621,7 +624,14 @@ function vHome(){
       </div>`
     :`<div class="row"><div><b>${esc(S.me.name)} <span class="pill gray">this phone's owner</span></b><div class="tiny">Index ${S.me.index}</div></div>
       <button class="ghost" onclick="editMe()">Edit</button></div>`):''}
-    ${onlineList().length?`<div class="tiny mt mb">On the app now: ${onlineList().map(n=>(n.near?'📍':'🌐')+esc(n.name)).join(' · ')}</div>`:''}
+    ${scanOpen?`
+      <div class="tiny mt">${(lobbySock&&lobbySock.readyState===1)?((scanShown=onlineList()).length?'On the app right now:':'Scanning… no one else is on the app at the moment.'):'Connecting to the Pi…'}</div>
+      ${(scanShown||[]).map((n,j)=>{
+        const saved=S.playerLib.some(x=>x.name.trim().toLowerCase()===n.name.trim().toLowerCase());
+        return `<div class="row"><div><b>${n.near?'📍':'🌐'} ${esc(n.name)}</b><div class="tiny">Index ${n.index!=null?n.index:'?'}${n.tee?` · ${esc(n.tee)} tees`:''} · ${n.near?'nearby':'online'}</div></div>
+          ${saved?'<span class="pill gray">saved</span>':`<button class="ghost sel" onclick="savePresencePlayer(${j})">Save</button>`}</div>`;}).join('')}
+      <button class="ghost mt" onclick="toggleScan()">Done</button>`
+    :`<button class="ghost mt" onclick="toggleScan()">📍 Find nearby players</button>`}
     ${addingPlayer?`<div class="grid2 mt">
         <div><div class="tiny">Name</div><input id="npName" type="text"></div>
         <div><div class="tiny">Handicap index</div><input id="npIdx" type="text" inputmode="decimal" placeholder="10.0"></div>
@@ -651,8 +661,15 @@ function vHome(){
     :'<div class="tiny">Golfers you set up in a round are saved here automatically.</div>'}
   </div>
   <div class="card"><h2>New round</h2>
-    <div class="tiny mb">Players, handicaps, tees and point values are set on the next screen.</div>
+    <div class="tiny mb">Players, handicaps, tees and point values are set on the next screen. Starting a round with nearby players invites their phones automatically.</div>
     <button class="big" onclick="go('setup')">${inRound?'Set up a new round':'Set up round'}</button></div>
+  ${!S.share.on?`<details class="card" style="padding:10px 14px"><summary class="tiny" style="cursor:pointer;color:var(--ink3)">Join a shared round with a code (backup)</summary>
+    <div class="row" style="border:none">
+      <input type="text" id="joincode" placeholder="ABCDE" maxlength="8" autocapitalize="characters" style="width:46%;text-transform:uppercase;font-family:Rajdhani,sans-serif;font-size:20px;letter-spacing:3px">
+      <button class="ghost sel" style="flex:1" onclick="joinRound()">Join</button>
+    </div>
+    <div class="tiny">Joining replaces this phone's current round with the shared one.</div>
+  </details>`:''}
   </main>`;
 }
 function endRound(){set(()=>{S.screen='settle';});}
