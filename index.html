@@ -1131,7 +1131,7 @@ function vHole(){
     ${holeNav}
     <div class="wolfcard"><span class="wolf-ic" aria-hidden="true">🐺</span>
       <div><b>${esc(names[rec.wolfAt??wolf])} is the Wolf</b>
-      <div class="tiny">hits first${h>=16&&S.config.last2LastPlace?' · last place picks up the wolf here':''}</div></div></div>
+      <div class="tiny">hits first · ${dots(rec.wolfAt??wolf)>0?`<span class="dots">${'●'.repeat(dots(rec.wolfAt??wolf))}</span> gets ${dots(rec.wolfAt??wolf)===2?'2 strokes':'a stroke'} here`:'no stroke here'}${h>=16&&S.config.last2LastPlace?' · last place picks up the wolf here':''}</div></div></div>
     ${carryNote}
     ${body}
   </main>`+tabs('hole');
