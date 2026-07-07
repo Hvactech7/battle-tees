@@ -353,7 +353,25 @@ function saveMe(){
   });
   sendHello();grabCoords();
 }
-function editMe(){set(()=>{S.me.name='';});}
+let editingMe=false;
+function editMe(){editingMe=true;addingPlayer=false;editingPlayer=null;render();}
+function cancelEditMe(){editingMe=false;render();}
+function saveEditMe(){
+  const n=document.getElementById('meEName'),x=document.getElementById('meEIdx');
+  const name=(n&&n.value||'').trim();
+  if(!name){editingMe=false;render();return;}
+  const old=S.me.name;
+  editingMe=false;
+  set(()=>{
+    S.me={name,index:+((x&&x.value)||S.me.index)||S.me.index};
+    const e=S.playerLib.find(p=>p.name.trim().toLowerCase()===old.trim().toLowerCase());
+    if(e){
+      e.name=name;e.index=S.me.index;
+      S.players.forEach(p=>{if(p.libId===e.id){p.name=name;p.index=S.me.index;}});
+    }
+  });
+  sendHello();
+}
 function onlineList(){
   return nearby.map(p=>({...p,near:!!(myCoords&&p.lat!=null&&kmBetween(myCoords[0],myCoords[1],p.lat,p.lon)<5)}))
     .sort((a,b)=>(b.near?1:0)-(a.near?1:0));
@@ -590,8 +608,19 @@ function vHome(){
       </details>`}
   </div>
   <div class="card"><h2>Players</h2>
-    ${S.me.name?`<div class="row"><div><b>${esc(S.me.name)} <span class="pill gray">you</span></b><div class="tiny">Index ${S.me.index}</div></div>
-      <button class="ghost" onclick="editMe()">Edit</button></div>`:''}
+    ${S.me.name?(editingMe?`
+      <div class="row" style="background:var(--green-lt);border-radius:10px;padding:9px 12px;border-top:none;margin:2px 0">
+        <div class="grid2" style="flex:1">
+          <div><div class="tiny">Your name</div><input id="meEName" type="text" value="${esc(S.me.name)}"></div>
+          <div><div class="tiny">Handicap index</div><input id="meEIdx" type="text" inputmode="decimal" value="${S.me.index}"></div>
+        </div>
+      </div>
+      <div class="row" style="border-top:none">
+        <button class="ghost sel" style="flex:1" onclick="saveEditMe()">Save</button>
+        <button class="ghost" onclick="cancelEditMe()">Cancel</button>
+      </div>`
+    :`<div class="row"><div><b>${esc(S.me.name)} <span class="pill gray">this phone's owner</span></b><div class="tiny">Index ${S.me.index}</div></div>
+      <button class="ghost" onclick="editMe()">Edit</button></div>`):''}
     ${onlineList().length?`<div class="tiny mt mb">On the app now: ${onlineList().map(n=>(n.near?'📍':'🌐')+esc(n.name)).join(' · ')}</div>`:''}
     ${addingPlayer?`<div class="grid2 mt">
         <div><div class="tiny">Name</div><input id="npName" type="text"></div>
