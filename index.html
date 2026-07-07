@@ -337,11 +337,18 @@ function saveMe(){
   sendHello();grabCoords();
 }
 function editMe(){set(()=>{S.me.name='';});}
-function nearbyList(){
-  return nearby.filter(p=>{
-    if(myCoords&&p.lat!=null)return kmBetween(myCoords[0],myCoords[1],p.lat,p.lon)<5;
-    return true;
-  });
+function onlineList(){
+  return nearby.map(p=>({...p,near:!!(myCoords&&p.lat!=null&&kmBetween(myCoords[0],myCoords[1],p.lat,p.lon)<5)}))
+    .sort((a,b)=>(b.near?1:0)-(a.near?1:0));
+}
+let addingPlayer=false;
+function toggleAddPlayer(){addingPlayer=!addingPlayer;render();}
+function addManualPlayer(){
+  const n=document.getElementById('npName'),x=document.getElementById('npIdx');
+  const name=(n&&n.value||'').trim();
+  if(!name)return;
+  addingPlayer=false;
+  set(()=>{upsertLib({name,index:+((x&&x.value)||10)||10,tee:S.players[0]?S.players[0].tee:undefined,libId:null});});
 }
 function lobbyConnect(){
   if((S.share&&S.share.on)||lobbySock)return;
@@ -551,7 +558,16 @@ function vHome(){
   <div class="card"><h2>Players</h2>
     ${S.me.name?`<div class="row"><div><b>${esc(S.me.name)} <span class="pill gray">you</span></b><div class="tiny">Index ${S.me.index}</div></div>
       <button class="ghost" onclick="editMe()">Edit</button></div>`:''}
-    ${nearbyList().length?`<div class="tiny mt mb">📍 Nearby on the app: ${nearbyList().map(n=>esc(n.name)).join(', ')}</div>`:''}
+    ${onlineList().length?`<div class="tiny mt mb">On the app now: ${onlineList().map(n=>(n.near?'📍':'🌐')+esc(n.name)).join(' · ')}</div>`:''}
+    ${addingPlayer?`<div class="grid2 mt">
+        <div><div class="tiny">Name</div><input id="npName" type="text"></div>
+        <div><div class="tiny">Handicap index</div><input id="npIdx" type="text" inputmode="decimal" placeholder="10.0"></div>
+      </div>
+      <div class="mt" style="display:flex;gap:6px">
+        <button class="ghost sel" onclick="addManualPlayer()">Save player</button>
+        <button class="ghost" onclick="toggleAddPlayer()">Cancel</button>
+      </div>`
+    :`<button class="ghost mt" onclick="toggleAddPlayer()">Add player</button>`}
     ${S.playerLib.length?S.playerLib.map(e=>`<div class="row">
       <div><b>${esc(e.name)}</b><div class="tiny">Index ${e.index}${e.teeName?` · prefers ${esc(e.teeName)} tees`:''}</div></div>
       <button class="ghost danger" onclick="delPlayer('${e.id}')">✕</button></div>`).join('')
@@ -697,7 +713,7 @@ function delTee(i){if(S.course.teeSets.length<=1)return;set(()=>{S.course.teeSet
 
 // ----- round setup -----
 function vSetup(){
-  nbShown=nearbyList();
+  nbShown=onlineList();
   const ch=courseHandicaps(), st=playingStrokes();
   const rows=S.players.map((p,i)=>{
     const teeOpts=S.course.teeSets.map(t=>`<option value="${t.id}" ${p.tee===t.id?'selected':''}>${esc(t.name)}</option>`).join('');
@@ -713,7 +729,8 @@ function vSetup(){
       <div class="tiny mt">Course hcp <b>${ch[i]}</b> → plays with <b>${st[i]}</b> stroke${st[i]===1?'':'s'} (off the low man)</div>
       ${(nbShown.length||S.playerLib.length)?`<select class="mt" style="width:100%;padding:8px;border:1px solid var(--line);border-radius:9px;font-size:13px;color:var(--ink2);background:#fff" onchange="pickPlayerOpt(${i},this.value)">
         <option value="">Add player…</option>
-        ${nbShown.length?`<optgroup label="Nearby — on the app right now">${nbShown.map((n,j)=>`<option value="nb:${j}">📍 ${esc(n.name)}${n.index!=null?` · ${n.index}`:''}</option>`).join('')}</optgroup>`:''}
+        ${nbShown.some(n=>n.near)?`<optgroup label="Nearby — on the course">${nbShown.map((n,j)=>n.near?`<option value="nb:${j}">📍 ${esc(n.name)}${n.index!=null?` · ${n.index}`:''}</option>`:'').join('')}</optgroup>`:''}
+        ${nbShown.some(n=>!n.near)?`<optgroup label="Online — elsewhere">${nbShown.map((n,j)=>!n.near?`<option value="nb:${j}">🌐 ${esc(n.name)}${n.index!=null?` · ${n.index}`:''}</option>`:'').join('')}</optgroup>`:''}
         ${S.playerLib.length?`<optgroup label="Saved players">${S.playerLib.map(e=>`<option value="lib:${e.id}">${esc(e.name)} · ${e.index}${e.teeName?` · ${esc(e.teeName)}`:''}</option>`).join('')}</optgroup>`:''}
       </select>`:''}
     </div>`;
