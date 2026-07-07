@@ -272,6 +272,7 @@ function syncConnect(){
     let m;try{m=JSON.parse(ev.data);}catch(e){return;}
     if(m.t==='state')onStateDoc(m.doc);
     else if(m.t==='op')applyOp(m.k,m.v,false);
+    else if(m.t==='courseResult')handleCourseResult(m);
   };
   sock.onclose=()=>{sockOpen=false;sock=null;render();scheduleReconnect();};
   sock.onerror=()=>{try{sock&&sock.close();}catch(e){}};
@@ -360,6 +361,7 @@ function lobbyConnect(){
     else if(m.t==='invite'){invites=invites.filter(i=>i.code!==m.info.code).concat([m.info]);render();}
     else if(m.t==='uninvite'){invites=invites.filter(i=>i.code!==m.code);render();}
     else if(m.t==='nearby'){nearby=(m.list||[]).filter(p=>p.id!==devId());if(S.screen==='home'||S.screen==='setup')render();}
+    else if(m.t==='courseResult')handleCourseResult(m);
   };
   lobbySock.onclose=()=>{lobbySock=null;nearby=[];if(!(S.share&&S.share.on))setTimeout(lobbyConnect,10000);};
   lobbySock.onerror=()=>{try{lobbySock&&lobbySock.close();}catch(e){}};
@@ -643,9 +645,42 @@ async function findCoursesNear(lat,lon){
     finder={status:'choices',choices:list,error:''};render();
   }catch(e){finder={status:'error',choices:[],error:'Course lookup failed — '+(e.message||'check your connection.')};render();}
 }
+const pendingCourse={};
+function handleCourseResult(m){
+  const p=pendingCourse[m.rid];
+  if(!p)return;
+  clearTimeout(p.timer);delete pendingCourse[m.rid];
+  p.res(m);
+}
+function piCourseLookup(q,lat,lon){
+  return new Promise((res,rej)=>{
+    const ws=(sockOpen&&sock)||((lobbySock&&lobbySock.readyState===1)?lobbySock:null);
+    if(!ws)return rej(new Error('relay offline'));
+    const rid='r'+Math.random().toString(36).slice(2,8);
+    pendingCourse[rid]={res,timer:setTimeout(()=>{delete pendingCourse[rid];rej(new Error('timeout'));},20000)};
+    try{ws.send(JSON.stringify({t:'course',q,lat,lon,rid}));}
+    catch(e){clearTimeout(pendingCourse[rid].timer);delete pendingCourse[rid];rej(e);}
+  });
+}
 async function useFoundCourse(idx){
   const c=finder.choices[idx];
   finder={status:'fetching',choices:[],error:''};render();
+  // 1) USGA/GHIN via the Pi — authoritative pars, stroke indexes, ratings, slopes
+  let g=null;
+  try{g=await piCourseLookup(c.name,c.lat,c.lon);}catch(e){}
+  if(g&&g.ok&&g.course&&g.course.holes&&g.course.teeSets.length){
+    syncLib();
+    S.course={id:'ghin-'+Date.now(),name:g.course.name,
+      teeSets:g.course.teeSets.map((t,i)=>({id:'t'+Date.now()+i,name:t.name,rating:+t.rating||72,slope:+t.slope||113})),
+      holes:g.course.holes,
+      _note:`Loaded from USGA/GHIN: ${g.matched}${g.city?` (${g.city}, ${g.state})`:''} — pars, stroke indexes, tee ratings and slopes all included.`};
+    const t=S.course.teeSets[Math.min(1,S.course.teeSets.length-1)].id;
+    S.players.forEach(p=>p.tee=t);
+    finder={status:'idle',choices:[],error:''};
+    S.screen='course';save();render();
+    return;
+  }
+  // 2) fallback: OpenStreetMap hole data
   try{
     const q=`[out:json][timeout:15];way["golf"="hole"](around:2000,${c.lat},${c.lon});out tags;`;
     const js=await overpassQuery(q);
@@ -664,7 +699,8 @@ async function useFoundCourse(idx){
     S.course={id:'osm-'+Date.now(),name:c.name,
       teeSets:[{id:'t'+Date.now(),name:'White',rating:72.0,slope:120}],holes,
       _note:(gotPar?`Loaded ${gotPar} hole pars from map data${siValid?' with stroke indexes':''}. `:'Hole data was not mapped for this course — card starts as all par 4. ')
-        +`Enter tee rating and slope from the scorecard${siValid?'':', and set the stroke indexes'}.`};
+        +`Enter tee rating and slope from the scorecard${siValid?'':', and set the stroke indexes'}.`
+        +(g&&g.error?` (USGA lookup: ${g.error})`:'')};
     S.players.forEach(p=>p.tee=S.course.teeSets[0].id);
     finder={status:'idle',choices:[],error:''};
     S.screen='course';save();render();
