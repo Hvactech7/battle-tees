@@ -2052,7 +2052,7 @@ function newRound(){
   if(!armNewRound){armNewRound=true;render();setTimeout(()=>{if(armNewRound){armNewRound=false;render();}},4000);return;}
   armNewRound=false;stView=null;
   if(S.share.on)leaveShare();
-  set(()=>{S.round=blankRound();S.screen='setup';});
+  set(()=>{S.round=blankRound();S.screen='home';});
 }
 
 applyTheme();
