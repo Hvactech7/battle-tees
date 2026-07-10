@@ -1039,7 +1039,7 @@ function tabs(sel){
 function vHome(){
   const inRound=S.round.started;
   return `<main>
-  <div class="center" style="margin:10px 0 18px"><img src="banner.jpg" alt="Battle Tees" style="width:100%;display:block;border-radius:14px;border:2px solid var(--green);box-shadow:4px 4px 0 var(--green)" onerror="this.outerHTML='<h1 style=&quot;color:var(--green);font-size:20px&quot;>Battle Tees</h1>'"></div>
+  <div class="center" style="margin:10px 0 18px"><img src="banner.jpg" alt="Battle Tees" style="width:100%;aspect-ratio:1200/509;display:block;border-radius:14px;border:2px solid var(--green);box-shadow:4px 4px 0 var(--green)" onerror="this.outerHTML='<h1 style=&quot;color:var(--green);font-size:20px&quot;>Battle Tees</h1>'"></div>
   ${!S.me.name?`<div class="card"><h2>Your profile</h2>
     <div class="tiny mb">So nearby phones can add you to a round by name.</div>
     <div class="grid2">
@@ -2055,6 +2055,14 @@ function newRound(){
   set(()=>{S.round=blankRound();S.screen='home';});
 }
 
+// Keep decoded copies of the big artwork alive for the whole session — render()
+// rebuilds the DOM on every screen change, and without these iOS re-decodes the
+// images from scratch, flashing an artless start screen for a second or two.
+const ARTCACHE=['banner.jpg','wolf.png','nine.png','vegas.png','crest.jpg'].map(s=>{
+  const i=new Image();i.src=s;
+  if(i.decode)i.decode().catch(()=>{});
+  return i;
+});
 applyTheme();
 render();
 if(S.share&&S.share.on){primeCaches(false);syncConnect();}
