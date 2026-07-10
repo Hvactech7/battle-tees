@@ -82,9 +82,9 @@
   .pill{display:inline-block;border-radius:999px;padding:2px 9px;font-size:11.5px;font-weight:600}
   .pill.wolf{background:var(--amber-lt);color:var(--amber)}
   .pill.gray{background:#2a3348;color:var(--ink2)}
-  table.st{width:100%;border-collapse:collapse;font-size:14px}
-  table.st th{text-align:left;font-size:11px;color:var(--ink3);text-transform:uppercase;letter-spacing:.5px;padding:4px 6px;border-bottom:1px solid var(--line)}
-  table.st td{padding:7px 6px;border-bottom:1px solid var(--line)}
+  table.st{width:100%;border-collapse:collapse;font-size:19px}
+  table.st th{text-align:left;font-size:13px;color:var(--ink3);text-transform:uppercase;letter-spacing:.5px;padding:4px 6px;border-bottom:1px solid var(--line)}
+  table.st td{padding:11px 6px;border-bottom:1px solid var(--line)}
   table.st tr:last-child td{border-bottom:none}
   table.st td.r,table.st th.r{text-align:right}
   nav.tabs{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;
@@ -122,6 +122,14 @@
   .teambox{border:2px solid #2ea043;border-radius:10px;padding:4px 12px 8px;margin-bottom:12px;background:rgba(46,160,67,.06)}
   .teambox .vnum{font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:30px;line-height:1;color:#2ea043}
   .teambox.flipped .vnum{color:var(--red)}
+  .gamebtn.strokeg{background:rgba(201,162,39,.10);border-color:var(--green);box-shadow:3px 3px 0 #8a6f1c}
+  .gamebtn.bbg{background:rgba(42,167,160,.12);border-color:#2aa7a0;box-shadow:3px 3px 0 #17615d}
+  .gamebtn.bbg:active{box-shadow:1px 1px 0 #17615d}
+  .gamebtn.scrg{background:rgba(142,92,217,.12);border-color:#8e5cd9;box-shadow:3px 3px 0 #55357f}
+  .gamebtn.scrg:active{box-shadow:1px 1px 0 #55357f}
+  .bb-ph,.scr-ph{font-size:40px;margin:0 16px 0 0;flex:none}
+  .gamebtn.strokeg:active{box-shadow:1px 1px 0 #8a6f1c}
+  .stroke-ph{font-size:40px;margin:0 16px 0 0;flex:none;filter:drop-shadow(0 0 6px rgba(201,162,39,.5))}
   .vtabs{display:flex;gap:6px;overflow-x:auto;margin:0 0 12px;padding-bottom:3px;-webkit-overflow-scrolling:touch}
   .vtabs button{flex:none;white-space:nowrap}
   .nine-ph{font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:54px;color:var(--elec);width:84px;text-align:center;flex:none;text-shadow:0 0 14px rgba(74,168,255,.65)}
@@ -137,9 +145,9 @@
   .flexwrap{display:flex;flex-wrap:wrap;gap:6px}
   .sc-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
   table.sc{border-collapse:collapse}
-  .sc th{font-size:10px;color:var(--ink3);font-weight:600;padding:3px 0;min-width:25px}
-  .sc td{font-family:Rajdhani,Inter,sans-serif;font-weight:600;font-size:15px;text-align:center;min-width:25px;padding:3px 2px;border-bottom:1px solid var(--line);white-space:nowrap;line-height:22px}
-  .sc td.nm,.sc th.nm{font-family:Inter,-apple-system,sans-serif;font-size:12px;text-align:left;position:sticky;left:0;background:var(--card);min-width:56px;max-width:96px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:8px;font-stretch:normal;letter-spacing:0}
+  .sc th{font-size:13px;color:var(--ink3);font-weight:600;padding:4px 0;min-width:33px}
+  .sc td{font-family:Rajdhani,Inter,sans-serif;font-weight:600;font-size:20px;text-align:center;min-width:33px;padding:5px 3px;border-bottom:1px solid var(--line);white-space:nowrap;line-height:27px}
+  .sc td.nm,.sc th.nm{font-family:Inter,-apple-system,sans-serif;font-size:15px;text-align:left;position:sticky;left:0;background:var(--card);min-width:64px;max-width:112px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:8px;font-stretch:normal;letter-spacing:0}
   .sc .parrow td{color:var(--ink3);font-weight:500}
   .sc td.tt{font-weight:700}
   .sc td.bir{background:#14301d;color:#7fd49a}
@@ -200,6 +208,8 @@ function defaultConfig(){
     pts:{partnerWin:1, fieldBeatsPartners:2, loneWin:2, fieldBeatsLone:1, blindWin:3, fieldBeatsBlind:1, ctp:1},
     nines:{n:4,blitz:false,ctp:true},
     vegas:{pairing:0,rotate:'none',flip:true,ctp:false},
+    stroke:{n:4},
+    span:{count:18,start:0},
     track:{bunker:false,chips:false,pen:false},
   };
 }
@@ -217,7 +227,7 @@ function defaultPlayers(){
 }
 function blankHole(){return {mode:null,partner:null,passes:[],wolfAt:null,gross:[null,null,null,null],ctp:null,confirmed:false,stats:{}};}
 function statArr(rec,k){if(!rec.stats)rec.stats={};if(!rec.stats[k])rec.stats[k]=[0,0,0,0];return rec.stats[k];}
-function blankRound(){return {started:false,holes:Array.from({length:HOLES},blankHole),cur:0,dollarPerPt:0};}
+function blankRound(){return {started:false,holes:Array.from({length:HOLES},blankHole),cur:0,dollarPerPt:0,span:{count:18,start:0},startedAt:null};}
 
 let S=load();
 function load(){
@@ -232,6 +242,9 @@ function load(){
       if(!s.config.game)s.config.game='wolf';
       if(!s.config.nines)s.config.nines={n:4,blitz:false,ctp:true};
       if(!s.config.vegas)s.config.vegas={pairing:0,rotate:'none',flip:true,ctp:false};
+      if(!s.config.stroke)s.config.stroke={n:4};
+      if(!s.config.span)s.config.span={count:18,start:0};
+      if(!s.round.span)s.round.span={count:18,start:0};
       if((s.config._v||2)<3){
         s.config._v=3;
         const fresh=builtinCourses();
@@ -294,7 +307,7 @@ const SYNC_KEYS=['meta',...Array.from({length:HOLES},(_,i)=>'h'+i)];
 let sock=null,sockOpen=false,retryMs=1000,applyingRemote=false;
 const sentCache={},localContent={};
 function makeCode(){const A='ABCDEFGHJKMNPQRSTUVWXYZ23456789';let s='';for(let i=0;i<5;i++)s+=A[Math.floor(Math.random()*A.length)];return s;}
-function shareMeta(){return {course:S.course,players:S.players,config:S.config,started:S.round.started,dollarPerPt:S.round.dollarPerPt,_ts:S.shareMetaTs||0};}
+function shareMeta(){return {course:S.course,players:S.players,config:S.config,started:S.round.started,dollarPerPt:S.round.dollarPerPt,span:S.round.span,startedAt:S.round.startedAt,_ts:S.shareMetaTs||0};}
 function contentKey(k){
   if(k==='meta'){const {_ts,...rest}=shareMeta();return JSON.stringify(rest);}
   const {_ts,...rest}=S.round.holes[+k.slice(1)];return JSON.stringify(rest);
@@ -329,6 +342,8 @@ function applyOp(k,v,defer){
       if((v._ts||0)>=(S.shareMetaTs||0)){
         S.course=v.course;S.players=v.players;S.config=v.config;
         S.round.started=v.started;S.round.dollarPerPt=v.dollarPerPt;
+        if(v.span)S.round.span=v.span;
+        if(v.startedAt)S.round.startedAt=v.startedAt;
         S.shareMetaTs=v._ts;
         localContent[k]=sentCache[k]=contentKey(k);
       }
@@ -616,9 +631,37 @@ function gameOn(){
   const roundScr=['hole','standings','settle','map'].includes(S.screen);
   return (roundScr&&S.round.started&&S.round.game)||S.config.game||'wolf';
 }
-function gameName(g){const x=g||gameOn();return x==='nines'?'9’s':x==='vegas'?'Vegas':'Wolf';}
-function NP(){return gameOn()==='nines'&&S.config.nines&&S.config.nines.n===3?3:4;}
+function gameName(g){const x=g||gameOn();return x==='nines'?'9’s':x==='vegas'?'Vegas':x==='stroke'?'Stroke':x==='bestball'?'Best Ball':x==='scramble'?'Scramble':'Wolf';}
+function NP(){
+  const g=gameOn();
+  if(g==='nines'&&S.config.nines&&S.config.nines.n===3)return 3;
+  if(g==='stroke'&&S.config.stroke)return Math.min(4,Math.max(2,S.config.stroke.n||4));
+  return 4;
+}
 function actIdx(){return [0,1,2,3].slice(0,NP());}
+// Round span: which holes are in play (full 18, front/back 9) and the first tee.
+// Hole records stay indexed 0-17 (sync keys unchanged); the span just limits
+// navigation and position-based rules (wolf rotation, match clinches).
+function roundSpan(){return (S.round.started&&S.round.span)||S.config.span||{count:18,start:0};}
+function playOrder(){
+  const {count,start}=roundSpan();
+  if(count===9){const base=start<9?0:9;return Array.from({length:9},(_,k)=>base+((start-base+k)%9));}
+  return Array.from({length:18},(_,k)=>(start+k)%18);
+}
+function posOf(h){return playOrder().indexOf(h);}
+function paceLine(){
+  if(!S.round.started||!S.round.startedAt)return '';
+  const mins=Math.max(0,Math.floor((Date.now()-S.round.startedAt)/60000));
+  const el=`${Math.floor(mins/60)}:${String(mins%60).padStart(2,'0')}`;
+  const thru=S.round.holes.filter(r=>r.confirmed).length;
+  return `<div class="tiny mt" style="text-align:center">⏱ ${el} on the course${thru?` · ${(mins/thru).toFixed(1)} min/hole`:''}</div>`;
+}
+function holeNavHTML(){
+  const h=S.round.cur;
+  return `<div class="card"><div class="holegrid">${playOrder().map(i=>{const r=S.round.holes[i];
+    return `<button class="${r.confirmed?'done':''} ${i===h?'cur':''}" onclick="jumpHole(${i})">${i+1}</button>`;}).join('')}</div>
+    <button class="ghost mt" style="width:100%" onclick="openMap()">🛰 Hole map &amp; distances</button>${paceLine()}</div>`;
+}
 // 9's ledgers are kept in twelfths of a point so pooled tie splits (÷2, ÷3, ÷4) stay exact.
 function fmtPts(u){
   const neg=u<0?'−':'';u=Math.abs(u);
@@ -640,13 +683,13 @@ function computeAll(){
   const perHole=[];
   for(let h=0;h<HOLES;h++){
     const rec=S.round.holes[h];
-    // wolf assignment
+    // wolf assignment follows play order (supports 9-hole spans + shotgun starts)
+    const pos=posOf(h);
     let wolf;
-    if(h<16) wolf=h%4;
-    else if(S.config.last2LastPlace){
+    if(pos>=0&&pos>=playOrder().length-2&&S.config.last2LastPlace){
       const led=ledgers[lenses.includes(primaryLens())?primaryLens():lenses[0]];
       let min=Math.min(...led); wolf=led.indexOf(min);
-    } else wolf=h%4;
+    } else wolf=Math.max(0,pos)%4;
     const info={wolf,results:{},ledgerAfter:{},carryAfter:{}};
     if(rec.confirmed&&rec.mode){
       const wolfSide=rec.mode==='partner'?[rec.wolfAt,rec.partner]:[rec.wolfAt];
@@ -732,7 +775,7 @@ function computeNines(){
 function vegasTeamsFor(h){
   const P=[[[0,1],[2,3]],[[0,2],[1,3]],[[0,3],[1,2]]];
   let p=(S.config.vegas&&S.config.vegas.pairing)||0;
-  if(S.config.vegas&&S.config.vegas.rotate==='six')p=(p+Math.floor(h/6))%3;
+  if(S.config.vegas&&S.config.vegas.rotate==='six'){const seg=playOrder().length===9?3:6;p=(p+Math.floor(Math.max(0,posOf(h))/seg))%3;}
   return P[p];
 }
 function vegasNum(sc,team,flip){
@@ -771,7 +814,48 @@ function computeVegas(){
   }
   return {perHole,ledgers,carries:{net:0,gross:0},lenses};
 }
-function computeGame(){const g=gameOn();return g==='nines'?computeNines():g==='vegas'?computeVegas():computeAll();}
+// Best Ball (2v2): each plays their own ball; the team's better score wins the
+// hole. Ledger = holes won (shared by both teammates).
+function computeBestBall(){
+  const T=matchTeams();
+  const ledgers={net:[0,0,0,0],gross:[0,0,0,0]};
+  for(const h of playOrder()){
+    const rec=S.round.holes[h];if(!rec.confirmed)continue;
+    for(const L of ['net','gross']){
+      const best=t=>Math.min(...t.map(i=>{const sc=lensScore(rec,i,h,L);return sc==null?99:sc;}));
+      const a=best(T[0]),b=best(T[1]);
+      if(a!==b)T[a<b?0:1].forEach(i=>ledgers[L][i]+=1);
+    }
+  }
+  return {ledgers,perHole:null,carries:{net:0,gross:0},lenses:['net','gross']};
+}
+// Scramble (2v2): one ball per team. Net uses the USGA two-player scramble
+// allowance — 35% of the low course handicap + 15% of the high.
+function scrambleStrokes(){
+  const T=matchTeams(),ch=courseHandicaps();
+  const tch=T.map(t=>{const a=ch[t[0]],b=ch[t[1]];return Math.round((0.35*Math.min(a,b)+0.15*Math.max(a,b))*S.config.allowance/100);});
+  const m=Math.min(...tch);
+  return tch.map(c=>Math.max(0,c-m));
+}
+function scrambleDots(k,h){const st=scrambleStrokes()[k],si=S.course.holes[h].si;return (st>=si?1:0)+((st-18)>=si?1:0);}
+function computeScramble(){
+  const T=matchTeams(),capt=[T[0][0],T[1][0]];
+  const ledgers={net:[0,0,0,0],gross:[0,0,0,0]},par={net:[0,0,0,0],gross:[0,0,0,0]};
+  for(const h of playOrder()){
+    const rec=S.round.holes[h];if(!rec.confirmed)continue;
+    T.forEach((t,k)=>{
+      const g=rec.gross[capt[k]];if(g==null)return;
+      const p=S.course.holes[h].par;
+      [['gross',g],['net',g-scrambleDots(k,h)]].forEach(([L,sc])=>t.forEach(i=>{ledgers[L][i]+=sc;par[L][i]+=p;}));
+    });
+  }
+  return {ledgers,par,perHole:null,carries:{net:0,gross:0},lenses:['net','gross']};
+}
+function computeGame(){const g=gameOn();
+  if(g==='bestball')return computeBestBall();
+  if(g==='scramble')return computeScramble();
+  if(g==='stroke')return Object.assign({perHole:null,carries:{net:0,gross:0},lenses:['net','gross']},computeStroke());
+  return g==='nines'?computeNines():g==='vegas'?computeVegas():computeAll();}
 
 
 // ---------- hole map: satellite view + GPS distances (Phase 1) ----------
@@ -1078,6 +1162,21 @@ function vHome(){
       <div style="flex:1;min-width:0"><span class="gname">Vegas</span>
         <div class="tiny">2 v 2 — team digits duel, birdies flip the number</div></div>
       <img src="vegas.png" alt="" onerror="this.outerHTML='<span class=&quot;vegas-ph&quot;>🎲</span>'">
+    </button>
+    <button class="gamebtn strokeg" onclick="pickGame('stroke')">
+      <div style="flex:1;min-width:0"><span class="gname">Stroke</span>
+        <div class="tiny">Classic scoring — lowest total wins</div></div>
+      <span class="stroke-ph">⛳</span>
+    </button>
+    <button class="gamebtn bbg" onclick="pickGame('bestball')">
+      <div style="flex:1;min-width:0"><span class="gname">Best Ball</span>
+        <div class="tiny">2 v 2 match play — your team's best score counts</div></div>
+      <span class="bb-ph">🏆</span>
+    </button>
+    <button class="gamebtn scrg" onclick="pickGame('scramble')">
+      <div style="flex:1;min-width:0"><span class="gname">Scramble</span>
+        <div class="tiny">2 v 2, one ball per team — play the best shot</div></div>
+      <span class="scr-ph">🤝</span>
     </button>
   </div>
   <div style="display:flex;gap:10px;margin-bottom:16px">
@@ -1448,11 +1547,14 @@ function vSetup(){
   const ch=courseHandicaps(), st=playingStrokes();
   const nines=S.config.game==='nines';
   const vegas=S.config.game==='vegas';
+  const stroke=S.config.game==='stroke';
+  const bestball=S.config.game==='bestball';
+  const scramble=S.config.game==='scramble';
   const rows=actIdx().map(i=>{
     const p=S.players[i];
     const teeOpts=S.course.teeSets.map(t=>`<option value="${t.id}" ${p.tee===t.id?'selected':''}>${esc(t.name)}</option>`).join('');
     return `<div class="card">
-      <div class="row"><b>Golfer ${i+1}${(nines||vegas)?'':` — tees off ${['1st','2nd','3rd','4th'][i]}`}</b>
+      <div class="row"><b>Golfer ${i+1}${S.config.game==='wolf'?` — tees off ${['1st','2nd','3rd','4th'][i]}`:''}</b>
         <span>${i>0?`<button class="ghost" onclick="movePl(${i})">↑</button>`:''}</span></div>
       <div class="grid2 mt">
         <div><div class="tiny">Name</div><input type="text" value="${esc(p.name)}" onfocus="tapClear(this)" onblur="commitPl(this,${i},'name')"></div>
@@ -1474,8 +1576,13 @@ function vSetup(){
     <div class="stepper"><button onclick="chPt('${k}',-1)">−</button><span class="val num">${P[k]}</span><button onclick="chPt('${k}',1)">+</button></div></div>`;
   const V=S.config.vegas;
   const pairLbl=T=>`${esc(S.players[T[0][0]].name)} &amp; ${esc(S.players[T[0][1]].name)} <span class="muted">vs</span> ${esc(S.players[T[1][0]].name)} &amp; ${esc(S.players[T[1][1]].name)}`;
-  return topbar(`Round setup — ${gameName(S.config.game)}`,nines?'Every hole is worth 9 points: 5 · 3 · 1':vegas?'Low team number takes the difference':'Order = tee order on hole 1 (wolf rotation)','home')+`<main>
+  return topbar(`Round setup — ${gameName(S.config.game)}`,nines?'Every hole is worth 9 points: 5 · 3 · 1':vegas?'Low team number takes the difference':stroke?'Straight scoring — net, gross or both':bestball?'2 v 2 — better ball wins the hole':scramble?'2 v 2 — one ball per team':'Order = tee order on hole 1 (wolf rotation)','home')+`<main>
   ${rows}
+  ${(bestball||scramble)?`<div class="card"><h2>Teams</h2>
+    ${[[[0,1],[2,3]],[[0,2],[1,3]],[[0,3],[1,2]]].map((T,pi)=>`
+      <button class="ghost ${S.config.vegas.pairing===pi?'sel':''}" style="width:100%;text-align:left;margin-bottom:8px" onclick="set(()=>S.config.vegas.pairing=${pi})">${pairLbl(T)}</button>`).join('')}
+    <div class="tiny mt">${scramble?'One ball per team — pick your partners. Net strokes use the 35%/15% scramble allowance.':'Better ball of each team wins the hole.'}</div>
+  </div>`:''}
   ${vegas?`<div class="card"><h2>Teams</h2>
     ${[[[0,1],[2,3]],[[0,2],[1,3]],[[0,3],[1,2]]].map((T,pi)=>`
       <button class="ghost ${V.pairing===pi?'sel':''}" style="width:100%;text-align:left;margin-bottom:8px" onclick="set(()=>S.config.vegas.pairing=${pi})">${pairLbl(T)}</button>`).join('')}
@@ -1486,6 +1593,13 @@ function vSetup(){
     <div class="row"><span class="muted">Closest to pin +1 (par 3s)</span>
       <button class="ghost ${V.ctp?'sel':''}" onclick="set(()=>S.config.vegas.ctp=!S.config.vegas.ctp)">${V.ctp?'On':'Off'}</button></div>
     <div class="tiny mt">Your two scores pair low-first into a number (4 &amp; 5 → 45); low team number wins the difference in points, every player on the winning side books it. Both teams birdie = no flip. Scores above 9 count as 9.</div>
+  </div>`:''}
+  ${stroke?`<div class="card"><h2>Stroke play</h2>
+    <div class="row"><span class="muted">Players in the round</span>
+      <span class="seg" style="display:inline-flex;gap:6px">
+        ${[2,3,4].map(n=>`<button class="ghost ${NP()===n?'sel':''}" onclick="set(()=>S.config.stroke.n=${n})">${n}</button>`).join('')}
+      </span></div>
+    <div class="tiny mt">Everyone plays their own ball — lowest total takes it. Use the Standings tabs mid-round for what-if games.</div>
   </div>`:''}
   ${nines?`<div class="card"><h2>9’s rules</h2>
     <div class="row"><span class="muted">Players in the game</span>
@@ -1499,6 +1613,19 @@ function vSetup(){
       <button class="ghost ${S.config.nines.ctp?'sel':''}" onclick="set(()=>S.config.nines.ctp=!S.config.nines.ctp)">${S.config.nines.ctp?'On':'Off'}</button></div>
     <div class="tiny mt">${NP()===3?'Best score takes 5, middle 3, worst 1.':'Best score takes 5, then 3, then 1 — worst gets 0.'} Ties pool those spots and split evenly.</div>
   </div>`:''}
+  <div class="card"><h2>Round</h2>
+    <div class="row"><span class="muted">Holes</span>
+      <span class="seg" style="display:inline-flex;gap:6px">
+        <button class="ghost ${S.config.span.count===18?'sel':''}" onclick="setSpan(18,0)">18</button>
+        <button class="ghost ${S.config.span.count===9&&S.config.span.start<9?'sel':''}" onclick="setSpan(9,0)">Front 9</button>
+        <button class="ghost ${S.config.span.count===9&&S.config.span.start>=9?'sel':''}" onclick="setSpan(9,9)">Back 9</button>
+      </span></div>
+    <div class="row"><span class="muted">First tee</span>
+      <select style="padding:8px 10px;border:2px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);font-size:16px" onchange="set(()=>S.config.span.start=+this.value)">
+        ${(S.config.span.count===9?(S.config.span.start<9?[0,1,2,3,4,5,6,7,8]:[9,10,11,12,13,14,15,16,17]):[...Array(18).keys()]).map(hh=>`<option value="${hh}" ${S.config.span.start===hh?'selected':''}>Hole ${hh+1}</option>`).join('')}
+      </select></div>
+    <div class="tiny mt">Start from any tee — play wraps around${S.config.span.count===9?' within the nine':''}. The clock starts when the round does.</div>
+  </div>
   <div class="card"><h2>Scoring lens</h2>
     <div class="seg">
       ${['gross','net','both'].map(L=>`<button class="ghost ${S.config.lens===L?'sel':''}" onclick="set(()=>S.config.lens='${L}')">${L[0].toUpperCase()+L.slice(1)}</button>`).join('')}
@@ -1506,7 +1633,7 @@ function vSetup(){
     <div class="row mt"><span class="muted">Handicap allowance</span>
       <div class="stepper"><button onclick="chAllow(-5)">−</button><span class="val num" style="font-size:17px">${S.config.allowance}%</span><button onclick="chAllow(5)">+</button></div></div>
   </div>
-  ${(nines||vegas)?'':`<div class="card"><h2>Points (per player)</h2>
+  ${S.config.game!=='wolf'?'':`<div class="card"><h2>Points (per player)</h2>
     ${pt('partnerWin','Wolf + partner win')}
     ${pt('fieldBeatsPartners','Field beats wolf team')}
     ${pt('loneWin','Lone wolf wins')}
@@ -1567,31 +1694,38 @@ function setPl(i,k,v){set(()=>{
 function movePl(i){set(()=>{const a=S.players;[a[i-1],a[i]]=[a[i],a[i-1]];});}
 function chPt(k,d){set(()=>{S.config.pts[k]=Math.max(0,S.config.pts[k]+d);});}
 function chAllow(d){set(()=>{S.config.allowance=Math.min(100,Math.max(50,S.config.allowance+d));});}
+function setSpan(count,start){set(()=>{S.config.span={count,start};});}
 function startRound(){
   const withNearby=S.players.some(p=>p.nearby);
   stView=null;
-  set(()=>{S.round=blankRound();S.round.started=true;S.round.game=S.config.game;S.screen='hole';
-    if(S.config.game!=='wolf')prefillNines(0);});
+  set(()=>{S.round=blankRound();S.round.started=true;S.round.game=S.config.game;
+    S.round.span=clone(S.config.span||{count:18,start:0});S.round.startedAt=Date.now();
+    S.round.cur=playOrder()[0];S.screen='hole';
+    if(S.config.game!=='wolf')prefillNines(S.round.cur);});
   if(withNearby&&!S.share.on)shareRound();
 }
 function prefillNines(h){
   const par=S.course.holes[h].par,r=S.round.holes[h];
+  if(gameOn()==='scramble'){
+    const capt=matchTeams().map(t=>t[0]);
+    r.gross=r.gross.map((g,i)=>(capt.includes(i)&&g==null)?par:g);
+    return;
+  }
   r.gross=r.gross.map((g,i)=>(i<NP()&&g==null)?par:g);
 }
 
 // ----- hole screen -----
 function vHole(){
   if(!S.round.started) return topbar(gameName(),'','home')+`<main><div class="card center">No round in progress.<button class="big mt" onclick="go('home')">Pick a game</button></div></main>`;
-  if(gameOn()==='nines') return vHoleNines();
+  if(['nines','stroke','bestball'].includes(gameOn())) return vHoleNines();
   if(gameOn()==='vegas') return vHoleVegas();
+  if(gameOn()==='scramble') return vHoleScramble();
   const h=S.round.cur, hole=S.course.holes[h], rec=S.round.holes[h];
   const all=computeAll(), wolf=all.perHole[h].wolf;
   if(rec.wolfAt==null||(!rec.confirmed&&rec.wolfAt!==wolf&&rec.mode==null)) rec.wolfAt=wolf;
   const names=S.players.map(p=>p.name);
   const dots=i=>dotsOn(i,h);
-  const holeNav=`<div class="card"><div class="holegrid">${S.round.holes.map((r,i)=>
-    `<button class="${r.confirmed?'done':''} ${i===h?'cur':''}" onclick="jumpHole(${i})">${i+1}</button>`).join('')}</div>
-    <button class="ghost mt" style="width:100%" onclick="openMap()">🛰 Hole map &amp; distances</button></div>`;
+  const holeNav=holeNavHTML();
   const carryNote=rec.confirmed?'':activeLenses().map(L=>{
     const c=h>0?all.perHole[h-1].carryAfter[L]:0;
     return c>0?`<div class="banner carry">Carryover live (${L}): this hole pays ×${c+1} if decided</div>`:'';
@@ -1656,7 +1790,7 @@ function vHole(){
       ${scoreRows}
       </div>${ctpRow}${extrasCard}${resultNote}
       ${rec.confirmed
-        ?`<button class="big" onclick="nextHole()">${h<17?'Next hole →':'Finish round'}</button>
+        ?`<button class="big" onclick="nextHole()">${posOf(h)<playOrder().length-1?'Next hole →':'Finish round'}</button>
           <button class="ghost mt" style="width:100%" onclick="unconfirm()">Edit this hole</button>`
         :`<button class="big" ${done?'':'disabled'} onclick="confirmHole()">Confirm hole</button>`}
     `;
@@ -1692,19 +1826,21 @@ function chStat(k,i,d){set(()=>{const a=statArr(S.round.holes[S.round.cur],k);a[
 function confirmHole(){set(()=>{S.round.holes[S.round.cur].confirmed=true;});}
 function unconfirm(){set(()=>{S.round.holes[S.round.cur].confirmed=false;});}
 function nextHole(){set(()=>{
-  const next=S.round.holes.findIndex(r=>!r.confirmed);
+  const o=playOrder();
+  const cur=Math.max(0,o.indexOf(S.round.cur));
+  let next=-1;
+  for(let k=1;k<=o.length;k++){const cand=o[(cur+k)%o.length];if(!S.round.holes[cand].confirmed){next=cand;break;}}
   if(next===-1){S.screen='settle';}else{S.round.cur=next;if(gameOn()!=='wolf')prefillNines(next);}
 });}
 
 // ----- 9's hole screen: no pick phase — just scores, ranked into 5·3·1 -----
 function vHoleNines(){
+  const isN=gameOn()==='nines';
   const h=S.round.cur, hole=S.course.holes[h], rec=S.round.holes[h];
-  const all=computeNines();
+  const all=isN?computeNines():null;
   const dots=i=>dotsOn(i,h);
   const act=actIdx();
-  const holeNav=`<div class="card"><div class="holegrid">${S.round.holes.map((r,i)=>
-    `<button class="${r.confirmed?'done':''} ${i===h?'cur':''}" onclick="jumpHole(${i})">${i+1}</button>`).join('')}</div>
-    <button class="ghost mt" style="width:100%" onclick="openMap()">🛰 Hole map &amp; distances</button></div>`;
+  const holeNav=holeNavHTML();
   const scoreRows=act.map(i=>{
     const p=S.players[i], g=rec.gross[i];
     const net=g!=null?g-dots(i):null;
@@ -1717,14 +1853,14 @@ function vHoleNines(){
         <button onclick="chScore(${i},1)">+</button>
       </div>
     </div>`;}).join('');
-  const ctpOn=S.config.nines.ctp&&hole.par===3;
+  const ctpOn=isN&&S.config.nines.ctp&&hole.par===3;
   const ctpRow=ctpOn?`<div class="card"><h2>Closest to pin (+1 pt)</h2>
     <div class="flexwrap">${act.map(i=>`<button class="ghost ${rec.ctp===i?'sel':''}" onclick="setCtp(${i})">${esc(S.players[i].name)}</button>`).join('')}
     <button class="ghost ${rec.ctp===-1?'sel':''}" onclick="setCtp(-1)">No one on green</button></div>
     <div class="tiny mt">Ball must be on the green. Unclaimed = no point.</div></div>`:'';
   const done=act.every(i=>rec.gross[i]!=null)&&(!ctpOn||rec.ctp!=null);
   let resultNote='';
-  if(rec.confirmed){
+  if(rec.confirmed&&isN){
     resultNote=activeLenses().map(L=>{
       const r=all.perHole[h].results[L];if(!r)return '';
       const split=act.slice().sort((a,b)=>r.share[b]-r.share[a]).map(i=>`${esc(S.players[i].name)} ${fmtPts(r.share[i])}`).join(' · ');
@@ -1745,16 +1881,16 @@ function vHoleNines(){
     ${scoreRows}
     </div>${ctpRow}${extrasCard}${resultNote}
     ${rec.confirmed
-      ?`<button class="big" onclick="nextHole()">${h<17?'Next hole →':'Finish round'}</button>
+      ?`<button class="big" onclick="nextHole()">${posOf(h)<playOrder().length-1?'Next hole →':'Finish round'}</button>
         <button class="ghost mt" style="width:100%" onclick="unconfirm()">Edit this hole</button>`
       :`<button class="big" ${done?'':'disabled'} onclick="confirmHole()">Confirm hole</button>`}`;
   return topbar(`Hole ${h+1}`,`Par ${hole.par} · SI ${hole.si} · ${esc(S.course.name)}${S.share.on?` · ${esc(S.share.code)} ${sockOpen?'●':'○'}`:''}`,'')+`<main>
     ${holeNav}
-    <div class="ninecard">
+    ${isN?`<div class="ninecard">
       <div style="flex:1;min-width:0"><b>9 points on this hole</b>
         <div class="tiny">${NP()===3?'5 best · 3 middle · 1 worst':'5 · 3 · 1 · 0 — worst walks away empty'}${S.config.nines.blitz?' · ⚡ blitz live':''}</div></div>
       <img class="nine-art" src="nine.png" alt="" onerror="this.style.display='none'">
-    </div>
+    </div>`:''}
     ${body}
   </main>`+tabs('hole');
 }
@@ -1765,9 +1901,7 @@ function vHoleVegas(){
   const T=all.perHole[h].teams;
   const dots=i=>dotsOn(i,h);
   const L=primaryLens();
-  const holeNav=`<div class="card"><div class="holegrid">${S.round.holes.map((r,i)=>
-    `<button class="${r.confirmed?'done':''} ${i===h?'cur':''}" onclick="jumpHole(${i})">${i+1}</button>`).join('')}</div>
-    <button class="ghost mt" style="width:100%" onclick="openMap()">🛰 Hole map &amp; distances</button></div>`;
+  const holeNav=holeNavHTML();
   // live team numbers off the current (even unconfirmed) scores, primary lens
   const liveSc=[0,1,2,3].map(i=>{const g=rec.gross[i];if(g==null)return null;return L==='net'?g-dots(i):g;});
   const liveNum=t=>t.every(i=>liveSc[i]!=null)?vegasNum(liveSc,t,false):null;
@@ -1822,13 +1956,43 @@ function vHoleVegas(){
     ${holeNav}
     <div class="vegascard">
       <div style="flex:1;min-width:0"><b>Vegas — low number wins the difference</b>
-        <div class="tiny">${S.config.vegas.rotate==='six'?`Partners swap at 7 &amp; 13 · `:''}${S.config.vegas.flip?'birdies flip':'no flips'} · ${S.config.lens==='both'?'net shown live':L}</div></div>
+        <div class="tiny">${S.config.vegas.rotate==='six'?`Partners swap twice · `:''}${S.config.vegas.flip?'birdies flip':'no flips'} · ${S.config.lens==='both'?'net shown live':L}</div></div>
       <img class="vegas-art" src="vegas.png" alt="" onerror="this.outerHTML='<span style=&quot;font-size:34px&quot;>🎲</span>'">
     </div>
     ${[0,1,2,3].some(i=>rec.gross[i]==null)?`<button class="ghost mb" style="width:100%" onclick="set(()=>prefillNines(${h}))">Everyone to par ${hole.par} — adjust from there</button>`:''}
     ${teamBoxes}${ctpRow}${extrasCard}${resultNote}
     ${rec.confirmed
-      ?`<button class="big" onclick="nextHole()">${h<17?'Next hole →':'Finish round'}</button>
+      ?`<button class="big" onclick="nextHole()">${posOf(h)<playOrder().length-1?'Next hole →':'Finish round'}</button>
+        <button class="ghost mt" style="width:100%" onclick="unconfirm()">Edit this hole</button>`
+      :`<button class="big" ${done?'':'disabled'} onclick="confirmHole()">Confirm hole</button>`}
+  </main>`+tabs('hole');
+}
+
+function vHoleScramble(){
+  const h=S.round.cur, hole=S.course.holes[h], rec=S.round.holes[h];
+  const T=matchTeams(), capt=[T[0][0],T[1][0]];
+  const holeNav=holeNavHTML();
+  const rows=T.map((t,k)=>{
+    const g=rec.gross[capt[k]], d=scrambleDots(k,h);
+    return `<div class="scorebar">
+      <div style="min-width:140px"><b>${esc(S.players[t[0]].name)} &amp; ${esc(S.players[t[1]].name)}</b>
+        <div class="tiny">${d>0?`<span class="dots">${'●'.repeat(d)}</span>`:''} ${g!=null&&S.config.lens!=='gross'?`net ${g-d}`:''}</div></div>
+      <div class="stepper">
+        <button onclick="chScore(${capt[k]},-1)">−</button>
+        <span class="val num">${g==null?'–':g}</span>
+        <button onclick="chScore(${capt[k]},1)">+</button>
+      </div>
+    </div>`;}).join('');
+  const done=capt.every(i=>rec.gross[i]!=null);
+  return topbar(`Hole ${h+1}`,`Par ${hole.par} · SI ${hole.si} · ${esc(S.course.name)}${S.share.on?` · ${esc(S.share.code)} ${sockOpen?'●':'○'}`:''}`,'')+`<main>
+    ${holeNav}
+    <div class="card">
+      <div class="tiny mb">One score per team — everyone plays from the best shot.</div>
+      ${capt.some(i=>rec.gross[i]==null)?`<button class="ghost mb" style="width:100%" onclick="set(()=>prefillNines(${h}))">Both teams to par ${hole.par} — adjust from there</button>`:''}
+      ${rows}
+    </div>
+    ${rec.confirmed
+      ?`<button class="big" onclick="nextHole()">${posOf(h)<playOrder().length-1?'Next hole →':'Finish round'}</button>
         <button class="ghost mt" style="width:100%" onclick="unconfirm()">Edit this hole</button>`
       :`<button class="big" ${done?'':'disabled'} onclick="confirmHole()">Confirm hole</button>`}
   </main>`+tabs('hole');
@@ -1837,6 +2001,8 @@ function vHoleVegas(){
 // ----- standings -----
 function scorecardHTML(){
   const hs=S.course.holes;
+  const sp=roundSpan();
+  if(sp.count===9)return scorecard9HTML(sp.start<9?0:9);
   const idx=[...Array(18).keys()];
   const cell=(g,par)=>{
     if(g==null)return '<td class="e">·</td>';
@@ -1850,7 +2016,8 @@ function scorecardHTML(){
     +idx.slice(9).map(i=>`<th>${i+1}</th>`).join('')+'<th>IN</th><th>TOT</th></tr>';
   html+='<tr class="parrow"><td class="nm">Par</td>'+hs.slice(0,9).map(h=>`<td>${h.par}</td>`).join('')
     +`<td>${parOut}</td>`+hs.slice(9).map(h=>`<td>${h.par}</td>`).join('')+`<td>${parIn}</td><td>${parOut+parIn}</td></tr>`;
-  S.players.slice(0,NP()).forEach((p,pi)=>{
+  const rowDefs=gameOn()==='scramble'?matchTeams().map(t=>({name:S.players[t[0]].name+' & '+S.players[t[1]].name,pi:t[0]})):S.players.slice(0,NP()).map((p,pi)=>({name:p.name,pi}));
+  rowDefs.forEach(({name:rowName,pi})=>{
     const g=i=>S.round.holes[i].confirmed?S.round.holes[i].gross[pi]:null;
     const sum=(a,b)=>{let s=0,n=0;for(let i=a;i<b;i++){const v=g(i);if(v!=null){s+=v;n++;}}return n?s:null;};
     const out=sum(0,9),inn=sum(9,18);
@@ -1858,9 +2025,33 @@ function scorecardHTML(){
     const tot=played.reduce((s,i)=>s+g(i),0);
     const diff=tot-played.reduce((s,i)=>s+hs[i].par,0);
     const totTxt=played.length?`${tot}<span style="font-size:11px"> ${diff===0?'E':(diff>0?'+':'')+diff}</span>`:'';
-    html+=`<tr><td class="nm">${esc(p.name)}</td>`+idx.slice(0,9).map(i=>cell(g(i),hs[i].par)).join('')
+    html+=`<tr><td class="nm">${esc(rowName)}</td>`+idx.slice(0,9).map(i=>cell(g(i),hs[i].par)).join('')
       +`<td class="tt">${out??''}</td>`+idx.slice(9).map(i=>cell(g(i),hs[i].par)).join('')
       +`<td class="tt">${inn??''}</td><td class="tt">${totTxt}</td></tr>`;
+  });
+  return html+'</table></div>';
+}
+function scorecard9HTML(base){
+  const hs=S.course.holes;
+  const idx=Array.from({length:9},(_,k)=>base+k);
+  const cell=(g,par)=>{
+    if(g==null)return '<td class="e">·</td>';
+    const d=g-par;
+    const c=d<=-2?'eag':d===-1?'bir':d===0?'':d===1?'bog':'dbl';
+    return `<td class="${c}">${g}</td>`;
+  };
+  const parTot=idx.reduce((a,i)=>a+hs[i].par,0);
+  let html='<div class="sc-wrap"><table class="sc"><tr><th class="nm">Hole</th>'
+    +idx.map(i=>`<th>${i+1}</th>`).join('')+'<th>TOT</th></tr>';
+  html+='<tr class="parrow"><td class="nm">Par</td>'+idx.map(i=>`<td>${hs[i].par}</td>`).join('')+`<td>${parTot}</td></tr>`;
+  const rowDefs=gameOn()==='scramble'?matchTeams().map(t=>({name:S.players[t[0]].name+' & '+S.players[t[1]].name,pi:t[0]})):S.players.slice(0,NP()).map((p,pi)=>({name:p.name,pi}));
+  rowDefs.forEach(({name:rowName,pi})=>{
+    const g=i=>S.round.holes[i].confirmed?S.round.holes[i].gross[pi]:null;
+    const played=idx.filter(i=>g(i)!=null);
+    const tot=played.reduce((sm,i)=>sm+g(i),0);
+    const diff=tot-played.reduce((sm,i)=>sm+hs[i].par,0);
+    const totTxt=played.length?`${tot}<span style="font-size:12px"> ${diff===0?'E':(diff>0?'+':'')+diff}</span>`:'';
+    html+=`<tr><td class="nm">${esc(rowName)}</td>`+idx.map(i=>cell(g(i),hs[i].par)).join('')+`<td class="tt">${totTxt}</td></tr>`;
   });
   return html+'</table></div>';
 }
@@ -1873,10 +2064,11 @@ function stViews(){
   const g=S.round.game||S.config.game||'wolf';
   const four=NP()===4;
   const v=[[g,gameName(g)]];
-  v.push(['stroke','Stroke']);
+  if(g==='scramble')return v;  // one ball per team — nothing to re-score
+  if(g!=='stroke')v.push(['stroke','Stroke']);
   v.push(['stableford','Stableford']);
-  if(four)v.push(['match','Match']);
-  if(g!=='nines')v.push(['nines','9’s']);
+  if(four&&g!=='bestball')v.push(['match','Match']);
+  if(g!=='nines'&&NP()>=3)v.push(['nines','9’s']);
   if(g!=='vegas'&&four)v.push(['vegas','Vegas']);
   return v;
 }
@@ -1902,16 +2094,17 @@ function matchTeams(){
 }
 function computeMatch(L){
   const T=matchTeams();
+  const o=playOrder();
   let up=0,thru=0,clinch=null;
-  for(let h=0;h<HOLES;h++){
-    const rec=S.round.holes[h];if(!rec.confirmed)continue;
+  for(let p=0;p<o.length;p++){
+    const h=o[p],rec=S.round.holes[h];if(!rec.confirmed)continue;
     thru++;
     const best=t=>Math.min(...t.map(i=>{const s=lensScore(rec,i,h,L);return s==null?99:s;}));
     const a=best(T[0]),b=best(T[1]);
     if(a<b)up++;else if(b<a)up--;
-    if(!clinch&&Math.abs(up)>18-(h+1))clinch={margin:Math.abs(up),left:18-(h+1),team:up>0?0:1};
+    if(!clinch&&Math.abs(up)>o.length-(p+1))clinch={margin:Math.abs(up),left:o.length-(p+1),team:up>0?0:1};
   }
-  return {T,up,thru,clinch};
+  return {T,up,thru,clinch,count:o.length};
 }
 function teamPickerRow(){
   const P=[[[0,1],[2,3]],[[0,2],[1,3]],[[0,3],[1,2]]];
@@ -1929,18 +2122,50 @@ function vStandings(){
   const cols=['gross','net'].filter(L=>activeLenses().includes(L));
   const prim=primaryLens();
   const lbl=L=>L==='net'?'Net (hcp)':'Gross';
-  const vtabs=`<div class="vtabs">${views.map(([k,l])=>
+  const vtabs=views.length<2?'':`<div class="vtabs">${views.map(([k,l])=>
     `<button class="ghost ${view===k?'sel':''}" onclick="setStView(${k===g?'null':`'${k}'`})">${k===g?'⛳ ':''}${l}</button>`).join('')}</div>`;
   const whatIf=view!==g?`<div class="tiny mb">What-if view from the same scores — settlement still pays by ${gameName(g)}.</div>`:'';
   const genericCard=(title,led,fmt,asc,note)=>{
     const order=actIdx().slice().sort((a,b)=>asc?led[prim][a]-led[prim][b]:led[prim][b]-led[prim][a]);
     return `<div class="card"><h2>${title} · thru ${thru}</h2>${whatIf}
       <table class="st"><tr><th>Player</th>${cols.map(L=>`<th class="r">${lbl(L)}</th>`).join('')}</tr>
-      ${order.map(i=>`<tr><td>${esc(S.players[i].name)}</td>${cols.map(L=>`<td class="r num" style="font-size:20px;${L!==prim&&cols.length>1?'color:var(--ink2);font-size:16px':''}">${fmt(led[L][i],L,i)}</td>`).join('')}</tr>`).join('')}
+      ${order.map(i=>`<tr><td>${esc(S.players[i].name)}</td>${cols.map(L=>`<td class="r num" style="font-size:27px;${L!==prim&&cols.length>1?'color:var(--ink2);font-size:20px':''}">${fmt(led[L][i],L,i)}</td>`).join('')}</tr>`).join('')}
       </table>${note||''}</div>`;
   };
   let all=null,tables='';
-  if(view===g){
+  if(view===g&&g==='scramble'){
+    const sc=computeScramble();const T=matchTeams();
+    const rows=T.slice().sort((a,b)=>sc.ledgers[prim][a[0]]-sc.ledgers[prim][b[0]]);
+    tables=`<div class="card"><h2>Scramble · thru ${thru}</h2>
+      <table class="st"><tr><th>Team</th>${cols.map(L=>`<th class="r">${lbl(L)}</th>`).join('')}</tr>
+      ${rows.map(t=>`<tr><td>${esc(S.players[t[0]].name)} &amp; ${esc(S.players[t[1]].name)}</td>${cols.map(L=>{
+        const vv=sc.ledgers[L][t[0]],d=vv-sc.par[L][t[0]];
+        return `<td class="r num" style="font-size:27px;${L!==prim&&cols.length>1?'color:var(--ink2);font-size:20px':''}">${thru?`${vv} <span style="font-size:13px">${d===0?'E':(d>0?'+':'')+d}</span>`:'–'}</td>`;}).join('')}</tr>`).join('')}
+      </table>${teamPickerRow()}
+      <div class="tiny mt">One ball per team — lowest total wins. Net gives the higher-handicap team strokes via the 35%/15% scramble allowance.</div></div>`;
+  }else if(view===g&&g==='bestball'){
+    const bb=computeBestBall();
+    const blocks=cols.map(L=>{
+      const m=computeMatch(L);
+      const tn=t=>`${esc(S.players[m.T[t][0]].name)} &amp; ${esc(S.players[m.T[t][1]].name)}`;
+      let status;
+      if(!m.thru)status='No holes confirmed yet';
+      else if(m.clinch)status=`${tn(m.clinch.team)} win ${m.clinch.margin}${m.clinch.left?`&${m.clinch.left}`:' UP'}`;
+      else if(m.up===0)status=`All square thru ${m.thru}`;
+      else status=`${tn(m.up>0?0:1)} ${Math.abs(m.up)} UP thru ${m.thru}${Math.abs(m.up)===m.count-m.thru?' — dormie':''}`;
+      return `<div class="center mb">${cols.length>1?`<div class="tiny">${lbl(L)}</div>`:''}<span class="bigscore num" style="font-size:24px">${status}</span></div>`;
+    }).join('');
+    tables=`<div class="card"><h2>Best Ball · thru ${thru}</h2>${blocks}
+      <table class="st"><tr><th>Player</th>${cols.map(L=>`<th class="r">${lbl(L)} holes</th>`).join('')}</tr>
+      ${actIdx().slice().sort((a,b)=>bb.ledgers[prim][b]-bb.ledgers[prim][a]).map(i=>`<tr><td>${esc(S.players[i].name)}</td>${cols.map(L=>`<td class="r num" style="font-size:27px;${L!==prim&&cols.length>1?'color:var(--ink2);font-size:20px':''}">${bb.ledgers[L][i]}</td>`).join('')}</tr>`).join('')}
+      </table>${teamPickerRow()}
+      <div class="tiny mt">Better ball of each team wins the hole.</div></div>`;
+  }else if(view===g&&g==='stroke'){
+    const st=computeStroke();
+    tables=genericCard('Stroke play',st.ledgers,(v,L,i)=>{if(!thru)return '-';const d=v-st.par[L][i];
+      return `${v} <span style="font-size:13px">${d===0?'E':(d>0?'+':'')+d}</span>`;},true,
+      `<div class="tiny mt">Total strokes over confirmed holes — lowest wins.</div>`);
+  }else if(view===g){
     all=computeGame();
     const carryNote=cols.map(L=>all.carries[L]>0?`<div class="banner carry mt">${lbl(L)}: ${all.carries[L]} hole${all.carries[L]>1?'s':''} carried — next decided hole pays ×${all.carries[L]+1}</div>`:'').join('');
     tables=genericCard('Standings',all.ledgers,v=>ptsTxt(v),false,
@@ -1967,7 +2192,7 @@ function vStandings(){
       if(!m.thru)status='No holes confirmed yet';
       else if(m.clinch)status=`${tn(m.clinch.team)} win ${m.clinch.margin}${m.clinch.left?`&${m.clinch.left}`:' UP'}`;
       else if(m.up===0)status=`All square thru ${m.thru}`;
-      else status=`${tn(m.up>0?0:1)} ${Math.abs(m.up)} UP thru ${m.thru}${Math.abs(m.up)===18-m.thru?' — dormie':''}`;
+      else status=`${tn(m.up>0?0:1)} ${Math.abs(m.up)} UP thru ${m.thru}${Math.abs(m.up)===m.count-m.thru?' — dormie':''}`;
       return `<div class="center mb">${cols.length>1?`<div class="tiny">${lbl(L)}</div>`:''}<span class="bigscore num" style="font-size:24px">${status}</span></div>`;
     }).join('');
     tables=`<div class="card"><h2>Match play · best ball · thru ${thru}</h2>${whatIf}${blocks}${teamPickerRow()}
@@ -1992,10 +2217,10 @@ function vStandings(){
         <span><b class="num">${h+1}</b> · <span class="num">${res.nums[0]} v ${res.nums[1]}</span>${res.flips.some(Boolean)?' 🔄':''}</span>
         <span class="muted">${out}</span></div>`;
     }
-    const modeLbl=r.mode==='blind'?'blind lone':r.mode==='lone'?'lone':`+ ${esc(S.players[r.partner].name)}`;
+    const modeLbl=r.mode==='blind'?'blind lone':r.mode==='lone'?'lone':r.partner!=null?`+ ${esc(S.players[r.partner].name)}`:'';
     let out=res?(res.tie?'pushed':`${res.wolfWon?'wolf side':'field'} +${res.per*res.mult}`):'';
     return `<div class="row" onclick="jumpAndGo(${h})" style="cursor:pointer">
-      <span><b class="num">${h+1}</b> · 🐺 ${esc(S.players[r.wolfAt].name)} ${modeLbl}</span>
+      <span><b class="num">${h+1}</b> · 🐺 ${r.wolfAt!=null?esc(S.players[r.wolfAt].name):'—'} ${modeLbl}</span>
       <span class="muted">${out}${S.course.holes[h].par===3&&r.ctp!=null&&r.ctp>=0?` · CTP ${esc(S.players[r.ctp].name)}`:''}</span></div>`;
   }).join('');
   const en=trackKeys();
@@ -2003,12 +2228,12 @@ function vStandings(){
     <table class="st"><tr><th>Player</th>${en.map(([k,l])=>`<th class="r">${l}</th>`).join('')}</tr>
     ${S.players.slice(0,NP()).map((p,i)=>`<tr><td>${esc(p.name)}</td>${en.map(([k])=>{
       const tot=S.round.holes.reduce((a,r)=>a+((r.stats&&r.stats[k])?r.stats[k][i]:0),0);
-      return `<td class="r num" style="font-size:17px">${tot}</td>`;
+      return `<td class="r num" style="font-size:22px">${tot}</td>`;
     }).join('')}</tr>`).join('')}</table></div>`:'';
   const extra=(thru>0?`
     <div class="card"><h2>Scorecard · gross strokes</h2>${scorecardHTML()}
       <div class="tiny mt">Green = under par · amber = bogey · red = double or worse. Swipe the card sideways.</div></div>`:'')+statsCard;
-  return topbar('Standings',esc(S.course.name),'')+`<main>${vtabs}${tables}${extra}
+  return topbar('Standings',esc(S.course.name),'')+`<main>${vtabs}${paceLine()}${tables}${extra}
     ${all!=null?`<div class="card"><h2>Hole history (tap to edit)</h2>${hist||'<div class="muted">No holes confirmed yet.</div>'}</div>`:''}
   </main>`+tabs('standings');
 }
@@ -2022,12 +2247,14 @@ function vSettle(){
   const act=actIdx();
   const blocks=activeLenses().map(LL=>{
     const led=all.ledgers[LL];
+    const gg=gameOn();
+    const inv=(gg==='stroke'||gg==='scramble')?-1:1, unit=(gg==='stroke'||gg==='scramble')?'stroke':gg==='bestball'?'hole':'pt';
     const pairs=[];
     for(let a=0;a<act.length;a++)for(let b=a+1;b<act.length;b++){
-      const i=act[a],j=act[b],d=led[i]-led[j],ad=ptsVal(Math.abs(d));
-      if(d!==0)pairs.push(`${esc(S.players[d>0?j:i].name)} → ${esc(S.players[d>0?i:j].name)}: <b class="num">${ptsTxt(Math.abs(d))} pt${ad===1?'':'s'}</b>${v?` <span class="muted">($${(ad*v).toFixed(2)})</span>`:''}`);
+      const i=act[a],j=act[b],d=(led[i]-led[j])*inv,ad=ptsVal(Math.abs(d));
+      if(d!==0)pairs.push(`${esc(S.players[d>0?j:i].name)} → ${esc(S.players[d>0?i:j].name)}: <b class="num">${ptsTxt(Math.abs(d))} ${unit}${ad===1?'':'s'}</b>${v?` <span class="muted">($${(ad*v).toFixed(2)})</span>`:''}`);
     }
-    const order=act.slice().sort((a,b)=>led[b]-led[a]);
+    const order=act.slice().sort((a,b)=>(led[b]-led[a])*inv);
     const leaders=act.filter(i=>led[i]===led[order[0]]);
     const verb=thru===18?'wins':'leads';
     const leadTxt=leaders.length===1?`${esc(S.players[leaders[0]].name)} ${verb}`
@@ -2035,13 +2262,13 @@ function vSettle(){
       :`${leaders.length}-way tie: ${leaders.map(i=>esc(S.players[i].name)).join(', ')}`;
     return `<div class="card"><h2>${LL==='net'?'Net':'Gross'} settlement · thru ${thru}</h2>
       <div class="center mb"><span class="bigscore num">${ptsTxt(led[order[0]])}</span><div class="muted">${leadTxt}</div></div>
-      <table class="st"><tr><th>Player</th><th class="r">Pts</th></tr>
+      <table class="st"><tr><th>Player</th><th class="r">${['stroke','scramble'].includes(gameOn())?'Strokes':gameOn()==='bestball'?'Holes':'Pts'}</th></tr>
       ${order.map(i=>`<tr><td>${esc(S.players[i].name)}</td><td class="r num" style="font-size:18px">${ptsTxt(led[i])}</td></tr>`).join('')}</table>
       <div class="mt"><h2>Pairwise (difference method)</h2>${pairs.length?pairs.map(p=>`<div class="row">${p}</div>`).join(''):'<div class="muted">All square.</div>'}</div>
     </div>`;
   }).join('');
   return topbar('Settlement','','')+`<main>
-    <div class="card"><div class="row"><span class="muted">$ per point (optional)</span>
+    <div class="card"><div class="row"><span class="muted">$ per ${['stroke','scramble'].includes(gameOn())?'stroke':gameOn()==='bestball'?'hole':'point'} (optional)</span>
       <input type="number" step="0.25" min="0" value="${S.round.dollarPerPt||''}" placeholder="0" style="width:90px" onchange="set(()=>S.round.dollarPerPt=+this.value||0)"></div></div>
     ${blocks}
     <button class="big warn" onclick="newRound()">${armNewRound?'Tap again to clear this round':'Start a new round'}</button>
@@ -2063,6 +2290,7 @@ const ARTCACHE=['banner.jpg','wolf.png','nine.png','vegas.png','crest.jpg'].map(
   if(i.decode)i.decode().catch(()=>{});
   return i;
 });
+setInterval(()=>{if(S.round.started&&S.round.startedAt&&(S.screen==='hole'||S.screen==='standings'))render();},60000);
 applyTheme();
 render();
 if(S.share&&S.share.on){primeCaches(false);syncConnect();}
