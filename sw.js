@@ -1,7 +1,7 @@
 // Wolf service worker — offline cache + auto-update (stale-while-revalidate).
 // The app loads instantly from cache and refreshes in the background; a new
 // version appears the next time it's opened while online.
-const CACHE = 'battletees-1783746293';
+const CACHE = 'battletees-1783746792';
 const CORE = ['./', 'index.html', 'manifest.json', 'icon-180.png', 'icon-512.png', 'crest.jpg', 'banner.jpg', 'wolf.png', 'nine.png', 'vegas.png'];
 
 self.addEventListener('install', (e) => {

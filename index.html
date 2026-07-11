@@ -499,8 +499,8 @@ async function doBackup(){
   try{
     syncLib();
     const r=await relayBackup({op:'save',email:em,data:{me:S.me,playerLib:S.playerLib,courses:S.courses}});
-    backupUI.msg=r.ok?`✓ ${S.playerLib.length} player${S.playerLib.length===1?'':'s'} + ${S.courses.length} course${S.courses.length===1?'':'s'} backed up to the Pi${r.emailed?' — confirmation emailed':''}.`:(r.error||'Backup failed.');
-  }catch(e){backupUI.msg='Could not reach the Pi — check your connection.';}
+    backupUI.msg=r.ok?`✓ ${S.playerLib.length} player${S.playerLib.length===1?'':'s'} + ${S.courses.length} course${S.courses.length===1?'':'s'} safely backed up${r.emailed?' — confirmation emailed':''}.`:(r.error||'Backup failed.');
+  }catch(e){backupUI.msg='Could not connect — check your signal and try again.';}
   render();
 }
 async function requestRestoreCode(){
@@ -510,7 +510,7 @@ async function requestRestoreCode(){
     const r=await relayBackup({op:'code',email:em});
     if(r.ok){backupUI.stage=1;backupUI.msg='Code emailed — enter it below (valid 15 min).';}
     else backupUI.msg=r.error||'Could not send the code.';
-  }catch(e){backupUI.msg='Could not reach the Pi — check your connection.';}
+  }catch(e){backupUI.msg='Could not connect — check your signal and try again.';}
   render();
 }
 async function doRestore(){
@@ -541,7 +541,7 @@ async function doRestore(){
       backupUI.stage=0;
       backupUI.msg=`✓ Restored — ${added} player${added===1?'':'s'} added, ${updated} updated${backupUI._cAdded?`, ${backupUI._cAdded} course${backupUI._cAdded===1?'':'s'} added`:''}.`;
     }else backupUI.msg=r.error||'Restore failed.';
-  }catch(e){backupUI.msg='Could not reach the Pi — check your connection.';}
+  }catch(e){backupUI.msg='Could not connect — check your signal and try again.';}
   render();
 }
 function toggleScan(){
@@ -1302,7 +1302,7 @@ function vRules(){
 }
 function backupBlockHTML(){
   return `${backupUI.mode?`
-      <div class="tiny mt mb" style="border-top:1px solid var(--line);padding-top:10px">${backupUI.mode==='backup'?'Backs up players AND courses to the Pi — restore them on any phone later.':'Restore backed-up players and courses from the Pi.'}</div>
+      <div class="tiny mt mb" style="border-top:1px solid var(--line);padding-top:10px">${backupUI.mode==='backup'?'Backs up your players AND courses — restore them on any phone later.':'Restore your backed-up players and courses.'}</div>
       <input id="bkEmail" type="text" inputmode="email" autocapitalize="off" placeholder="you@email.com" value="${esc(localStorage.getItem('wolfBackupEmail')||'')}">
       ${backupUI.mode==='backup'
         ?`<div class="mt" style="display:flex;gap:6px">
@@ -1380,7 +1380,7 @@ function vPlayers(){
       return `<div class="row"><div><b>${esc(S.me.name)} <span class="pill gray">this phone's owner</span></b><div class="tiny">Index ${S.me.index}${meLib&&meLib.teeName?` · prefers ${esc(meLib.teeName)} tees`:''}</div></div>
       <button class="ghost" onclick="editMe()">Edit</button></div>`;})()):''}
     ${scanOpen?`
-      <div class="tiny mt">${(lobbySock&&lobbySock.readyState===1)?((scanShown=onlineList()).length?'On the app right now:':'Scanning… no one else is on the app at the moment.'):'Connecting to the Pi…'}</div>
+      <div class="tiny mt">${(lobbySock&&lobbySock.readyState===1)?((scanShown=onlineList()).length?'On the app right now:':'Scanning… no one else is on the app at the moment.'):'Connecting…'}</div>
       ${(scanShown||[]).map((n,j)=>{
         const saved=S.playerLib.some(x=>x.name.trim().toLowerCase()===n.name.trim().toLowerCase());
         return `<div class="row"><div><b>${n.near?'📍':'🌐'} ${esc(n.name)}</b><div class="tiny">Index ${n.index!=null?n.index:'?'}${n.tee?` · ${esc(n.tee)} tees`:''} · ${n.near?'nearby':'online'}</div></div>
@@ -1539,7 +1539,7 @@ async function runCourseSearch(){
     const r=await piCourseLookup2({mode:'search',q,lat:myCoords?myCoords[0]:null,lon:myCoords?myCoords[1]:null});
     if(r.ok&&r.list&&r.list.length){finder={status:'searchResults',choices:[],results:r.list,q,error:''};}
     else finder={status:'error',choices:[],results:[],error:r.error||'No courses found.'};
-  }catch(e){finder={status:'error',choices:[],results:[],error:'Could not reach the Pi — check your connection.'};}
+  }catch(e){finder={status:'error',choices:[],results:[],error:'Could not connect — check your signal and try again.'};}
   render();
 }
 async function useSearchResult(j){
@@ -1554,7 +1554,7 @@ async function useSearchResult(j){
       return;
     }
     finder={status:'error',choices:[],results:[],error:g.error||'Could not load that course.'};
-  }catch(e){finder={status:'error',choices:[],results:[],error:'Could not reach the Pi — check your connection.'};}
+  }catch(e){finder={status:'error',choices:[],results:[],error:'Could not connect — check your signal and try again.'};}
   render();
 }
 function piCourseLookup2(payload){
