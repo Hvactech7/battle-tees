@@ -1384,7 +1384,7 @@ function vPlayers(){
         <button class="ghost" onclick="cancelEditMe()">Cancel</button>
       </div>`
     :(()=>{const meLib=S.playerLib.find(e=>e.name.trim().toLowerCase()===S.me.name.trim().toLowerCase());
-      return `<div class="row"><div><b>${esc(S.me.name)} <span class="pill gray">this phone's owner</span></b><div class="tiny">Index ${S.me.index}${meLib&&meLib.teeName?` · prefers ${esc(meLib.teeName)} tees`:''}</div></div>
+      return `<div class="row"><div><b>${esc(S.me.name)}</b><div class="tiny">Index ${S.me.index}${meLib&&meLib.teeName?` · prefers ${esc(meLib.teeName)} tees`:''}</div></div>
       <button class="ghost" onclick="editMe()">Edit</button></div>`;})()):''}
     ${scanOpen?`
       <div class="tiny mt">${(lobbySock&&lobbySock.readyState===1)?((scanShown=onlineList()).length?'On the app right now:':'Scanning… no one else is on the app at the moment.'):'Connecting…'}</div>
