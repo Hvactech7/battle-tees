@@ -130,6 +130,8 @@
   .bb-ph,.scr-ph{font-size:40px;margin:0 16px 0 0;flex:none}
   .gamebtn.strokeg:active{box-shadow:1px 1px 0 #8a6f1c}
   .stroke-ph{font-size:40px;margin:0 16px 0 0;flex:none;filter:drop-shadow(0 0 6px rgba(201,162,39,.5))}
+  .scorebar.rowmine{background:rgba(74,168,255,.10);border:1.5px solid rgba(74,168,255,.45);border-radius:10px;margin:3px -7px;padding:6px 7px}
+  .scorebar.rowlocked{opacity:.55}
   .vtabs{display:flex;gap:6px;overflow-x:auto;margin:0 0 12px;padding-bottom:3px;-webkit-overflow-scrolling:touch}
   .vtabs button{flex:none;white-space:nowrap}
   .nine-ph{font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:54px;color:var(--elec);width:84px;text-align:center;flex:none;text-shadow:0 0 14px rgba(74,168,255,.65)}
@@ -183,7 +185,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1783748536';
+const BUILD='1783808015';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -227,9 +229,9 @@ function defaultPlayers(){
     {name:'Player 4',index:10.0,chOverride:null,tee:'tb-blu'},
   ];
 }
-function blankHole(){return {mode:null,partner:null,passes:[],wolfAt:null,gross:[null,null,null,null],ctp:null,confirmed:false,stats:{}};}
+function blankHole(){return {mode:null,partner:null,passes:[],wolfAt:null,gross:[null,null,null,null],gts:[0,0,0,0],ctp:null,confirmed:false,stats:{}};}
 function statArr(rec,k){if(!rec.stats)rec.stats={};if(!rec.stats[k])rec.stats[k]=[0,0,0,0];return rec.stats[k];}
-function blankRound(){return {started:false,holes:Array.from({length:HOLES},blankHole),cur:0,dollarPerPt:0,span:{count:18,start:0},startedAt:null};}
+function blankRound(){return {started:false,holes:Array.from({length:HOLES},blankHole),cur:0,dollarPerPt:0,span:{count:18,start:0},startedAt:null,myStartedAt:null};}
 
 let S=load();
 function load(){
@@ -246,6 +248,7 @@ function load(){
       if(!s.config.vegas)s.config.vegas={pairing:0,rotate:'none',flip:true,ctp:false};
       if(!s.config.stroke)s.config.stroke={n:4};
       if(!s.config.scramble)s.config.scramble={teams:'2v2'};
+      if(!s.history)s.history=[];
       if(!s.config.span)s.config.span={count:18,start:0};
       if(!s.round.span)s.round.span={count:18,start:0};
       if((s.config._v||2)<3){
@@ -286,7 +289,7 @@ function load(){
       return s;
     }}
   }catch(e){}
-  return {screen:'home',course:defaultCourse(),courses:builtinCourses(),playerLib:[],config:defaultConfig(),players:defaultPlayers(),round:blankRound(),share:{on:false,code:null},me:{name:'',index:10},theme:'dark'};
+  return {screen:'home',course:defaultCourse(),courses:builtinCourses(),playerLib:[],config:defaultConfig(),players:defaultPlayers(),round:blankRound(),share:{on:false,code:null},me:{name:'',index:10},theme:'dark',history:[]};
 }
 function syncLib(){
   if(!S.courses)return;
@@ -352,16 +355,33 @@ function applyOp(k,v,defer){
       }
     }else{
       const i=+k.slice(1);
-      if((v._ts||0)>=(S.round.holes[i]._ts||0)){
-        S.round.holes[i]=v;
-        localContent[k]=sentCache[k]=contentKey(k);
+      const cur=S.round.holes[i];
+      const newer=(v._ts||0)>=(cur._ts||0);
+      // non-score fields follow the newer record; scores merge slot-by-slot so
+      // two phones entering different players' scores never clobber each other
+      const base=newer?v:cur, other=newer?cur:v;
+      const merged=Object.assign({},base);
+      merged.gross=(base.gross||[null,null,null,null]).slice();
+      merged.gts=(base.gts||[0,0,0,0]).slice();
+      const ogts=other.gts||[0,0,0,0], og=other.gross||[null,null,null,null];
+      for(let p=0;p<4;p++){
+        if((ogts[p]||0)>(merged.gts[p]||0)){merged.gross[p]=og[p];merged.gts[p]=ogts[p];}
       }
+      merged._ts=Math.max(v._ts||0,cur._ts||0);
+      S.round.holes[i]=merged;
+      const mk=contentKey(k);
+      localContent[k]=mk;
+      // if our merge produced more than the incoming record, mark it unsent so
+      // syncPush ships the completed record back to the server for late joiners
+      const vrest=Object.assign({},v);delete vrest._ts;
+      sentCache[k]=(JSON.stringify(vrest)===mk)?mk:'(merge-pending)';
     }
-    if(!defer){save();render();}
   }finally{applyingRemote=false;}
+  if(!defer){save();syncPush();render();}
 }
 function onStateDoc(doc){
   Object.entries(doc||{}).forEach(([k,v])=>applyOp(k,v,true));
+  claimMySlot();
   save();syncPush();render();
 }
 function syncConnect(){
@@ -387,11 +407,34 @@ function scheduleReconnect(){
   if(!S.share||!S.share.on)return;
   setTimeout(()=>{retryMs=Math.min(15000,Math.round(retryMs*1.7));syncConnect();},retryMs);
 }
+// In a shared round, each phone claims the player slot matching its profile
+// name. Claimed rows are score-locked on OTHER phones (tap ✎ to override).
+function claimMySlot(){
+  if(!S.share.on||!S.me||!S.me.name)return;
+  const me=S.me.name.trim().toLowerCase();
+  let changed=false;
+  S.players.forEach(p=>{
+    const match=(p.name||'').trim().toLowerCase()===me;
+    if(match&&p.ownerDev!==devId()){p.ownerDev=devId();changed=true;}
+    if(!match&&p.ownerDev===devId()){delete p.ownerDev;changed=true;}
+  });
+  if(changed){stampChanges();save();syncPush();}
+}
+let unlockedRows={};
+function unlockRow(h,i){unlockedRows[h+'-'+i]=true;render();}
+function rowLock(h,i){
+  if(!S.share.on)return '';
+  const p=S.players[i];
+  if(!p||!p.ownerDev)return '';
+  if(p.ownerDev===devId())return 'mine';
+  return unlockedRows[h+'-'+i]?'open':'locked';
+}
 function shareRound(){
   lobbyClose();
   S.share={on:true,code:makeCode(),creator:true};
   S.shareMetaTs=Date.now();
   S.round.holes.forEach(r=>{if(!r._ts)r._ts=Date.now();});
+  claimMySlot();
   primeCaches(false);
   save();syncConnect();render();
 }
@@ -405,6 +448,7 @@ function joinFromInvite(code){joinRoundCode(code);}
 function joinRoundCode(code){
   lobbyClose();
   S.share={on:true,code,creator:false};
+  S.round.myStartedAt=Date.now();
   S.shareMetaTs=0;
   S.round.holes.forEach(r=>{r._ts=0;});
   primeCaches(false);
@@ -657,10 +701,20 @@ function courseHandicaps(){
 }
 function playingStrokes(){
   const ch=courseHandicaps();
-  if(NP()===1) // solo round: net plays against the course, so the full handicap applies
+  if(gameOn()==='stroke') // stroke play: net is against the course — full handicap
     return ch.map(c=>Math.max(0,Math.round(c*S.config.allowance/100)));
   const lo=Math.min(...actIdx().map(i=>ch[i]));  // low man among the players actually in the game
   return ch.map(c=>Math.max(0,Math.round((c-lo)*S.config.allowance/100)));
+}
+// Full-handicap strokes: what a player's "net score" means as a number.
+// Game engines keep using playingStrokes (off the low man) for points.
+function fullStrokes(){
+  const ch=courseHandicaps();
+  return ch.map(c=>Math.max(0,Math.round(c*S.config.allowance/100)));
+}
+function fullDotsOn(pi,h){
+  const st=fullStrokes()[pi], si=S.course.holes[h].si;
+  return (st>=si?1:0)+((st-18)>=si?1:0);
 }
 function dotsOn(pi,h){
   const s=playingStrokes()[pi], si=S.course.holes[h].si;
@@ -692,18 +746,22 @@ function playOrder(){
 }
 function posOf(h){return playOrder().indexOf(h);}
 function paceLine(){
-  if(!S.round.started||!S.round.startedAt)return '';
-  const mins=Math.max(0,Math.floor((Date.now()-S.round.startedAt)/60000));
+  const t0=S.round.myStartedAt||S.round.startedAt;
+  if(!S.round.started||!t0)return '';
+  const mins=Math.max(0,Math.floor((Date.now()-t0)/60000));
   const el=`${Math.floor(mins/60)}:${String(mins%60).padStart(2,'0')}`;
   const thru=S.round.holes.filter(r=>r.confirmed).length;
   return `<div class="tiny mt" style="text-align:center">⏱ ${el} on the course${thru?` · ${(mins/thru).toFixed(1)} min/hole`:''}</div>`;
 }
 // Compact running stroke totals for the top of the hole screens.
+// Defaults to gross; the little toggle flips to net (remembered per phone).
+let topLens=(()=>{try{return localStorage.getItem('btTopLens')||'gross';}catch(e){return 'gross';}})();
+function setTopLens(v){topLens=v;try{localStorage.setItem('btTopLens',v);}catch(e){}render();}
 function runningTotalsCard(){
   if(!S.round.started)return '';
   const thru=S.round.holes.filter(r=>r.confirmed).length;
   if(!thru)return '';
-  const L=primaryLens();
+  const L=topLens==='net'?'net':'gross';
   const fmt=(v,p)=>{const d=v-p;
     const col=d<0?'#7fd49a':d>0?'var(--amber-bd)':'var(--ink2)';
     return `<div class="num" style="font-size:32px;font-weight:700;line-height:1.05">${v}</div>
@@ -717,7 +775,11 @@ function runningTotalsCard(){
     cells=actIdx().map(i=>`<div style="text-align:center;flex:1;min-width:60px"><div style="font-size:14px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px">${esc((S.players[i].name||'').split(' ')[0])}</div>${fmt(st.ledgers[L][i],st.par[L][i])}</div>`).join('');
   }
   return `<div class="card" style="padding:14px 12px 10px"><div style="display:flex;gap:4px">${cells}</div>
-    <div class="tiny" style="text-align:center;margin-top:4px">${L} score · thru ${thru}</div></div>`;
+    <div style="display:flex;justify-content:center;align-items:center;gap:8px;margin-top:7px">
+      <button class="ghost ${L==='gross'?'sel':''}" style="padding:3px 14px;font-size:13px" onclick="setTopLens('gross')">Gross</button>
+      <button class="ghost ${L==='net'?'sel':''}" style="padding:3px 14px;font-size:13px" onclick="setTopLens('net')">Net</button>
+      <span class="tiny">thru ${thru}</span>
+    </div></div>`;
 }
 function holeNavHTML(){
   const h=S.round.cur;
@@ -1167,6 +1229,7 @@ function render(){
   else if(scr==='courses') html=vCourses();
   else if(scr==='players') html=vPlayers();
   else if(scr==='rules') html=vRules();
+  else if(scr==='history') html=vHistory();
   else if(scr==='course') html=vCourse();
   else if(scr==='setup') html=vSetup();
   else if(scr==='hole') html=vHole();
@@ -1251,10 +1314,11 @@ function vHome(){
       <span class="scr-ph">🤝</span>
     </button>
   </div>
-  <div style="display:flex;gap:10px;margin-bottom:16px">
-    <button class="ghost" style="flex:1;padding:12px" onclick="go('courses')">⛳ Courses</button>
-    <button class="ghost" style="flex:1;padding:12px" onclick="go('players')">👥 Players</button>
-    <button class="ghost" style="flex:1;padding:12px" onclick="go('rules')">📜 Rules</button>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+    <button class="ghost" style="padding:12px" onclick="go('courses')">⛳ Courses</button>
+    <button class="ghost" style="padding:12px" onclick="go('players')">👥 Players</button>
+    <button class="ghost" style="padding:12px" onclick="go('rules')">📜 Rules</button>
+    <button class="ghost" style="padding:12px" onclick="go('history')">🕰 Rounds</button>
   </div>
   <div class="center" style="margin:2px 0 12px">
     <span class="seg" style="display:inline-flex;gap:6px">
@@ -1279,6 +1343,25 @@ function ruleCard(art,title,tag,body){
       <span class="tiny" style="display:block">${tag}</span></span><span style="color:var(--ink3)">▾</span></summary>
     <div style="margin-top:10px;font-size:15px;line-height:1.55">${body}</div>
   </details>`;
+}
+function vHistory(){
+  const H=S.history||[];
+  return topbar('Past rounds','Reopen one to view or fix scores','home')+`<main>
+  ${H.length?H.map(e=>{
+    const d=new Date(e.endedAt);
+    const when=`${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()]} ${d.getMonth()+1}/${d.getDate()}`;
+    return `<div class="card" style="padding:12px 14px">
+      <div class="row" style="border-top:none">
+        <div style="flex:1;min-width:0"><b style="font-family:Rajdhani,sans-serif;font-size:20px">${gameName(e.game)} · ${esc(e.courseName)}</b>
+          <div class="tiny">${when} · thru ${e.thru} · ${e.mins!=null?e.mins+' min':''}${e.code?' · shared '+esc(e.code):''}</div>
+          <div class="tiny">${(e.players||[]).map(esc).join(' · ')}</div></div>
+        <span style="display:flex;gap:6px;flex:none">
+          <button class="ghost sel" onclick="reopenRound('${e.id}')">Open</button>
+          <button class="ghost danger" onclick="delHist('${e.id}')">${armDelHist===e.id?'Delete?':'✕'}</button>
+        </span></div>
+    </div>`;}).join('')
+  :`<div class="card center muted">No finished rounds yet — they land here when you tap “End round”.</div>`}
+  </main>`;
 }
 function vRules(){
   const P=S.config.pts;
@@ -1321,7 +1404,7 @@ function vRules(){
     'Lowest team total wins. In one-team mode there’s nothing to settle — hand the card to the committee.']))}
   <div class="card" style="padding:12px 14px"><b style="font-family:Rajdhani,sans-serif;font-size:20px">Scoring options — every game</b>
     <div style="font-size:15px;line-height:1.55;margin-top:6px">
-    <b>Net</b> gives strokes off the low man’s course handicap (dots on the score entry show where they land). <b>Gross</b> is raw. <b>Both</b> scores the round two ways at once.
+    <b>Net</b> scores (totals, Stroke play, Stableford) apply each player’s <b>full course handicap</b>. Inside the games, points play off strokes <b>relative to the low man</b> — the dots on the score entry show where those game strokes land. <b>Gross</b> is raw. <b>Both</b> shows two columns.
     All games ride the same scores — Standings tabs let you replay the round as any other game, and Settle always pays by the game you picked at the start.</div></div>
   </main>`;
 }
@@ -1444,7 +1527,54 @@ function vPlayers(){
   </div>
   </main>`;
 }
-function endRound(){set(()=>{S.screen='settle';});}
+// Ending a round is per-phone: archive it locally, leave the shared room
+// (other phones keep playing), and return the start screen to its clean state.
+function archiveRound(){
+  if(!S.round.started)return;
+  if(!S.round._histId)S.round._histId='r'+Date.now()+Math.floor(Math.random()*1e4);
+  const thru=S.round.holes.filter(r=>r.confirmed).length;
+  const t0=S.round.myStartedAt||S.round.startedAt;
+  const entry={
+    id:S.round._histId,endedAt:Date.now(),
+    game:S.round.game||S.config.game,courseId:S.course.id,courseName:S.course.name,
+    code:S.share.on?S.share.code:null,thru,
+    mins:t0?Math.round((Date.now()-t0)/60000):null,
+    players:actIdx().map(i=>S.players[i].name),
+    round:clone(S.round),config:clone(S.config),playersSnap:clone(S.players)
+  };
+  S.history=(S.history||[]).filter(e=>e.id!==entry.id);
+  S.history.unshift(entry);
+  S.history=S.history.slice(0,12);
+}
+function endRound(){
+  if(!S.round.started){S.screen='home';save();render();return;}
+  if(!S.round._statFin){S.round._statFin=true;
+    const t0=S.round.myStartedAt||S.round.startedAt;
+    stat('round_end',{game:S.round.game,thru:S.round.holes.filter(r=>r.confirmed).length,
+      mins:t0?Math.round((Date.now()-t0)/60000):null});}
+  archiveRound();
+  const wasShared=S.share.on;
+  S.round=blankRound();S.screen='home';stView=null;
+  save();
+  if(wasShared)leaveShare();else render();
+}
+function reopenRound(id){
+  const e=(S.history||[]).find(x=>x.id===id);if(!e)return;
+  S.round=clone(e.round);S.round.started=true;
+  S.config=clone(e.config);
+  if(e.playersSnap)S.players=clone(e.playersSnap);
+  const c=S.courses.find(x=>x.id===e.courseId);if(c)S.course=clone(c);
+  S.round.myStartedAt=S.round.myStartedAt||Date.now();
+  S.screen='hole';stView=null;
+  if(e.code){S.share={on:true,code:e.code,creator:false};S.shareMetaTs=0;S.round.holes.forEach(r=>{r._ts=r._ts||0;});primeCaches(false);save();syncConnect();render();}
+  else{S.share={on:false,code:null};save();render();}
+}
+let armDelHist=null;
+function delHist(id){
+  if(armDelHist!==id){armDelHist=id;render();setTimeout(()=>{if(armDelHist===id){armDelHist=null;render();}},3500);return;}
+  armDelHist=null;
+  set(()=>{S.history=S.history.filter(e=>e.id!==id);});
+}
 function pickCourse(i){set(()=>{
   syncLib();
   S.course=clone(S.courses[i]);
@@ -1834,7 +1964,7 @@ function startRound(){
   const withNearby=S.players.some(p=>p.nearby);
   stView=null;
   set(()=>{S.round=blankRound();S.round.started=true;S.round.game=S.config.game;
-    S.round.span=clone(S.config.span||{count:18,start:0});S.round.startedAt=Date.now();
+    S.round.span=clone(S.config.span||{count:18,start:0});S.round.startedAt=Date.now();S.round.myStartedAt=Date.now();
     S.round.cur=playOrder()[0];S.screen='hole';
     if(S.config.game!=='wolf')prefillNines(S.round.cur);});
   stat('round_start',{game:S.round.game,course:S.course.name,holes:S.round.span.count,firstTee:S.round.span.start+1,
@@ -1847,12 +1977,14 @@ function startRound(){
 }
 function prefillNines(h){
   const par=S.course.holes[h].par,r=S.round.holes[h];
+  if(!r.gts)r.gts=[0,0,0,0];
+  const fill=i=>{r.gts[i]=r.gts[i]||1;return par;};
   if(gameOn()==='scramble'){
     const capt=scrambleTeams().map(t=>t[0]);
-    r.gross=r.gross.map((g,i)=>(capt.includes(i)&&g==null)?par:g);
+    r.gross=r.gross.map((g,i)=>(capt.includes(i)&&g==null)?fill(i):g);
     return;
   }
-  r.gross=r.gross.map((g,i)=>(i<NP()&&g==null)?par:g);
+  r.gross=r.gross.map((g,i)=>(i<NP()&&g==null)?fill(i):g);
 }
 
 // ----- hole screen -----
@@ -1892,14 +2024,17 @@ function vHole(){
       const g=rec.gross[i];
       const side=(i===rec.wolfAt||i===rec.partner)?'wolf':'field';
       const net=g!=null?g-dots(i):null;
-      return `<div class="scorebar">
+      const lk=rowLock(h,i);
+      return `<div class="scorebar ${lk==='mine'?'rowmine':lk==='locked'?'rowlocked':''}">
         <div style="min-width:118px"><b>${esc(p.name)}</b> ${side==='wolf'?'<span class="pill wolf">wolf side</span>':''}
           <div class="tiny">${dots(i)>0?`<span class="dots">${'●'.repeat(dots(i))}</span>`:''} ${g!=null&&S.config.lens!=='gross'?`net ${net}`:''}</div></div>
-        <div class="stepper">
+        ${lk==='locked'
+          ?`<div style="display:flex;align-items:center;gap:12px"><span class="val num" style="font-size:24px">${g==null?'–':g}</span><button class="ghost" onclick="unlockRow(${h},${i})">✎</button></div>`
+          :`<div class="stepper">
           <button onclick="chScore(${i},-1)">−</button>
           <span class="val num">${g==null?'–':g}</span>
           <button onclick="chScore(${i},1)">+</button>
-        </div>
+        </div>`}
       </div>`;}).join('');
     const ctpRow=hole.par===3?`<div class="card"><h2>Closest to pin (+${S.config.pts.ctp} pt)</h2>
       <div class="flexwrap">${S.players.map((p,i)=>`<button class="ghost ${rec.ctp===i?'sel':''}" onclick="setCtp(${i})">${esc(p.name)}</button>`).join('')}
@@ -1960,9 +2095,9 @@ function howlSound(){
 function pickBlind(){howlSound();set(()=>{const r=S.round.holes[S.round.cur];r.mode='blind';prefill(r);});}
 function pickTake(i){set(()=>{const r=S.round.holes[S.round.cur];r.mode='partner';r.partner=i;prefill(r);});}
 function pickLone(){howlSound();set(()=>{const r=S.round.holes[S.round.cur];r.mode='lone';prefill(r);});}
-function prefill(r){const par=S.course.holes[S.round.cur].par;r.gross=r.gross.map(g=>g==null?par:g);}
+function prefill(r){const par=S.course.holes[S.round.cur].par;if(!r.gts)r.gts=[0,0,0,0];r.gross=r.gross.map((g,i)=>{if(g==null){r.gts[i]=r.gts[i]||1;return par;}return g;});}
 function redoPick(){set(()=>{const r=S.round.holes[S.round.cur];r.mode=null;r.partner=null;});}
-function chScore(i,d){set(()=>{const r=S.round.holes[S.round.cur];const v=(r.gross[i]??S.course.holes[S.round.cur].par)+d;r.gross[i]=Math.min(15,Math.max(1,v));});}
+function chScore(i,d){set(()=>{const r=S.round.holes[S.round.cur];const v=(r.gross[i]??S.course.holes[S.round.cur].par)+d;r.gross[i]=Math.min(15,Math.max(1,v));if(!r.gts)r.gts=[0,0,0,0];r.gts[i]=Date.now();});}
 function setCtp(i){set(()=>{S.round.holes[S.round.cur].ctp=i;});}
 function chStat(k,i,d){set(()=>{const a=statArr(S.round.holes[S.round.cur],k);a[i]=Math.max(0,a[i]+d);});}
 function advanceToNext(){
@@ -1992,14 +2127,17 @@ function vHoleNines(){
   const scoreRows=act.map(i=>{
     const p=S.players[i], g=rec.gross[i];
     const net=g!=null?g-dots(i):null;
-    return `<div class="scorebar">
+    const lk=rowLock(h,i);
+    return `<div class="scorebar ${lk==='mine'?'rowmine':lk==='locked'?'rowlocked':''}">
       <div style="min-width:118px"><b>${esc(p.name)}</b>
         <div class="tiny">${dots(i)>0?`<span class="dots">${'●'.repeat(dots(i))}</span>`:''} ${g!=null&&S.config.lens!=='gross'?`net ${net}`:''}</div></div>
-      <div class="stepper">
+      ${lk==='locked'
+        ?`<div style="display:flex;align-items:center;gap:12px"><span class="val num" style="font-size:24px">${g==null?'–':g}</span><button class="ghost" onclick="unlockRow(${h},${i})">✎</button></div>`
+        :`<div class="stepper">
         <button onclick="chScore(${i},-1)">−</button>
         <span class="val num">${g==null?'–':g}</span>
         <button onclick="chScore(${i},1)">+</button>
-      </div>
+      </div>`}
     </div>`;}).join('');
   const ctpOn=isN&&S.config.nines.ctp&&hole.par===3;
   const ctpRow=ctpOn?`<div class="card"><h2>Closest to pin (+1 pt)</h2>
@@ -2058,14 +2196,17 @@ function vHoleVegas(){
   const scoreRow=i=>{
     const p=S.players[i], g=rec.gross[i];
     const net=g!=null?g-dots(i):null;
-    return `<div class="scorebar">
+    const lk=rowLock(h,i);
+    return `<div class="scorebar ${lk==='mine'?'rowmine':lk==='locked'?'rowlocked':''}">
       <div style="min-width:112px"><b>${esc(p.name)}</b>
         <div class="tiny">${dots(i)>0?`<span class="dots">${'●'.repeat(dots(i))}</span>`:''} ${g!=null&&S.config.lens!=='gross'?`net ${net}`:''}</div></div>
-      <div class="stepper">
+      ${lk==='locked'
+        ?`<div style="display:flex;align-items:center;gap:12px"><span class="val num" style="font-size:24px">${g==null?'–':g}</span><button class="ghost" onclick="unlockRow(${h},${i})">✎</button></div>`
+        :`<div class="stepper">
         <button onclick="chScore(${i},-1)">−</button>
         <span class="val num">${g==null?'–':g}</span>
         <button onclick="chScore(${i},1)">+</button>
-      </div>
+      </div>`}
     </div>`;
   };
   const teamBoxes=T.map((t,k)=>{
@@ -2226,8 +2367,9 @@ function stViews(){
 function lensScore(rec,i,h,L){const g=rec.gross[i];return g==null?null:(L==='net'?g-dotsOn(i,h):g);}
 function computeStroke(){
   const led={net:[0,0,0,0],gross:[0,0,0,0]},par={net:[0,0,0,0],gross:[0,0,0,0]};
+  const sc=(rec,i,h,L)=>{const g=rec.gross[i];return g==null?null:(L==='net'?g-fullDotsOn(i,h):g);};
   for(let h=0;h<HOLES;h++){const rec=S.round.holes[h];if(!rec.confirmed)continue;
-    for(const L of ['net','gross'])actIdx().forEach(i=>{const s=lensScore(rec,i,h,L);
+    for(const L of ['net','gross'])actIdx().forEach(i=>{const s=sc(rec,i,h,L);
       if(s!=null){led[L][i]+=s;par[L][i]+=S.course.holes[h].par;}});}
   return {ledgers:led,par};
 }
@@ -2235,7 +2377,8 @@ function computeStableford(){
   const led={net:[0,0,0,0],gross:[0,0,0,0]};
   for(let h=0;h<HOLES;h++){const rec=S.round.holes[h];if(!rec.confirmed)continue;
     const p=S.course.holes[h].par;
-    for(const L of ['net','gross'])actIdx().forEach(i=>{const s=lensScore(rec,i,h,L);if(s==null)return;
+    for(const L of ['net','gross'])actIdx().forEach(i=>{const g=rec.gross[i];if(g==null)return;
+      const s=L==='net'?g-fullDotsOn(i,h):g;
       const d=s-p;led[L][i]+=d<=-3?5:d===-2?4:d===-1?3:d===0?2:d===1?1:0;});}
   return {ledgers:led};
 }
@@ -2391,6 +2534,7 @@ function vStandings(){
 function jumpAndGo(h){set(()=>{S.round.cur=h;S.screen='hole';});}
 
 // ----- settlement -----
+const PAIRS_GAMES=['wolf','vegas','bestball','scramble'];
 function vSettle(){
   if(gameOn()==='scramble'&&scrambleTeams().length===1){
     const sc=computeScramble();
@@ -2429,12 +2573,12 @@ function vSettle(){
       <div class="center mb"><span class="bigscore num">${ptsTxt(led[order[0]])}</span><div class="muted">${leadTxt}</div></div>
       <table class="st"><tr><th>Player</th><th class="r">${['stroke','scramble'].includes(gameOn())?'Strokes':gameOn()==='bestball'?'Holes':'Pts'}</th></tr>
       ${order.map(i=>`<tr><td>${esc(S.players[i].name)}</td><td class="r num" style="font-size:18px">${ptsTxt(led[i])}</td></tr>`).join('')}</table>
-      ${act.length===1?'<div class="tiny mt">Solo round — nothing to settle. Beat the course.</div>':`<div class="mt"><h2>Pairwise (difference method)</h2>${pairs.length?pairs.map(p=>`<div class="row">${p}</div>`).join(''):'<div class="muted">All square.</div>'}</div>`}
+      ${act.length===1?'<div class="tiny mt">Solo round — nothing to settle. Beat the course.</div>':PAIRS_GAMES.includes(gameOn())?`<div class="mt"><h2>Pairwise (difference method)</h2>${pairs.length?pairs.map(p=>`<div class="row">${p}</div>`).join(''):'<div class="muted">All square.</div>'}</div>`:''}
     </div>`;
   }).join('');
   return topbar('Settlement','','')+`<main>
-    <div class="card"><div class="row"><span class="muted">$ per ${['stroke','scramble'].includes(gameOn())?'stroke':gameOn()==='bestball'?'hole':'point'} (optional)</span>
-      <input type="number" step="0.25" min="0" value="${S.round.dollarPerPt||''}" placeholder="0" style="width:90px" onchange="set(()=>S.round.dollarPerPt=+this.value||0)"></div></div>
+    ${PAIRS_GAMES.includes(gameOn())&&actIdx().length>1?`<div class="card"><div class="row"><span class="muted">$ per ${['stroke','scramble'].includes(gameOn())?'stroke':gameOn()==='bestball'?'hole':'point'} (optional)</span>
+      <input type="number" step="0.25" min="0" value="${S.round.dollarPerPt||''}" placeholder="0" style="width:90px" onchange="set(()=>S.round.dollarPerPt=+this.value||0)"></div></div>`:''}
     ${blocks}
     <button class="big warn" onclick="newRound()">${armNewRound?'Tap again to clear this round':'Start a new round'}</button>
   </main>`+tabs('settle');
@@ -2443,8 +2587,7 @@ let armNewRound=false;
 function newRound(){
   if(!armNewRound){armNewRound=true;render();setTimeout(()=>{if(armNewRound){armNewRound=false;render();}},4000);return;}
   armNewRound=false;stView=null;
-  if(S.share.on)leaveShare();
-  set(()=>{S.round=blankRound();S.screen='home';});
+  endRound();
 }
 
 // Keep decoded copies of the big artwork alive for the whole session — render()
