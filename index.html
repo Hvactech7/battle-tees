@@ -1163,7 +1163,7 @@ function topbar(title,sub,backTo){
   return `<header class="top"><div><h1>${esc(title)}</h1>${sub?`<div class="sub">${esc(sub)}</div>`:''}</div>
   ${backTo?`<button onclick="go('${backTo}')">Back</button>`:''}</header>`;
 }
-function go(scr){set(()=>{S.screen=scr;});}
+function go(scr){S.screen=scr;save();render();}
 function tabs(sel){
   return `<nav class="tabs">
     <button class="${sel==='hole'?'sel':''}" onclick="go('hole')"><span class="ic">⛳</span>Hole</button>
@@ -1177,7 +1177,7 @@ function tabs(sel){
 function vHome(){
   const inRound=S.round.started;
   return `<main>
-  <div class="center" style="margin:10px 0 18px"><img src="banner.jpg" alt="Battle Tees" style="width:100%;aspect-ratio:1200/509;display:block;border-radius:14px;border:2px solid var(--green);box-shadow:4px 4px 0 var(--green)" onerror="this.outerHTML='<h1 style=&quot;color:var(--green);font-size:20px&quot;>Battle Tees</h1>'"></div>
+  <div class="center" style="margin:10px 0 18px"><img src="${art('banner.jpg')}" alt="Battle Tees" style="width:100%;aspect-ratio:1200/509;display:block;border-radius:14px;border:2px solid var(--green);box-shadow:4px 4px 0 var(--green)" onerror="this.outerHTML='<h1 style=&quot;color:var(--green);font-size:20px&quot;>Battle Tees</h1>'"></div>
   ${!S.me.name?`<div class="card"><h2>Your profile</h2>
     <div class="tiny mb">So nearby phones can add you to a round by name.</div>
     <div class="grid2">
@@ -1205,17 +1205,17 @@ function vHome(){
     <button class="gamebtn" onclick="pickGame('wolf')">
       <div style="flex:1;min-width:0"><span class="gname">Wolf</span>
         <div class="tiny">Hunt with a partner — or go lone wolf</div></div>
-      <img src="wolf.png" alt="" onerror="this.style.display='none'">
+      <img src="${art('wolf.png')}" alt="" onerror="this.style.display='none'">
     </button>
     <button class="gamebtn nineg" onclick="pickGame('nines')">
       <div style="flex:1;min-width:0"><span class="gname">9&rsquo;s</span>
         <div class="tiny">Every hole splits 9 points — 5 · 3 · 1</div></div>
-      <img src="nine.png" alt="" onerror="this.outerHTML='<span class=&quot;nine-ph&quot;>9</span>'">
+      <img src="${art('nine.png')}" alt="" onerror="this.outerHTML='<span class=&quot;nine-ph&quot;>9</span>'">
     </button>
     <button class="gamebtn vegasg" onclick="pickGame('vegas')">
       <div style="flex:1;min-width:0"><span class="gname">Vegas</span>
         <div class="tiny">2 v 2 — team digits duel, birdies flip the number</div></div>
-      <img src="vegas.png" alt="" onerror="this.outerHTML='<span class=&quot;vegas-ph&quot;>🎲</span>'">
+      <img src="${art('vegas.png')}" alt="" onerror="this.outerHTML='<span class=&quot;vegas-ph&quot;>🎲</span>'">
     </button>
     <button class="gamebtn strokeg" onclick="pickGame('stroke')">
       <div style="flex:1;min-width:0"><span class="gname">Stroke</span>
@@ -1264,7 +1264,7 @@ function ruleCard(art,title,tag,body){
 }
 function vRules(){
   const P=S.config.pts;
-  const img=(src,h)=>`<img src="${src}" style="height:${h||46}px;flex:none" onerror="this.style.display='none'">`;
+  const img=(src,h)=>`<img src="${art(src)}" style="height:${h||46}px;flex:none" onerror="this.style.display='none'">`;
   const em=e=>`<span style="font-size:34px;flex:none">${e}</span>`;
   const li=items=>`<ul style="margin:6px 0 0;padding-left:20px">${items.map(x=>`<li style="margin-bottom:6px">${x}</li>`).join('')}</ul>`;
   return topbar('Rules','How each battle is fought','home')+`<main>
@@ -1917,7 +1917,7 @@ function vHole(){
     <div class="wolfcard">
       <div style="flex:1;min-width:0"><b>${esc(names[rec.wolfAt??wolf])} is the Wolf</b>
       <div class="tiny">hits first · ${dots(rec.wolfAt??wolf)>0?`<span class="dots">${'●'.repeat(dots(rec.wolfAt??wolf))}</span> gets ${dots(rec.wolfAt??wolf)===2?'2 strokes':'a stroke'} here`:'no stroke here'}${h>=16&&S.config.last2LastPlace?' · last place picks up the wolf here':''}</div></div>
-      <img class="wolf-art" src="wolf.png" alt="" onerror="this.style.display='none'"></div>
+      <img class="wolf-art" src="${art('wolf.png')}" alt="" onerror="this.style.display='none'"></div>
     ${carryNote}
     ${body}
     ${holeNav}
@@ -2008,7 +2008,7 @@ function vHoleNines(){
     ${isN?`<div class="ninecard">
       <div style="flex:1;min-width:0"><b>9 points on this hole</b>
         <div class="tiny">${NP()===3?'5 best · 3 middle · 1 worst':'5 · 3 · 1 · 0 — worst walks away empty'}${S.config.nines.blitz?' · ⚡ blitz live':''}</div></div>
-      <img class="nine-art" src="nine.png" alt="" onerror="this.style.display='none'">
+      <img class="nine-art" src="${art('nine.png')}" alt="" onerror="this.style.display='none'">
     </div>`:''}
     ${body}
     ${holeNav}
@@ -2077,7 +2077,7 @@ function vHoleVegas(){
     <div class="vegascard">
       <div style="flex:1;min-width:0"><b>Vegas — low number wins the difference</b>
         <div class="tiny">${S.config.vegas.rotate==='six'?`Partners swap twice · `:''}${S.config.vegas.flip?'birdies flip':'no flips'} · ${S.config.lens==='both'?'net shown live':L}</div></div>
-      <img class="vegas-art" src="vegas.png" alt="" onerror="this.outerHTML='<span style=&quot;font-size:34px&quot;>🎲</span>'">
+      <img class="vegas-art" src="${art('vegas.png')}" alt="" onerror="this.outerHTML='<span style=&quot;font-size:34px&quot;>🎲</span>'">
     </div>
     ${[0,1,2,3].some(i=>rec.gross[i]==null)?`<button class="ghost mb" style="width:100%" onclick="set(()=>prefillNines(${h}))">Everyone to par ${hole.par} — adjust from there</button>`:''}
     ${teamBoxes}${ctpRow}${extrasCard}${resultNote}
@@ -2421,11 +2421,19 @@ function newRound(){
 // Keep decoded copies of the big artwork alive for the whole session — render()
 // rebuilds the DOM on every screen change, and without these iOS re-decodes the
 // images from scratch, flashing an artless start screen for a second or two.
-const ARTCACHE=['banner.jpg','wolf.png','nine.png','vegas.png','crest.jpg'].map(s=>{
-  const i=new Image();i.src=s;
-  if(i.decode)i.decode().catch(()=>{});
-  return i;
+// Load each artwork ONCE per session into a blob URL. Screen switches then
+// paint from memory — no service-worker round trips, no background network
+// revalidation per render, no pop-in on flaky signal.
+const ART={};
+['banner.jpg','wolf.png','nine.png','vegas.png','crest.jpg'].forEach(f=>{
+  fetch(f).then(r=>r.ok?r.blob():null).then(b=>{
+    if(!b)return;
+    ART[f]=URL.createObjectURL(b);
+    const i=new Image();i.src=ART[f];if(i.decode)i.decode().catch(()=>{});
+    if(S.screen==='home'||S.screen==='rules')render();
+  }).catch(()=>{});
 });
+function art(f){return ART[f]||f;}
 setInterval(()=>{if(S.round.started&&S.round.startedAt&&(S.screen==='hole'||S.screen==='standings'))render();},60000);
 applyTheme();
 render();
