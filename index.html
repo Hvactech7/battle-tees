@@ -188,7 +188,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1783837348';
+const BUILD='1783838498';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1243,6 +1243,7 @@ function render(){
   else if(scr==='players') html=vPlayers();
   else if(scr==='rules') html=vRules();
   else if(scr==='history') html=vHistory();
+  else if(scr==='pickcourse') html=vPickCourse();
   else if(scr==='course') html=vCourse();
   else if(scr==='setup') html=vSetup();
   else if(scr==='hole') html=vHole();
@@ -1362,6 +1363,20 @@ function ruleCard(art,title,tag,body){
     <div style="margin-top:10px;font-size:15px;line-height:1.55">${body}</div>
   </details>`;
 }
+function vPickCourse(){
+  return topbar(`Where are you playing?`,`${gameName(S.config.game)} · ${actIdx().map(i=>esc((S.players[i].name||'').split(' ')[0])).join(', ')}`,'setup')+`<main>
+  <div class="card"><h2>Pick the course</h2>
+    ${S.courses.map((c,i)=>{
+      const par=c.holes.reduce((a,h)=>a+h.par,0);
+      const active=c.id===S.course.id;
+      return `<div class="row" onclick="pickCourse(${i})" style="cursor:pointer;${active?'background:var(--green-lt);border-radius:10px;padding:9px 12px;border-top:none;margin:2px 0':''}">
+        <div><b${active?' style="color:var(--green)"':''}>${active?'✓ ':''}${esc(c.name)}</b><div class="tiny">Par ${par}</div></div>
+      </div>`;}).join('')}
+    ${courseFinderHTML(true)}
+  </div>
+  <button class="big" onclick="startRound()">Start round — ${esc(S.course.name)}</button>
+  </main>`;
+}
 function vHistory(){
   const H=S.history||[];
   return topbar('Past rounds','Reopen one to view or fix scores','home')+`<main>
@@ -1451,21 +1466,11 @@ function backupBlockHTML(){
         <button class="ghost" onclick="openBackup()">☁ Back up</button>
         <button class="ghost" onclick="openRestore()">Restore</button></div>`}`;
 }
-function vCourses(){
-  return topbar('Courses','','home')+`<main>
-  <div class="card"><h2>Course</h2>
-    ${S.courses.map((c,i)=>{
-      const par=c.holes.reduce((a,h)=>a+h.par,0);
-      const active=c.id===S.course.id;
-      return `<div class="row" style="${active?'background:var(--green-lt);border-radius:10px;padding:9px 12px;border-top:none;margin:2px 0':''}">
-        <div onclick="pickCourse(${i})" style="flex:1;cursor:pointer"><b${active?' style="color:var(--green)"':''}>${esc(c.name)}</b><div class="tiny">Par ${par} · ${c.teeSets.map(t=>esc(t.name)).join(' / ')}</div></div>
-        ${active?`<button class="ghost sel" onclick="go('course')">Edit</button>`
-          :S.courses.length>1?`<button class="ghost danger" onclick="delCourse(${i})">${armDelCourse===i?'Delete?':'✕'}</button>`:''}
-      </div>`;}).join('')}
-    ${finder.status==='idle'?`<div class="mt" style="display:flex;gap:6px;flex-wrap:wrap">
+function courseFinderHTML(noBlank){
+  return `    ${finder.status==='idle'?`<div class="mt" style="display:flex;gap:6px;flex-wrap:wrap">
       <button class="ghost" onclick="addCourse()">📍 Find nearest</button>
       <button class="ghost" onclick="openCourseSearch()">🔎 Search by name</button>
-      <button class="ghost" onclick="addBlankCourse()">Add blank</button></div>`:''}
+      ${noBlank?'':`<button class="ghost" onclick="addBlankCourse()">Add blank</button>`}</div>`:''}
     ${finder.status==='search'?`<div class="mt">
       <input type="text" id="courseQ" placeholder="Course name — e.g. Pebble Beach" onkeydown="if(event.key==='Enter')runCourseSearch()">
       <div class="mt" style="display:flex;gap:6px">
@@ -1486,7 +1491,20 @@ function vCourses(){
       <button class="ghost mt" onclick="cancelFind()">Cancel</button></div>`:''}
     ${finder.status==='error'?`<div class="banner carry mt">${esc(finder.error)}</div>
       <div style="display:flex;gap:6px"><button class="ghost" onclick="addBlankCourse()">Start blank instead</button>
-      <button class="ghost" onclick="cancelFind()">Dismiss</button></div>`:''}
+      <button class="ghost" onclick="cancelFind()">Dismiss</button></div>`:''}`;
+}
+function vCourses(){
+  return topbar('Courses','','home')+`<main>
+  <div class="card"><h2>Course</h2>
+    ${S.courses.map((c,i)=>{
+      const par=c.holes.reduce((a,h)=>a+h.par,0);
+      const active=c.id===S.course.id;
+      return `<div class="row" style="${active?'background:var(--green-lt);border-radius:10px;padding:9px 12px;border-top:none;margin:2px 0':''}">
+        <div onclick="pickCourse(${i})" style="flex:1;cursor:pointer"><b${active?' style="color:var(--green)"':''}>${esc(c.name)}</b><div class="tiny">Par ${par} · ${c.teeSets.map(t=>esc(t.name)).join(' / ')}</div></div>
+        ${active?`<button class="ghost sel" onclick="go('course')">Edit</button>`
+          :S.courses.length>1?`<button class="ghost danger" onclick="delCourse(${i})">${armDelCourse===i?'Delete?':'✕'}</button>`:''}
+      </div>`;}).join('')}
+    ${courseFinderHTML()}
     ${S.round.started?`<div class="tiny mt">Switching courses re-scores the round in progress against the new card.</div>`:''}
     ${backupBlockHTML()}
   </div>
@@ -1702,7 +1720,7 @@ function applyGhinCourse(g){
   const t=S.course.teeSets[Math.min(1,S.course.teeSets.length-1)].id;
   S.players.forEach(p=>p.tee=t);
   finder={status:'idle',choices:[],error:''};
-  S.screen='course';save();render();
+  S.screen=pickingCourse?'pickcourse':'course';save();render();
 }
 function openCourseSearch(){
   finder={status:'search',choices:[],results:[],error:''};
@@ -1781,7 +1799,7 @@ async function useFoundCourse(idx){
         +(g&&g.error?` (USGA lookup: ${g.error})`:'')};
     S.players.forEach(p=>p.tee=S.course.teeSets[0].id);
     finder={status:'idle',choices:[],error:''};
-    S.screen='course';save();render();
+    S.screen=pickingCourse?'pickcourse':'course';save();render();
   }catch(e){finder={status:'error',choices:[],error:'Could not download hole data — check your connection.'};render();}
 }
 function addBlankCourse(){
@@ -1793,7 +1811,7 @@ function addBlankCourse(){
     teeSets:[{id:'t'+Date.now(),name:'White',rating:72.0,slope:120}],
     holes:Array.from({length:HOLES},(_,i)=>({par:4,si:i+1}))};
   S.players.forEach(p=>p.tee=S.course.teeSets[0].id);
-  S.screen='course';
+  S.screen=pickingCourse?'pickcourse':'course';
 });}
 
 // ----- course editor -----
@@ -1954,7 +1972,7 @@ function vSetup(){
     ${[['putts','Putts'],['bunker','Bunker shots'],['chips','Chips'],['pen','Penalties']].map(([k,l])=>`<div class="row"><span class="muted">${l}</span>
       <button class="ghost ${S.config.track[k]?'sel':''}" onclick="set(()=>S.config.track.${k}=!S.config.track.${k})">${S.config.track[k]?'On':'Off'}</button></div>`).join('')}
   </div>
-  <button class="big" onclick="startRound()">Start round</button>
+  <button class="big" onclick="startPick()">Next — pick the course →</button>
   </main>`;
 }
 function tapClear(el){el.dataset.prev=el.value;el.value='';}
@@ -1997,8 +2015,11 @@ function movePl(i){set(()=>{const a=S.players;[a[i-1],a[i]]=[a[i],a[i-1]];});}
 function chPt(k,d){set(()=>{S.config.pts[k]=Math.max(0,S.config.pts[k]+d);});}
 function chStblPt(k,d){set(()=>{S.config.stbl.pts[k]=Math.min(10,Math.max(-5,S.config.stbl.pts[k]+d));});}
 function chAllow(d){set(()=>{S.config.allowance=Math.min(100,Math.max(50,S.config.allowance+d));});}
+let pickingCourse=false;
+function startPick(){pickingCourse=true;finder={status:'idle',choices:[],error:''};S.screen='pickcourse';save();render();}
 function setSpan(count,start){set(()=>{S.config.span={count,start};});}
 function startRound(){
+  pickingCourse=false;
   const withNearby=S.players.some(p=>p.nearby);
   stView=null;
   set(()=>{S.round=blankRound();S.round.started=true;S.round.game=S.config.game;
