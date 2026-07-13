@@ -1,7 +1,7 @@
 // Wolf service worker — offline cache + auto-update (stale-while-revalidate).
 // The app loads instantly from cache and refreshes in the background; a new
 // version appears the next time it's opened while online.
-const CACHE = 'battletees-1783973042';
+const CACHE = 'battletees-1783973457';
 const CORE = ['./', 'index.html', 'manifest.json', 'icon-180.png', 'icon-512.png', 'crest.jpg', 'banner.jpg', 'wolf.png', 'nine.png', 'vegas.png', 'quota.png', 'sixes.png', 'umbrella.png', 'hammer.png', 'bbb.png', 'stroke.png', 'stableford.png', 'bestball.png', 'scramble.png', 'nassau.png'];
 
 // Safari refuses to let a service worker answer a page load with a response
@@ -38,15 +38,19 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
-  const isShell = req.mode === 'navigate' || req.url.endsWith('/') || req.url.endsWith('index.html');
+  // The APP shell is only the root document. /welcome/ and /rules/* are their
+  // own pages — they must NEVER fall back to the cached app, or a first visit
+  // to a rules page serves the app instead.
+  const path = new URL(req.url).pathname;
+  const isApp = path === '/' || path === '/index.html';
   e.respondWith(
     caches.match(req)
-      .then((hit) => hit || (isShell ? caches.match('index.html') : undefined))
+      .then((hit) => hit || (isApp ? caches.match('index.html') : undefined))
       .then((cached) => {
         // belt & braces: never serve a redirect-tainted entry from an old cache
         const safeCached = cached && cached.redirected ? clean(cached) : Promise.resolve(cached);
         return safeCached.then((cachedResp) => {
-          const network = (isShell ? fetch(req.url, {cache: 'no-store'}) : fetch(req)).then(clean).then((resp) => {
+          const network = (isApp ? fetch(req.url, {cache: 'no-store'}) : fetch(req)).then(clean).then((resp) => {
             if (resp && resp.status === 200) {
               const clone = resp.clone();
               caches.open(CACHE).then((c) => c.put(req, clone));
