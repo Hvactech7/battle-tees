@@ -38,6 +38,9 @@ section{padding:44px 0 8px}
 /* games */
 .games{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
 .game{display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:12px;border:2px solid;overflow:hidden;min-height:88px}
+a.game{text-decoration:none;color:inherit;cursor:pointer;transition:transform .06s}
+a.game:hover{transform:translate(-1px,-1px)}
+a.hammer{text-decoration:none;color:inherit;cursor:pointer}
 .game b{font-family:Rajdhani;font-size:23px;display:block;line-height:1.15}
 .game span{font-size:13.5px;color:var(--ink2)}
 .game img{height:64px;flex:none;filter:drop-shadow(0 0 6px rgba(0,0,0,.5))}
@@ -93,26 +96,26 @@ a{color:var(--elec)}
   </div>
 
   <section>
-    <div class="sect-title">CHOOSE YOUR GAME</div>
-    <p class="sect-sub">Every format rides the same scorecard — enter scores once, the app does all the math.</p>
+    <div class="sect-title" id="games">CHOOSE YOUR GAME</div>
+    <p class="sect-sub">Every format rides the same scorecard — enter scores once, the app does all the math. Tap any game for the full rules.</p>
     <div class="games">
-      <div class="game g-wolf"><img src="/wolf.png" alt=""><div><b>Wolf</b><span>First off the tee hunts with a partner — or goes lone wolf</span></div></div>
-      <div class="game g-nine"><img src="/nine.png" alt=""><div><b>9&rsquo;s</b><span>Every hole splits 9 points — 5 · 3 · 1. Perfect for threesomes</span></div></div>
-      <div class="game g-vegas"><img src="/vegas.png" alt=""><div><b>Vegas</b><span>2 v 2 team digits duel — birdies flip the other team's number</span></div></div>
-      <div class="game g-stroke"><img src="/stroke.png" alt=""><div><b>Stroke</b><span>Classic scoring, 1–4 players — you against the course</span></div></div>
-      <div class="game g-bb"><img src="/bestball.png" alt=""><div><b>Best Ball</b><span>2 v 2 match play — your team's best score counts</span></div></div>
-      <div class="game g-scr"><img src="/scramble.png" alt=""><div><b>Scramble</b><span>One ball per team — 2 v 2 battles or the tournament card</span></div></div>
-      <div class="game g-six"><img src="/sixes.png" alt=""><div><b>Sixes</b><span>Partners rotate every six holes — everyone teams with everyone</span></div></div>
-      <div class="game g-umb"><img src="/umbrella.png" alt=""><div><b>Umbrella</b><span>Six points a hole — sweep them all and it doubles to twelve</span></div></div>
-      <div class="game g-quota"><img src="/quota.png" alt=""><div><b>Quota</b><span>Race your own number — the fairest game for mixed handicaps</span></div></div>
-      <div class="game g-stbl"><img src="/stableford.png" alt=""><div><b>Stableford</b><span>Points for your score vs par — set your own point values</span></div></div>
-      <div class="game g-bbb"><img src="/bbb.png" alt=""><div><b>Bingo Bango Bongo</b><span>Three taps a hole — the great equalizer, no handicaps needed</span></div></div>
-      <div class="game g-nas"><img src="/nassau.png" alt=""><div><b>Nassau</b><span>The classic — front nine, back nine, overall, with presses</span></div></div>
+      <a class="game g-wolf" href="/rules/wolf/"><img src="/wolf.png" alt=""><div><b>Wolf</b><span>First off the tee hunts with a partner — or goes lone wolf</span></div></a>
+      <a class="game g-nine" href="/rules/nines/"><img src="/nine.png" alt=""><div><b>9&rsquo;s</b><span>Every hole splits 9 points — 5 · 3 · 1. Perfect for threesomes</span></div></a>
+      <a class="game g-vegas" href="/rules/vegas/"><img src="/vegas.png" alt=""><div><b>Vegas</b><span>2 v 2 team digits duel — birdies flip the other team's number</span></div></a>
+      <a class="game g-stroke" href="/rules/stroke/"><img src="/stroke.png" alt=""><div><b>Stroke</b><span>Classic scoring, 1–4 players — you against the course</span></div></a>
+      <a class="game g-bb" href="/rules/best-ball/"><img src="/bestball.png" alt=""><div><b>Best Ball</b><span>2 v 2 match play — your team's best score counts</span></div></a>
+      <a class="game g-scr" href="/rules/scramble/"><img src="/scramble.png" alt=""><div><b>Scramble</b><span>One ball per team — 2 v 2 battles or the tournament card</span></div></a>
+      <a class="game g-six" href="/rules/sixes/"><img src="/sixes.png" alt=""><div><b>Sixes</b><span>Partners rotate every six holes — everyone teams with everyone</span></div></a>
+      <a class="game g-umb" href="/rules/umbrella/"><img src="/umbrella.png" alt=""><div><b>Umbrella</b><span>Six points a hole — sweep them all and it doubles to twelve</span></div></a>
+      <a class="game g-quota" href="/rules/quota/"><img src="/quota.png" alt=""><div><b>Quota</b><span>Race your own number — the fairest game for mixed handicaps</span></div></a>
+      <a class="game g-stbl" href="/rules/stableford/"><img src="/stableford.png" alt=""><div><b>Stableford</b><span>Points for your score vs par — set your own point values</span></div></a>
+      <a class="game g-bbb" href="/rules/bingo-bango-bongo/"><img src="/bbb.png" alt=""><div><b>Bingo Bango Bongo</b><span>Three taps a hole — the great equalizer, no handicaps needed</span></div></a>
+      <a class="game g-nas" href="/rules/nassau/"><img src="/nassau.png" alt=""><div><b>Nassau</b><span>The classic — front nine, back nine, overall, with presses</span></div></a>
     </div>
-    <div class="hammer"><img src="/hammer.png" alt="">
+    <a class="hammer" href="/rules/hammer/"><img src="/hammer.png" alt="">
       <div><b>🔨 The Hammer — battle modifier</b>
       <span>Switch it on in Best Ball or Sixes and any hole can go double-or-fold, mid-hole. Accept the throw and the stakes double — and only you can throw the next one. Fold and walk away cheap. 2× &rarr; 4× &rarr; 8×…</span></div>
-    </div>
+    </a>
   </section>
 
   <section>
