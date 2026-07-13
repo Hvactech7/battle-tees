@@ -78,6 +78,8 @@
   .banner.wolf{background:var(--amber-lt);color:var(--amber);border-color:var(--amber-bd);box-shadow:2px 2px 0 var(--amber-bd)}
   .banner.ok{background:var(--elec-lt);color:var(--elec-mid);border-color:var(--elec);box-shadow:2px 2px 0 var(--elec-dk)}
   .banner.carry{background:var(--red-lt);color:var(--red);border-color:var(--red);box-shadow:2px 2px 0 var(--red)}
+  .banner.ham{background:rgba(184,115,51,.14);color:#e0995c;border-color:#b87333;box-shadow:2px 2px 0 #6e4418}
+  .hamcard{border-color:#b87333;box-shadow:5px 5px 0 #6e4418}
   .dots{color:var(--elec);letter-spacing:2px;font-size:11px}
   .pill{display:inline-block;border-radius:999px;padding:2px 9px;font-size:11.5px;font-weight:600}
   .pill.wolf{background:var(--amber-lt);color:var(--amber)}
@@ -197,7 +199,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1783911920';
+const BUILD='1783913482';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -265,6 +267,7 @@ function load(){
       if(!s.config.stbl)s.config.stbl={n:4,pts:{alba:5,eagle:4,birdie:3,par:2,bogey:1,dbl:0}};
       if(!s.config.quota)s.config.quota={n:4,pts:{alba:6,eagle:4,birdie:3,par:2,bogey:0}};
       if(!s.config.sixes)s.config.sixes={pairing:0};
+      if(!s.config.hammer)s.config.hammer={on:false};
       if(!s.config.scramble)s.config.scramble={teams:'2v2'};
       if(!s.history)s.history=[];
       if(!s.config.span)s.config.span={count:18,start:0};
@@ -993,15 +996,33 @@ function computeVegas(){
 }
 // Best Ball (2v2): each plays their own ball; the team's better score wins the
 // hole. Ledger = holes won (shared by both teammates).
+// Hammer overlay (Best Ball & Sixes): mid-hole double-or-fold. Every hole
+// opens at 1x with the hammer in the air; either team may throw it. The other
+// side accepts (hole doubles, they take the hammer — only they can re-throw)
+// or folds (concedes the hole at the pre-throw stake). State lives on the
+// hole record (rec.ham) so it rides the normal 4-phone sync.
+function hammerLive(g){return !!(S.config.hammer&&S.config.hammer.on)&&gameOn()===g;}
+function hammerOn(){return hammerLive('bestball')||hammerLive('sixes');}
+function hamState(rec){return Object.assign({m:1,own:-1,pend:-1,fold:-1},rec.ham||{});}
+function hamTeams(h){return gameOn()==='sixes'?sixesTeamsFor(h):matchTeams();}
+function hamAct(fn){set(()=>{const rec=S.round.holes[S.round.cur];const st=hamState(rec);fn(st);rec.ham=st;});}
+function hamThrow(k){hamAct(st=>{if(st.fold>=0||st.pend>=0)return;if(st.own!==-1&&st.own!==k)return;st.pend=k;});}
+function hamAccept(){hamAct(st=>{if(st.pend<0)return;st.m*=2;st.own=1-st.pend;st.pend=-1;});}
+function hamFold(){hamAct(st=>{if(st.pend<0)return;st.fold=1-st.pend;st.pend=-1;});}
+function hamUndo(){set(()=>{delete S.round.holes[S.round.cur].ham;});}
 function computeBestBall(){
   const T=matchTeams();
+  const hm=hammerLive('bestball');
   const ledgers={net:[0,0,0,0],gross:[0,0,0,0]};
   for(const h of playOrder()){
     const rec=S.round.holes[h];if(!rec.confirmed)continue;
+    const st=hm?hamState(rec):null;
+    const mult=st?st.m:1;
     for(const L of ['net','gross']){
+      if(st&&st.fold>=0){T[1-st.fold].forEach(i=>ledgers[L][i]+=mult);continue;}
       const best=t=>Math.min(...t.map(i=>{const sc=lensScore(rec,i,h,L);return sc==null?99:sc;}));
       const a=best(T[0]),b=best(T[1]);
-      if(a!==b)T[a<b?0:1].forEach(i=>ledgers[L][i]+=1);
+      if(a!==b)T[a<b?0:1].forEach(i=>ledgers[L][i]+=mult);
     }
   }
   return {ledgers,perHole:null,carries:{net:0,gross:0},lenses:['net','gross']};
@@ -1063,18 +1084,22 @@ function sixesTeamsFor(h){
   return P[(p0+Math.floor(Math.max(0,posOf(h))/seg))%3];
 }
 function computeSixes(){
+  const hm=hammerLive('sixes');
   const ledgers={net:[0,0,0,0],gross:[0,0,0,0]};
   for(const h of playOrder()){
     const rec=S.round.holes[h];if(!rec.confirmed)continue;
     const T=sixesTeamsFor(h);
+    const st=hm?hamState(rec):null;
+    const mult=st?st.m:1;
     for(const L of ['net','gross']){
+      if(st&&st.fold>=0){T[1-st.fold].forEach(i=>ledgers[L][i]+=mult);continue;}
       const sc=i=>{const g=rec.gross[i];return g==null?99:(L==='net'?g-dotsOn(i,h):g);};
       const bA=Math.min(sc(T[0][0]),sc(T[0][1])),bB=Math.min(sc(T[1][0]),sc(T[1][1]));
       let win=null;
       if(bA<bB)win=0;else if(bB<bA)win=1;
       else{const sA=sc(T[0][0])+sc(T[0][1]),sB=sc(T[1][0])+sc(T[1][1]);
         if(sA<sB)win=0;else if(sB<sA)win=1;}
-      if(win!=null)T[win].forEach(i=>ledgers[L][i]+=1);
+      if(win!=null)T[win].forEach(i=>ledgers[L][i]+=mult);
     }
   }
   return {ledgers,perHole:null,carries:{net:0,gross:0},lenses:['net','gross']};
@@ -1574,6 +1599,12 @@ function vRules(){
     '<b>☂ The Umbrella:</b> win all six on one hole and it doubles to <b>12</b>. Dominance pays.',
     'Fixed 2 v 2 teams — pick partners in setup. Tap closest-to-pin each hole (any hole, not just par 3s).',
     'Net or gross via the scoring options; the birdie point is always gross.']))}
+  ${ruleCard(img('hammer.png',48),'Hammer','Battle modifier — double or fold',li([
+    '<b>Not a game — a weapon:</b> switch it on in <b>Best Ball</b> or <b>Sixes</b> setup and every hole becomes a standoff.',
+    '<b>The throw:</b> any time during a hole — even mid-swing drama — either team can throw the hammer. The hole instantly goes double-or-fold.',
+    '<b>Accept:</b> the double is live and the hammer changes hands — only the accepting team can throw the next one. Re-hammers stack: 2×, 4×, 8×…',
+    '<b>Fold:</b> concede the hole at the old stake and move on. Cheap insurance or slow bleed — you decide.',
+    'Every hole starts fresh at 1× with the hammer in the air. Throw it when your opponent is in the trees.']))}
   ${(()=>{const P=quotaPts();return ruleCard(img('quota.png',48),'Quota','Race your own number',li([
     '<b>Your quota:</b> 36 minus your course handicap (18 for a nine-hole round) — a personal target that makes every handicap fair.',
     `<b>Points from gross scores:</b> par <b>${P.par}</b> · birdie <b>${P.birdie}</b> · eagle <b>${P.eagle}</b> · albatross <b>${P.alba}</b> · bogey <b>${P.bogey}</b> — adjustable in setup.`,
@@ -2035,6 +2066,11 @@ function vSetup(){
       <button class="ghost ${S.config.sixes.pairing===pi?'sel':''}" style="width:100%;text-align:left;margin-bottom:8px" onclick="set(()=>S.config.sixes.pairing=${pi})">${pairLbl(T)}</button>`).join('')}
     <div class="tiny mt">Partners rotate every ${(S.config.span&&S.config.span.count===9)?'three':'six'} holes so everyone teams with everyone. Best ball wins the hole — 1 point each.</div>
   </div>`:''}
+  ${(bestball||sixes)?`<div class="card hamcard"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><h2 style="margin-bottom:0">🔨 Hammer <span class="tiny" style="font-weight:400">— battle modifier</span></h2><img src="${art('hammer.png')}" style="height:56px;flex:none" onerror="this.style.display='none'"></div>
+    <div class="row" style="border-top:none"><span class="muted">Double-or-fold, any time mid-hole</span>
+      <button class="ghost ${S.config.hammer.on?'sel':''}" onclick="set(()=>S.config.hammer.on=!S.config.hammer.on)">${S.config.hammer.on?'On':'Off'}</button></div>
+    <div class="tiny mt">Either team can throw the hammer to double what the hole is worth. The other side <b>accepts</b> — the double is live and they take the hammer (only they can re-throw) — or <b>folds</b> and concedes the hole at the old stake. Every hole starts fresh at 1×.</div>
+  </div>`:''}
   ${(bestball||scramble||umbrella)?`<div class="card"><h2>Teams</h2>
     ${scramble?`<div class="row" style="border-top:none"><span class="muted">Format</span>
       <span class="seg" style="display:inline-flex;gap:6px">
@@ -2197,7 +2233,8 @@ function startRound(){
       :S.round.game==='scramble'?{teams:S.config.scramble.teams}
       :S.round.game==='stableford'?{n:S.config.stbl.n,pts:S.config.stbl.pts}
       :S.round.game==='quota'?{n:S.config.quota.n,pts:S.config.quota.pts}
-      :S.round.game==='sixes'?{pairing:S.config.sixes.pairing}
+      :S.round.game==='sixes'?{pairing:S.config.sixes.pairing,hammer:!!S.config.hammer.on}
+      :S.round.game==='bestball'?{hammer:!!S.config.hammer.on}
       :S.round.game==='umbrella'?{pairing:S.config.vegas.pairing}
       :S.round.game==='wolf'?{carry:S.config.carryTies,last2:S.config.last2LastPlace}:{}});
   if(withNearby&&!S.share.on)shareRound();
@@ -2326,6 +2363,36 @@ function prefill(r){const par=S.course.holes[S.round.cur].par;if(!r.gts)r.gts=[0
 function redoPick(){set(()=>{const r=S.round.holes[S.round.cur];r.mode=null;r.partner=null;});}
 function chScore(i,d){set(()=>{const r=S.round.holes[S.round.cur];const v=(r.gross[i]??S.course.holes[S.round.cur].par)+d;r.gross[i]=Math.min(15,Math.max(1,v));if(!r.gts)r.gts=[0,0,0,0];r.gts[i]=Date.now();});}
 function setCtp(i){set(()=>{S.round.holes[S.round.cur].ctp=i;});}
+// The Hammer card on the hole screen: idle → throw, pending → accept/fold.
+function hammerCardHTML(){
+  const h=S.round.cur,rec=S.round.holes[h];
+  const st=hamState(rec),T=hamTeams(h);
+  const fn=i=>esc((S.players[i].name||'').split(' ')[0]);
+  const tn=k=>T[k].map(fn).join(' & ');
+  const dis=rec.confirmed||isReview();
+  let inner;
+  if(st.fold>=0){
+    inner=`<div class="banner ham" style="margin-bottom:0">🔨 <b>${tn(st.fold)}</b> folded — ${tn(1-st.fold)} take the hole at <b>${st.m}×</b></div>
+      ${dis?'':`<button class="ghost mt" style="width:100%" onclick="hamUndo()">Undo — hole is live again</button>`}`;
+  }else if(st.pend>=0){
+    inner=`<div class="banner ham">🔨 <b>${tn(st.pend)}</b> throw the hammer — this hole goes ${st.m}× → <b>${st.m*2}×</b></div>
+      <div class="tiny mb">${tn(1-st.pend)} — your call:</div>
+      <div style="display:flex;gap:8px">
+        <button class="big" style="flex:1;margin:0" ${dis?'disabled':''} onclick="hamAccept()">Accept ${st.m*2}×</button>
+        <button class="big danger" style="flex:1;margin:0" ${dis?'disabled':''} onclick="hamFold()">Fold the hole</button>
+      </div>
+      <button class="ghost mt" style="width:100%" ${dis?'disabled':''} onclick="hamUndo()">Oops — nobody threw it</button>`;
+  }else{
+    inner=`<div class="tiny mb">Stake <b>${st.m}×</b>${st.own>=0?` · <b>${tn(st.own)}</b> hold the hammer`:' · hammer is in the air — either team can throw it'}</div>
+      <div style="display:flex;gap:8px">
+      ${[0,1].map(k=>(st.own===-1||st.own===k)
+        ?`<button class="ghost" style="flex:1;font-weight:700" ${dis?'disabled':''} onclick="hamThrow(${k})">🔨 ${tn(k)}</button>`
+        :`<button class="ghost" style="flex:1" disabled>${tn(k)}</button>`).join('')}
+      </div>
+      ${st.m>1?`<div class="tiny mt">Winner books <b>${st.m}</b> point${st.m>1?'s':''} this hole.</div>`:`<div class="tiny mt">Tap your team to throw — the other side must accept the double or fold the hole.</div>`}`;
+  }
+  return `<div class="card hamcard"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><h2 style="margin-bottom:0">🔨 Hammer</h2><img src="${art('hammer.png')}" style="height:52px;flex:none" onerror="this.style.display='none'"></div><div style="height:8px"></div>${inner}</div>`;
+}
 function chStat(k,i,d){set(()=>{const a=statArr(S.round.holes[S.round.cur],k);a[i]=Math.max(0,a[i]+d);});}
 function advanceToNext(){
   const o=playOrder();
@@ -2371,7 +2438,10 @@ function vHoleNines(){
     <div class="flexwrap">${act.map(i=>`<button class="ghost ${rec.ctp===i?'sel':''}" onclick="setCtp(${i})">${esc(S.players[i].name)}</button>`).join('')}
     <button class="ghost ${rec.ctp===-1?'sel':''}" onclick="setCtp(-1)">No one on green</button></div>
     <div class="tiny mt">Ball must be on the green. Unclaimed = no point.</div></div>`:'';
-  const done=act.every(i=>rec.gross[i]!=null)&&(!ctpOn||rec.ctp!=null);
+  const hamSt=hammerOn()?hamState(rec):null;
+  const hamCard=hammerOn()?hammerCardHTML():'';
+  let done=act.every(i=>rec.gross[i]!=null)&&(!ctpOn||rec.ctp!=null);
+  if(hamSt){if(hamSt.fold>=0)done=true;else if(hamSt.pend>=0)done=false;}
   let resultNote='';
   if(rec.confirmed&&isN){
     resultNote=activeLenses().map(L=>{
@@ -2392,7 +2462,7 @@ function vHoleNines(){
   const body=`<div class="card">
     ${act.some(i=>rec.gross[i]==null)?`<button class="ghost mb" style="width:100%" onclick="set(()=>prefillNines(${h}))">Everyone to par ${hole.par} — adjust from there</button>`:''}
     ${scoreRows}
-    </div>${ctpRow}${extrasCard}${resultNote}
+    </div>${hamCard}${ctpRow}${extrasCard}${resultNote}
     ${rec.confirmed
       ?`${isReview()?'':`<button class="big" onclick="nextHole()">${posOf(h)<playOrder().length-1?'Next hole →':'Finish round'}</button>`}
         <button class="ghost mt" style="width:100%" onclick="unconfirm()">Edit this hole</button>`
@@ -2623,9 +2693,13 @@ function computeMatch(L){
   for(let p=0;p<o.length;p++){
     const h=o[p],rec=S.round.holes[h];if(!rec.confirmed)continue;
     thru++;
-    const best=t=>Math.min(...t.map(i=>{const s=lensScore(rec,i,h,L);return s==null?99:s;}));
-    const a=best(T[0]),b=best(T[1]);
-    if(a<b)up++;else if(b<a)up--;
+    const st=hammerLive('bestball')?hamState(rec):null;
+    if(st&&st.fold>=0){up+=st.fold===1?1:-1;}
+    else{
+      const best=t=>Math.min(...t.map(i=>{const s=lensScore(rec,i,h,L);return s==null?99:s;}));
+      const a=best(T[0]),b=best(T[1]);
+      if(a<b)up++;else if(b<a)up--;
+    }
     if(!clinch&&Math.abs(up)>o.length-(p+1))clinch={margin:Math.abs(up),left:o.length-(p+1),team:up>0?0:1};
   }
   return {T,up,thru,clinch,count:o.length};
@@ -2699,7 +2773,7 @@ function vStandings(){
       <table class="st"><tr><th>Player</th>${cols.map(L=>`<th class="r">${lbl(L)} holes</th>`).join('')}</tr>
       ${actIdx().slice().sort((a,b)=>bb.ledgers[prim][b]-bb.ledgers[prim][a]).map(i=>`<tr><td>${esc(S.players[i].name)}</td>${cols.map(L=>`<td class="r num" style="font-size:34px">${bb.ledgers[L][i]}</td>`).join('')}</tr>`).join('')}
       </table>${teamPickerRow()}
-      <div class="tiny mt">Better ball of each team wins the hole.</div></div>`;
+      <div class="tiny mt">Better ball of each team wins the hole.${hammerLive('bestball')?' <b>🔨 Hammer live</b> — totals include doubled and folded holes.':''}</div></div>`;
   }else if(view===g&&g==='stableford'){
     const P=stblPts();
     tables=genericCard('Stableford',computeStableford().ledgers,v=>String(v),false,
@@ -2708,7 +2782,7 @@ function vStandings(){
     const seg=playOrder().length===9?3:6;
     const T=sixesTeamsFor(S.round.cur);
     tables=genericCard('Sixes',computeSixes().ledgers,v=>String(v),false,
-      `<div class="tiny mt">Best ball wins the hole, 1 pt each — ties go to both balls, then push.
+      `<div class="tiny mt">Best ball wins the hole, 1 pt each — ties go to both balls, then push.${hammerLive('sixes')?' <b>🔨 Hammer live</b> — totals include doubled and folded holes.':''}
       Partners swap every ${seg} holes. Current: <b>${T[0].map(i=>esc((S.players[i].name||'').split(' ')[0])).join(' & ')}</b> v <b>${T[1].map(i=>esc((S.players[i].name||'').split(' ')[0])).join(' & ')}</b></div>`);
   }else if(view===g&&g==='umbrella'){
     const u=computeUmbrella();
@@ -2875,7 +2949,7 @@ function newRound(){
 // paint from memory — no service-worker round trips, no background network
 // revalidation per render, no pop-in on flaky signal.
 const ART={};
-['banner.jpg','wolf.png','nine.png','vegas.png','quota.png','sixes.png','umbrella.png','crest.jpg'].forEach(f=>{
+['banner.jpg','wolf.png','nine.png','vegas.png','quota.png','sixes.png','umbrella.png','hammer.png','crest.jpg'].forEach(f=>{
   fetch(f).then(r=>r.ok?r.blob():null).then(b=>{
     if(!b)return;
     ART[f]=URL.createObjectURL(b);
