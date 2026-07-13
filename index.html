@@ -123,6 +123,9 @@
   .teambox .vnum{font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:30px;line-height:1;color:#2ea043}
   .teambox.flipped .vnum{color:var(--red)}
   .gamebtn.strokeg{background:rgba(201,162,39,.10);border-color:var(--green);box-shadow:3px 3px 0 #8a6f1c}
+  .gamebtn.quotag{background:rgba(90,208,224,.10);border-color:#5ad0e0;box-shadow:3px 3px 0 #2a7d8a}
+  .gamebtn.quotag:active{box-shadow:1px 1px 0 #2a7d8a}
+  .quota-ph{font-family:Rajdhani,sans-serif;font-weight:700;font-size:34px;color:#5ad0e0;flex:none;margin:0 14px 0 0;text-shadow:0 0 10px rgba(90,208,224,.6)}
   .gamebtn.stblg{background:rgba(201,79,124,.12);border-color:#c94f7c;box-shadow:3px 3px 0 #7c2f4c}
   .gamebtn.stblg:active{box-shadow:1px 1px 0 #7c2f4c}
   .stbl-ph{font-size:38px;margin:0 16px 0 0;flex:none}
@@ -188,7 +191,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1783844219';
+const BUILD='1783909011';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -216,6 +219,7 @@ function defaultConfig(){
     vegas:{pairing:0,rotate:'none',flip:true,ctp:false},
     stroke:{n:4},
     stbl:{n:4,pts:{alba:5,eagle:4,birdie:3,par:2,bogey:1,dbl:0}},
+    quota:{n:4,pts:{alba:6,eagle:4,birdie:3,par:2,bogey:0}},
     scramble:{teams:'2v2'},
     span:{count:18,start:0},
     track:{putts:false,bunker:false,chips:false,pen:false},
@@ -252,6 +256,7 @@ function load(){
       if(!s.config.vegas)s.config.vegas={pairing:0,rotate:'none',flip:true,ctp:false};
       if(!s.config.stroke)s.config.stroke={n:4};
       if(!s.config.stbl)s.config.stbl={n:4,pts:{alba:5,eagle:4,birdie:3,par:2,bogey:1,dbl:0}};
+      if(!s.config.quota)s.config.quota={n:4,pts:{alba:6,eagle:4,birdie:3,par:2,bogey:0}};
       if(!s.config.scramble)s.config.scramble={teams:'2v2'};
       if(!s.history)s.history=[];
       if(!s.config.span)s.config.span={count:18,start:0};
@@ -732,12 +737,13 @@ function gameOn(){
   const roundScr=['hole','standings','settle','map'].includes(S.screen);
   return (roundScr&&S.round.started&&S.round.game)||S.config.game||'wolf';
 }
-function gameName(g){const x=g||gameOn();return x==='nines'?'9’s':x==='vegas'?'Vegas':x==='stroke'?'Stroke':x==='bestball'?'Best Ball':x==='scramble'?'Scramble':x==='stableford'?'Stableford':'Wolf';}
+function gameName(g){const x=g||gameOn();return x==='nines'?'9’s':x==='vegas'?'Vegas':x==='stroke'?'Stroke':x==='bestball'?'Best Ball':x==='scramble'?'Scramble':x==='stableford'?'Stableford':x==='quota'?'Quota':'Wolf';}
 function NP(){
   const g=gameOn();
   if(g==='nines'&&S.config.nines&&S.config.nines.n===3)return 3;
   if(g==='stroke'&&S.config.stroke)return Math.min(4,Math.max(1,S.config.stroke.n||4));
   if(g==='stableford'&&S.config.stbl)return Math.min(4,Math.max(1,S.config.stbl.n||4));
+  if(g==='quota'&&S.config.quota)return Math.min(4,Math.max(1,S.config.quota.n||4));
   return 4;
 }
 function actIdx(){return [0,1,2,3].slice(0,NP());}
@@ -795,7 +801,15 @@ function runningTotalsCard(){
       :m.up===0?'All square'
       :`${(m.up>0?T[0]:T[1]).map(first).join(' & ')} ${Math.abs(m.up)} UP${Math.abs(m.up)===m.count-m.thru?' — dormie':''}`;
   }else{
-    // points games: wolf, 9's, vegas, stableford
+    // points games: wolf, 9's, vegas, stableford, quota
+    if(g==='quota'){
+      const q=computeQuota();
+      cells=actIdx().map(i=>{const d=q.ledgers.gross[i]-q.targets[i];
+        const col=d>0?'#7fd49a':d<0?'var(--amber-bd)':'var(--ink2)';
+        return cell(first(i),big(q.ledgers.gross[i])+`<div class="num" style="font-size:22px;font-weight:700;color:${col}">${d>0?'+':''}${d}</div>`);}).join('');
+      return `<div class="card" style="padding:14px 12px 10px"><div style="display:flex;gap:4px">${cells}</div>
+        <div class="tiny" style="text-align:center;margin-top:6px">points · +/− vs quota · thru ${thru}</div></div>`;
+    }
     const eng=g==='nines'?computeNines():g==='vegas'?computeVegas():g==='stableford'?computeStableford():computeAll();
     const f=g==='nines'?fmtPts:String;
     cells=actIdx().map(i=>cell(first(i),big(f(eng.ledgers[L][i])))).join('');
@@ -1011,7 +1025,26 @@ function computeScramble(){
   }
   return {ledgers,par,perHole:null,carries:{net:0,gross:0},lenses:['net','gross']};
 }
+// Quota: everyone races their own number. Target = (2 pts x holes) - course
+// handicap (scaled for 9-hole rounds); points come from GROSS scores.
+function quotaPts(){return (S.config.quota&&S.config.quota.pts)||{alba:6,eagle:4,birdie:3,par:2,bogey:0};}
+function quotaTargets(){
+  const ch=courseHandicaps(),n=playOrder().length;
+  return ch.map(c=>Math.round(n*2-c*(n/18)));
+}
+function computeQuota(){
+  const P=quotaPts();
+  const led=[0,0,0,0];
+  for(const h of playOrder()){
+    const rec=S.round.holes[h];if(!rec.confirmed)continue;
+    const par=S.course.holes[h].par;
+    actIdx().forEach(i=>{const g=rec.gross[i];if(g==null)return;const d=g-par;
+      led[i]+=d<=-3?P.alba:d===-2?P.eagle:d===-1?P.birdie:d===0?P.par:d===1?P.bogey:0;});
+  }
+  return {ledgers:{net:led.slice(),gross:led.slice()},targets:quotaTargets(),perHole:null,carries:{net:0,gross:0},lenses:['net','gross']};
+}
 function computeGame(){const g=gameOn();
+  if(g==='quota')return computeQuota();
   if(g==='stableford')return Object.assign({perHole:null,carries:{net:0,gross:0},lenses:['net','gross']},computeStableford());
   if(g==='bestball')return computeBestBall();
   if(g==='scramble')return computeScramble();
@@ -1342,6 +1375,11 @@ function vHome(){
         <div class="tiny">One Ball Per Team</div></div>
       <span class="scr-ph">🤝</span>
     </button>
+    <button class="gamebtn quotag" onclick="pickGame('quota')">
+      <div style="flex:1;min-width:0"><span class="gname">Quota</span>
+        <div class="tiny">Race your own number — fairest game for mixed handicaps</div></div>
+      <img src="${art('quota.png')}" alt="" style="height:92px;margin:4px 8px 4px 0;filter:drop-shadow(0 0 6px rgba(90,208,224,.5))" onerror="this.outerHTML='<span class=&quot;quota-ph&quot;>36</span>'">
+    </button>
     <button class="gamebtn stblg" onclick="pickGame('stableford')">
       <div style="flex:1;min-width:0"><span class="gname">Stableford</span>
         <div class="tiny">Points for your score vs par — highest wins</div></div>
@@ -1450,6 +1488,11 @@ function vRules(){
     '<b>2 v 2:</b> the higher-handicap team gets net strokes via the <b>35% / 15%</b> two-player allowance.',
     '<b>One team (all 4):</b> tournament mode — the app keeps the official card; net uses the <b>25/20/15/10%</b> allowance.',
     'Lowest team total wins. In one-team mode there’s nothing to settle — hand the card to the committee.']))}
+  ${(()=>{const P=quotaPts();return ruleCard(img('quota.png',48),'Quota','Race your own number',li([
+    '<b>Your quota:</b> 36 minus your course handicap (18 for a nine-hole round) — a personal target that makes every handicap fair.',
+    `<b>Points from gross scores:</b> par <b>${P.par}</b> · birdie <b>${P.birdie}</b> · eagle <b>${P.eagle}</b> · albatross <b>${P.alba}</b> · bogey <b>${P.bogey}</b> — adjustable in setup.`,
+    '<b>Winning:</b> beat your quota by the most. A 25-handicap grinding pars can beat a scratch player having an off day — that is the whole point.',
+    'Works with 1–4 players; no strokes on holes, no dots — the handicap lives entirely in the target.']));})()}
   ${(()=>{const P=stblPts();return ruleCard(em('🎯'),'Stableford','Points for your score vs par',li([
     `<b>Points per hole:</b> albatross <b>${P.alba}</b> · eagle <b>${P.eagle}</b> · birdie <b>${P.birdie}</b> · par <b>${P.par}</b> · bogey <b>${P.bogey}</b> · double or worse <b>${P.dbl}</b> — all adjustable in setup.`,
     'Highest total wins. Blow-up holes stop hurting after double — pick up and move on.',
@@ -1868,6 +1911,7 @@ function vSetup(){
   const vegas=S.config.game==='vegas';
   const stroke=S.config.game==='stroke';
   const stbl=S.config.game==='stableford';
+  const quota=S.config.game==='quota';
   const bestball=S.config.game==='bestball';
   const scramble=S.config.game==='scramble';
   const rows=actIdx().map(i=>{
@@ -1896,7 +1940,7 @@ function vSetup(){
     <div class="stepper"><button onclick="chPt('${k}',-1)">−</button><span class="val num">${P[k]}</span><button onclick="chPt('${k}',1)">+</button></div></div>`;
   const V=S.config.vegas;
   const pairLbl=T=>`${esc(S.players[T[0][0]].name)} &amp; ${esc(S.players[T[0][1]].name)} <span class="muted">vs</span> ${esc(S.players[T[1][0]].name)} &amp; ${esc(S.players[T[1][1]].name)}`;
-  return topbar(`Round setup — ${gameName(S.config.game)}`,nines?'Every hole is worth 9 points: 5 · 3 · 1':vegas?'Low team number takes the difference':stroke?'Straight scoring — net, gross or both':stbl?'Points vs par — highest total wins':bestball?'2 v 2 — better ball wins the hole':scramble?'2 v 2 — one ball per team':'Order = tee order on hole 1 (wolf rotation)','home')+`<main>
+  return topbar(`Round setup — ${gameName(S.config.game)}`,nines?'Every hole is worth 9 points: 5 · 3 · 1':vegas?'Low team number takes the difference':stroke?'Straight scoring — net, gross or both':stbl?'Points vs par — highest total wins':quota?'Beat your own number':bestball?'2 v 2 — better ball wins the hole':scramble?'2 v 2 — one ball per team':'Order = tee order on hole 1 (wolf rotation)','home')+`<main>
   ${rows}
   ${(bestball||scramble)?`<div class="card"><h2>Teams</h2>
     ${scramble?`<div class="row" style="border-top:none"><span class="muted">Format</span>
@@ -1918,6 +1962,17 @@ function vSetup(){
     <div class="row"><span class="muted">Closest to pin +1 (par 3s)</span>
       <button class="ghost ${V.ctp?'sel':''}" onclick="set(()=>S.config.vegas.ctp=!S.config.vegas.ctp)">${V.ctp?'On':'Off'}</button></div>
     <div class="tiny mt">Your two scores pair low-first into a number (4 &amp; 5 → 45); low team number wins the difference in points, every player on the winning side books it. Both teams birdie = no flip. Scores above 9 count as 9.</div>
+  </div>`:''}
+  ${quota?`<div class="card"><h2>Quota</h2>
+    <div class="row"><span class="muted">Players in the round</span>
+      <span class="seg" style="display:inline-flex;gap:6px">
+        ${[1,2,3,4].map(n=>`<button class="ghost ${NP()===n?'sel':''}" onclick="set(()=>S.config.quota.n=${n})">${n}</button>`).join('')}
+      </span></div>
+    ${[['par','Par'],['birdie','Birdie'],['eagle','Eagle'],['alba','Albatross'],['bogey','Bogey']].map(([k,l])=>`
+      <div class="row"><span class="muted">${l}</span>
+        <div class="stepper"><button onclick="chQuotaPt('${k}',-1)">−</button><span class="val num">${S.config.quota.pts[k]}</span><button onclick="chQuotaPt('${k}',1)">+</button></div></div>`).join('')}
+    <div class="tiny mt">Your quota = ${playOrder().length===9?'18':'36'} minus your course handicap — beat it by the most and you win. Points come from gross scores; the handicap lives in the target.
+    <b>Quotas today: ${actIdx().map(i=>`${esc((S.players[i].name||'').split(' ')[0])} ${quotaTargets()[i]}`).join(' · ')}</b></div>
   </div>`:''}
   ${stbl?`<div class="card"><h2>Stableford</h2>
     <div class="row"><span class="muted">Players in the round</span>
@@ -2028,6 +2083,7 @@ function setPl(i,k,v){set(()=>{
 });}
 function movePl(i){set(()=>{const a=S.players;[a[i-1],a[i]]=[a[i],a[i-1]];});}
 function chPt(k,d){set(()=>{S.config.pts[k]=Math.max(0,S.config.pts[k]+d);});}
+function chQuotaPt(k,d){set(()=>{S.config.quota.pts[k]=Math.min(10,Math.max(-5,S.config.quota.pts[k]+d));});}
 function chStblPt(k,d){set(()=>{S.config.stbl.pts[k]=Math.min(10,Math.max(-5,S.config.stbl.pts[k]+d));});}
 function chAllow(d){set(()=>{S.config.allowance=Math.min(100,Math.max(50,S.config.allowance+d));});}
 let pickingCourse=false;
@@ -2047,6 +2103,7 @@ function startRound(){
       :S.round.game==='vegas'?{rotate:S.config.vegas.rotate,flip:S.config.vegas.flip,ctp:S.config.vegas.ctp}
       :S.round.game==='scramble'?{teams:S.config.scramble.teams}
       :S.round.game==='stableford'?{n:S.config.stbl.n,pts:S.config.stbl.pts}
+      :S.round.game==='quota'?{n:S.config.quota.n,pts:S.config.quota.pts}
       :S.round.game==='wolf'?{carry:S.config.carryTies,last2:S.config.last2LastPlace}:{}});
   if(withNearby&&!S.share.on)shareRound();
 }
@@ -2065,7 +2122,7 @@ function prefillNines(h){
 // ----- hole screen -----
 function vHole(){
   if(!S.round.started) return topbar(gameName(),'','home')+`<main><div class="card center">No round in progress.<button class="big mt" onclick="go('home')">Pick a game</button></div></main>`;
-  if(['nines','stroke','bestball','stableford'].includes(gameOn())) return vHoleNines();
+  if(['nines','stroke','bestball','stableford','quota'].includes(gameOn())) return vHoleNines();
   if(gameOn()==='vegas') return vHoleVegas();
   if(gameOn()==='scramble') return vHoleScramble();
   const h=S.round.cur, hole=S.course.holes[h], rec=S.round.holes[h];
@@ -2434,6 +2491,7 @@ function stViews(){
   if(g==='scramble')return v;  // one ball per team — nothing to re-score
   if(g!=='stroke')v.push(['stroke','Stroke']);
   if(g!=='stableford')v.push(['stableford','Stableford']);
+  if(g!=='quota')v.push(['quota','Quota']);
   if(four&&g!=='bestball')v.push(['match','Match']);
   if(g!=='nines'&&NP()>=3)v.push(['nines','9’s']);
   if(g!=='vegas'&&four)v.push(['vegas','Vegas']);
@@ -2503,8 +2561,24 @@ function vStandings(){
       ${order.map(i=>`<tr><td>${esc(S.players[i].name)}</td>${cols.map(L=>`<td class="r num" style="font-size:34px">${fmt(led[L][i],L,i)}</td>`).join('')}</tr>`).join('')}
       </table>${note||''}</div>`;
   };
+  const quotaCard=title=>{
+    const q=computeQuota();
+    const rows=actIdx().slice().sort((a,b)=>(q.ledgers.gross[b]-q.targets[b])-(q.ledgers.gross[a]-q.targets[a]));
+    return `<div class="card"><h2>${title} · thru ${thru}</h2>${view!==g?whatIf:''}
+      <table class="st"><tr><th>Player</th><th class="r">Pts</th><th class="r">Quota</th><th class="r">+/−</th></tr>
+      ${rows.map(i=>{const d=q.ledgers.gross[i]-q.targets[i];
+        const col=d>0?'#7fd49a':d<0?'var(--amber-bd)':'var(--ink2)';
+        return `<tr><td>${esc(S.players[i].name)}</td><td class="r num" style="font-size:30px">${q.ledgers.gross[i]}</td>
+        <td class="r num" style="font-size:20px;color:var(--ink2)">${q.targets[i]}</td>
+        <td class="r num" style="font-size:34px;font-weight:700;color:${col}">${d>0?'+':''}${d}</td></tr>`;}).join('')}
+      </table><div class="tiny mt">Beat your own number — most over quota wins. Points from gross scores${(()=>{const P=quotaPts();return `: par ${P.par} · birdie ${P.birdie} · eagle ${P.eagle} · bogey ${P.bogey}`;})()}.</div></div>`;
+  };
   let all=null,tables='';
-  if(view===g&&g==='scramble'){
+  if(view===g&&g==='quota'){
+    tables=quotaCard('Quota');
+  }else if(view==='quota'){
+    tables=quotaCard('Quota');
+  }else if(view===g&&g==='scramble'){
     const sc=computeScramble();const T=scrambleTeams();
     const rows=T.slice().sort((a,b)=>sc.ledgers[prim][a[0]]-sc.ledgers[prim][b[0]]);
     tables=`<div class="card"><h2>Scramble · thru ${thru}</h2>
@@ -2617,6 +2691,23 @@ function jumpAndGo(h){set(()=>{S.round.cur=h;S.screen='hole';});}
 // ----- settlement -----
 const PAIRS_GAMES=['wolf','vegas','bestball','scramble'];
 function vSettle(){
+  if(gameOn()==='quota'){
+    const q=computeQuota();
+    const thru=S.round.holes.filter(r=>r.confirmed).length;
+    const act=actIdx();
+    const margins=act.map(i=>({i,d:q.ledgers.gross[i]-q.targets[i]})).sort((a,b)=>b.d-a.d);
+    const lead=margins[0];
+    const verb=thru>=playOrder().length?'wins':'leads';
+    return topbar('Settlement','','')+`<main>
+      <div class="card"><h2>Quota · thru ${thru}</h2>
+        <div class="center mb"><span class="bigscore num">${lead.d>0?'+':''}${lead.d}</span>
+        <div class="muted">${act.length===1?(lead.d>=0?'Quota beaten!':'Short of quota'):esc(S.players[lead.i].name)+' '+verb+' — furthest over quota'}</div></div>
+        <table class="st"><tr><th>Player</th><th class="r">Pts</th><th class="r">Quota</th><th class="r">+/−</th></tr>
+        ${margins.map(({i,d})=>`<tr><td>${esc(S.players[i].name)}</td><td class="r num" style="font-size:22px">${q.ledgers.gross[i]}</td><td class="r num" style="font-size:18px;color:var(--ink2)">${q.targets[i]}</td><td class="r num" style="font-size:26px;font-weight:700">${d>0?'+':''}${d}</td></tr>`).join('')}
+        </table></div>
+      <button class="big warn" onclick="newRound()">${armNewRound?'Tap again to clear this round':'Start a new round'}</button>
+    </main>`+tabs('settle');
+  }
   if(gameOn()==='scramble'&&scrambleTeams().length===1){
     const sc=computeScramble();
     const thru=S.round.holes.filter(r=>r.confirmed).length;
@@ -2678,7 +2769,7 @@ function newRound(){
 // paint from memory — no service-worker round trips, no background network
 // revalidation per render, no pop-in on flaky signal.
 const ART={};
-['banner.jpg','wolf.png','nine.png','vegas.png','crest.jpg'].forEach(f=>{
+['banner.jpg','wolf.png','nine.png','vegas.png','quota.png','crest.jpg'].forEach(f=>{
   fetch(f).then(r=>r.ok?r.blob():null).then(b=>{
     if(!b)return;
     ART[f]=URL.createObjectURL(b);
