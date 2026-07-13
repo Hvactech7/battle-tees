@@ -201,7 +201,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1783920899';
+const BUILD='1783922356';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -488,8 +488,11 @@ function unlockRow(h,i){unlockedRows[h+'-'+i]=true;render();}
 function rowLock(h,i){
   if(!S.share.on)return '';
   const p=S.players[i];
-  if(!p||!p.ownerDev)return '';
-  if(p.ownerDev===devId())return 'mine';
+  // ownerDev = the player's own phone (self-claim, wins); scorer = the phone
+  // that manually added them — whoever adds a player scores them
+  const dev=p&&(p.ownerDev||p.scorer);
+  if(!dev)return '';
+  if(dev===devId())return 'mine';
   return unlockedRows[h+'-'+i]?'open':'locked';
 }
 function shareRound(){
@@ -759,7 +762,7 @@ function pickPlayerOpt(i,v){
     if(!n)return;
     set(()=>{
       const p=S.players[i];
-      p.name=n.name;p.index=+n.index||10;p.chOverride=null;p.nearby=true;delete p.libId;
+      p.name=n.name;p.index=+n.index||10;p.chOverride=null;p.nearby=true;delete p.libId;delete p.scorer;
       const t=S.course.teeSets.find(ts=>ts.name.toLowerCase()===String(n.tee||'').toLowerCase());
       if(t)p.tee=t.id;
       upsertLib(p);
@@ -1450,6 +1453,7 @@ function updateFMB(pos,label){
 const $=s=>document.querySelector(s);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function render(){
+  if(S.screen!=='gate'&&gatePick.timer){clearInterval(gatePick.timer);gatePick.timer=null;gatePick.open=false;}
   const el=$('#app');
   const scr=S.screen;
   let html='';
@@ -1610,6 +1614,45 @@ function ensureMeFirst(){
   S.players.length=4;
 }
 function startOwnSetup(){set(()=>{ensureMeFirst();S.screen='setup';});}
+// Gate nearby-group picker: tap the card, check up to 3 names, build the group.
+// The list is a snapshot refreshed every 15s so names don't flicker as
+// presence packets arrive; checked names survive a presence blink.
+let gatePick={open:false,sel:{},list:[],timer:null};
+function openGatePick(){
+  gatePick.open=true;gatePick.sel={};
+  sendHello();grabCoords();
+  gateSnapshot();
+  clearInterval(gatePick.timer);
+  gatePick.timer=setInterval(()=>{gateSnapshot();render();},15000);
+  render();
+}
+function closeGatePick(){gatePick.open=false;clearInterval(gatePick.timer);gatePick.timer=null;render();}
+function gateSnapshot(){
+  const cur=onlineList();
+  const keep=gatePick.list.filter(n=>gatePick.sel[n.id]&&!cur.some(c=>c.id===n.id));
+  gatePick.list=cur.concat(keep);
+}
+function gateSel(id){
+  if(gatePick.sel[id])delete gatePick.sel[id];
+  else if(Object.keys(gatePick.sel).length<3)gatePick.sel[id]=true;
+  render();
+}
+function gateAddGroup(){
+  const chosen=gatePick.list.filter(n=>gatePick.sel[n.id]).slice(0,3);
+  if(!chosen.length)return;
+  gatePick.open=false;clearInterval(gatePick.timer);gatePick.timer=null;
+  set(()=>{
+    ensureMeFirst();
+    chosen.forEach((n,k)=>{
+      const pl=S.players[k+1];
+      pl.name=n.name;pl.index=+n.index||10;pl.chOverride=null;pl.nearby=true;delete pl.libId;delete pl.scorer;
+      const t=S.course.teeSets.find(ts=>ts.name.toLowerCase()===String(n.tee||'').toLowerCase());
+      if(t)pl.tee=t.id;
+      upsertLib(pl);
+    });
+    S.screen='setup';
+  });
+}
 function vGate(){
   const g=S.config.game;
   const A={wolf:'wolf.png',nines:'nine.png',vegas:'vegas.png',quota:'quota.png',sixes:'sixes.png',umbrella:'umbrella.png',bbb:'bbb.png',stroke:'stroke.png',stableford:'stableford.png',bestball:'bestball.png',scramble:'scramble.png'}[g];
@@ -1624,13 +1667,25 @@ function vGate(){
     <div class="mt"><div class="tiny">Email</div><input type="text" inputmode="email" autocapitalize="off" id="meEmail" placeholder="you@email.com" value="${esc(localStorage.getItem('wolfBackupEmail')||'')}">
       <div class="tiny mt">Backs up your players, courses &amp; rounds automatically.</div></div>
     <button class="big mt" onclick="saveMe()">Save profile</button></div>`:''}
-  ${invites.length?invites.map(inv=>`<div class="card" style="border-color:var(--amber)">
+  ${invites.map(inv=>`<div class="card" style="border-color:var(--amber)">
     <h2 style="color:var(--amber)">⚔️ Join this group</h2>
     <div class="mb"><b>${esc(inv.course||'Shared round')}</b>
       <div class="tiny">${(inv.players||[]).map(esc).join(' · ')}</div></div>
     <button class="big warn" onclick="joinFromInvite('${esc(inv.code)}')">Join their round</button>
-  </div>`).join(''):`<div class="card"><h2>⚔️ Join nearby players</h2>
-    <div class="tiny">No group invites yet — when someone nearby starts a round and taps <b>Invite nearby players</b>, it shows up here instantly.</div></div>`}
+  </div>`).join('')}
+  <div class="card" ${gatePick.open?'':'onclick="openGatePick()" style="cursor:pointer"'}>
+    <h2>⚔️ ${gatePick.open?'Who\'s playing with you?':'Find nearby players'}</h2>
+    ${gatePick.open?`
+      <div class="tiny mb">${gatePick.list.length?'Check up to 3 golfers — they join your group:':(lobbySock&&lobbySock.readyState===1)?'Scanning… no one else is on Battle Tees around you yet.':'Connecting…'}</div>
+      ${gatePick.list.map(n=>`<div class="row" style="cursor:pointer" onclick="gateSel('${esc(n.id)}')">
+        <div><b>${n.near?'📍':'🌐'} ${esc(n.name)}</b><div class="tiny">Index ${n.index!=null?n.index:'?'}${n.tee?` · ${esc(n.tee)} tees`:''} · ${n.near?'nearby':'online'}</div></div>
+        <input type="checkbox" style="width:24px;height:24px;accent-color:var(--elec);pointer-events:none" ${gatePick.sel[n.id]?'checked':''}>
+      </div>`).join('')}
+      <div class="tiny mt">List refreshes every 15 seconds. Can't see someone? They can join with the round code once you've started.</div>
+      ${(()=>{const nsel=Object.keys(gatePick.sel).length;return nsel?`<button class="big mt" onclick="gateAddGroup()">Add ${nsel} to my group →</button>`:'';})()}
+      <button class="ghost mt" style="width:100%" onclick="closeGatePick()">Cancel</button>`
+    :`<div class="tiny">Tap to see who's on Battle Tees around you and check off your group${invites.length?'':' — or wait here for a round invite to appear'}.</div>`}
+  </div>
   <button class="big" onclick="startOwnSetup()">➕ Set up my own group</button>
   <details class="card" style="padding:10px 14px;margin-top:12px"><summary class="tiny" style="cursor:pointer;color:var(--ink3)">Join with a code instead</summary>
     <div class="row" style="border:none">
@@ -2193,7 +2248,7 @@ function vSetup(){
         ${S.playerLib.length?`<optgroup label="Saved players">${S.playerLib.map(e=>`<option value="lib:${e.id}">${esc(e.name)} · ${e.index}${e.teeName?` · ${esc(e.teeName)}`:''}</option>`).join('')}</optgroup>`:''}
       </select></span>`:'';
     return `<div class="card">
-      <div class="row"><b>Golfer ${i+1}${isMe?' <span class="pill gray">you</span>':''}${S.config.game==='wolf'?` — tees off ${['1st','2nd','3rd','4th'][i]}`:''}</b>
+      <div class="row"><b>Golfer ${i+1}${isMe?' <span class="pill gray">you</span>':''}${(!isMe&&p.scorer===devId()&&(S.share.on||S.players.some(x=>x.nearby)))?' <span class="pill gray">you score them</span>':''}${S.config.game==='wolf'?` — tees off ${['1st','2nd','3rd','4th'][i]}`:''}</b>
         <span>${i>0?`<button class="ghost" onclick="movePl(${i})">↑</button>`:''}</span></div>
       <div class="grid2 mt">
         <div><div class="tiny">Name</div><div style="display:flex;gap:6px;align-items:stretch"><input type="text" style="flex:1;min-width:0" value="${esc(p.name)}" onfocus="tapClear(this)" onblur="commitPl(this,${i},'name')">${pickSel}</div></div>
@@ -2353,6 +2408,9 @@ function loadPlayer(i,libId){
     const e=S.playerLib.find(x=>x.id===libId);if(!e)return;
     const p=S.players[i];
     p.name=e.name;p.index=e.index;p.libId=e.id;p.chOverride=null;
+    delete p.nearby;
+    if(!S.me.name||e.name.trim().toLowerCase()!==S.me.name.trim().toLowerCase())p.scorer=devId();
+    else delete p.scorer;
     const t=S.course.teeSets.find(ts=>ts.name.toLowerCase()===String(e.teeName||'').toLowerCase());
     if(t)p.tee=t.id;
   });
@@ -2365,6 +2423,12 @@ function setPl(i,k,v){set(()=>{
   if(k==='index')S.players[i][k]=+v||0;
   else if(k==='chOverride')S.players[i][k]=v===''?null:+v;
   else S.players[i][k]=v;
+  if(k==='name'){
+    const p=S.players[i];
+    delete p.nearby;
+    if(v&&(!S.me.name||v.trim().toLowerCase()!==S.me.name.trim().toLowerCase()))p.scorer=devId();
+    else delete p.scorer;
+  }
   if(k==='name'||k==='index'||k==='tee')upsertLib(S.players[i]);
 });}
 function movePl(i){set(()=>{const a=S.players;[a[i-1],a[i]]=[a[i],a[i-1]];});}
