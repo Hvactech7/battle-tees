@@ -201,7 +201,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1783915926';
+const BUILD='1783919800';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -231,6 +231,8 @@ function defaultConfig(){
     stbl:{n:4,pts:{alba:5,eagle:4,birdie:3,par:2,bogey:1,dbl:0}},
     quota:{n:4,pts:{alba:6,eagle:4,birdie:3,par:2,bogey:0}},
     sixes:{pairing:0},
+    hammer:{on:false},
+    bbb:{n:4},
     scramble:{teams:'2v2'},
     span:{count:18,start:0},
     track:{putts:false,bunker:false,chips:false,pen:false},
@@ -686,7 +688,7 @@ function lobbyConnect(){
     if(m.t==='invites'){invites=m.list||[];render();}
     else if(m.t==='invite'){invites=invites.filter(i=>i.code!==m.info.code).concat([m.info]);render();}
     else if(m.t==='uninvite'){invites=invites.filter(i=>i.code!==m.code);render();}
-    else if(m.t==='nearby'){nearby=(m.list||[]).filter(p=>p.id!==devId());if(S.screen==='home'||S.screen==='players'||S.screen==='setup')render();}
+    else if(m.t==='nearby'){nearby=(m.list||[]).filter(p=>p.id!==devId());if(S.screen==='home'||S.screen==='players'||S.screen==='setup'||S.screen==='gate')render();}
     else if(m.t==='courseResult'||m.t==='backupResult')handleCourseResult(m);
   };
   lobbySock.onclose=()=>{lobbySock=null;nearby=[];if(!(S.share&&S.share.on))setTimeout(lobbyConnect,10000);};
@@ -1402,6 +1404,7 @@ function render(){
   else if(scr==='pickcourse') html=vPickCourse();
   else if(scr==='course') html=vCourse();
   else if(scr==='setup') html=vSetup();
+  else if(scr==='gate') html=vGate();
   else if(scr==='hole') html=vHole();
   else if(scr==='standings') html=vStandings();
   else if(scr==='settle') html=vSettle();
@@ -1530,7 +1533,52 @@ function vHome(){
   </details>`:''}
   </main>`;
 }
-function pickGame(g){set(()=>{S.config.game=g;S.screen='setup';});}
+function pickGame(g){set(()=>{S.config.game=g;S.screen='gate';});}
+// After picking a game: join a nearby group or build your own.
+function ensureMeFirst(){
+  if(!S.me||!S.me.name)return;
+  const me=S.me.name.trim().toLowerCase();
+  const idx=S.players.findIndex(pl=>(pl.name||'').trim().toLowerCase()===me);
+  if(idx===0)return;
+  if(idx>0){const [pl]=S.players.splice(idx,1);S.players.unshift(pl);}
+  else{
+    const lib=S.playerLib.find(e=>e.name.trim().toLowerCase()===me);
+    const pl={name:S.me.name,index:S.me.index,chOverride:null};
+    if(lib){pl.index=lib.index;pl.libId=lib.id;if(lib.tee&&S.course.teeSets.some(t=>t.id===lib.tee))pl.tee=lib.tee;}
+    if(!pl.tee)pl.tee=(S.players[0]&&S.players[0].tee)||(S.course.teeSets[0]&&S.course.teeSets[0].id);
+    S.players.unshift(pl);
+  }
+  S.players.length=4;
+}
+function startOwnSetup(){set(()=>{ensureMeFirst();S.screen='setup';});}
+function vGate(){
+  const g=S.config.game;
+  const A={wolf:'wolf.png',nines:'nine.png',vegas:'vegas.png',quota:'quota.png',sixes:'sixes.png',umbrella:'umbrella.png',bbb:'bbb.png',stroke:'stroke.png',stableford:'stableford.png',bestball:'bestball.png',scramble:'scramble.png'}[g];
+  return topbar(gameName(g),'Who are you battling with?','home')+`<main>
+  ${A?`<div class="center" style="margin:4px 0 14px"><img src="${art(A)}" style="height:110px" onerror="this.style.display='none'"></div>`:''}
+  ${!S.me.name?`<div class="card"><h2>First — your profile</h2>
+    <div class="tiny mb">You're always Golfer 1 on your own phone — no need to add yourself.</div>
+    <div class="grid2">
+      <div><div class="tiny">Your name</div><input type="text" id="meName" onfocus="tapClear(this)"></div>
+      <div><div class="tiny">Handicap index</div><input type="text" inputmode="decimal" id="meIdx" placeholder="10.0" onfocus="tapClear(this)"></div>
+    </div>
+    <button class="big mt" onclick="saveMe()">Save profile</button></div>`:''}
+  ${invites.length?invites.map(inv=>`<div class="card" style="border-color:var(--amber)">
+    <h2 style="color:var(--amber)">⚔️ Join this group</h2>
+    <div class="mb"><b>${esc(inv.course||'Shared round')}</b>
+      <div class="tiny">${(inv.players||[]).map(esc).join(' · ')}</div></div>
+    <button class="big warn" onclick="joinFromInvite('${esc(inv.code)}')">Join their round</button>
+  </div>`).join(''):`<div class="card"><h2>⚔️ Join nearby players</h2>
+    <div class="tiny">No group invites yet — when someone nearby starts a round and taps <b>Invite nearby players</b>, it shows up here instantly.</div></div>`}
+  <button class="big" onclick="startOwnSetup()">➕ Set up my own group</button>
+  <details class="card" style="padding:10px 14px;margin-top:12px"><summary class="tiny" style="cursor:pointer;color:var(--ink3)">Join with a code instead</summary>
+    <div class="row" style="border:none">
+      <input type="text" id="joincode" placeholder="ABCDE" maxlength="8" autocapitalize="characters" style="width:46%;text-transform:uppercase;font-family:Rajdhani,sans-serif;font-size:20px;letter-spacing:3px">
+      <button class="ghost sel" style="flex:1" onclick="joinRound()">Join</button>
+    </div>
+  </details>
+  </main>`;
+}
 function ruleCard(art,title,tag,body){
   return `<details class="card" style="padding:12px 14px">
     <summary style="cursor:pointer;list-style:none;display:flex;align-items:center;gap:12px">
@@ -2065,22 +2113,23 @@ function vSetup(){
   const rows=actIdx().map(i=>{
     const p=S.players[i];
     const teeOpts=S.course.teeSets.map(t=>`<option value="${t.id}" ${p.tee===t.id?'selected':''}>${esc(t.name)}</option>`).join('');
+    const isMe=!!(S.me.name&&(p.name||'').trim().toLowerCase()===S.me.name.trim().toLowerCase());
+    const pickSel=(nbShown.length||S.playerLib.length)?`<span style="position:relative;flex:none;width:42px;border:2px solid var(--elec);border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--elec);background:var(--card);font-size:15px;box-shadow:2px 2px 0 var(--elec-dk)">▾<select style="position:absolute;inset:0;opacity:0;width:100%;height:100%" onchange="pickPlayerOpt(${i},this.value)">
+        <option value="">Pick a player…</option>
+        ${nbShown.some(n=>n.near)?`<optgroup label="Nearby — on the course">${nbShown.map((n,j)=>n.near?`<option value="nb:${j}">📍 ${esc(n.name)}${n.index!=null?` · ${n.index}`:''}</option>`:'').join('')}</optgroup>`:''}
+        ${nbShown.some(n=>!n.near)?`<optgroup label="Online — elsewhere">${nbShown.map((n,j)=>!n.near?`<option value="nb:${j}">🌐 ${esc(n.name)}${n.index!=null?` · ${n.index}`:''}</option>`:'').join('')}</optgroup>`:''}
+        ${S.playerLib.length?`<optgroup label="Saved players">${S.playerLib.map(e=>`<option value="lib:${e.id}">${esc(e.name)} · ${e.index}${e.teeName?` · ${esc(e.teeName)}`:''}</option>`).join('')}</optgroup>`:''}
+      </select></span>`:'';
     return `<div class="card">
-      <div class="row"><b>Golfer ${i+1}${S.config.game==='wolf'?` — tees off ${['1st','2nd','3rd','4th'][i]}`:''}</b>
+      <div class="row"><b>Golfer ${i+1}${isMe?' <span class="pill gray">you</span>':''}${S.config.game==='wolf'?` — tees off ${['1st','2nd','3rd','4th'][i]}`:''}</b>
         <span>${i>0?`<button class="ghost" onclick="movePl(${i})">↑</button>`:''}</span></div>
       <div class="grid2 mt">
-        <div><div class="tiny">Name</div><input type="text" value="${esc(p.name)}" onfocus="tapClear(this)" onblur="commitPl(this,${i},'name')"></div>
+        <div><div class="tiny">Name</div><div style="display:flex;gap:6px;align-items:stretch"><input type="text" style="flex:1;min-width:0" value="${esc(p.name)}" onfocus="tapClear(this)" onblur="commitPl(this,${i},'name')">${pickSel}</div></div>
         <div><div class="tiny">Tees</div><select style="width:100%;padding:9px;border:2px solid var(--line);border-radius:8px;font-size:15px;background:var(--card)" onchange="setPl(${i},'tee',this.value)">${teeOpts}</select></div>
         <div><div class="tiny">Handicap index</div><input type="text" inputmode="decimal" value="${p.index}" onfocus="tapClear(this)" onblur="commitPl(this,${i},'index')"></div>
         <div><div class="tiny">or course hcp (override)</div><input type="text" inputmode="numeric" placeholder="auto: ${ch[i]}" value="${p.chOverride==null?'':p.chOverride}" onfocus="tapClear(this)" onblur="commitPl(this,${i},'chOverride')"></div>
       </div>
       <div class="tiny mt">Course hcp <b>${ch[i]}</b> → plays with <b>${st[i]}</b> stroke${st[i]===1?'':'s'} (off the low man)</div>
-      ${(nbShown.length||S.playerLib.length)?`<select class="mt" style="width:100%;padding:8px;border:2px solid var(--line);border-radius:8px;font-size:13px;color:var(--ink2);background:var(--card)" onchange="pickPlayerOpt(${i},this.value)">
-        <option value="">Add player…</option>
-        ${nbShown.some(n=>n.near)?`<optgroup label="Nearby — on the course">${nbShown.map((n,j)=>n.near?`<option value="nb:${j}">📍 ${esc(n.name)}${n.index!=null?` · ${n.index}`:''}</option>`:'').join('')}</optgroup>`:''}
-        ${nbShown.some(n=>!n.near)?`<optgroup label="Online — elsewhere">${nbShown.map((n,j)=>!n.near?`<option value="nb:${j}">🌐 ${esc(n.name)}${n.index!=null?` · ${n.index}`:''}</option>`:'').join('')}</optgroup>`:''}
-        ${S.playerLib.length?`<optgroup label="Saved players">${S.playerLib.map(e=>`<option value="lib:${e.id}">${esc(e.name)} · ${e.index}${e.teeName?` · ${esc(e.teeName)}`:''}</option>`).join('')}</optgroup>`:''}
-      </select>`:''}
     </div>`;
   }).join('');
   const P=S.config.pts;
@@ -2088,7 +2137,7 @@ function vSetup(){
     <div class="stepper"><button onclick="chPt('${k}',-1)">−</button><span class="val num">${P[k]}</span><button onclick="chPt('${k}',1)">+</button></div></div>`;
   const V=S.config.vegas;
   const pairLbl=T=>`${esc(S.players[T[0][0]].name)} &amp; ${esc(S.players[T[0][1]].name)} <span class="muted">vs</span> ${esc(S.players[T[1][0]].name)} &amp; ${esc(S.players[T[1][1]].name)}`;
-  return topbar(`Round setup — ${gameName(S.config.game)}`,nines?'Every hole is worth 9 points: 5 · 3 · 1':vegas?'Low team number takes the difference':stroke?'Straight scoring — net, gross or both':stbl?'Points vs par — highest total wins':quota?'Beat your own number':sixes?'Partners rotate — best ball wins the hole':umbrella?'Six points a hole — sweep for twelve':bbb?'Three taps a hole — bingo, bango, bongo':bestball?'2 v 2 — better ball wins the hole':scramble?'2 v 2 — one ball per team':'Order = tee order on hole 1 (wolf rotation)','home')+`<main>
+  return topbar(`Round setup — ${gameName(S.config.game)}`,nines?'Every hole is worth 9 points: 5 · 3 · 1':vegas?'Low team number takes the difference':stroke?'Straight scoring — net, gross or both':stbl?'Points vs par — highest total wins':quota?'Beat your own number':sixes?'Partners rotate — best ball wins the hole':umbrella?'Six points a hole — sweep for twelve':bbb?'Three taps a hole — bingo, bango, bongo':bestball?'2 v 2 — better ball wins the hole':scramble?'2 v 2 — one ball per team':'Order = tee order on hole 1 (wolf rotation)','gate')+`<main>
   ${rows}
   ${sixes?`<div class="card"><h2>Starting partners</h2>
     ${[[[0,1],[2,3]],[[0,2],[1,3]],[[0,3],[1,2]]].map((T,pi)=>`
