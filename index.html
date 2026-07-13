@@ -137,6 +137,8 @@
   .gamebtn.stblg{background:rgba(201,79,124,.12);border-color:#c94f7c;box-shadow:3px 3px 0 #7c2f4c}
   .gamebtn.bbbg{background:rgba(210,75,184,.10);border-color:#d24bb8;box-shadow:3px 3px 0 #7d2a6d}
   .bbb-ph{font-size:34px;flex:none;margin:0 14px 0 0}
+  .gamebtn.nasg{background:rgba(70,99,217,.10);border-color:#4663d9;box-shadow:3px 3px 0 #2a3b85}
+  .nas-ph{font-size:34px;flex:none;margin:0 14px 0 0}
   .gamebtn.stblg:active{box-shadow:1px 1px 0 #7c2f4c}
   .stbl-ph{font-size:38px;margin:0 16px 0 0;flex:none}
   .gamebtn.bbg{background:rgba(42,167,160,.12);border-color:#2aa7a0;box-shadow:3px 3px 0 #17615d}
@@ -201,7 +203,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1783924191';
+const BUILD='1783972208';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -233,6 +235,7 @@ function defaultConfig(){
     sixes:{pairing:0},
     hammer:{on:false},
     bbb:{n:4},
+    nassau:{n:4,press:'manual'},
     scramble:{teams:'2v2'},
     span:{count:18,start:0},
     track:{putts:false,bunker:false,chips:false,pen:false},
@@ -274,6 +277,7 @@ function load(){
       if(!s.config.sixes)s.config.sixes={pairing:0};
       if(!s.config.hammer)s.config.hammer={on:false};
       if(!s.config.bbb)s.config.bbb={n:4};
+      if(!s.config.nassau)s.config.nassau={n:4,press:'manual'};
       if(!s.config.scramble)s.config.scramble={teams:'2v2'};
       if(!s.history)s.history=[];
       if(!s.config.span)s.config.span={count:18,start:0};
@@ -822,7 +826,7 @@ function gameOn(){
   const roundScr=['hole','standings','settle','map'].includes(S.screen);
   return (roundScr&&S.round.started&&S.round.game)||S.config.game||'wolf';
 }
-function gameName(g){const x=g||gameOn();return x==='nines'?'9’s':x==='vegas'?'Vegas':x==='stroke'?'Stroke':x==='bestball'?'Best Ball':x==='scramble'?'Scramble':x==='stableford'?'Stableford':x==='quota'?'Quota':x==='sixes'?'Sixes':x==='umbrella'?'Umbrella':x==='bbb'?'Bingo Bango Bongo':'Wolf';}
+function gameName(g){const x=g||gameOn();return x==='nines'?'9’s':x==='vegas'?'Vegas':x==='stroke'?'Stroke':x==='bestball'?'Best Ball':x==='scramble'?'Scramble':x==='stableford'?'Stableford':x==='quota'?'Quota':x==='sixes'?'Sixes':x==='umbrella'?'Umbrella':x==='bbb'?'Bingo Bango Bongo':x==='nassau'?'Nassau':'Wolf';}
 function NP(){
   const g=gameOn();
   if(g==='nines'&&S.config.nines&&S.config.nines.n===3)return 3;
@@ -830,6 +834,7 @@ function NP(){
   if(g==='stableford'&&S.config.stbl)return Math.min(4,Math.max(1,S.config.stbl.n||4));
   if(g==='quota'&&S.config.quota)return Math.min(4,Math.max(1,S.config.quota.n||4));
   if(g==='bbb'&&S.config.bbb)return Math.min(4,Math.max(2,S.config.bbb.n||4));
+  if(g==='nassau'&&S.config.nassau)return S.config.nassau.n===2?2:4;
   return 4;
 }
 function actIdx(){return [0,1,2,3].slice(0,NP());}
@@ -897,11 +902,13 @@ function runningTotalsCard(){
         <div class="tiny" style="text-align:center;margin-top:6px">points · +/− vs quota · thru ${thru}</div></div>`;
     }
     const eng=g==='nines'?computeNines():g==='vegas'?computeVegas():g==='stableford'?computeStableford()
-      :g==='sixes'?computeSixes():g==='umbrella'?computeUmbrella():g==='bbb'?computeBBB():computeAll();
+      :g==='sixes'?computeSixes():g==='umbrella'?computeUmbrella():g==='bbb'?computeBBB():g==='nassau'?computeNassau():computeAll();
     const f=g==='nines'?fmtPts:String;
     cells=actIdx().map(i=>cell(first(i),big(f(eng.ledgers[L][i])))).join('');
     if(g==='sixes'){const T=sixesTeamsFor(S.round.cur);
       foot=`${T[0].map(first).join(' & ')} v ${T[1].map(first).join(' & ')}`;}
+    else if(g==='nassau'){const sgn=x=>x===0?'AS':(x>0?'+':'')+x;
+      foot=eng.bets[L].filter(b=>!b.press).map(b=>`${b.seg[0].toUpperCase()} ${sgn(b.up)}`).join(' · ');}
     else foot='points';
   }
   return `<div class="card" style="padding:14px 12px 10px"><div style="display:flex;gap:4px">${cells}</div>
@@ -1162,6 +1169,56 @@ function computeBBB(){
   }
   return {ledgers:{net:led.slice(),gross:led.slice()},perHole:null,carries:{net:0,gross:0},lenses:['net','gross']};
 }
+// Nassau: the classic three-bet round — front nine, back nine, overall.
+// Singles (1v1) or 2v2 best ball. Presses open a fresh bet on the remaining
+// holes of a nine: rec.press=side marks a manual press starting at that hole;
+// 'auto2' spawns one press per bet the first time it reaches exactly 2 down.
+// A 9-hole round collapses to a single overall match.
+function nassauSides(){return NP()===2?[[0],[1]]:matchTeams();}
+function computeNassau(){
+  const T=nassauSides();
+  const o=playOrder();
+  const cfg=S.config.nassau||{n:4,press:'manual'};
+  const segs=o.length>=18?[['front',o.slice(0,9)],['back',o.slice(9,18)],['overall',o]]:[['overall',o]];
+  const out={lenses:['net','gross'],ledgers:{net:[0,0,0,0],gross:[0,0,0,0]},bets:{net:[],gross:[]},perHole:null,carries:{net:0,gross:0}};
+  for(const L of ['net','gross']){
+    const bets=[];
+    const hw=h=>{
+      const rec=S.round.holes[h];if(!rec.confirmed)return undefined;
+      const sc=t=>Math.min(...t.map(i=>{const g=rec.gross[i];return g==null?99:(L==='net'?g-dotsOn(i,h):g);}));
+      const a=sc(T[0]),b=sc(T[1]);
+      return a<b?0:b<a?1:null;
+    };
+    for(const [seg,holes] of segs){
+      const list=[{seg,from:0,up:0,thru:0,press:false,spawned:false}];
+      if(seg!=='overall'&&cfg.press==='manual'){
+        holes.forEach((h,pi)=>{const rec=S.round.holes[h];
+          if(rec.press!=null&&rec.press>=0&&pi>0)list.push({seg,from:pi,up:0,thru:0,press:true,by:rec.press,spawned:false});});
+      }
+      for(let pi=0;pi<holes.length;pi++){
+        const w=hw(holes[pi]);
+        if(w===undefined)continue;
+        for(const b of list){
+          if(pi<b.from)continue;
+          b.thru++;
+          if(w===0)b.up++;else if(w===1)b.up--;
+        }
+        if(seg!=='overall'&&cfg.press==='auto2'){
+          for(const b of [...list]){
+            if(!b.spawned&&pi>=b.from&&Math.abs(b.up)===2&&pi<holes.length-1){
+              b.spawned=true;
+              list.push({seg,from:pi+1,up:0,thru:0,press:true,spawned:false});
+            }
+          }
+        }
+      }
+      bets.push(...list);
+    }
+    bets.forEach(b=>{if(b.thru>0&&b.up!==0)T[b.up>0?0:1].forEach(i=>out.ledgers[L][i]+=1);});
+    out.bets[L]=bets;
+  }
+  return out;
+}
 // Sixes: 2v2 best-ball hole wins, partners rotate every six holes (three for a
 // nine) so everyone partners everyone. Ties break on both balls, then push.
 function sixesTeamsFor(h){
@@ -1220,6 +1277,7 @@ function computeUmbrella(){
   return {ledgers,sweeps,perHole:null,carries:{net:0,gross:0},lenses:['net','gross']};
 }
 function computeGame(){const g=gameOn();
+  if(g==='nassau')return computeNassau();
   if(g==='bbb')return computeBBB();
   if(g==='sixes')return computeSixes();
   if(g==='umbrella')return computeUmbrella();
@@ -1583,6 +1641,11 @@ function vHome(){
         <div class="tiny">Three taps a hole — the great equalizer</div></div>
       <img src="${art('bbb.png')}" alt="" style="height:92px;margin:4px 8px 4px 0;filter:drop-shadow(0 0 6px rgba(210,75,184,.5))" onerror="this.outerHTML='<span class=&quot;bbb-ph&quot;>🥁</span>'">
     </button>
+    <button class="gamebtn nasg" onclick="pickGame('nassau')">
+      <div style="flex:1;min-width:0"><span class="gname">Nassau</span>
+        <div class="tiny">The classic — front nine, back nine, overall. Press when you're down</div></div>
+      <img src="${art('nassau.png')}" alt="" style="height:92px;margin:4px 8px 4px 0;filter:drop-shadow(0 0 6px rgba(70,99,217,.55))" onerror="this.outerHTML='<span class=&quot;nas-ph&quot;>🏅</span>'">
+    </button>
   </div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
     <button class="ghost" style="padding:12px" onclick="go('courses')">⛳ Courses</button>
@@ -1794,18 +1857,6 @@ function vRules(){
     '<b>☂ The Umbrella:</b> win all six on one hole and it doubles to <b>12</b>. Dominance pays.',
     'Fixed 2 v 2 teams — pick partners in setup. Tap closest-to-pin each hole (any hole, not just par 3s).',
     'Net or gross via the scoring options; the birdie point is always gross.']))}
-  ${ruleCard(img('hammer.png',48),'Hammer','Battle modifier — double or fold',li([
-    '<b>Not a game — a weapon:</b> switch it on in <b>Best Ball</b> or <b>Sixes</b> setup and every hole becomes a standoff.',
-    '<b>The throw:</b> any time during a hole — even mid-swing drama — either team can throw the hammer. The hole instantly goes double-or-fold.',
-    '<b>Accept:</b> the double is live and the hammer changes hands — only the accepting team can throw the next one. Re-hammers stack: 2×, 4×, 8×…',
-    '<b>Fold:</b> concede the hole at the old stake and move on. Cheap insurance or slow bleed — you decide.',
-    'Every hole starts fresh at 1× with the hammer in the air. Throw it when your opponent is in the trees.']))}
-  ${ruleCard(img('bbb.png',48),'Bingo Bango Bongo','Three taps a hole — the great equalizer',li([
-    '<b>🟢 Bingo:</b> first ball <b>on the green</b> — the short hitter playing first has the inside track.',
-    '<b>📍 Bango:</b> once <b>every ball is on</b>, closest to the pin takes it.',
-    '<b>⛳ Bongo:</b> first ball <b>in the cup</b> — putting order matters, lags win points.',
-    '<b>Play strictly in turn</b> — farthest from the hole plays first. That etiquette IS the game; break it and the point is forfeit.',
-    'No handicaps needed — a 30 can beat a scratch player all day. Most taps at the end wins.']))}
   ${(()=>{const P=quotaPts();return ruleCard(img('quota.png',48),'Quota','Race your own number',li([
     '<b>Your quota:</b> 36 minus your course handicap (18 for a nine-hole round) — a personal target that makes every handicap fair.',
     `<b>Points from gross scores:</b> par <b>${P.par}</b> · birdie <b>${P.birdie}</b> · eagle <b>${P.eagle}</b> · albatross <b>${P.alba}</b> · bogey <b>${P.bogey}</b> — adjustable in setup.`,
@@ -1815,6 +1866,24 @@ function vRules(){
     `<b>Points per hole:</b> albatross <b>${P.alba}</b> · eagle <b>${P.eagle}</b> · birdie <b>${P.birdie}</b> · par <b>${P.par}</b> · bogey <b>${P.bogey}</b> · double or worse <b>${P.dbl}</b> — all adjustable in setup.`,
     'Highest total wins. Blow-up holes stop hurting after double — pick up and move on.',
     'Works with 1–4 players; net plays off your full course handicap.']));})()}
+  ${ruleCard(img('bbb.png',48),'Bingo Bango Bongo','Three taps a hole — the great equalizer',li([
+    '<b>🟢 Bingo:</b> first ball <b>on the green</b> — the short hitter playing first has the inside track.',
+    '<b>📍 Bango:</b> once <b>every ball is on</b>, closest to the pin takes it.',
+    '<b>⛳ Bongo:</b> first ball <b>in the cup</b> — putting order matters, lags win points.',
+    '<b>Play strictly in turn</b> — farthest from the hole plays first. That etiquette IS the game; break it and the point is forfeit.',
+    'No handicaps needed — a 30 can beat a scratch player all day. Most taps at the end wins.']))}
+  ${ruleCard(img('nassau.png',48),'Nassau','The classic — three bets in every round',li([
+    '<b>Three bets, one round:</b> the <b>front nine</b>, the <b>back nine</b>, and the <b>overall 18</b> — each its own match. A "$5 Nassau" means $5 on each.',
+    '<b>Match play:</b> holes won, not strokes. Play it <b>1 v 1</b> or <b>2 v 2 best ball</b>.',
+    '<b>The press:</b> a side that is down can press — a brand-new bet at the same stake covering the remaining holes of that nine. Set presses to anytime, classic <b>2-down automatic</b>, or off.',
+    '<b>Fresh starts:</b> a rough front nine cannot touch the back-nine bet — everyone grinds to the 18th.',
+    'Born at Nassau Country Club, Long Island, around 1900 — invented so badly beaten members never lost worse than "3 points" in the club results.']))}
+  ${ruleCard(img('hammer.png',48),'Hammer','Battle modifier — double or fold',li([
+    '<b>Not a game — a weapon:</b> switch it on in <b>Best Ball</b> or <b>Sixes</b> setup and every hole becomes a standoff.',
+    '<b>The throw:</b> any time during a hole — even mid-swing drama — either team can throw the hammer. The hole instantly goes double-or-fold.',
+    '<b>Accept:</b> the double is live and the hammer changes hands — only the accepting team can throw the next one. Re-hammers stack: 2×, 4×, 8×…',
+    '<b>Fold:</b> concede the hole at the old stake and move on. Cheap insurance or slow bleed — you decide.',
+    'Every hole starts fresh at 1× with the hammer in the air. Throw it when your opponent is in the trees.']))}
   <div class="card" style="padding:12px 14px"><b style="font-family:Rajdhani,sans-serif;font-size:20px">Scoring options — every game</b>
     <div style="font-size:15px;line-height:1.55;margin-top:6px">
     <b>Net</b> scores (totals, Stroke play, Stableford) apply each player’s <b>full course handicap</b>. Inside the games, points play off strokes <b>relative to the low man</b> — the dots on the score entry show where those game strokes land. <b>Gross</b> is raw. <b>Both</b> shows two columns.
@@ -2246,6 +2315,7 @@ function vSetup(){
   const bestball=S.config.game==='bestball';
   const scramble=S.config.game==='scramble';
   const bbb=S.config.game==='bbb';
+  const nassau=S.config.game==='nassau';
   const rows=actIdx().map(i=>{
     const p=S.players[i];
     const teeOpts=S.course.teeSets.map(t=>`<option value="${t.id}" ${p.tee===t.id?'selected':''}>${esc(t.name)}</option>`).join('');
@@ -2273,7 +2343,7 @@ function vSetup(){
     <div class="stepper"><button onclick="chPt('${k}',-1)">−</button><span class="val num">${P[k]}</span><button onclick="chPt('${k}',1)">+</button></div></div>`;
   const V=S.config.vegas;
   const pairLbl=T=>`${esc(S.players[T[0][0]].name)} &amp; ${esc(S.players[T[0][1]].name)} <span class="muted">vs</span> ${esc(S.players[T[1][0]].name)} &amp; ${esc(S.players[T[1][1]].name)}`;
-  return topbar(`Round setup — ${gameName(S.config.game)}`,nines?'Every hole is worth 9 points: 5 · 3 · 1':vegas?'Low team number takes the difference':stroke?'Straight scoring — net, gross or both':stbl?'Points vs par — highest total wins':quota?'Beat your own number':sixes?'Partners rotate — best ball wins the hole':umbrella?'Six points a hole — sweep for twelve':bbb?'Three taps a hole — bingo, bango, bongo':bestball?'2 v 2 — better ball wins the hole':scramble?'2 v 2 — one ball per team':'Order = tee order on hole 1 (wolf rotation)','gate')+`<main>
+  return topbar(`Round setup — ${gameName(S.config.game)}`,nines?'Every hole is worth 9 points: 5 · 3 · 1':vegas?'Low team number takes the difference':stroke?'Straight scoring — net, gross or both':stbl?'Points vs par — highest total wins':quota?'Beat your own number':sixes?'Partners rotate — best ball wins the hole':umbrella?'Six points a hole — sweep for twelve':bbb?'Three taps a hole — bingo, bango, bongo':nassau?'Front nine · back nine · overall — three bets':bestball?'2 v 2 — better ball wins the hole':scramble?'2 v 2 — one ball per team':'Order = tee order on hole 1 (wolf rotation)','gate')+`<main>
   ${rows}
   ${sixes?`<div class="card"><h2>Starting partners</h2>
     ${[[[0,1],[2,3]],[[0,2],[1,3]],[[0,3],[1,2]]].map((T,pi)=>`
@@ -2285,7 +2355,19 @@ function vSetup(){
       <button class="ghost ${S.config.hammer.on?'sel':''}" onclick="set(()=>S.config.hammer.on=!S.config.hammer.on)">${S.config.hammer.on?'On':'Off'}</button></div>
     <div class="tiny mt">Either team can throw the hammer to double what the hole is worth. The other side <b>accepts</b> — the double is live and they take the hammer (only they can re-throw) — or <b>folds</b> and concedes the hole at the old stake. Every hole starts fresh at 1×.</div>
   </div>`:''}
-  ${(bestball||scramble||umbrella)?`<div class="card"><h2>Teams</h2>
+  ${nassau?`<div class="card"><h2>Nassau</h2>
+    <div class="row" style="border-top:none"><span class="muted">Format</span>
+      <span class="seg" style="display:inline-flex;gap:6px">
+        <button class="ghost ${S.config.nassau.n!==2?'sel':''}" onclick="set(()=>S.config.nassau.n=4)">2 v 2</button>
+        <button class="ghost ${S.config.nassau.n===2?'sel':''}" onclick="set(()=>S.config.nassau.n=2)">1 v 1</button>
+      </span></div>
+    <div class="row"><span class="muted">Presses</span>
+      <span class="seg" style="display:inline-flex;gap:6px">
+        ${[['off','Off'],['manual','Anytime'],['auto2','2-down auto']].map(([k,l])=>`<button class="ghost ${(S.config.nassau.press||'manual')===k?'sel':''}" onclick="set(()=>S.config.nassau.press='${k}')">${l}</button>`).join('')}
+      </span></div>
+    <div class="tiny mt">Three separate match-play bets: front nine, back nine, and the overall. ${(S.config.nassau.press||'manual')==='off'?'No presses — just the three bets.':(S.config.nassau.press||'manual')==='manual'?'A side that is down can press — a fresh bet on the remaining holes of that nine.':'Every bet automatically presses the first time a side falls exactly 2 down.'}${(S.config.span&&S.config.span.count===9)?' <b>9-hole round: collapses to a single overall match.</b>':''}</div>
+  </div>`:''}
+  ${(bestball||scramble||umbrella||(nassau&&S.config.nassau.n!==2))?`<div class="card"><h2>Teams</h2>
     ${scramble?`<div class="row" style="border-top:none"><span class="muted">Format</span>
       <span class="seg" style="display:inline-flex;gap:6px">
         <button class="ghost ${S.config.scramble.teams!=='solo'?'sel':''}" onclick="set(()=>S.config.scramble.teams='2v2')">2 v 2</button>
@@ -2293,7 +2375,7 @@ function vSetup(){
       </span></div>`:''}
     ${(scramble&&S.config.scramble.teams==='solo')?'':[[[0,1],[2,3]],[[0,2],[1,3]],[[0,3],[1,2]]].map((T,pi)=>`
       <button class="ghost ${S.config.vegas.pairing===pi?'sel':''}" style="width:100%;text-align:left;margin-bottom:8px" onclick="set(()=>S.config.vegas.pairing=${pi})">${pairLbl(T)}</button>`).join('')}
-    <div class="tiny mt">${scramble?(S.config.scramble.teams==='solo'?'Tournament mode — the whole group plays one ball and the app keeps the card. Net uses the 25/20/15/10% four-player allowance.':'One ball per team — pick your partners. Net strokes use the 35%/15% scramble allowance.'):umbrella?'Six points a hole — low ball 2, low team total 2, closest to pin 1, gross birdie 1. Sweep all six for 12.':'Better ball of each team wins the hole.'}</div>
+    <div class="tiny mt">${scramble?(S.config.scramble.teams==='solo'?'Tournament mode — the whole group plays one ball and the app keeps the card. Net uses the 25/20/15/10% four-player allowance.':'One ball per team — pick your partners. Net strokes use the 35%/15% scramble allowance.'):umbrella?'Six points a hole — low ball 2, low team total 2, closest to pin 1, gross birdie 1. Sweep all six for 12.':nassau?'Best ball of each team decides every hole across all three bets.':'Better ball of each team wins the hole.'}</div>
   </div>`:''}
   ${vegas?`<div class="card"><h2>Teams</h2>
     ${[[[0,1],[2,3]],[[0,2],[1,3]],[[0,3],[1,2]]].map((T,pi)=>`
@@ -2466,6 +2548,7 @@ function startRound(){
       :S.round.game==='sixes'?{pairing:S.config.sixes.pairing,hammer:!!S.config.hammer.on}
       :S.round.game==='bestball'?{hammer:!!S.config.hammer.on}
       :S.round.game==='bbb'?{n:S.config.bbb.n}
+      :S.round.game==='nassau'?{n:S.config.nassau.n,press:S.config.nassau.press,pairing:S.config.vegas.pairing}
       :S.round.game==='umbrella'?{pairing:S.config.vegas.pairing}
       :S.round.game==='wolf'?{carry:S.config.carryTies,last2:S.config.last2LastPlace}:{}});
   if(withNearby&&!S.share.on)shareRound();
@@ -2485,7 +2568,7 @@ function prefillNines(h){
 // ----- hole screen -----
 function vHole(){
   if(!S.round.started) return topbar(gameName(),'','home')+`<main><div class="card center">No round in progress.<button class="big mt" onclick="go('home')">Pick a game</button></div></main>`;
-  if(['nines','stroke','bestball','stableford','quota','sixes','umbrella','bbb'].includes(gameOn())) return vHoleNines();
+  if(['nines','stroke','bestball','stableford','quota','sixes','umbrella','bbb','nassau'].includes(gameOn())) return vHoleNines();
   if(gameOn()==='vegas') return vHoleVegas();
   if(gameOn()==='scramble') return vHoleScramble();
   const h=S.round.cur, hole=S.course.holes[h], rec=S.round.holes[h];
@@ -2595,6 +2678,43 @@ function redoPick(){set(()=>{const r=S.round.holes[S.round.cur];r.mode=null;r.pa
 function chScore(i,d){set(()=>{const r=S.round.holes[S.round.cur];const v=(r.gross[i]??S.course.holes[S.round.cur].par)+d;r.gross[i]=Math.min(15,Math.max(1,v));if(!r.gts)r.gts=[0,0,0,0];r.gts[i]=Date.now();});}
 function setCtp(i){set(()=>{S.round.holes[S.round.cur].ctp=i;});}
 function setBBB(k,i){set(()=>{const rec=S.round.holes[S.round.cur];rec.bbb=Object.assign({},rec.bbb);rec.bbb[k]=i;});}
+// Nassau press: mark/unmark a manual press starting at the current hole.
+function nassauPress(side){set(()=>{const rec=S.round.holes[S.round.cur];
+  if(side<0||(rec.press!=null&&rec.press>=0))delete rec.press;else rec.press=side;});}
+function nassauUpTxt(up,thru,fin){
+  if(!thru)return '—';
+  if(up===0)return fin?'HALVED':'AS';
+  return (up>0?'+':'')+up+(fin?' FINAL':'');
+}
+function nassauCardHTML(){
+  const h=S.round.cur,rec=S.round.holes[h];
+  const eng=computeNassau(),L=primaryLens(),T=nassauSides();
+  const o=playOrder(),pos=Math.max(0,posOf(h));
+  const first=i=>esc((S.players[i].name||'').split(' ')[0]);
+  const tn=k=>T[k].map(first).join(' & ');
+  const segLen=x=>x==='overall'?o.length:9;
+  const rows=eng.bets[L].map(b=>{
+    const fin=b.thru>=segLen(b.seg)-b.from;
+    const lbl=b.press?`↳ press — ${b.seg}, from hole ${b.from+1}`:b.seg;
+    return `<div class="row" style="border-top:none;padding:3px 0"><span class="tiny" style="text-transform:capitalize">${lbl}</span>
+      <b class="num" style="font-size:16px">${nassauUpTxt(b.up,b.thru,fin)}</b></div>`;
+  }).join('');
+  let pressBtn='';
+  if((S.config.nassau.press||'manual')==='manual'&&o.length>=18){
+    const nine=pos<9?'front':'back';
+    const orig=eng.bets[L].find(b=>b.seg===nine&&!b.press);
+    const down=orig&&orig.up>0?1:orig&&orig.up<0?0:null;
+    const marked=rec.press!=null&&rec.press>=0;
+    if(marked)pressBtn=`<div class="banner ok" style="margin:8px 0 0">↳ ${tn(rec.press)} press the ${nine} from this hole</div>
+      <button class="ghost mt" style="width:100%" onclick="nassauPress(-1)">Undo press</button>`;
+    else if(down!=null&&!rec.confirmed&&pos>0&&pos!==9)pressBtn=`<button class="ghost mt" style="width:100%;font-weight:700" onclick="nassauPress(${down})">⚡ ${tn(down)} press the ${nine} — new bet from here</button>`;
+  }
+  return `<div class="card"><h2>Nassau — ${tn(0)} <span class="tiny" style="text-transform:none">vs</span> ${tn(1)}</h2>
+    <div class="tiny mb">+ favors ${tn(0)} · ${L} scores</div>
+    ${rows}${pressBtn}
+    ${o.length<18?'<div class="tiny mt">9-hole round — single match, no front/back split.</div>':''}
+  </div>`;
+}
 // The Hammer card on the hole screen: idle → throw, pending → accept/fold.
 function hammerCardHTML(){
   const h=S.round.cur,rec=S.round.holes[h];
@@ -2672,6 +2792,7 @@ function vHoleNines(){
     <div class="tiny mt">Ball must be on the green. Unclaimed = no point.</div></div>`:'';
   const hamSt=hammerOn()?hamState(rec):null;
   const hamCard=hammerOn()?hammerCardHTML():'';
+  const nasCard=gameOn()==='nassau'?nassauCardHTML():'';
   const bbbOn=gameOn()==='bbb';
   const bbbCard=bbbOn?`<div class="card"><h2>3 points on this hole</h2>
     ${[['bingo','\u{1F7E2} Bingo','first ball on the green'],['bango','\u{1F4CD} Bango','closest to the pin once all balls are on'],['bongo','\u26F3 Bongo','first ball in the cup']].map(([k,l,dsc])=>{
@@ -2703,7 +2824,7 @@ function vHoleNines(){
   const body=`<div class="card">
     ${act.some(i=>rec.gross[i]==null)?`<button class="ghost mb" style="width:100%" onclick="set(()=>prefillNines(${h}))">Everyone to par ${hole.par} — adjust from there</button>`:''}
     ${scoreRows}
-    </div>${hamCard}${bbbCard}${ctpRow}${extrasCard}${resultNote}
+    </div>${hamCard}${nasCard}${bbbCard}${ctpRow}${extrasCard}${resultNote}
     ${rec.confirmed
       ?`${isReview()?'':`<button class="big" onclick="nextHole()">${posOf(h)<playOrder().length-1?'Next hole →':'Finish round'}</button>`}
         <button class="ghost mt" style="width:100%" onclick="unconfirm()">Edit this hole</button>`
@@ -2901,6 +3022,7 @@ function stViews(){
   if(four&&g!=='bestball')v.push(['match','Match']);
   if(g!=='nines'&&NP()>=3)v.push(['nines','9’s']);
   if(g!=='vegas'&&four)v.push(['vegas','Vegas']);
+  if(g!=='nassau'&&(four||NP()===2))v.push(['nassau','Nassau']);
   return v;
 }
 function lensScore(rec,i,h,L){const g=rec.gross[i];return g==null?null:(L==='net'?g-dotsOn(i,h):g);}
@@ -3038,6 +3160,17 @@ function vStandings(){
     tables=genericCard('Stroke play',st.ledgers,(v,L,i)=>{if(!thru)return '-';const d=v-st.par[L][i];
       return `${v} <span style="font-size:17px">${d===0?'E':(d>0?'+':'')+d}</span>`;},true,
       `<div class="tiny mt">Total strokes over confirmed holes — lowest wins.</div>`);
+  }else if(view==='nassau'){
+    const na=computeNassau(),T=nassauSides();
+    const fn=i=>esc((S.players[i].name||'').split(' ')[0]);
+    const tn=k=>T[k].map(fn).join(' & ');
+    const o=playOrder(),segLen=x=>x==='overall'?o.length:9;
+    const betLines=cols.map(L=>`<div class="tiny mt"><b>${lbl(L)}:</b> ${na.bets[L].map(b=>{
+      const fin=b.thru>=segLen(b.seg)-b.from;
+      return `${b.press?'↳':''}${b.seg[0].toUpperCase()+b.seg.slice(1)}${b.press?' h'+(b.from+1):''} ${nassauUpTxt(b.up,b.thru,fin)}`;
+    }).join(' · ')}</div>`).join('');
+    tables=genericCard('Nassau',na.ledgers,v=>String(v),false,
+      `<div class="tiny mt">${tn(0)} <b>vs</b> ${tn(1)} — + favors ${tn(0)}. Table counts bets currently won.</div>${betLines}`);
   }else if(view===g){
     all=computeGame();
     const carryNote=cols.map(L=>all.carries[L]>0?`<div class="banner carry mt">${lbl(L)}: ${all.carries[L]} hole${all.carries[L]>1?'s':''} carried — next decided hole pays ×${all.carries[L]+1}</div>`:'').join('');
@@ -3113,7 +3246,7 @@ function vStandings(){
 function jumpAndGo(h){set(()=>{S.round.cur=h;S.screen='hole';});}
 
 // ----- settlement -----
-const PAIRS_GAMES=['wolf','vegas','bestball','scramble','sixes','umbrella'];
+const PAIRS_GAMES=['wolf','vegas','bestball','scramble','sixes','umbrella','nassau'];
 function vSettle(){
   if(gameOn()==='quota'){
     const q=computeQuota();
@@ -3153,7 +3286,7 @@ function vSettle(){
   const blocks=activeLenses().map(LL=>{
     const led=all.ledgers[LL];
     const gg=gameOn();
-    const inv=(gg==='stroke'||gg==='scramble')?-1:1, unit=(gg==='stroke'||gg==='scramble')?'stroke':gg==='bestball'?'hole':'pt';
+    const inv=(gg==='stroke'||gg==='scramble')?-1:1, unit=(gg==='stroke'||gg==='scramble')?'stroke':gg==='bestball'?'hole':gg==='nassau'?'bet':'pt';
     const pairs=[];
     for(let a=0;a<act.length;a++)for(let b=a+1;b<act.length;b++){
       const i=act[a],j=act[b],d=(led[i]-led[j])*inv,ad=ptsVal(Math.abs(d));
@@ -3173,7 +3306,7 @@ function vSettle(){
     </div>`;
   }).join('');
   return topbar('Settlement','','')+`<main>
-    ${PAIRS_GAMES.includes(gameOn())&&actIdx().length>1?`<div class="card"><div class="row"><span class="muted">$ per ${['stroke','scramble'].includes(gameOn())?'stroke':gameOn()==='bestball'?'hole':'point'} (optional)</span>
+    ${PAIRS_GAMES.includes(gameOn())&&actIdx().length>1?`<div class="card"><div class="row"><span class="muted">$ per ${['stroke','scramble'].includes(gameOn())?'stroke':gameOn()==='bestball'?'hole':gameOn()==='nassau'?'bet':'point'} (optional)</span>
       <input type="number" step="0.25" min="0" value="${S.round.dollarPerPt||''}" placeholder="0" style="width:90px" onchange="set(()=>S.round.dollarPerPt=+this.value||0)"></div></div>`:''}
     ${blocks}
     <button class="big warn" onclick="newRound()">${armNewRound?'Tap again to clear this round':'Start a new round'}</button>
@@ -3193,7 +3326,7 @@ function newRound(){
 // paint from memory — no service-worker round trips, no background network
 // revalidation per render, no pop-in on flaky signal.
 const ART={};
-['banner.jpg','wolf.png','nine.png','vegas.png','quota.png','sixes.png','umbrella.png','hammer.png','bbb.png','stroke.png','stableford.png','bestball.png','scramble.png','crest.jpg'].forEach(f=>{
+['banner.jpg','wolf.png','nine.png','vegas.png','quota.png','sixes.png','umbrella.png','hammer.png','bbb.png','stroke.png','stableford.png','bestball.png','scramble.png','nassau.png','crest.jpg'].forEach(f=>{
   fetch(f).then(r=>r.ok?r.blob():null).then(b=>{
     if(!b)return;
     ART[f]=URL.createObjectURL(b);
