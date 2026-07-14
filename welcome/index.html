@@ -71,10 +71,19 @@ a.game:hover{transform:translate(-1px,-1px)}
 .feat .ic{font-size:30px;float:right;margin-left:10px;filter:drop-shadow(0 0 9px var(--fc,#4aa8ff))}
 /* install */
 .install .card{max-width:640px;margin:0 auto}
-.install ol{padding-left:24px;font-size:16px}
-.install li{margin-bottom:10px}
-.install .os{font-family:Rajdhani;font-weight:700;color:var(--gold);font-size:19px;letter-spacing:.5px;margin-top:14px}
+.install ol,.modal-card ol{padding-left:24px;font-size:16px}
+.install li,.modal-card li{margin-bottom:10px}
+.install .os,.modal-card .os{font-family:Rajdhani;font-weight:700;color:var(--gold);font-size:19px;letter-spacing:.5px;margin-top:14px}
 kbd{background:#0d1420;border:1px solid var(--line);border-radius:6px;padding:1px 8px;font-family:inherit;font-size:14px}
+/* install modal */
+.modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:20px;
+  background:rgba(8,12,22,.78);backdrop-filter:blur(4px);z-index:50}
+.modal.open{display:flex}
+.modal-card{background:var(--card);border:2px solid var(--gold);border-radius:14px;box-shadow:6px 6px 0 var(--gold-dk);
+  padding:26px 26px 24px;max-width:460px;width:100%;position:relative;animation:pop .18s ease-out}
+@keyframes pop{from{transform:scale(.92);opacity:0}to{transform:scale(1);opacity:1}}
+.modal-x{position:absolute;top:10px;right:12px;background:none;border:none;color:var(--ink3);font-size:20px;cursor:pointer;padding:6px}
+.modal-x:hover{color:var(--ink)}
 /* footer */
 footer{text-align:center;padding:52px 0 42px;color:var(--ink3);font-size:13.5px}
 a{color:var(--elec)}
@@ -133,24 +142,33 @@ a{color:var(--elec)}
   <section class="install">
     <div class="sect-title">GET IT ON YOUR PHONE</div>
     <p class="sect-sub">Battle Tees installs straight from the web — no app store, nothing to pay.</p>
-    <div class="card">
-      <div class="os">iPhone</div>
-      <ol>
-        <li>Open <a href="https://battletees.app">battletees.app</a> in <b>Safari</b></li>
-        <li>Tap <kbd>Share</kbd> → <kbd>Add to Home Screen</kbd></li>
-      </ol>
-      <div class="os">Android</div>
-      <ol>
-        <li>Open <a href="https://battletees.app">battletees.app</a> in <b>Chrome</b></li>
-        <li>Tap <kbd>⋮</kbd> → <kbd>Add to Home screen</kbd> / <kbd>Install</kbd></li>
-      </ol>
-      <div class="center" style="margin-top:20px"><a class="cta gold" href="https://battletees.app">Open Battle Tees</a></div>
+    <div class="center">
+      <button class="cta gold" onclick="document.getElementById('installModal').classList.add('open')" style="border:2px solid var(--gold-dk);cursor:pointer;font-family:Rajdhani;font-weight:700">📲 &nbsp;Show me how — 10 seconds</button>
     </div>
   </section>
 
   <footer>
     <div>Forged for the foursome · <a href="mailto:battletees.apps@gmail.com">battletees.apps@gmail.com</a></div>
   </footer>
+</div>
+
+<div class="modal" id="installModal" onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="modal-card">
+    <button class="modal-x" onclick="document.getElementById('installModal').classList.remove('open')">✕</button>
+    <div class="sect-title" style="margin-bottom:4px">GET IT ON YOUR PHONE</div>
+    <p class="sect-sub" style="margin-bottom:18px">Ten seconds, no app store, nothing to pay.</p>
+    <div class="os">iPhone</div>
+    <ol>
+      <li>Open <a href="https://battletees.app">battletees.app</a> in <b>Safari</b></li>
+      <li>Tap <kbd>Share</kbd> → <kbd>Add to Home Screen</kbd></li>
+    </ol>
+    <div class="os">Android</div>
+    <ol>
+      <li>Open <a href="https://battletees.app">battletees.app</a> in <b>Chrome</b></li>
+      <li>Tap <kbd>⋮</kbd> → <kbd>Add to Home screen</kbd> / <kbd>Install</kbd></li>
+    </ol>
+    <div class="center" style="margin-top:20px"><a class="cta gold" href="https://battletees.app">Open Battle Tees</a></div>
+  </div>
 </div>
 
 </body>
