@@ -74,6 +74,23 @@
   .stepper.mini button{width:28px;height:28px;border-radius:8px;font-size:15px}
   .stepper.mini .val{min-width:20px;font-size:17px}
   .stepper.mini{gap:5px}
+  .splash{position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;
+    background:rgba(8,12,22,.82);backdrop-filter:blur(5px);animation:spFade .25s ease-out}
+  .splash-burst{position:absolute;width:560px;height:560px;border-radius:50%;pointer-events:none;
+    background:repeating-conic-gradient(from 0deg,transparent 0 13deg,var(--sc) 14deg 16deg,transparent 17deg 30deg);
+    opacity:.18;animation:spSpin 16s linear infinite;filter:blur(1px)}
+  @keyframes spSpin{to{transform:rotate(360deg)}}
+  @keyframes spFade{from{opacity:0}}
+  .splash-card{position:relative;background:var(--card);border:2px solid var(--sc);border-radius:18px;
+    box-shadow:6px 6px 0 rgba(0,0,0,.55),0 0 44px var(--sc);
+    padding:22px 26px 16px;width:min(330px,86vw);text-align:center;animation:spPop .38s cubic-bezier(.2,1.4,.4,1)}
+  @keyframes spPop{0%{transform:scale(.55);opacity:0}70%{transform:scale(1.05)}100%{transform:scale(1)}}
+  .splash-card img{height:110px;filter:drop-shadow(0 0 16px var(--sc));margin-bottom:4px}
+  .splash-hole{font-size:12px;letter-spacing:2.5px;color:var(--ink3);text-transform:uppercase}
+  .splash-head{font-family:Rajdhani,sans-serif;font-weight:700;font-size:26px;line-height:1.15;color:var(--sc);margin:6px 0 10px}
+  .splash-row{display:flex;justify-content:space-between;align-items:center;padding:5px 2px;border-top:1px solid var(--line);font-size:16px}
+  .splash-row b{font-size:20px}
+  .splash-tap{font-size:11px;color:var(--ink3);margin-top:10px;letter-spacing:1px}
   .banner{border-radius:8px;padding:9px 12px;font-size:13.5px;font-weight:600;margin-bottom:12px;border:2px solid}
   .banner.wolf{background:var(--amber-lt);color:var(--amber);border-color:var(--amber-bd);box-shadow:2px 2px 0 var(--amber-bd)}
   .banner.ok{background:var(--elec-lt);color:var(--elec-mid);border-color:var(--elec);box-shadow:2px 2px 0 var(--elec-dk)}
@@ -205,7 +222,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1783992988';
+const BUILD='1783994892';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -439,6 +456,9 @@ function applyOp(k,v,defer){
         if((ogts[p]||0)>(merged.gts[p]||0)){merged.gross[p]=og[p];merged.gts[p]=ogts[p];}
       }
       merged._ts=Math.max(v._ts||0,cur._ts||0);
+      // a hole finishing on ANOTHER phone fires the splash here too — live
+      // ops only, so the state doc on join doesn't replay old holes
+      if(!defer&&!cur.confirmed&&merged.confirmed&&S.round.started)setTimeout(()=>showSplash(i),60);
       S.round.holes[i]=merged;
       const mk=contentKey(k);
       localContent[k]=mk;
@@ -1565,6 +1585,113 @@ function updateFMB(pos,label){
 // ---------- rendering ----------
 const $=s=>document.querySelector(s);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+// ---- hole splash: fires on every phone when a hole's scores are complete ----
+let splash=null,splashTimer=null;
+function showSplash(h){
+  if(isReview()||!S.round.started)return;
+  splash={h};
+  clearTimeout(splashTimer);
+  splashTimer=setTimeout(()=>{splash=null;render();},4200);
+  render();
+}
+function dismissSplash(){splash=null;clearTimeout(splashTimer);render();}
+function splashLens(){return S.config.lens==='net'?'net':'gross';}
+function holeSplash(){
+  if(!splash)return '';
+  const h=splash.h,rec=S.round.holes[h];
+  if(!rec||!rec.confirmed)return '';
+  const g=gameOn(),L=splashLens();
+  const par=S.course.holes[h].par;
+  const first=i=>esc((S.players[i].name||'').split(' ')[0]);
+  const sc=i=>{const gr=rec.gross[i];return gr==null?null:(L==='net'?gr-dotsOn(i,h):gr);};
+  const A={wolf:'wolf.png',nines:'nine.png',vegas:'vegas.png',quota:'quota.png',sixes:'sixes.png',umbrella:'umbrella.png',bbb:'bbb.png',stroke:'stroke.png',stableford:'stableford.png',bestball:'bestball.png',scramble:'scramble.png',nassau:'nassau.png',skins:'skins.png'}[g];
+  const C={wolf:'#c76a1d',nines:'#4aa8ff',vegas:'#2ea043',stroke:'#e0bb45',bestball:'#2aa7a0',scramble:'#8e5cd9',stableford:'#c94f7c',quota:'#5ad0e0',sixes:'#9ec425',umbrella:'#8fa3c0',bbb:'#d24bb8',nassau:'#4663d9',skins:'#3ddc97'}[g]||'#c9a227';
+  let headline='',rows=[];
+  const tag=v=>{if(v==null)return '';const d=v-par;return d<=-2?' 🦅':d===-1?' 🐦':'';};
+  try{
+  if(g==='nines'){
+    const r=computeNines().perHole[h].results[L];
+    if(r){headline=r.blitz?'⚡ BLITZ — ALL 9!':'9 points split';
+      actIdx().slice().sort((a,b)=>r.share[b]-r.share[a]).forEach(i=>rows.push([first(i),fmtPts(r.share[i])+' pts']));}
+  }else if(g==='vegas'){
+    const r=computeVegas().perHole[h],res=r&&r.results[L];
+    if(res){const T=r.teams;
+      headline=res.winner==null?'PUSH — numbers match':`${T[res.winner].map(first).join(' & ')} +${res.diff}`;
+      rows.push([T[0].map(first).join(' & '),String(res.nums[0])+(res.flips[0]?' 🔄':'')]);
+      rows.push([T[1].map(first).join(' & '),String(res.nums[1])+(res.flips[1]?' 🔄':'')]);}
+  }else if(g==='wolf'){
+    const r=computeAll().perHole[h],res=r&&r.results[L];
+    if(res){headline=res.tie?'TIE — carried':`${res.winners.map(first).join(' & ')} +${res.per*res.mult} each${res.mult>1?` (×${res.mult})`:''}`;
+      actIdx().forEach(i=>rows.push([first(i)+(i===rec.wolfAt?' 🐺':''),String(sc(i)??'–')+tag(sc(i))]));}
+  }else if(g==='bestball'||g==='sixes'){
+    const T=g==='sixes'?sixesTeamsFor(h):matchTeams();
+    const st=hammerOn()?hamState(rec):null;const mult=st?st.m:1;
+    let win=null;
+    if(st&&st.fold>=0)win=1-st.fold;
+    else{const best=t=>Math.min(...t.map(i=>sc(i)??99));const a=best(T[0]),b=best(T[1]);
+      if(a<b)win=0;else if(b<a)win=1;
+      else if(g==='sixes'){const s2=t=>t.reduce((x,i)=>x+(sc(i)??99),0);const sA=s2(T[0]),sB=s2(T[1]);win=sA<sB?0:sB<sA?1:null;}}
+    headline=win==null?'HALVED':`${T[win].map(first).join(' & ')} take the hole${mult>1?` ×${mult} 🔨`:''}${st&&st.fold>=0?' — FOLD':''}`;
+    T.forEach(t=>{const b=Math.min(...t.map(i=>sc(i)??99));rows.push([t.map(first).join(' & '),b===99?'–':String(b)+tag(b)]);});
+  }else if(g==='umbrella'){
+    const T=matchTeams();const pts=[0,0];
+    const bA=Math.min(...T[0].map(i=>sc(i)??99)),bB=Math.min(...T[1].map(i=>sc(i)??99));
+    if(bA<bB)pts[0]+=2;else if(bB<bA)pts[1]+=2;
+    const sA=T[0].reduce((x,i)=>x+(sc(i)??99),0),sB=T[1].reduce((x,i)=>x+(sc(i)??99),0);
+    if(sA<sB)pts[0]+=2;else if(sB<sA)pts[1]+=2;
+    if(rec.ctp!=null&&rec.ctp>=0)pts[T[0].includes(rec.ctp)?0:1]+=1;
+    const bird=T.map(t=>t.some(i=>rec.gross[i]!=null&&rec.gross[i]<=par-1));
+    if(bird[0]&&!bird[1])pts[0]+=1;else if(bird[1]&&!bird[0])pts[1]+=1;
+    const sweep=pts[0]===6||pts[1]===6;
+    headline=sweep?'☂ UMBRELLA — 6 DOUBLES TO 12!':`${pts[0]} — ${pts[1]}`;
+    T.forEach((t,k)=>rows.push([t.map(first).join(' & '),String(pts[k]===6?12:pts[k])+' pts']));
+  }else if(g==='skins'){
+    const eng=computeSkins();const d=eng.detail[L].find(x=>x.h===h);
+    headline=d?(d.won!=null?`💰 ${first(d.won)} takes ${fmtMoney(d.amt)}`:(d.dead?'TIE — skin dies':`TIE — ${fmtMoney(eng.pot[L])} rides on`)):'';
+    actIdx().forEach(i=>rows.push([first(i),String(sc(i)??'–')+tag(sc(i))]));
+  }else if(g==='nassau'){
+    const T=nassauSides();
+    const best=t=>Math.min(...t.map(i=>sc(i)??99));const a=best(T[0]),b=best(T[1]);
+    headline=a===b?'HALVED':`${T[a<b?0:1].map(first).join(' & ')} win the hole`;
+    const na=computeNassau();const sgn=x=>x===0?'AS':(x>0?'+':'')+x;
+    na.bets[L].filter(bb=>!bb.press).forEach(bb=>rows.push([bb.seg[0].toUpperCase()+bb.seg.slice(1),sgn(bb.up)]));
+  }else if(g==='bbb'){
+    const b=rec.bbb||{};headline='3 points placed';
+    [['bingo','🟢 Bingo'],['bango','📍 Bango'],['bongo','⛳ Bongo']].forEach(([k,l])=>rows.push([l,(b[k]!=null&&b[k]>=0)?first(b[k]):'—']));
+  }else if(g==='stableford'){
+    const P=stblPts();headline='Points this hole';
+    actIdx().forEach(i=>{const gr=rec.gross[i];if(gr==null){rows.push([first(i),'–']);return;}
+      const sv=(S.config.lens==='net')?gr-fullDotsOn(i,h):gr;const d=sv-par;
+      const pts=d<=-3?P.alba:d===-2?P.eagle:d===-1?P.birdie:d===0?P.par:d===1?P.bogey:P.dbl;
+      rows.push([first(i),(pts>0?'+':'')+pts+' pts'+tag(sv)]);});
+  }else if(g==='quota'){
+    const P=quotaPts();headline='Quota points';
+    actIdx().forEach(i=>{const gr=rec.gross[i];if(gr==null){rows.push([first(i),'–']);return;}
+      const d=gr-par;const pts=d<=-3?P.alba:d===-2?P.eagle:d===-1?P.birdie:d===0?P.par:d===1?P.bogey:0;
+      rows.push([first(i),'+'+pts+' pts'+tag(gr)]);});
+  }else if(g==='scramble'){
+    const T=scrambleTeams(),capt=T.map(t=>t[0]);
+    headline=T.length>1?'Team scores':'Team score';
+    T.forEach((t,k)=>{const gr=rec.gross[capt[k]];rows.push([t.map(first).join(' & '),String(gr??'–')+tag(gr)]);});
+  }else{
+    const vals=actIdx().map(i=>({i,v:sc(i)}));
+    const best=Math.min(...vals.map(x=>x.v??99));
+    const lows=vals.filter(x=>x.v===best).map(x=>first(x.i));
+    headline=best<99?`${lows.join(' & ')} low ball`:'';
+    vals.sort((a,b)=>(a.v??99)-(b.v??99)).forEach(x=>rows.push([first(x.i),String(x.v??'–')+tag(x.v)]));
+  }
+  }catch(e){return '';}
+  return `<div class="splash" onclick="dismissSplash()" style="--sc:${C}">
+    <div class="splash-burst"></div>
+    <div class="splash-card">
+      ${A?`<img src="${art(A)}" alt="">`:''}
+      <div class="splash-hole">HOLE ${h+1} · ${gameName()}${L==='net'?' · NET':''}</div>
+      <div class="splash-head">${headline||'Hole complete'}</div>
+      ${rows.map(([a,b])=>`<div class="splash-row"><span>${a}</span><b class="num">${b}</b></div>`).join('')}
+      <div class="splash-tap">tap to continue</div>
+    </div>
+  </div>`;
+}
 function render(){
   if(S.screen!=='gate'&&gatePick.timer){clearInterval(gatePick.timer);gatePick.timer=null;gatePick.open=false;}
   const el=$('#app');
@@ -1583,7 +1710,7 @@ function render(){
   else if(scr==='standings') html=vStandings();
   else if(scr==='settle') html=vSettle();
   else if(scr==='map') html=vMap();
-  el.innerHTML=html;
+  el.innerHTML=html+holeSplash();
   if(scr==='map')requestAnimationFrame(initHoleMap);
   else teardownMap();
 }
@@ -2853,7 +2980,7 @@ function advanceToNext(){
         mins:S.round.startedAt?Math.round((Date.now()-S.round.startedAt)/60000):null});}
   }else{S.round.cur=next;if(gameOn()!=='wolf')prefillNines(next);}
 }
-function confirmHole(){set(()=>{S.round.holes[S.round.cur].confirmed=true;if(!isReview())advanceToNext();});}
+function confirmHole(){const h=S.round.cur;set(()=>{S.round.holes[h].confirmed=true;if(!isReview())advanceToNext();});showSplash(h);}
 function unconfirm(){set(()=>{S.round.holes[S.round.cur].confirmed=false;});}
 function nextHole(){set(()=>{advanceToNext();});}
 
