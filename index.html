@@ -91,6 +91,23 @@
   .splash-row{display:flex;justify-content:space-between;align-items:center;padding:5px 2px;border-top:1px solid var(--line);font-size:16px}
   .splash-row b{font-size:20px}
   .splash-tap{font-size:11px;color:var(--ink3);margin-top:10px;letter-spacing:1px}
+  .cagewrap{position:relative;display:inline-block}
+  .fx-wolfwin img{animation:wolfHowl 1s ease-in-out .25s}
+  @keyframes wolfHowl{0%,100%{transform:scale(1) rotate(0)}25%{transform:scale(1.22) rotate(-7deg)}55%{transform:scale(1.15) rotate(5deg)}80%{transform:scale(1.08) rotate(-2deg)}}
+  .fx-wolfwin .splash-head{text-shadow:0 0 18px var(--sc);animation:headGlow 1.2s ease-in-out .3s}
+  @keyframes headGlow{0%,100%{opacity:1}50%{opacity:.75;letter-spacing:1px}}
+  .fx-wolfcage img{filter:grayscale(.65) brightness(.72);transition:filter .3s .5s}
+  .cage{position:absolute;inset:-4px -10px;pointer-events:none;border-radius:10px;
+    background:repeating-linear-gradient(90deg,transparent 0 16px,#7d8698 16px 21px,#59616f 21px 23px);
+    box-shadow:0 4px 8px rgba(0,0,0,.55);
+    animation:cageSlam .5s cubic-bezier(.55,0,.35,1.35) .4s both}
+  .cagebar{position:absolute;left:-10px;right:-10px;height:7px;border-radius:3px;pointer-events:none;
+    background:linear-gradient(180deg,#8b93a3,#4c5563);top:-4px;
+    box-shadow:0 92px 0 0 #5a6270;
+    animation:cageSlam .5s cubic-bezier(.55,0,.35,1.35) .4s both}
+  @keyframes cageSlam{0%{transform:translateY(-140%);opacity:0}55%{transform:translateY(5%);opacity:1}75%{transform:translateY(-2%)}100%{transform:translateY(0)}}
+  .fx-wolfcage.splash-card,.splash-card.fx-wolfcage{animation:spPop .38s cubic-bezier(.2,1.4,.4,1),cageShake .35s .88s}
+  @keyframes cageShake{0%,100%{transform:translate(0,0)}20%{transform:translate(-5px,2px)}45%{transform:translate(5px,-2px)}70%{transform:translate(-3px,1px)}}
   .banner{border-radius:8px;padding:9px 12px;font-size:13.5px;font-weight:600;margin-bottom:12px;border:2px solid}
   .banner.wolf{background:var(--amber-lt);color:var(--amber);border-color:var(--amber-bd);box-shadow:2px 2px 0 var(--amber-bd)}
   .banner.ok{background:var(--elec-lt);color:var(--elec-mid);border-color:var(--elec);box-shadow:2px 2px 0 var(--elec-dk)}
@@ -222,7 +239,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1783996142';
+const BUILD='1783996533';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1638,7 +1655,7 @@ function holeSplash(){
   const C={wolf:'#c76a1d',nines:'#4aa8ff',vegas:'#2ea043',stroke:'#e0bb45',bestball:'#2aa7a0',scramble:'#8e5cd9',stableford:'#c94f7c',quota:'#5ad0e0',sixes:'#9ec425',umbrella:'#8fa3c0',bbb:'#d24bb8',nassau:'#4663d9',skins:'#3ddc97'}[g]||'#c9a227';
   const tag=v=>{if(v==null)return '';const d=v-par;return d<=-2?' 🦅':d===-1?' 🐦':'';};
   function verdict(g){
-  let headline='',rows=[];
+  let headline='',rows=[],fx='';
   if(g==='nines'){
     const r=computeNines().perHole[h].results[L];
     if(r){headline=r.blitz?'⚡ BLITZ — ALL 9!':'9 points split';
@@ -1651,7 +1668,13 @@ function holeSplash(){
       rows.push([T[1].map(first).join(' & '),String(res.nums[1])+(res.flips[1]?' 🔄':'')]);}
   }else if(g==='wolf'){
     const r=computeAll().perHole[h],res=r&&r.results[L];
-    if(res){headline=res.tie?'TIE — carried':`${res.winners.map(first).join(' & ')} +${res.per*res.mult} each${res.mult>1?` (×${res.mult})`:''}`;
+    if(res){
+      const mode=rec.mode==='blind'?'BLIND LONE WOLF':rec.mode==='lone'?'LONE WOLF':'WOLF';
+      if(res.tie){headline='TIE — carried';}
+      else if(res.wolfWon){headline=`🐺 AWOOOO! — ${mode} WINS`;fx='wolfwin';
+        rows.push([res.winners.map(first).join(' & '),`+${res.per*res.mult} each${res.mult>1?` ×${res.mult}`:''}`]);}
+      else{headline=`🔒 ${mode} CAGED!`;fx='wolfcage';
+        rows.push([res.winners.map(first).join(' & '),`+${res.per*res.mult} each${res.mult>1?` ×${res.mult}`:''}`]);}
       actIdx().forEach(i=>rows.push([first(i)+(i===rec.wolfAt?' 🐺':''),String(sc(i)??'–')+tag(sc(i))]));}
   }else if(g==='bestball'||g==='sixes'){
     const T=g==='sixes'?sixesTeamsFor(h):matchTeams();
@@ -1710,17 +1733,17 @@ function holeSplash(){
     headline=best<99?`${lows.join(' & ')} low ball`:'';
     vals.sort((a,b)=>(a.v??99)-(b.v??99)).forEach(x=>rows.push([first(x.i),String(x.v??'–')+tag(x.v)]));
   }
-  return {headline,rows};
+  return {headline,rows,fx};
   }
-  let headline='',rows=[],extras=[];
+  let headline='',rows=[],extras=[],fx='';
   try{
-    const v0=verdict(g);headline=v0.headline;rows=v0.rows;
+    const v0=verdict(g);headline=v0.headline;rows=v0.rows;fx=v0.fx||'';
     G.slice(1).forEach(x=>{const vx=verdict(x);if(vx.headline)extras.push([gameName(x),vx.headline]);});
   }catch(e){return '';}
   return `<div class="splash" onclick="dismissSplash()" style="--sc:${C}">
     <div class="splash-burst"></div>
-    <div class="splash-card">
-      ${A?`<img src="${art(A)}" alt="">`:''}
+    <div class="splash-card${fx?' fx-'+fx:''}">
+      ${A?`<span class="cagewrap"><img src="${art(A)}" alt="">${fx==='wolfcage'?'<span class="cage"></span><span class="cagebar"></span>':''}</span>`:''}
       <div class="splash-hole">HOLE ${h+1} · ${gameName(g)}${L==='net'?' · NET':''}</div>
       <div class="splash-head">${headline||'Hole complete'}</div>
       ${rows.map(([a,b])=>`<div class="splash-row"><span>${a}</span><b class="num">${b}</b></div>`).join('')}
