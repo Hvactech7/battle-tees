@@ -61,10 +61,14 @@ a.game:hover{transform:translate(-1px,-1px)}
 .g-ham{background:rgba(184,115,51,.12);border-color:#b87333;box-shadow:3px 3px 0 #6e4418}
 /* features */
 .feats{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
-.feat{background:var(--card);border:2px solid var(--line);border-radius:12px;padding:18px 18px 14px}
-.feat h3{color:var(--elec);font-size:19px;letter-spacing:.5px;margin-bottom:4px}
-.feat p{font-size:14.5px;color:var(--ink2)}
-.feat .ic{font-size:26px;float:right;margin-left:8px}
+.feat{background:var(--card);border:2px solid var(--fc,#2a3550);border-radius:14px;padding:18px 18px 15px;
+  box-shadow:4px 4px 0 rgba(0,0,0,.5);position:relative;overflow:hidden}
+.feat::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 95% 70% at 15% 0%,var(--ft,transparent),transparent);pointer-events:none}
+.feat>*{position:relative}
+.feat h3{font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:22px;letter-spacing:.6px;text-transform:uppercase;color:var(--fc,var(--elec));margin-bottom:6px}
+.feat p{font-size:14.5px;line-height:1.62;color:var(--ink2)}
+.feat p b{color:var(--ink);font-weight:600}
+.feat .ic{font-size:30px;float:right;margin-left:10px;filter:drop-shadow(0 0 9px var(--fc,#4aa8ff))}
 /* install */
 .install .card{max-width:640px;margin:0 auto}
 .install ol{padding-left:24px;font-size:16px}
@@ -114,15 +118,15 @@ a{color:var(--elec)}
     <div class="sect-title">BUILT FOR THE GROUP</div>
     <p class="sect-sub">Everything the money games need — and a few things no other golf app has.</p>
     <div class="feats">
-      <div class="feat"><span class="ic">⚡</span><h3>Every phone, one scorecard</h3><p>One tap invites the group. Everyone scores their own ball, and the moment a putt drops it's on all four phones. Lose signal in the canyon? Scores queue up and reconcile the second the cart crests the hill — nobody ever re-enters a number.</p></div>
-      <div class="feat"><span class="ic">🔨</span><h3>Stakes that escalate live</h3><p>Throw the Hammer mid-hole and it's double-or-fold. Press the back nine. Watch a Skins pot snowball three holes deep. Battle Tees runs the drama in real time — every phone sees the stake change the second it's thrown.</p></div>
-      <div class="feat"><span class="ic">💰</span><h3>Settled, not argued</h3><p>Carried pots, stacked presses, hammered holes, birdie flips — the app tracked every dollar while you were busy playing. Who pays whom, to the quarter, computed before your 19th-hole beer arrives. Nobody relitigates the round.</p></div>
-      <div class="feat"><span class="ic">🔀</span><h3>Thirteen scoreboards, one round</h3><p>Playing Skins but curious who'd be winning the Nassau? Tabs replay the exact same scores through any game, live, mid-round. Trash-talk material on demand — while settlement stays honest to the game you actually picked.</p></div>
-      <div class="feat"><span class="ic">🎚️</span><h3>Handicaps without homework</h3><p>Real ratings and slopes for the tees you actually play. Game strokes land off the low man, dots show exactly which holes pay them, and net plays your full handicap. The 25 and the scratch player tee it up dead even — and both believe it.</p></div>
-      <div class="feat"><span class="ic">🛰️</span><h3>GPS hole maps</h3><p>Satellite view with live front · middle · back numbers and a tap-anywhere rangefinder on mapped courses. Know the carry over the bunker before you pull the club — then bet on it.</p></div>
-      <div class="feat"><span class="ic">☁️</span><h3>Never lose a round</h3><p>Players, courses and every finished round back themselves up the moment they change. Break your phone Saturday night, restore the whole empire Sunday morning with one emailed code.</p></div>
-      <div class="feat"><span class="ic">⏱️</span><h3>Pace &amp; past rounds</h3><p>A personal round clock keeps the group honest, and every round you've played is one tap away — reopen it to relive the comeback, review the damage, or fix that score somebody fat-fingered on 14.</p></div>
-      <div class="feat"><span class="ic">⚔️</span><h3>Free. Offline. No account.</h3><p>Installs from the browser in ten seconds — no app store, no login, no subscription. Works in airplane mode at a muni with zero bars. Your money games don't need a middleman taking a cut.</p></div>
+      <div class="feat" style="--fc:#4aa8ff;--ft:rgba(74,168,255,.12)"><span class="ic">⚡</span><h3>Every phone, one scorecard</h3><p>One tap invites the group. Everyone scores their own ball, and the moment a putt drops <b>it's on all four phones</b>. Lose signal in the canyon? Scores queue up and reconcile the second the cart crests the hill — <b>nobody ever re-enters a number</b>.</p></div>
+      <div class="feat" style="--fc:#b87333;--ft:rgba(184,115,51,.14)"><span class="ic">🔨</span><h3>Stakes that escalate live</h3><p>Throw the Hammer mid-hole and it's <b>double-or-fold</b>. Press the back nine. Watch a Skins pot snowball three holes deep. Battle Tees runs the drama in real time — <b>every phone sees the stake change</b> the second it's thrown.</p></div>
+      <div class="feat" style="--fc:#e0bb45;--ft:rgba(224,187,69,.12)"><span class="ic">💰</span><h3>Settled, not argued</h3><p>Carried pots, stacked presses, hammered holes, birdie flips — the app tracked every dollar while you were busy playing. <b>Who pays whom, to the quarter</b>, computed before your 19th-hole beer arrives. Nobody relitigates the round.</p></div>
+      <div class="feat" style="--fc:#8e5cd9;--ft:rgba(142,92,217,.13)"><span class="ic">🔀</span><h3>Thirteen scoreboards, one round</h3><p>Playing Skins but curious who'd be winning the Nassau? Tabs replay the exact same scores through <b>any game, live, mid-round</b>. Trash-talk material on demand — while settlement stays honest to the game you actually picked.</p></div>
+      <div class="feat" style="--fc:#2aa7a0;--ft:rgba(42,167,160,.13)"><span class="ic">🎚️</span><h3>Handicaps without homework</h3><p>Real ratings and slopes for the tees you actually play. Game strokes land off the low man, dots show exactly which holes pay them, and net plays your full handicap. <b>The 25 and the scratch player tee it up dead even</b> — and both believe it.</p></div>
+      <div class="feat" style="--fc:#8fa3c0;--ft:rgba(143,163,192,.13)"><span class="ic">🛰️</span><h3>GPS hole maps</h3><p>Satellite view with live front · middle · back numbers and a <b>tap-anywhere rangefinder</b> on mapped courses. Know the carry over the bunker before you pull the club — <b>then bet on it</b>.</p></div>
+      <div class="feat" style="--fc:#3ddc97;--ft:rgba(61,220,151,.12)"><span class="ic">☁️</span><h3>Never lose a round</h3><p>Players, courses and every finished round <b>back themselves up the moment they change</b>. Break your phone Saturday night, restore the whole empire Sunday morning with one emailed code.</p></div>
+      <div class="feat" style="--fc:#c94f7c;--ft:rgba(201,79,124,.13)"><span class="ic">⏱️</span><h3>Pace &amp; past rounds</h3><p>A personal round clock keeps the group honest, and <b>every round you've played is one tap away</b> — reopen it to relive the comeback, review the damage, or fix that score somebody fat-fingered on 14.</p></div>
+      <div class="feat" style="--fc:#e8604f;--ft:rgba(232,96,79,.12)"><span class="ic">⚔️</span><h3>Free. Offline. No account.</h3><p>Installs from the browser in <b>ten seconds</b> — no app store, no login, no subscription. Works in airplane mode at a muni with zero bars. <b>Your money games don't need a middleman</b> taking a cut.</p></div>
     </div>
   </section>
 
