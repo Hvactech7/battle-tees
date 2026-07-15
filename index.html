@@ -235,7 +235,7 @@
   html.light .sc td.eag{background:#cde5d2;color:#1c5c34}
   html.light button.ghost.sel{color:var(--elec)}
   html.light nav.tabs button.sel{color:var(--elec)}
-  #holemap{position:fixed;top:62px;bottom:112px;left:50%;transform:translateX(-50%);width:100%;max-width:480px;z-index:1;background:#0a0f18}
+  #holemap{position:fixed;top:62px;bottom:calc(66px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);width:100%;max-width:480px;z-index:1;background:#0a0f18}
   .mapbar{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;background:var(--card);border-top:2px solid var(--green);padding:6px 12px calc(8px + env(safe-area-inset-bottom));z-index:5}
   .leaflet-container{font-family:inherit}
 </style>
@@ -245,7 +245,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1784138827';
+const BUILD='1784140288';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1465,7 +1465,7 @@ function teardownMap(){
 }
 function vMap(){
   const hole=S.course.holes[mapHole]||{par:4,si:0};
-  return topbar(`Hole ${mapHole+1} · Par ${hole.par}`,`${esc(S.course.name)} · SI ${hole.si}`,'')+`
+  return topbar(`Hole ${mapHole+1} · Par ${hole.par}`,`${esc(S.course.name)} · SI ${hole.si}`,'hole')+`
   <div id="holemap"></div>
   <div class="mapbar">
     <div class="row" style="border:none;padding:2px 0">
@@ -1476,7 +1476,6 @@ function vMap(){
       </div>
       <button class="ghost" onclick="mapNext()">▶</button>
     </div>
-    <div class="tiny center mt" id="tapinfo" style="margin-top:4px">Tap the map for distances to that spot · <span onclick="closeMap()" style="text-decoration:underline;cursor:pointer">back to scoring</span></div>
   </div>`;
 }
 async function ensureCourseGeo(){
@@ -1526,15 +1525,8 @@ function loadGoogleMaps(){
   return googleP;
 }
 function mapTapAt(t){
+  // the yardage pills on the map carry the leg distances — nothing else to show
   if(mapMarks.setTap)mapMarks.setTap(t);
-  const from=mapMarks.mePos||mapMarks.ref;
-  const info=document.getElementById('tapinfo');
-  if(info){
-    let out=[];
-    if(from)out.push(`${mapMarks.mePos?'You':'Tee'} → spot: <b class="num" style="font-size:15px">${yd(mDist(from,t))}y</b>`);
-    if(mapMarks.greenC)out.push(`Spot → green: <b class="num" style="font-size:15px">${yd(mDist(t,mapMarks.greenC))}y</b>`);
-    info.innerHTML=out.join(' · ')||'—';
-  }
 }
 function startMapGps(){
   if(!navigator.geolocation)return;
