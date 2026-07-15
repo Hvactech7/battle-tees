@@ -241,7 +241,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1784104562';
+const BUILD='1784106595';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -870,6 +870,10 @@ function activeLenses(){return S.config.lens==='both'?['net','gross']:[S.config.
 function primaryLens(){return S.config.lens==='gross'?'gross':'net';}
 // Round screens score by the game the round was started as; setup/home follow the picked game.
 const STACKABLE=['nines','stroke','bestball','stableford','quota','sixes','umbrella','bbb','nassau','skins'];
+// Games that can join a stack as a guest but can't host one (their primary
+// hole screens don't carry the shared tap cards): vegas needs only gross
+// scores, so it guests cleanly on any host.
+const STACK_GUESTS=[...STACKABLE,'vegas'];
 function gamesOn(){
   if(S.round.started&&S.round.games&&S.round.games.length)return S.round.games;
   if(S.round.started&&S.round.game)return [S.round.game];
@@ -2624,11 +2628,11 @@ function vSetup(){
   const stackN=(S.config.games||[]).length;
   return topbar(`Round setup — ${gameName(S.config.game)}${stackN>1?` +${stackN-1}`:''}`,SUBS[S.config.game]||'Order = tee order on hole 1 (wolf rotation)','gate')+`<main>
   ${rows}
-  ${STACKABLE.includes(S.config.game)?(()=>{
+  ${(STACKABLE.includes(S.config.game)||S.config.game==='wolf')?(()=>{
     const four=NP()===4;
     const cur=S.config.games||[S.config.game];
-    const NEED4=['bestball','sixes','umbrella'];
-    const opts=STACKABLE.filter(g=>g!==S.config.game).map(g=>{
+    const NEED4=['bestball','sixes','umbrella','vegas'];
+    const opts=STACK_GUESTS.filter(g=>g!==S.config.game).map(g=>{
       const on=cur.includes(g);
       let dis='',why='';
       if(NEED4.includes(g)&&!four){dis='disabled';why='needs 4';}
@@ -2941,11 +2945,20 @@ function vHole(){
           <button onclick="chScore(${i},1)">+</button>
         </div>`}
       </div>`;}).join('');
-    const ctpRow=hole.par===3?`<div class="card"><h2>Closest to pin (+${S.config.pts.ctp} pt)</h2>
+    const ctpRow=(hole.par===3||stackHas('umbrella'))?`<div class="card"><h2>Closest to pin (+${S.config.pts.ctp} pt)</h2>
       <div class="flexwrap">${S.players.map((p,i)=>`<button class="ghost ${rec.ctp===i?'sel':''}" onclick="setCtp(${i})">${esc(p.name)}</button>`).join('')}
       <button class="ghost ${rec.ctp===-1?'sel':''}" onclick="setCtp(-1)">No one on green</button></div>
       <div class="tiny mt">Ball must be on the green. Unclaimed = no point (no carryover).</div></div>`:'';
-    const done=rec.gross.every(g=>g!=null)&&(hole.par!==3||rec.ctp!=null);
+    // guest games stacked on a wolf round — same shared cards as the stacked hole screen
+    const hamCard=hammerOn()?hammerCardHTML():'';
+    const nasCard=stackHas('nassau')?nassauCardHTML():'';
+    const skCard=stackHas('skins')?skinsCardHTML():'';
+    const bbbOn=stackHas('bbb');
+    const bbbCard=bbbOn?bbbCardHTML(rec,actIdx()):'';
+    let done=rec.gross.every(g=>g!=null)&&((hole.par!==3&&!stackHas('umbrella'))||rec.ctp!=null)
+      &&(!bbbOn||(rec.bbb&&['bingo','bango','bongo'].every(k=>rec.bbb[k]!=null)));
+    const hamSt=hammerOn()?hamState(rec):null;
+    if(hamSt&&hamSt.pend>=0)done=false;
     let resultNote='';
     if(rec.confirmed){
       resultNote=activeLenses().map(L=>{
@@ -2969,7 +2982,7 @@ function vHole(){
       <div class="row" style="border:none;padding-top:0"><span class="pill wolf">${modeLbl}</span>
         ${!rec.confirmed?`<button class="ghost" onclick="redoPick()">Redo pick</button>`:''}</div>
       ${scoreRows}
-      </div>${ctpRow}${extrasCard}${resultNote}
+      </div>${hamCard}${nasCard}${skCard}${bbbCard}${ctpRow}${extrasCard}${resultNote}
       ${rec.confirmed
         ?`${isReview()?'':`<button class="big" onclick="nextHole()">${posOf(h)<playOrder().length-1?'Next hole →':'Finish round'}</button>`}
           <button class="ghost mt" style="width:100%" onclick="unconfirm()">Edit this hole</button>`
@@ -3005,6 +3018,17 @@ function redoPick(){set(()=>{const r=S.round.holes[S.round.cur];r.mode=null;r.pa
 function chScore(i,d){set(()=>{const r=S.round.holes[S.round.cur];const v=(r.gross[i]??S.course.holes[S.round.cur].par)+d;r.gross[i]=Math.min(15,Math.max(1,v));if(!r.gts)r.gts=[0,0,0,0];r.gts[i]=Date.now();});}
 function setCtp(i){set(()=>{S.round.holes[S.round.cur].ctp=i;});}
 function setBBB(k,i){set(()=>{const rec=S.round.holes[S.round.cur];rec.bbb=Object.assign({},rec.bbb);rec.bbb[k]=i;});}
+// BBB tap card — shared by the stacked hole screen and the wolf (host) hole screen.
+const BBB_DEFS=[['bingo','\u{1F7E2} Bingo','first ball on the green'],['bango','\u{1F4CD} Bango','closest to the pin once all balls are on'],['bongo','⛳ Bongo','first ball in the cup']];
+function bbbCardHTML(rec,act){
+  return `<div class="card"><h2>3 points on this hole</h2>
+    ${BBB_DEFS.map(([k,l,dsc])=>{
+      const cur=rec.bbb?rec.bbb[k]:null;
+      return `<div class="mt"><b>${l}</b> <span class="tiny">— ${dsc}</span>
+        <div class="flexwrap" style="margin-top:5px">${act.map(i=>`<button class="ghost ${cur===i?'sel':''}" onclick="setBBB('${k}',${i})">${esc(S.players[i].name)}</button>`).join('')}
+        <button class="ghost ${cur===-1?'sel':''}" onclick="setBBB('${k}',-1)">No one</button></div></div>`;}).join('')}
+    <div class="tiny mt">Play in turn — farthest away hits first. That order is the whole game.</div></div>`;
+}
 // Skins pot card for the hole screen.
 function skinsCardHTML(){
   const h=S.round.cur,rec=S.round.holes[h];
@@ -3140,13 +3164,7 @@ function vHoleNines(){
   const nasCard=stackHas('nassau')?nassauCardHTML():'';
   const skCard=stackHas('skins')?skinsCardHTML():'';
   const bbbOn=stackHas('bbb');
-  const bbbCard=bbbOn?`<div class="card"><h2>3 points on this hole</h2>
-    ${[['bingo','\u{1F7E2} Bingo','first ball on the green'],['bango','\u{1F4CD} Bango','closest to the pin once all balls are on'],['bongo','\u26F3 Bongo','first ball in the cup']].map(([k,l,dsc])=>{
-      const cur=rec.bbb?rec.bbb[k]:null;
-      return `<div class="mt"><b>${l}</b> <span class="tiny">— ${dsc}</span>
-        <div class="flexwrap" style="margin-top:5px">${act.map(i=>`<button class="ghost ${cur===i?'sel':''}" onclick="setBBB('${k}',${i})">${esc(S.players[i].name)}</button>`).join('')}
-        <button class="ghost ${cur===-1?'sel':''}" onclick="setBBB('${k}',-1)">No one</button></div></div>`;}).join('')}
-    <div class="tiny mt">Play in turn — farthest away hits first. That order is the whole game.</div></div>`:'';
+  const bbbCard=bbbOn?bbbCardHTML(rec,act):'';
   let done=act.every(i=>rec.gross[i]!=null)&&(!ctpOn||rec.ctp!=null)
     &&(!bbbOn||(rec.bbb&&['bingo','bango','bongo'].every(k=>rec.bbb[k]!=null)));
   if(hamSt){if(hamSt.fold>=0&&gamesOn().length===1)done=true;else if(hamSt.pend>=0)done=false;}
