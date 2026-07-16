@@ -245,7 +245,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1784179364';
+const BUILD='1784182912';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -950,7 +950,6 @@ function reviewBanner(){
 function runningTotalsCard(){
   if(!S.round.started)return '';
   const thru=S.round.holes.filter(r=>r.confirmed).length;
-  if(!thru)return '';
   const L=topLens==='net'?'net':'gross';
   const g=gameOn();
   const first=i=>esc((S.players[i].name||'').split(' ')[0]);
@@ -974,20 +973,23 @@ function runningTotalsCard(){
                               :actIdx().map(i=>({id:i,label:first(i)}));
     const rows=units.map(u=>({label:u.label,v:eng.ledgers[L][u.id],d:eng.ledgers[L][u.id]-eng.par[L][u.id]}));
     rows.sort((a,b)=>a.d-b.d);
-    tiles=rows.map((r,ri)=>tile(r.label,String(r.v),`${r.d===0?'E':(r.d>0?'+':'')+r.d}${ri===0?' · leader':''}`,ri,parCol(r.d))).join('');
+    const tied=rows.every(r=>r.d===rows[0].d);
+    tiles=rows.map((r,ri)=>tile(r.label,String(r.v),tied?'all square':`${r.d===0?'E':(r.d>0?'+':'')+r.d}${ri===0?' · leader':''}`,tied?3:ri,parCol(r.d))).join('');
     foot='strokes';
   }else if(g==='quota'){
     const q=computeQuota();
     const rows=actIdx().map(i=>({label:first(i),v:q.ledgers.gross[i],d:q.ledgers.gross[i]-q.targets[i]}));
     rows.sort((a,b)=>b.d-a.d);
-    tiles=rows.map((r,ri)=>tile(r.label,String(r.v),`${r.d>0?'+':''}${r.d} vs quota`,ri,r.d>0?'#7fd49a':r.d<0?'var(--amber-bd)':'var(--ink2)')).join('');
+    const tiedQ=rows.every(r=>r.d===rows[0].d);
+    tiles=rows.map((r,ri)=>tile(r.label,String(r.v),`${r.d>0?'+':''}${r.d} vs quota`,tiedQ?3:ri,r.d>0?'#7fd49a':r.d<0?'var(--amber-bd)':'var(--ink2)')).join('');
     foot='points';
   }else if(g==='bestball'){
     const bb=computeBestBall(),m=computeMatch(L),T=m.T;
     const rows=T.map(t=>({label:t.map(first).join(' & '),v:bb.ledgers[L][t[0]]}));
     rows.sort((a,b)=>b.v-a.v);
     const lead=rows[0].v;
-    tiles=rows.map((r,ri)=>tile(r.label,String(r.v),ri===0?(rows[0].v===rows[1].v?'all square':'leader'):`${r.v-lead} back`,ri===0?0:2,'var(--ink)')).join('');
+    const tiedB=rows[0].v===rows[1].v;
+    tiles=rows.map((r,ri)=>tile(r.label,String(r.v),tiedB?'all square':(ri===0?'leader':`${r.v-lead} back`),tiedB?3:(ri===0?0:2),'var(--ink)')).join('');
     foot=m.clinch?`${m.clinch.team===0?T[0].map(first).join(' & '):T[1].map(first).join(' & ')} win ${m.clinch.margin}${m.clinch.left?'&'+m.clinch.left:' UP'}`
       :m.up===0?'All square'
       :`${(m.up>0?T[0]:T[1]).map(first).join(' & ')} ${Math.abs(m.up)} UP${Math.abs(m.up)===m.count-m.thru?' — dormie':''}`;
@@ -999,7 +1001,8 @@ function runningTotalsCard(){
     rows.sort((a,b)=>b.v-a.v);
     const lead=rows[0].v;
     const back=v=>g==='skins'?`−${fmtMoney(lead-v)}`:f(v-lead);
-    tiles=rows.map((r,ri)=>tile(r.label,f(r.v),ri===0?(rows.length>1&&rows[1].v===lead?'tied lead':'leader'):`${back(r.v)} back`,ri,sgnCol(r.v))).join('');
+    const tiedAll=rows.every(r=>r.v===lead);
+    tiles=rows.map((r,ri)=>tile(r.label,f(r.v),tiedAll?'all square':(ri===0?(rows.length>1&&rows[1].v===lead?'tied lead':'leader'):`${back(r.v)} back`),tiedAll?3:ri,sgnCol(r.v))).join('');
     if(g==='sixes'){const T=sixesTeamsFor(S.round.cur);
       foot=`${T[0].map(first).join(' & ')} v ${T[1].map(first).join(' & ')}`;}
     else if(g==='nassau'){const sgn=x=>x===0?'AS':(x>0?'+':'')+x;
