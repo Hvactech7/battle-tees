@@ -245,7 +245,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1784177781';
+const BUILD='1784179364';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -3329,16 +3329,15 @@ function vHoleVegas(){
   const scoreRow=i=>{
     const p=S.players[i], g=rec.gross[i];
     const net=g!=null?g-dots(i):null;
-    const shown=VL==='net'?net:g;
     const lk=rowLock(h,i);
     return `<div class="scorebar ${lk==='mine'?'rowmine':lk==='locked'?'rowlocked':''}">
       <div style="min-width:112px"><b>${esc(p.name)}</b>
-        <div class="tiny">${dots(i)>0?`<span class="dots">${'●'.repeat(dots(i))}</span>`:''} ${g!=null?(VL==='net'?`gross ${g}`:(S.config.lens!=='gross'?`net ${net}`:'')):''}</div></div>
+        <div class="tiny">${dots(i)>0?`<span class="dots">${'●'.repeat(dots(i))}</span>`:''} ${g!=null&&S.config.lens!=='gross'?`net ${net}`:''}</div></div>
       ${lk==='locked'
-        ?`<div style="display:flex;align-items:center;gap:12px"><span class="val num" style="font-size:24px">${g==null?'–':shown}</span><button class="ghost" onclick="unlockRow(${h},${i})">✎</button></div>`
+        ?`<div style="display:flex;align-items:center;gap:12px"><span class="val num" style="font-size:24px">${g==null?'–':g}</span><button class="ghost" onclick="unlockRow(${h},${i})">✎</button></div>`
         :`<div class="stepper">
         <button onclick="chScore(${i},-1)">−</button>
-        <span class="val num">${g==null?'–':shown}</span>
+        <span class="val num">${g==null?'–':g}</span>
         <button onclick="chScore(${i},1)">+</button>
       </div>`}
     </div>`;
