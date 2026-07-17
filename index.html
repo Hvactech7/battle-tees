@@ -244,7 +244,8 @@
   html.light button.ghost.sel{color:var(--elec)}
   html.light nav.tabs button.sel{color:var(--elec)}
   #holemap{position:fixed;top:62px;bottom:calc(66px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);width:100%;max-width:480px;z-index:1;background:#0a0f18}
-  .mapbar{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;background:var(--card);border-top:2px solid var(--green);padding:6px 12px calc(8px + env(safe-area-inset-bottom));z-index:5}
+  /* extra side/bottom padding keeps the arrow buttons clear of iPhone rounded screen corners */
+  .mapbar{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;background:var(--card);border-top:2px solid var(--green);padding:6px 22px calc(14px + env(safe-area-inset-bottom));z-index:5}
   .leaflet-container{font-family:inherit}
 </style>
 </head>
@@ -253,7 +254,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1784271135';
+const BUILD='1784271627';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
