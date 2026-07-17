@@ -1,7 +1,7 @@
 // Wolf service worker — offline cache + auto-update (stale-while-revalidate).
 // The app loads instantly from cache and refreshes in the background; a new
 // version appears the next time it's opened while online.
-const CACHE = 'battletees-1784224391';
+const CACHE = 'battletees-1784265161';
 const CORE = ['./', 'index.html', 'manifest.json', 'icon-180.png', 'icon-512.png', 'banner.jpg', 'wolf.png', 'wolfwin.png', 'wolfcage.png', 'nine.png', 'vegas.png', 'quota.png', 'sixes.png', 'umbrella.png', 'hammer.png', 'bbb.png', 'stroke.png', 'stableford.png', 'bestball.png', 'scramble.png', 'nassau.png', 'skins.png'];
 
 // Safari refuses to let a service worker answer a page load with a response

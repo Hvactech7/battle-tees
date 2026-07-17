@@ -98,8 +98,9 @@
   .splash-tap{font-size:11px;color:var(--ink3);margin-top:10px;letter-spacing:1px}
   .cagewrap{position:relative;display:inline-block}
   /* on-map yardage pills next to the tap/green dots (Google label + Leaflet tooltip) */
-  .maplbl{background:rgba(15,21,34,.82)!important;color:#fff!important;font-weight:700;font-size:12px;
-    padding:1px 7px;border-radius:7px;border:1px solid rgba(255,255,255,.3);box-shadow:0 1px 4px rgba(0,0,0,.4);white-space:nowrap}
+  .maplbl{background:transparent!important;border:none!important;box-shadow:none!important;
+    color:#fff!important;font-weight:800;font-size:16px;padding:0;white-space:nowrap;
+    text-shadow:0 0 3px rgba(5,10,20,.95),0 0 6px rgba(5,10,20,.85),0 0 10px rgba(5,10,20,.6),0 1px 2px rgba(0,0,0,.9)}
   .leaflet-tooltip.maplbl::before{display:none}
   .fx-wolfwin img{animation:wolfHowl 1s ease-in-out .25s}
   @keyframes wolfHowl{0%,100%{transform:scale(1) rotate(0)}25%{transform:scale(1.22) rotate(-7deg)}55%{transform:scale(1.15) rotate(5deg)}80%{transform:scale(1.08) rotate(-2deg)}}
@@ -245,7 +246,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1784224391';
+const BUILD='1784265161';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1495,10 +1496,28 @@ function vMap(){
     </div>
   </div>`;
 }
+// Catmull-Rom spline through hole-line waypoints — doglegs curve like a
+// yardage book instead of bending at hard angles. Straight 2-point paths
+// pass through unchanged.
+function splinePath(path){
+  if(!path||path.length<3)return path;
+  const P=path, out=[P[0]];
+  for(let i=0;i<P.length-1;i++){
+    const p0=P[Math.max(0,i-1)],p1=P[i],p2=P[i+1],p3=P[Math.min(P.length-1,i+2)];
+    for(let s=1;s<=8;s++){
+      const t=s/8,t2=t*t,t3=t2*t;
+      out.push([
+        .5*((2*p1[0])+(-p0[0]+p2[0])*t+(2*p0[0]-5*p1[0]+4*p2[0]-p3[0])*t2+(-p0[0]+3*p1[0]-3*p2[0]+p3[0])*t3),
+        .5*((2*p1[1])+(-p0[1]+p2[1])*t+(2*p0[1]-5*p1[1]+4*p2[1]-p3[1])*t2+(-p0[1]+3*p1[1]-3*p2[1]+p3[1])*t3)
+      ]);
+    }
+  }
+  return out;
+}
 // Courses with professionally-mapped geodata hosted on battletees.app
 // (Golfbert-sourced: fairway-bent hole lines, greens, bunkers, water).
 // Fetched once, cached in course geo like OSM data — no runtime API calls.
-const HOSTED_GEO={'rancho-solano':'geo/rancho-solano.json?v=2'};
+const HOSTED_GEO={'rancho-solano':'geo/rancho-solano.json?v=3'};
 async function ensureCourseGeo(){
   const hostedUrl=HOSTED_GEO[S.course.id];
   if(hostedUrl){
@@ -1589,11 +1608,11 @@ function initGoogleHoleMap(el,geo,geoErr){
     gmOverlays.push(new gm.Polyline({path:geo.path.map(P),strokeOpacity:0,clickable:false,
       icons:[{icon:{path:'M 0,-1 0,1',strokeOpacity:.95,strokeColor:'#ffffff',scale:2.2},offset:'0',repeat:'14px'}],map:GMAP}));
     const pathEnd=geo.path[geo.path.length-1];
-    (geo.water||[]).forEach(r=>gmOverlays.push(new gm.Polygon({paths:r.map(P),strokeColor:'#5fa8e0',strokeWeight:1.5,fillColor:'#3f83c4',fillOpacity:.35,clickable:false,map:GMAP})));
-    (geo.sand||[]).forEach(r=>gmOverlays.push(new gm.Polygon({paths:r.map(P),strokeColor:'#d9c37e',strokeWeight:1.5,fillColor:'#ecdca6',fillOpacity:.45,clickable:false,map:GMAP})));
+    (geo.water||[]).forEach(r=>gmOverlays.push(new gm.Polygon({paths:r.map(P),strokeWeight:0,fillColor:'#3f83c4',fillOpacity:.35,clickable:false,map:GMAP})));
+    (geo.sand||[]).forEach(r=>gmOverlays.push(new gm.Polygon({paths:r.map(P),strokeWeight:0,fillColor:'#ecdca6',fillOpacity:.45,clickable:false,map:GMAP})));
     if(geo.green&&geo.green.length>2){
       greenPoly=geo.green;greenC=centroidOf(geo.green);
-      gmOverlays.push(new gm.Polygon({paths:geo.green.map(P),strokeColor:'#7fd49a',strokeWeight:2,fillColor:'#7fd49a',fillOpacity:.18,clickable:false,map:GMAP}));
+      gmOverlays.push(new gm.Polygon({paths:geo.green.map(P),strokeWeight:0,fillColor:'#7fd49a',fillOpacity:.18,clickable:false,map:GMAP}));
     }else greenC=pathEnd;
     dot(geo.path[0],'#2b86ec');
     var gmGreen=dot(greenC,'#ffd75e');
@@ -1683,13 +1702,17 @@ async function initHoleMap(){
     {maxZoom:20,maxNativeZoom:19,attribution:'Esri, Maxar, Earthstar Geographics'}).addTo(LMAP);
   let greenC=null,greenPoly=null;
   if(geo&&geo.path&&geo.path.length>1){
-    L.polyline(geo.path,{color:'#ffffff',weight:2.5,opacity:.95,dashArray:'7 7'}).addTo(LMAP);
+    // hole line: spline-smoothed through the waypoints, white dashes over a
+    // soft dark casing so it stays readable on light fairways
+    const smooth=splinePath(geo.path);
+    L.polyline(smooth,{color:'#0a1220',weight:5.5,opacity:.45}).addTo(LMAP);
+    L.polyline(smooth,{color:'#ffffff',weight:2.5,opacity:.95,dashArray:'7 7'}).addTo(LMAP);
     const pathEnd=geo.path[geo.path.length-1];
-    (geo.water||[]).forEach(r=>L.polygon(r,{color:'#5fa8e0',weight:1.5,fillColor:'#3f83c4',fillOpacity:.35}).addTo(LMAP));
-    (geo.sand||[]).forEach(r=>L.polygon(r,{color:'#d9c37e',weight:1.5,fillColor:'#ecdca6',fillOpacity:.45}).addTo(LMAP));
+    (geo.water||[]).forEach(r=>L.polygon(r,{stroke:false,fillColor:'#3f83c4',fillOpacity:.35}).addTo(LMAP));
+    (geo.sand||[]).forEach(r=>L.polygon(r,{stroke:false,fillColor:'#ecdca6',fillOpacity:.45}).addTo(LMAP));
     if(geo.green&&geo.green.length>2){
       greenPoly=geo.green;greenC=centroidOf(geo.green);
-      L.polygon(geo.green,{color:'#7fd49a',weight:2,fillOpacity:.18}).addTo(LMAP);
+      L.polygon(geo.green,{stroke:false,fillColor:'#7fd49a',fillOpacity:.18}).addTo(LMAP);
     }else greenC=pathEnd;
     L.circleMarker(geo.path[0],{radius:6,color:'#fff',weight:2,fillColor:'#2b86ec',fillOpacity:1}).addTo(LMAP);
     var lGreen=L.circleMarker(greenC,{radius:6,color:'#fff',weight:2,fillColor:'#ffd75e',fillOpacity:1}).addTo(LMAP);
@@ -1725,21 +1748,67 @@ async function initHoleMap(){
     mapMarks={greenC:null,greenPoly:null,ref:c,mePos:null};
     const s2=sub();if(s2)s2.textContent=geoErr||'Hole lines not mapped here — rangefinder still works.';
   }
-  let lMe=null,lTap=null,lTapLine=null;
-  mapMarks.setMe=pos=>{if(!LMAP)return;if(!lMe)lMe=L.circleMarker(pos,{radius:8,color:'#fff',weight:2.5,fillColor:'#2b86ec',fillOpacity:1}).addTo(LMAP);else lMe.setLatLng(pos);};
-  mapMarks.setTap=t=>{if(!LMAP)return;
-    if(!lTap){lTap=L.circleMarker(t,{radius:6,color:'#fff',weight:2,fillColor:'#ffb454',fillOpacity:1}).addTo(LMAP);
-      lTap.bindTooltip('',{permanent:true,direction:'top',offset:[0,-8],className:'maplbl'});}
-    else lTap.setLatLng(t);
+  let lMe=null,lTap=null,lTapLine=null,lTapCase=null;
+  const refreshTapLine=()=>{
+    if(!lTap)return;
+    const t=[lTap.getLatLng().lat,lTap.getLatLng().lng];
     const from=mapMarks.mePos||mapMarks.ref;
     const pts=[from,t,mapMarks.greenC].filter(Boolean);
-    if(lTapLine)lTapLine.setLatLngs(pts);
-    else lTapLine=L.polyline(pts,{color:'#ffb454',weight:2.5,opacity:.95}).addTo(LMAP);
+    if(lTapLine){lTapLine.setLatLngs(pts);lTapCase.setLatLngs(pts);}
+    else{
+      lTapCase=L.polyline(pts,{color:'#0a1220',weight:5,opacity:.4}).addTo(LMAP);
+      lTapLine=L.polyline(pts,{color:'#ffb454',weight:2.5,opacity:.95}).addTo(LMAP);
+      lTap.bringToFront&&lTap.bringToFront();
+    }
     if(from)lTap.setTooltipContent(yd(mDist(from,t))+'y');
     if(mapMarks.greenC&&typeof lGreen!=='undefined'&&lGreen)lGreen.setTooltipContent(yd(mDist(t,mapMarks.greenC))+'y');
   };
+  const clearTap=()=>{
+    [lTap,lTapLine,lTapCase].forEach(o=>{if(o)LMAP.removeLayer(o);});
+    lTap=lTapLine=lTapCase=null;
+    if(mapMarks.greenC&&typeof lGreen!=='undefined'&&lGreen&&mapMarks.ref)
+      lGreen.setTooltipContent(yd(mDist(mapMarks.ref,mapMarks.greenC))+'y');
+  };
+  mapMarks.setMe=pos=>{if(!LMAP)return;
+    if(!lMe)lMe=L.circleMarker(pos,{radius:8,color:'#fff',weight:2.5,fillColor:'#2b86ec',fillOpacity:1}).addTo(LMAP);else lMe.setLatLng(pos);
+    refreshTapLine();  // the first leg walks with you
+  };
+  mapMarks.setTap=t=>{if(!LMAP)return;
+    if(!lTap){lTap=L.circleMarker(t,{radius:9,color:'#fff',weight:2.5,fillColor:'#ffb454',fillOpacity:1}).addTo(LMAP);
+      lTap.bindTooltip('',{permanent:true,direction:'top',offset:[0,-10],className:'maplbl'});}
+    else lTap.setLatLng(t);
+    refreshTapLine();
+  };
+  // drag the spot to re-price both legs live; a plain tap on the dot clears it
+  let tapDrag=false,tapMoved=false,suppressClick=false;
+  const evPt=e=>LMAP.mouseEventToContainerPoint(e.touches?e.touches[0]:e);
+  const cont=LMAP.getContainer();
+  cont.addEventListener('pointerdown',e=>{
+    if(!lTap)return;
+    const pt=evPt(e), tp=LMAP.latLngToContainerPoint(lTap.getLatLng());
+    if(pt.distanceTo(tp)>24)return;
+    tapDrag=true;tapMoved=false;
+    LMAP.dragging.disable();
+    e.preventDefault();e.stopPropagation();
+  },{passive:false});
+  cont.addEventListener('pointermove',e=>{
+    if(!tapDrag)return;
+    tapMoved=true;
+    const ll=LMAP.containerPointToLatLng(evPt(e));
+    lTap.setLatLng(ll);refreshTapLine();
+    e.preventDefault();
+  },{passive:false});
+  const endDrag=()=>{
+    if(!tapDrag)return;
+    tapDrag=false;LMAP.dragging.enable();
+    suppressClick=true;setTimeout(()=>{suppressClick=false;},250);
+    if(!tapMoved)clearTap();
+  };
+  cont.addEventListener('pointerup',endDrag);
+  cont.addEventListener('pointercancel',endDrag);
+  mapMarks._suppress=()=>suppressClick;
   startMapGps();
-  LMAP.on('click',e=>mapTapAt([e.latlng.lat,e.latlng.lng]));
+  LMAP.on('click',e=>{if(mapMarks._suppress&&mapMarks._suppress())return;mapTapAt([e.latlng.lat,e.latlng.lng]);});
 }
 function updateFMB(pos,label){
   const el=document.getElementById('fmb'),s2=document.getElementById('fmbsub');
