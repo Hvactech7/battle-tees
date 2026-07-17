@@ -258,7 +258,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1784322192';
+const BUILD='1784328883';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -270,11 +270,18 @@ function courseRanchoSolano(){return {id:'rancho-solano',name:'Rancho Solano GC'
   teeSets:[{id:'rs-blu',name:'Blue',rating:71.8,slope:133},{id:'rs-bwc',name:'Blue/White Combo',rating:70.9,slope:131},{id:'rs-wht',name:'White',rating:70.0,slope:128},{id:'rs-gd',name:'Gold',rating:67.8,slope:120},{id:'rs-rd',name:'Red',rating:65.7,slope:112},{id:'rs-w-wht',name:'White (W)',rating:75.5,slope:135},{id:'rs-w-gd',name:'Gold (W)',rating:72.9,slope:128},{id:'rs-w-rd',name:'Red (W)',rating:70.3,slope:123}],
   holes:[{par:5,si:3},{par:4,si:15},{par:4,si:1},{par:4,si:13},{par:3,si:7},{par:4,si:17},{par:5,si:5},{par:3,si:11},{par:4,si:9},
          {par:5,si:8},{par:4,si:2},{par:3,si:4},{par:4,si:6},{par:4,si:14},{par:3,si:18},{par:4,si:16},{par:5,si:12},{par:4,si:10}]};}
+// Lake Chabot (Oakland) — ratings from NCGA postings; hole lines hand-traced
+// from satellite by Nathan against 18Birdies reference, July 2026. Home of the
+// 665-yard par-6 18th.
+function courseLakeChabot(){return {id:'lake-chabot',name:'Lake Chabot GC',
+  teeSets:[{id:'lc-blu',name:'Blue',rating:68.9,slope:119},{id:'lc-wht',name:'White',rating:67.4,slope:116},{id:'lc-w-wht',name:'White (W)',rating:72.8,slope:123},{id:'lc-w-rd',name:'Red (W)',rating:70.1,slope:116}],
+  holes:[{par:4,si:1},{par:3,si:13},{par:5,si:9},{par:5,si:7},{par:4,si:15},{par:4,si:11},{par:3,si:5},{par:5,si:3},{par:3,si:17},
+         {par:4,si:16},{par:4,si:2},{par:3,si:18},{par:4,si:10},{par:4,si:4},{par:4,si:14},{par:4,si:6},{par:3,si:8},{par:6,si:12}]};}
 function courseDarkHorse(){return {id:'darkhorse',name:'DarkHorse GC',
   teeSets:[{id:'dh-blk',name:'Black',rating:74.6,slope:137},{id:'dh-cop',name:'Copper',rating:73.1,slope:134},{id:'dh-blu',name:'Blue',rating:71.7,slope:130},{id:'dh-wht',name:'White',rating:69.5,slope:127},{id:'dh-rd',name:'Red',rating:64.4,slope:115},{id:'dh-w-blu',name:'Blue (W)',rating:77.4,slope:138},{id:'dh-w-wht',name:'White (W)',rating:75.0,slope:133},{id:'dh-w-rd',name:'Red (W)',rating:69.4,slope:125}],
   holes:[{par:4,si:10},{par:4,si:16},{par:3,si:8},{par:5,si:2},{par:4,si:4},{par:3,si:18},{par:5,si:6},{par:4,si:14},{par:4,si:12},
          {par:4,si:13},{par:5,si:1},{par:4,si:9},{par:3,si:11},{par:4,si:17},{par:4,si:3},{par:3,si:7},{par:4,si:5},{par:5,si:15}]};}
-function builtinCourses(){return [courseTealBend(),courseRanchoSolano(),courseDarkHorse()];}
+function builtinCourses(){return [courseTealBend(),courseRanchoSolano(),courseDarkHorse(),courseLakeChabot()];}
 function clone(o){return JSON.parse(JSON.stringify(o));}
 function defaultCourse(){return courseTealBend();}
 function defaultConfig(){
@@ -1540,7 +1547,7 @@ function splinePath(path){
 // Courses with professionally-mapped geodata hosted on battletees.app
 // (Golfbert-sourced: fairway-bent hole lines, greens, bunkers, water).
 // Fetched once, cached in course geo like OSM data — no runtime API calls.
-const HOSTED_GEO={'rancho-solano':'geo/rancho-solano.json?v=3'};
+const HOSTED_GEO={'rancho-solano':'geo/rancho-solano.json?v=3','lake-chabot':'geo/lake-chabot.json?v=1'};
 async function ensureCourseGeo(){
   const hostedUrl=HOSTED_GEO[S.course.id];
   if(hostedUrl){
