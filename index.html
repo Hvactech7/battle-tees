@@ -258,7 +258,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1784332193';
+const BUILD='1784333514';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1519,16 +1519,31 @@ function myPlayerIdx(){
   if(i<0&&S.me&&S.me.name)i=S.players.findIndex(p=>p&&(p.name||'').trim().toLowerCase()===S.me.name.trim().toLowerCase());
   return i<0?0:i;
 }
-function mapScore(){if(S.round.started&&mapHole!==S.round.cur)jumpHole(mapHole);go('hole');}
+// map stepper edits MY score on the viewed hole in place — no render() (that
+// would rebuild the whole Leaflet map on every tap)
+function mapChScore(d){
+  if(!S.round.started)return;
+  const r=S.round.holes[mapHole]; if(!r||!r.gross)return;
+  const par=(S.course.holes[mapHole]||{par:4}).par;
+  const v=(r.gross[myPlayerIdx()]??par)+d;
+  r.gross[myPlayerIdx()]=Math.min(15,Math.max(1,v));
+  if(!r.gts)r.gts=[0,0,0,0];
+  r.gts[myPlayerIdx()]=Date.now();
+  stampChanges();save();syncPush();
+  const el=document.getElementById('mapsc');
+  if(el)el.textContent=r.gross[myPlayerIdx()];
+}
 function vMap(){
   const hole=S.course.holes[mapHole]||{par:4,si:0};
-  // Score button: confirmed hole → your score on it; otherwise "Score"
-  // (gross is prefilled with par, so only a CONFIRMED hole counts as scored)
   const rec=S.round.holes[mapHole];
-  const sc=rec&&rec.confirmed&&rec.gross?rec.gross[myPlayerIdx()]:null;
-  const scoreBtn=`<button onclick="mapScore()">${sc!=null?esc(String(sc)):'Score'}</button>`;
-  return topbar(`Hole ${mapHole+1} · Par ${hole.par}`,`Handicap ${hole.si}`,'','hero maphero',gameBadgeHTML()+scoreBtn)+`
+  const mySc=rec&&rec.gross&&rec.gross[myPlayerIdx()]!=null?rec.gross[myPlayerIdx()]:hole.par;
+  return topbar(`Hole ${mapHole+1} · Par ${hole.par}`,`Handicap ${hole.si}`,'hole','hero maphero',gameBadgeHTML())+`
   <div id="holemap"></div>
+  <div style="position:fixed;right:max(10px,calc(50vw - 230px));bottom:calc(112px + env(safe-area-inset-bottom));z-index:6;display:flex;align-items:center;background:var(--card);border:2px solid var(--green);border-radius:12px;overflow:hidden;box-shadow:2px 2px 0 rgba(0,0,0,.35)">
+    <button onclick="mapChScore(-1)" style="width:42px;height:46px;background:none;border:none;color:var(--elec);font-size:24px;font-weight:800">−</button>
+    <div id="mapsc" class="num" style="min-width:36px;text-align:center;font-size:26px">${mySc}</div>
+    <button onclick="mapChScore(1)" style="width:42px;height:46px;background:none;border:none;color:var(--elec);font-size:24px;font-weight:800">+</button>
+  </div>
   <div class="mapbar">
     <div class="row" style="border:none;padding:2px 0">
       <button class="ghost" onclick="mapPrev()">◀</button>
