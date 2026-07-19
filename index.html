@@ -258,7 +258,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1784490461';
+const BUILD='1784491328';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -489,6 +489,7 @@ function applyOp(k,v,defer){
         if(v.span)S.round.span=v.span;
         if(v.startedAt)S.round.startedAt=v.startedAt;
         S.shareMetaTs=v._ts;
+        if(v.started)libSaveRoster();  // joiners remember the group too
         localContent[k]=sentCache[k]=contentKey(k);
       }
     }else{
@@ -569,6 +570,9 @@ function claimMySlot(steal){
     // otherwise two phones sharing a name would fight over the row forever
     if(match&&p.ownerDev!==devId()&&(steal||!p.ownerDev)){p.ownerDev=devId();changed=true;}
     if(!match&&p.ownerDev===devId()){delete p.ownerDev;changed=true;}
+    // my phone is the authority on MY handicap — a stale index someone loaded
+    // from their library gets corrected to my current profile the moment I join
+    if(match&&p.ownerDev===devId()&&S.me.index!=null&&+p.index!==+S.me.index){p.index=+S.me.index;changed=true;}
   });
   if(changed){stampChanges();save();syncPush();}
 }
@@ -3217,6 +3221,12 @@ function commitPl(el,i,k){
   if(v===el.dataset.prev){el.value=v;return;}
   setPl(i,k,v);
 }
+// Anyone you play with gets remembered: upsert the whole roster into the
+// player library. Copies keep upsertLib's libId bookkeeping off the synced
+// roster (a joiner's local lib ids must never ride back to other phones).
+function libSaveRoster(){
+  try{S.players.forEach(p=>{if(p&&p.name)upsertLib(Object.assign({},p));});}catch(e){}
+}
 function upsertLib(p){
   if(!S.playerLib)return;
   const nm=(p.name||'').trim();
@@ -3267,6 +3277,7 @@ function startRound(){
   pickingCourse=false;
   const withNearby=S.players.some(p=>p.nearby);
   stView=null;
+  libSaveRoster();  // starting a round remembers everyone in it
   setTimeout(()=>preloadCourseTiles(false),1500);  // quiet tile-pack top-up while signal is good
   set(()=>{S.round=blankRound();S.round.started=true;S.round.game=S.config.game;
     S.round.games=(S.config.games&&S.config.games.length?S.config.games.slice():[S.config.game]).filter((g,i,a)=>a.indexOf(g)===i);
