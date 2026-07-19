@@ -258,7 +258,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1784494511';
+const BUILD='1784495305';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -505,6 +505,16 @@ function applyOp(k,v,defer){
       const ogts=other.gts||[0,0,0,0], og=other.gross||[null,null,null,null];
       for(let p=0;p<4;p++){
         if((ogts[p]||0)>(merged.gts[p]||0)){merged.gross[p]=og[p];merged.gts[p]=ogts[p];}
+      }
+      // per-player confirm stamps merge like scores: per slot, newest wins
+      // (positive = confirmed-at, negative = unconfirmed-at from an edit)
+      merged.cfts=(base.cfts||[0,0,0,0]).slice();
+      const octs=other.cfts||[0,0,0,0];
+      for(let p=0;p<4;p++){if(Math.abs(octs[p]||0)>Math.abs(merged.cfts[p]||0))merged.cfts[p]=octs[p];}
+      // distributed close: if the merge reveals every active player confirmed
+      // (two "last" confirmers racing), any phone may flip the hole closed
+      if(!merged.confirmed&&S.round.started){
+        try{if(actIdx().every(q=>(merged.cfts[q]||0)>0))merged.confirmed=true;}catch(e){}
       }
       merged._ts=Math.max(v._ts||0,cur._ts||0);
       // a hole finishing on ANOTHER phone fires the splash here too — live
@@ -2005,15 +2015,22 @@ function showSplash(h){
   clearTimeout(splashTimer);
   // wolf splashes (howl / cage art) get extra hang time to land the moment
   splashTimer=setTimeout(()=>dismissSplash(),stackHas('wolf')?7200:4200);
-  render();
+  if(S.screen==='map'){
+    // overlay the live map directly — a full render would rebuild Leaflet mid-splash
+    let el=document.getElementById('mapsplash');
+    if(!el){el=document.createElement('div');el.id='mapsplash';document.body.appendChild(el);}
+    el.innerHTML=holeSplash();
+  }else render();
 }
 function dismissSplash(){
   splash=null;clearTimeout(splashTimer);
+  const ms=document.getElementById('mapsplash');if(ms)ms.remove();
   // if the hole map is open, follow the round to the next unconfirmed hole
   if(S.screen==='map'&&S.round.started){
     const o=playOrder();
     const nxt=o.find(h=>!S.round.holes[h].confirmed);
-    if(nxt!=null)mapHole=nxt;
+    if(nxt!=null&&nxt!==mapHole){mapHole=nxt;render();}
+    return;  // same hole: leave the live map untouched
   }
   render();
 }
@@ -3445,7 +3462,7 @@ function vHole(){
       ${rec.confirmed
         ?`${isReview()?'':`<button class="big" onclick="nextHole()">${posOf(h)<playOrder().length-1?'Next hole →':'Finish round'}</button>`}
           <button class="ghost mt" style="width:100%" onclick="unconfirm()">Edit this hole</button>`
-        :`<button class="big" ${done?'':'disabled'} onclick="confirmHole()">Confirm hole</button>`}
+        :`${confirmBlockHTML(done)}`}
     `;
   }
   return topbar(`Hole ${h+1} · Par ${hole.par}`,`Handicap ${hole.si}${S.share.on?` · ${esc(S.share.code)} ${sockOpen?'●':'○ will sync'}`:''}`,'','hero',gameBadgeHTML())+`<main>
@@ -3587,7 +3604,41 @@ function advanceToNext(){
   }else{S.round.cur=next;if(gameOn()!=='wolf')prefillNines(next);}
 }
 function confirmHole(){const h=S.round.cur;set(()=>{S.round.holes[h].confirmed=true;if(!isReview())advanceToNext();});showSplash(h);}
-function unconfirm(){set(()=>{S.round.holes[S.round.cur].confirmed=false;});}
+// ----- shared rounds: each phone confirms its own rows, then moves on -----
+function myRows(){
+  return actIdx().filter(i=>{const p=S.players[i];const dev=p&&(p.ownerDev||p.scorer);return !dev||dev===devId();});
+}
+function cfOn(rec,i){return !!(rec&&rec.cfts&&rec.cfts[i]>0);}
+function confirmMine(){
+  const h=S.round.cur;
+  let closed=false;
+  set(()=>{
+    const rec=S.round.holes[h];
+    if(!rec.cfts)rec.cfts=[0,0,0,0];
+    myRows().forEach(i=>{if(rec.gross[i]!=null)rec.cfts[i]=Date.now();});
+    if(!rec.confirmed&&actIdx().every(i=>rec.cfts[i]>0)){rec.confirmed=true;closed=true;}
+    if(!isReview())advanceToNext();
+  });
+  if(closed)showSplash(h);
+}
+function confirmBlockHTML(done){
+  const rec=S.round.holes[S.round.cur];
+  if(!S.share.on)return `<button class="big" ${done?'':'disabled'} onclick="confirmHole()">Confirm hole</button>`;
+  const act=actIdx(), mine=myRows();
+  const first=i=>esc((S.players[i].name||'').split(' ')[0]);
+  const chips=act.map(i=>`<span class="pill ${cfOn(rec,i)?'wolf':'gray'}" style="margin-right:6px">${cfOn(rec,i)?'✓ ':''}${first(i)}</span>`).join('');
+  const waitingOn=act.filter(i=>!cfOn(rec,i));
+  if(mine.every(i=>cfOn(rec,i)))
+    return `<div class="center" style="margin:4px 0 2px">${chips}</div>
+      <div class="tiny center mt">✓ You're in — waiting on ${waitingOn.map(first).join(' · ')||'…'}</div>`;
+  const myScored=mine.every(i=>rec.gross[i]!=null);
+  const final=act.every(i=>mine.includes(i)||cfOn(rec,i));
+  const ok=myScored&&(!final||done);
+  return `<div class="center" style="margin:4px 0 2px">${chips}</div>
+    <button class="big mt" ${ok?'':'disabled'} onclick="confirmMine()">✓ Confirm my score${final?' — closes the hole':''}</button>
+    ${final&&myScored&&!done?`<div class="tiny center mt">the hole still needs its picks/taps before it can close</div>`:''}`;
+}
+function unconfirm(){set(()=>{const r=S.round.holes[S.round.cur];r.confirmed=false;r.cfts=[-Date.now(),-Date.now(),-Date.now(),-Date.now()];});}
 function nextHole(){set(()=>{advanceToNext();});}
 
 // ----- 9's hole screen: no pick phase — just scores, ranked into 5·3·1 -----
@@ -3651,7 +3702,7 @@ function vHoleNines(){
     ${rec.confirmed
       ?`${isReview()?'':`<button class="big" onclick="nextHole()">${posOf(h)<playOrder().length-1?'Next hole →':'Finish round'}</button>`}
         <button class="ghost mt" style="width:100%" onclick="unconfirm()">Edit this hole</button>`
-      :`<button class="big" ${done?'':'disabled'} onclick="confirmHole()">Confirm hole</button>`}`;
+      :`${confirmBlockHTML(done)}`}`;
   return topbar(`Hole ${h+1} · Par ${hole.par}`,`Handicap ${hole.si}${S.share.on?` · ${esc(S.share.code)} ${sockOpen?'●':'○ will sync'}`:''}`,'','hero',gameBadgeHTML())+`<main>
     ${reviewBanner()}${runningTotalsCard()}
     ${isN?`<div class="ninecard">
@@ -3739,7 +3790,7 @@ function vHoleVegas(){
     ${rec.confirmed
       ?`${isReview()?'':`<button class="big" onclick="nextHole()">${posOf(h)<playOrder().length-1?'Next hole →':'Finish round'}</button>`}
         <button class="ghost mt" style="width:100%" onclick="unconfirm()">Edit this hole</button>`
-      :`<button class="big" ${done?'':'disabled'} onclick="confirmHole()">Confirm hole</button>`}
+      :`${confirmBlockHTML(done)}`}
     ${holeNav}
   </main>`+tabs('hole');
 }
@@ -3770,7 +3821,7 @@ function vHoleScramble(){
     ${rec.confirmed
       ?`${isReview()?'':`<button class="big" onclick="nextHole()">${posOf(h)<playOrder().length-1?'Next hole →':'Finish round'}</button>`}
         <button class="ghost mt" style="width:100%" onclick="unconfirm()">Edit this hole</button>`
-      :`<button class="big" ${done?'':'disabled'} onclick="confirmHole()">Confirm hole</button>`}
+      :`${confirmBlockHTML(done)}`}
     ${holeNav}
   </main>`+tabs('hole');
 }
