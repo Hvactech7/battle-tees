@@ -258,7 +258,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1784496336';
+const BUILD='1784497614';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1080,7 +1080,7 @@ function holeNavHTML(){
   const h=S.round.cur;
   return `<div class="card"><div class="holegrid">${playOrder().map(i=>{const r=S.round.holes[i];
     return `<button class="${r.confirmed?'done':''} ${i===h?'cur':''}" onclick="jumpHole(${i})">${i+1}</button>`;}).join('')}</div>
-    <button class="ghost mt" style="width:100%" onclick="openMap()">🛰 Hole map &amp; distances</button>${paceLine()}</div>`;
+    ${paceLine()}</div>`;
 }
 // 9's ledgers are kept in twelfths of a point so pooled tie splits (÷2, ÷3, ÷4) stay exact.
 function fmtPts(u){
@@ -1548,6 +1548,15 @@ function teardownMap(){
   mapMarks={};lSpine=null;gmSpine=null;
 }
 // whose phone is this? self-claimed slot first, then profile-name match, else slot 0
+// my score on the hole the map is showing — but only once it's actually been
+// entered: my own confirm stamp or the hole fully closed (gross is prefilled
+// with par, so a bare value doesn't count)
+function mapMySc(){
+  const rec=S.round.holes[mapHole],mi=myPlayerIdx();
+  if(!rec||!rec.gross||rec.gross[mi]==null)return null;
+  return (rec.confirmed||(rec.cfts&&rec.cfts[mi]>0))?rec.gross[mi]:null;
+}
+function mapScoreTap(){if(S.round.started&&mapHole!==S.round.cur&&mapMySc()!=null)jumpHole(mapHole);go('hole');}
 function myPlayerIdx(){
   let i=S.players.findIndex(p=>p&&p.ownerDev===devId());
   if(i<0&&S.me&&S.me.name)i=S.players.findIndex(p=>p&&(p.name||'').trim().toLowerCase()===S.me.name.trim().toLowerCase());
@@ -1583,7 +1592,7 @@ function vMap(){
   return topbar(`Hole ${mapHole+1} · Par ${hole.par}`,`Handicap ${hole.si}`,'','hero maphero',
     `<div style="display:flex;align-items:center;margin-left:auto">${myScore}${gameBadgeHTML()}</div>`)+`
   <div id="holemap"></div>
-  <button onclick="go('hole')" style="position:fixed;right:max(10px,calc(50vw - 230px));bottom:calc(112px + env(safe-area-inset-bottom));z-index:6;width:120px;height:46px;background:var(--card);border:2px solid var(--green);border-radius:12px;color:var(--green-mid);font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:19px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">Score</button>
+  <button onclick="mapScoreTap()" style="position:fixed;right:max(10px,calc(50vw - 230px));bottom:calc(112px + env(safe-area-inset-bottom));z-index:6;width:120px;height:46px;background:var(--card);border:2px solid var(--green);border-radius:12px;color:var(--green-mid);font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:${mapMySc()!=null?'24':'19'}px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">${mapMySc()!=null?mapMySc():'Score'}</button>
   <div class="mapbar">
     <div class="row" style="border:none;padding:2px 0">
       <button class="ghost" onclick="mapPrev()">◀</button>
@@ -2179,6 +2188,7 @@ function topbar(title,sub,backTo,cls,right){
   ${right||''}${backTo?`<button onclick="go('${backTo}')">Back</button>`:''}</header>`;
 }
 function gameArtFile(g){return {wolf:'wolf.png',nines:'nine.png',vegas:'vegas.png',quota:'quota.png',sixes:'sixes.png',umbrella:'umbrella.png',bbb:'bbb.png',stroke:'stroke.png',stableford:'stableford.png',bestball:'bestball.png',scramble:'scramble.png',nassau:'nassau.png',skins:'skins.png'}[g];}
+function mapTopBtn(){return `<button onclick="openMap()">🛰 Map</button>`;}
 function gameBadgeHTML(){
   if(!S.round.started)return '';
   const G=gamesOn(), g=G[0];
@@ -3471,7 +3481,7 @@ function vHole(){
         :`${confirmBlockHTML(done)}`}
     `;
   }
-  return topbar(`Hole ${h+1} · Par ${hole.par}`,`Handicap ${hole.si}${S.share.on?` · ${esc(S.share.code)} ${sockOpen?'●':'○ will sync'}`:''}`,'','hero',gameBadgeHTML())+`<main>
+  return topbar(`Hole ${h+1} · Par ${hole.par}`,`Handicap ${hole.si}${S.share.on?` · ${esc(S.share.code)} ${sockOpen?'●':'○ will sync'}`:''}`,'','hero',`<div style="display:flex;align-items:center;margin-left:auto;gap:12px">${mapTopBtn()}${gameBadgeHTML()}</div>`)+`<main>
     ${reviewBanner()}${runningTotalsCard()}
     <div class="wolfcard">
       <div style="flex:1;min-width:0"><b>${esc(names[rec.wolfAt??wolf])} is the Wolf</b>
@@ -3709,7 +3719,7 @@ function vHoleNines(){
       ?`${isReview()?'':`<button class="big" onclick="nextHole()">${posOf(h)<playOrder().length-1?'Next hole →':'Finish round'}</button>`}
         <button class="ghost mt" style="width:100%" onclick="unconfirm()">Edit this hole</button>`
       :`${confirmBlockHTML(done)}`}`;
-  return topbar(`Hole ${h+1} · Par ${hole.par}`,`Handicap ${hole.si}${S.share.on?` · ${esc(S.share.code)} ${sockOpen?'●':'○ will sync'}`:''}`,'','hero',gameBadgeHTML())+`<main>
+  return topbar(`Hole ${h+1} · Par ${hole.par}`,`Handicap ${hole.si}${S.share.on?` · ${esc(S.share.code)} ${sockOpen?'●':'○ will sync'}`:''}`,'','hero',`<div style="display:flex;align-items:center;margin-left:auto;gap:12px">${mapTopBtn()}${gameBadgeHTML()}</div>`)+`<main>
     ${reviewBanner()}${runningTotalsCard()}
     ${isN?`<div class="ninecard">
       <div style="flex:1;min-width:0"><b>9 points on this hole</b>
@@ -3784,7 +3794,7 @@ function vHoleVegas(){
           <div class="stepper mini"><button onclick="chStat('${k}',${i},-1)">−</button><span class="val num">${v}</span><button onclick="chStat('${k}',${i},1)">+</button></div></div>`;
       }).join('')}</div></div>`;}).join('')}
   </div>`:'';
-  return topbar(`Hole ${h+1} · Par ${hole.par}`,`Handicap ${hole.si}${S.share.on?` · ${esc(S.share.code)} ${sockOpen?'●':'○ will sync'}`:''}`,'','hero',gameBadgeHTML())+`<main>
+  return topbar(`Hole ${h+1} · Par ${hole.par}`,`Handicap ${hole.si}${S.share.on?` · ${esc(S.share.code)} ${sockOpen?'●':'○ will sync'}`:''}`,'','hero',`<div style="display:flex;align-items:center;margin-left:auto;gap:12px">${mapTopBtn()}${gameBadgeHTML()}</div>`)+`<main>
     ${reviewBanner()}${runningTotalsCard()}
     <div class="vegascard">
       <div style="flex:1;min-width:0"><b>Vegas — low number wins the difference</b>
@@ -3817,7 +3827,7 @@ function vHoleScramble(){
       </div>
     </div>`;}).join('');
   const done=capt.every(i=>rec.gross[i]!=null);
-  return topbar(`Hole ${h+1} · Par ${hole.par}`,`Handicap ${hole.si}${S.share.on?` · ${esc(S.share.code)} ${sockOpen?'●':'○ will sync'}`:''}`,'','hero',gameBadgeHTML())+`<main>
+  return topbar(`Hole ${h+1} · Par ${hole.par}`,`Handicap ${hole.si}${S.share.on?` · ${esc(S.share.code)} ${sockOpen?'●':'○ will sync'}`:''}`,'','hero',`<div style="display:flex;align-items:center;margin-left:auto;gap:12px">${mapTopBtn()}${gameBadgeHTML()}</div>`)+`<main>
     ${reviewBanner()}${runningTotalsCard()}
     <div class="card">
       <div class="tiny mb">${T.length===1?'One ball for the whole group — the official tournament card.':'One score per team — everyone plays from the best shot.'}</div>
@@ -4137,7 +4147,7 @@ function vStandings(){
   const extra=(thru>0?`
     <div class="card"><h2>Scorecard · gross strokes</h2>${scorecardHTML()}
       <div class="tiny mt">Green = under par · amber = bogey · red = double or worse. Swipe the card sideways.</div></div>`:'')+statsCard;
-  return topbar('Standings',esc(S.course.name),'')+`<main>${vtabs}${paceLine()}${tables}${extra}
+  return topbar('Standings',esc(S.course.name),'','',mapTopBtn())+`<main>${vtabs}${paceLine()}${tables}${extra}
     ${all!=null?`<div class="card"><h2>Hole history (tap to edit)</h2>${hist||'<div class="muted">No holes confirmed yet.</div>'}</div>`:''}
   </main>`+tabs('standings');
 }
