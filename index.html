@@ -258,7 +258,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1784507732';
+const BUILD='1784508245';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -2294,6 +2294,7 @@ function render(){
   else if(scr==='players') html=vPlayers();
   else if(scr==='rules') html=vRules();
   else if(scr==='pickgame') html=vPickGame();
+  else if(scr==='stats') html=vStats();
   else if(scr==='history') html=vHistory();
   else if(scr==='pickcourse') html=vPickCourse();
   else if(scr==='course') html=vCourse();
@@ -2453,7 +2454,7 @@ function vHome(){
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
     <button class="ghost" style="padding:12px" onclick="go('courses')">⛳ Courses</button>
     <button class="ghost" style="padding:12px" onclick="go('players')">👥 Players</button>
-    <button class="ghost" style="padding:12px" onclick="go('rules')">📜 Rules</button>
+    <button class="ghost" style="padding:12px" onclick="go('stats')">📊 Stats</button>
     <button class="ghost" style="padding:12px" onclick="go('history')">🕰 Rounds</button>
   </div>
   <div class="center" style="margin:2px 0 12px">
@@ -2683,6 +2684,69 @@ function vHistory(){
         </span></div>
     </div>`;}).join('')
   :`<div class="card center muted">No finished rounds yet — they land here when you tap “End round”.</div>`}
+  </main>`;
+}
+// ---------- my stats ----------
+// Averages only count rounds where that thing was actually recorded — a round
+// with no putt tracking is IGNORED for putts, never counted as zero.
+function vStats(){
+  const meNm=(S.me&&S.me.name||'').trim().toLowerCase();
+  const rounds=[];
+  (S.history||[]).forEach(e=>{
+    const snap=e.playersSnap||[];
+    const mi=snap.findIndex(pl=>(pl.name||'').trim().toLowerCase()===meNm);
+    if(mi<0)return;
+    const course=S.courses.find(c=>c.id===e.courseId);
+    const parOf=h=>{const cs=course||S.course;return ((cs.holes||[])[h]||{par:4}).par;};
+    const holes=((e.round&&e.round.holes)||[]).map((r,h)=>({r,h})).filter(x=>x.r&&x.r.confirmed&&x.r.gross&&x.r.gross[mi]!=null);
+    if(!holes.length)return;
+    rounds.push({e,mi,holes,
+      gross:holes.reduce((s,x)=>s+x.r.gross[mi],0),
+      par:holes.reduce((s,x)=>s+parOf(x.h),0)});
+  });
+  const holesN=rounds.reduce((s,r)=>s+r.holes.length,0);
+  const toPar18=holesN?(rounds.reduce((s,r)=>s+(r.gross-r.par),0)/holesN)*18:null;
+  const full=rounds.filter(r=>r.holes.length===18);
+  const best=full.length?full.reduce((a,b)=>b.gross<a.gross?b:a):null;
+  const scoring=rounds.length?`
+    <div class="row"><span class="muted">Rounds played</span><b class="num" style="font-size:24px">${rounds.length}</b></div>
+    <div class="row"><span class="muted">Holes scored</span><b class="num" style="font-size:24px">${holesN}</b></div>
+    ${toPar18!=null?`<div class="row"><span class="muted">Average vs par (per 18)</span><b class="num" style="font-size:24px;color:${toPar18<0?'#7fd49a':'var(--amber-bd)'}">${toPar18>=0?'+':''}${Math.round(toPar18*10)/10}</b></div>`:''}
+    ${best?`<div class="row"><span class="muted">Best full round</span><b class="num" style="font-size:24px">${best.gross}</b></div>
+    <div class="tiny" style="text-align:right">${esc(best.e.courseName||'')}</div>`:''}`
+    :'<div class="tiny">Finish a round and your numbers start building here.</div>';
+  const KEYS=[['putts','Putts'],['chips','Chips'],['bunker','Bunker shots'],['pen','Penalties']];
+  const extras=KEYS.map(([k,label])=>{
+    const recd=rounds.map(r=>{
+      let tot=0,any=false;
+      r.holes.forEach(x=>{const st=x.r.stats&&x.r.stats[k];if(st&&st[r.mi]>0){tot+=st[r.mi];any=true;}});
+      return any?{tot,n:r.holes.length}:null;
+    }).filter(Boolean);
+    if(!recd.length)return null;
+    const per18=recd.reduce((s,x)=>s+(x.tot/x.n)*18,0)/recd.length;
+    return `<div class="row"><span class="muted">${label} <span class="tiny">(${recd.length} round${recd.length===1?'':'s'} tracked)</span></span>
+      <b class="num" style="font-size:22px">${Math.round(per18*10)/10}<span class="tiny" style="font-weight:400"> /18</span></b></div>`;
+  }).filter(Boolean).join('');
+  const shots=Object.values(S.shotLog||{}).reduce((a,b)=>a.concat(b),[]);
+  const byClub={};
+  shots.forEach(s2=>{const c=s2.club||'untagged';(byClub[c]=byClub[c]||[]).push(s2.yds);});
+  const clubOrder=['Dr','3W','5W','Hy','3i','4i','5i','6i','7i','8i','9i','PW','GW','SW','LW','Putt','untagged'];
+  const clubRows=clubOrder.filter(c=>byClub[c]).map(c=>{
+    const a=byClub[c];
+    return `<tr><td style="font-weight:700">${c==='untagged'?'<span class="muted">untagged</span>':c}</td>
+      <td class="r num" style="font-size:22px">${a.length}</td>
+      <td class="r num" style="font-size:22px">${Math.round(a.reduce((x,y)=>x+y,0)/a.length)}</td>
+      <td class="r num" style="font-size:22px">${Math.max(...a)}</td></tr>`;}).join('');
+  return topbar('My stats',S.me.name?esc(S.me.name):'','home')+`<main>
+  <div class="card"><h2>⛳ Scoring</h2>${scoring}
+    ${rounds.length?'<div class="tiny mt">Confirmed holes from your past rounds. 9-hole rounds are normalized into the per-18 averages.</div>':''}</div>
+  <div class="card"><h2>🥌 Short game &amp; extras</h2>
+    ${extras||'<div class="tiny">Turn on tracking (putts, chips, bunker, penalties) in Round options — rounds where you track them feed these averages. Untracked rounds are ignored, never counted as zero.</div>'}
+    ${extras?'<div class="tiny mt">Only rounds where each stat was recorded count toward its average.</div>':''}</div>
+  <div class="card"><h2>🏌️ Club distances</h2>
+    ${clubRows?`<table class="st"><tr><th>Club</th><th class="r">Shots</th><th class="r">Avg</th><th class="r">Longest</th></tr>${clubRows}</table>
+    <div class="tiny mt">From Track Shot on the map — GPS-measured, tagged by club.</div>`
+    :'<div class="tiny">Use <b>Track Shot</b> on the hole map: tap at your ball, tap where it lands, tag the club. Your real distances build here.</div>'}</div>
   </main>`;
 }
 function vRules(){
