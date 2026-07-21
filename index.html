@@ -258,7 +258,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1784527521';
+const BUILD='1784612573';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -277,11 +277,17 @@ function courseLakeChabot(){return {id:'lake-chabot',name:'Lake Chabot GC',loc:[
   teeSets:[{id:'lc-blu',name:'Blue',rating:68.9,slope:119},{id:'lc-wht',name:'White',rating:67.4,slope:116},{id:'lc-w-wht',name:'White (W)',rating:72.8,slope:123},{id:'lc-w-rd',name:'Red (W)',rating:70.1,slope:116}],
   holes:[{par:4,si:1},{par:3,si:13},{par:5,si:9},{par:5,si:7},{par:4,si:15},{par:4,si:11},{par:3,si:5},{par:5,si:3},{par:3,si:17},
          {par:4,si:16},{par:4,si:2},{par:3,si:18},{par:4,si:10},{par:4,si:4},{par:4,si:14},{par:4,si:6},{par:3,si:8},{par:6,si:12}]};}
+// Paradise Valley (Fairfield) — Robert Muir Graves 1993. OSM community hole
+// lines (all 18 verified by Nathan) + Nathan's hand-traced greens, July 2026.
+function courseParadiseValley(){return {id:'paradise-valley',name:'Paradise Valley GC',loc:[38.3006,-122.0305],
+  teeSets:[{id:'pv-tour',name:'Tournament',rating:73.7,slope:135},{id:'pv-champ',name:'Championship',rating:72.7,slope:132},{id:'pv-reg',name:'Regular',rating:70.4,slope:125},{id:'pv-gold',name:'Gold',rating:68.5,slope:119},{id:'pv-red',name:'Red',rating:66.2,slope:115},{id:'pv-w-reg',name:'Regular (W)',rating:75.9,slope:130},{id:'pv-w-gold',name:'Gold (W)',rating:73.5,slope:127},{id:'pv-w-red',name:'Red (W)',rating:71.3,slope:123}],
+  holes:[{par:5,si:5},{par:4,si:7},{par:3,si:17},{par:5,si:9},{par:4,si:1},{par:4,si:3},{par:4,si:11},{par:3,si:15},{par:4,si:13},
+         {par:5,si:4},{par:4,si:10},{par:3,si:18},{par:4,si:6},{par:4,si:14},{par:3,si:16},{par:5,si:8},{par:4,si:12},{par:4,si:2}]};}
 function courseDarkHorse(){return {id:'darkhorse',name:'DarkHorse GC',loc:[39.0294,-121.0507],
   teeSets:[{id:'dh-blk',name:'Black',rating:74.6,slope:137},{id:'dh-cop',name:'Copper',rating:73.1,slope:134},{id:'dh-blu',name:'Blue',rating:71.7,slope:130},{id:'dh-wht',name:'White',rating:69.5,slope:127},{id:'dh-rd',name:'Red',rating:64.4,slope:115},{id:'dh-w-blu',name:'Blue (W)',rating:77.4,slope:138},{id:'dh-w-wht',name:'White (W)',rating:75.0,slope:133},{id:'dh-w-rd',name:'Red (W)',rating:69.4,slope:125}],
   holes:[{par:4,si:10},{par:4,si:16},{par:3,si:8},{par:5,si:2},{par:4,si:4},{par:3,si:18},{par:5,si:6},{par:4,si:14},{par:4,si:12},
          {par:4,si:13},{par:5,si:1},{par:4,si:9},{par:3,si:11},{par:4,si:17},{par:4,si:3},{par:3,si:7},{par:4,si:5},{par:5,si:15}]};}
-function builtinCourses(){return [courseTealBend(),courseRanchoSolano(),courseDarkHorse(),courseLakeChabot()];}
+function builtinCourses(){return [courseTealBend(),courseRanchoSolano(),courseDarkHorse(),courseLakeChabot(),courseParadiseValley()];}
 function clone(o){return JSON.parse(JSON.stringify(o));}
 function defaultCourse(){return courseTealBend();}
 function defaultConfig(){
@@ -1746,7 +1752,7 @@ function splinePath(path){
 // Courses with professionally-mapped geodata hosted on battletees.app
 // (Golfbert-sourced: fairway-bent hole lines, greens, bunkers, water).
 // Fetched once, cached in course geo like OSM data — no runtime API calls.
-const HOSTED_GEO={'rancho-solano':'geo/rancho-solano.json?v=3','lake-chabot':'geo/lake-chabot.json?v=1'};
+const HOSTED_GEO={'rancho-solano':'geo/rancho-solano.json?v=3','lake-chabot':'geo/lake-chabot.json?v=1','paradise-valley':'geo/paradise-valley.json?v=1'};
 // ---------- offline tile pack ----------
 // Pre-downloads the satellite tiles for every hole view into the SW's bt-tiles
 // cache, so each hole opens instantly even with no signal on the course.
