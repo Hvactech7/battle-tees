@@ -258,7 +258,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1784686572';
+const BUILD='1784690875';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -285,6 +285,13 @@ function courseParadiseValley(){return {id:'paradise-valley',name:'Paradise Vall
          {par:5,si:4},{par:4,si:10},{par:3,si:18},{par:4,si:6},{par:4,si:14},{par:3,si:16},{par:5,si:8},{par:4,si:12},{par:4,si:2}]};}
 // Hiddenbrooke (Vallejo) — Arnold Palmer & Ed Seay 1995. OSM community greens
 // (17 kept) + Nathan's hand-traced hole lines (all 18) and 17th green, July 2026.
+// Cypress Lakes (Vacaville) — Nathan's home track, fully hand-traced July 2026
+// (OSM had zero golf data): all 18 lines + green rings drawn over Esri satellite,
+// 6858y drawn vs 6855 card. GHIN course 2727, Blue-set pars/SI.
+function courseCypressLakes(){return {id:'cypress-lakes',name:'Cypress Lakes GC',loc:[38.3253,-121.9247],
+  teeSets:[{id:'cy-blu',name:'Blue',rating:73.1,slope:128},{id:'cy-wht',name:'White',rating:71.6,slope:122},{id:'cy-gold',name:'Gold',rating:68.6,slope:114},{id:'cy-red',name:'Red',rating:67.3,slope:111},{id:'cy-w-wht',name:'White (W)',rating:77.5,slope:131},{id:'cy-w-gold',name:'Gold (W)',rating:73.8,slope:123},{id:'cy-w-red',name:'Red (W)',rating:72.5,slope:122},{id:'cy-w-rds',name:'Red short-18 (W)',rating:71.8,slope:121}],
+  holes:[{par:5,si:13},{par:4,si:11},{par:3,si:17},{par:4,si:3},{par:5,si:1},{par:4,si:7},{par:4,si:9},{par:3,si:15},{par:4,si:5},
+         {par:5,si:6},{par:3,si:16},{par:4,si:14},{par:4,si:10},{par:3,si:18},{par:4,si:12},{par:4,si:2},{par:5,si:4},{par:4,si:8}]};}
 function courseHiddenbrooke(){return {id:'hiddenbrooke',name:'Hiddenbrooke GC',loc:[38.1553,-122.1786],
   teeSets:[{id:'hb-palm',name:'Palmer',rating:73.1,slope:142},{id:'hb-blu',name:'Blue',rating:70.4,slope:139},{id:'hb-wht',name:'White',rating:68.2,slope:133},{id:'hb-gold',name:'Gold',rating:66.2,slope:119},{id:'hb-red',name:'Red',rating:64.5,slope:109},{id:'hb-w-wht',name:'White (W)',rating:73.4,slope:137},{id:'hb-w-gold',name:'Gold (W)',rating:70.7,slope:130},{id:'hb-w-red',name:'Red (W)',rating:67.8,slope:121}],
   holes:[{par:4,si:9},{par:5,si:1},{par:3,si:15},{par:4,si:17},{par:5,si:5},{par:3,si:13},{par:4,si:11},{par:4,si:3},{par:4,si:7},
@@ -351,7 +358,7 @@ function courseDarkHorse(){return {id:'darkhorse',name:'DarkHorse GC',loc:[39.02
   teeSets:[{id:'dh-blk',name:'Black',rating:74.6,slope:137},{id:'dh-cop',name:'Copper',rating:73.1,slope:134},{id:'dh-blu',name:'Blue',rating:71.7,slope:130},{id:'dh-wht',name:'White',rating:69.5,slope:127},{id:'dh-rd',name:'Red',rating:64.4,slope:115},{id:'dh-w-blu',name:'Blue (W)',rating:77.4,slope:138},{id:'dh-w-wht',name:'White (W)',rating:75.0,slope:133},{id:'dh-w-rd',name:'Red (W)',rating:69.4,slope:125}],
   holes:[{par:4,si:10},{par:4,si:16},{par:3,si:8},{par:5,si:2},{par:4,si:4},{par:3,si:18},{par:5,si:6},{par:4,si:14},{par:4,si:12},
          {par:4,si:13},{par:5,si:1},{par:4,si:9},{par:3,si:11},{par:4,si:17},{par:4,si:3},{par:3,si:7},{par:4,si:5},{par:5,si:15}]};}
-function builtinCourses(){return [courseTealBend(),courseRanchoSolano(),courseDarkHorse(),courseHiddenbrooke(),courseLakeChabot(),courseParadiseValley(),courseGreenValley(),courseSilveradoNorth(),courseDavis(),courseElMacero(),courseWildhorse(),courseWildWings(),courseDiabloCreek(),courseBartleyCavanaugh(),courseYochaDehe(),courseFranklinCanyon(),courseBoundaryOak()];}
+function builtinCourses(){return [courseTealBend(),courseRanchoSolano(),courseDarkHorse(),courseCypressLakes(),courseHiddenbrooke(),courseLakeChabot(),courseParadiseValley(),courseGreenValley(),courseSilveradoNorth(),courseDavis(),courseElMacero(),courseWildhorse(),courseWildWings(),courseDiabloCreek(),courseBartleyCavanaugh(),courseYochaDehe(),courseFranklinCanyon(),courseBoundaryOak()];}
 function clone(o){return JSON.parse(JSON.stringify(o));}
 function defaultCourse(){return courseTealBend();}
 // "Paradise Valley GC" / "Paradise Valley Golf Course" / "paradise valley country club"
@@ -1888,7 +1895,7 @@ function splinePath(path){
 // Courses with professionally-mapped geodata hosted on battletees.app
 // (Golfbert-sourced: fairway-bent hole lines, greens, bunkers, water).
 // Fetched once, cached in course geo like OSM data — no runtime API calls.
-const HOSTED_GEO={'rancho-solano':'geo/rancho-solano.json?v=3','lake-chabot':'geo/lake-chabot.json?v=1','paradise-valley':'geo/paradise-valley.json?v=1','teal-bend':'geo/teal-bend.json?v=1','hiddenbrooke':'geo/hiddenbrooke.json?v=1','green-valley':'geo/green-valley.json?v=1','silverado-north':'geo/silverado-north.json?v=1','davis':'geo/davis.json?v=1','el-macero':'geo/el-macero.json?v=1','wildhorse':'geo/wildhorse.json?v=1','wild-wings':'geo/wild-wings.json?v=1','diablo-creek':'geo/diablo-creek.json?v=1','bartley-cavanaugh':'geo/bartley-cavanaugh.json?v=1','yocha-dehe':'geo/yocha-dehe.json?v=1','franklin-canyon':'geo/franklin-canyon.json?v=1','boundary-oak':'geo/boundary-oak.json?v=1'};
+const HOSTED_GEO={'rancho-solano':'geo/rancho-solano.json?v=3','lake-chabot':'geo/lake-chabot.json?v=1','paradise-valley':'geo/paradise-valley.json?v=1','teal-bend':'geo/teal-bend.json?v=1','hiddenbrooke':'geo/hiddenbrooke.json?v=1','green-valley':'geo/green-valley.json?v=1','silverado-north':'geo/silverado-north.json?v=1','davis':'geo/davis.json?v=1','el-macero':'geo/el-macero.json?v=1','wildhorse':'geo/wildhorse.json?v=1','wild-wings':'geo/wild-wings.json?v=1','diablo-creek':'geo/diablo-creek.json?v=1','bartley-cavanaugh':'geo/bartley-cavanaugh.json?v=1','yocha-dehe':'geo/yocha-dehe.json?v=1','franklin-canyon':'geo/franklin-canyon.json?v=1','boundary-oak':'geo/boundary-oak.json?v=1','cypress-lakes':'geo/cypress-lakes.json?v=1'};
 // ---------- offline tile pack ----------
 // Pre-downloads the satellite tiles for every hole view into the SW's bt-tiles
 // cache, so each hole opens instantly even with no signal on the course.
