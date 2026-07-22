@@ -258,7 +258,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1784658686';
+const BUILD='1784686572';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1787,6 +1787,34 @@ function myPlayerIdx(){
 }
 // map stepper edits MY score on the viewed hole in place — no render() (that
 // would rebuild the whole Leaflet map on every tap)
+// FW/GIR chips above Track Shot — toggle for MY player on the current map hole.
+// Same no-render pattern as mapChScore: mutate, stamp, save, push, patch DOM.
+function mapStatToggle(k){
+  if(!S.round.started)return;
+  const rec=S.round.holes[mapHole];if(!rec)return;
+  const i=myPlayerIdx();
+  const a=statArr(rec,k);
+  a[i]=a[i]?0:1;
+  stampChanges();save();syncPush();
+  const b=document.getElementById('map'+k);
+  if(b){const on=!!a[i];
+    b.style.background=on?'var(--green-lt)':'rgba(15,21,34,.82)';
+    b.style.borderColor=on?'var(--green)':'var(--line)';
+    b.style.color=on?'var(--green-mid)':'var(--ink3)';
+    b.textContent=(on?'✓ ':'')+(k==='fw'?'FW':'GIR');}
+}
+function mapStatChipsHTML(hole){
+  if(!S.round.started)return '';
+  const rec=S.round.holes[mapHole]||{};
+  const mi=myPlayerIdx();
+  const chip=(k,label)=>{
+    const on=!!(rec.stats&&rec.stats[k]&&rec.stats[k][mi]);
+    return `<button id="map${k}" onclick="mapStatToggle('${k}')" style="height:32px;padding:0 12px;border-radius:9px;font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:14px;letter-spacing:.4px;background:${on?'var(--green-lt)':'rgba(15,21,34,.82)'};border:1.5px solid ${on?'var(--green)':'var(--line)'};color:${on?'var(--green-mid)':'var(--ink3)'};box-shadow:1px 1px 0 rgba(0,0,0,.3)">${on?'✓ ':''}${label}</button>`;
+  };
+  return `<div style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(166px + env(safe-area-inset-bottom));z-index:6;display:flex;gap:6px">
+    ${hole.par>=4?chip('fw','FW'):''}${chip('gir','GIR')}
+  </div>`;
+}
 function mapChScore(d){
   if(!S.round.started)return;
   const r=S.round.holes[mapHole]; if(!r||!r.gross)return;
@@ -1816,6 +1844,7 @@ function vMap(){
   return topbar(`Hole ${mapHole+1} · Par ${hole.par}`,`Handicap ${hole.si}`,'','hero maphero',
     `<div style="display:flex;align-items:center;margin-left:auto">${myScore}${gameBadgeHTML()}</div>`)+`
   <div id="holemap"></div>
+  ${mapStatChipsHTML(hole)}
   <button id="trackbtn" onclick="trackShotTap()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(112px + env(safe-area-inset-bottom));z-index:6;width:120px;height:46px;background:var(--card);border:2px solid ${trackShot&&trackShot.hole===mapHole?'var(--amber-bd)':'var(--green)'};border-radius:12px;color:${trackShot&&trackShot.hole===mapHole?'var(--amber-bd)':'var(--green-mid)'};font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:19px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">${trackShot&&trackShot.hole===mapHole?'Mark Ball':'Track Shot'}</button>
   <button onclick="go('hole')" style="position:fixed;right:max(10px,calc(50vw - 230px));top:calc(100px + env(safe-area-inset-top));z-index:6;background:rgba(15,21,34,.82);border:1.5px solid var(--line);border-radius:10px;color:#fff;padding:8px 14px;font-size:14px;font-weight:600;font-family:inherit">Back</button>
   <button id="mapconfirm" onclick="mapConfirm()" style="display:none;position:fixed;right:max(10px,calc(50vw - 230px));bottom:calc(166px + env(safe-area-inset-bottom));z-index:6;width:126px;height:46px;background:var(--elec,#2b86ec);background:#2b86ec;border:2px solid var(--elec-dk,#1c5eb0);border-radius:12px;color:#eef6ff;font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:19px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">✓ Confirm</button>
@@ -2809,6 +2838,7 @@ function vStats(){
     const holes=((e.round&&e.round.holes)||[]).map((r,h)=>({r,h})).filter(x=>x.r&&x.r.confirmed&&x.r.gross&&x.r.gross[mi]!=null);
     if(!holes.length)return;
     rounds.push({e,mi,holes,
+      pars:holes.map(x=>parOf(x.h)),
       gross:holes.reduce((s,x)=>s+x.r.gross[mi],0),
       par:holes.reduce((s,x)=>s+parOf(x.h),0)});
   });
@@ -2845,9 +2875,33 @@ function vStats(){
       <td class="r num" style="font-size:22px">${a.length}</td>
       <td class="r num" style="font-size:22px">${Math.round(a.reduce((x,y)=>x+y,0)/a.length)}</td>
       <td class="r num" style="font-size:22px">${Math.max(...a)}</td></tr>`;}).join('');
+  // FW/GIR from the map chips — a round counts as tracked if either was set on
+  // any hole (they're tracked together); untracked rounds never count as 0%
+  const acc=(()=>{
+    const recs=rounds.map(r=>{
+      let fwHit=0,fwN=0,girHit=0,girN=0,any=false;
+      r.holes.forEach((x,xi)=>{
+        const st=x.r.stats||{};
+        const fv=st.fw?st.fw[r.mi]:0,gv=st.gir?st.gir[r.mi]:0;
+        if(fv>0||gv>0)any=true;
+        if(r.pars[xi]>=4){fwN++;if(fv>0)fwHit++;}
+        girN++;if(gv>0)girHit++;
+      });
+      return any?{fwHit,fwN,girHit,girN}:null;
+    }).filter(Boolean);
+    if(!recs.length)return '';
+    const fwN=recs.reduce((s,x)=>s+x.fwN,0),fwH=recs.reduce((s,x)=>s+x.fwHit,0);
+    const gN=recs.reduce((s,x)=>s+x.girN,0),gH=recs.reduce((s,x)=>s+x.girHit,0);
+    return `<div class="card"><h2>🎯 Accuracy</h2>
+      ${fwN?`<div class="row"><span class="muted">Fairways hit <span class="tiny">(par 4s &amp; 5s)</span></span><b class="num" style="font-size:22px">${Math.round(100*fwH/fwN)}%</b></div>`:''}
+      <div class="row"><span class="muted">Greens in regulation</span><b class="num" style="font-size:22px">${Math.round(100*gH/Math.max(1,gN))}%</b></div>
+      <div class="tiny mt">From the FW / GIR buttons on the hole map — ${recs.length} round${recs.length===1?'':'s'} tracked.</div>
+    </div>`;
+  })();
   return topbar('My stats',S.me.name?esc(S.me.name):'','home')+`<main>
   <div class="card"><h2>⛳ Scoring</h2>${scoring}
     ${rounds.length?'<div class="tiny mt">Confirmed holes from your past rounds. 9-hole rounds are normalized into the per-18 averages.</div>':''}</div>
+  ${acc}
   <div class="card"><h2>🥌 Short game &amp; extras</h2>
     ${extras||'<div class="tiny">Turn on tracking (putts, chips, bunker, penalties) in Round options — rounds where you track them feed these averages. Untracked rounds are ignored, never counted as zero.</div>'}
     ${extras?'<div class="tiny mt">Only rounds where each stat was recorded count toward its average.</div>':''}</div>
