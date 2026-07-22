@@ -258,7 +258,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1784690875';
+const BUILD='1784693216';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -2486,20 +2486,24 @@ function gameGridHTML(fn){
         <div class="tiny">Hunt with a partner — or go lone wolf</div></div>
       <img src="${art('wolf.png')}" alt="" onerror="this.style.display='none'">
     </button>
-    <button class="gamebtn nineg" onclick="${fn}('nines')">
-      <div style="flex:1;min-width:0"><span class="gname">9&rsquo;s</span>
-        <div class="tiny">Every hole splits 9 points — 5 · 3 · 1</div></div>
-      <img src="${art('nine.png')}" alt="" onerror="this.outerHTML='<span class=&quot;nine-ph&quot;>9</span>'">
-    </button>
     <button class="gamebtn vegasg" onclick="${fn}('vegas')">
       <div style="flex:1;min-width:0"><span class="gname">Vegas</span>
         <div class="tiny">2 v 2 — team digits duel, birdies flip the number</div></div>
       <img src="${art('vegas.png')}" alt="" onerror="this.outerHTML='<span class=&quot;vegas-ph&quot;>🎲</span>'">
     </button>
-    <button class="gamebtn strokeg" onclick="${fn}('stroke')">
+    <button class="gamebtn sking" onclick="${fn}('skins')">
+      <div style="flex:1;min-width:0"><span class="gname">Skins</span>
+        <div class="tiny">Win the hole outright — ties roll the pot</div></div>
+      <img src="${art('skins.png')}" alt="" style="height:92px;margin:4px 8px 4px 0;filter:drop-shadow(0 0 6px rgba(61,220,151,.5))" onerror="this.outerHTML='<span class=&quot;skin-ph&quot;>🪙</span>'">
+    </button><button class="gamebtn strokeg" onclick="${fn}('stroke')">
       <div style="flex:1;min-width:0"><span class="gname">Stroke</span>
         <div class="tiny">Classic scoring — lowest total wins</div></div>
       <img src="${art('stroke.png')}" alt="" style="height:92px;margin:4px 8px 4px 0;filter:drop-shadow(0 0 6px rgba(224,187,69,.5))" onerror="this.outerHTML='<span class=&quot;stroke-ph&quot;>⛳</span>'">
+    </button>
+    <button class="gamebtn nineg" onclick="${fn}('nines')">
+      <div style="flex:1;min-width:0"><span class="gname">9&rsquo;s</span>
+        <div class="tiny">Every hole splits 9 points — 5 · 3 · 1</div></div>
+      <img src="${art('nine.png')}" alt="" onerror="this.outerHTML='<span class=&quot;nine-ph&quot;>9</span>'">
     </button>
     <button class="gamebtn bbg" onclick="${fn}('bestball')">
       <div style="flex:1;min-width:0"><span class="gname">Best Ball</span>
@@ -2541,11 +2545,7 @@ function gameGridHTML(fn){
         <div class="tiny">The classic — front nine, back nine, overall. Press when you're down</div></div>
       <img src="${art('nassau.png')}" alt="" style="height:92px;margin:4px 8px 4px 0;filter:drop-shadow(0 0 6px rgba(70,99,217,.55))" onerror="this.outerHTML='<span class=&quot;nas-ph&quot;>🏅</span>'">
     </button>
-    <button class="gamebtn sking" onclick="${fn}('skins')">
-      <div style="flex:1;min-width:0"><span class="gname">Skins</span>
-        <div class="tiny">Win the hole outright — ties roll the pot</div></div>
-      <img src="${art('skins.png')}" alt="" style="height:92px;margin:4px 8px 4px 0;filter:drop-shadow(0 0 6px rgba(61,220,151,.5))" onerror="this.outerHTML='<span class=&quot;skin-ph&quot;>🪙</span>'">
-    </button>`;
+    `;
 }
 function showRules(g){
   S.screen='rules';save();render();
