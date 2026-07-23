@@ -258,7 +258,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1784765428';
+const BUILD='1784777435';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -346,6 +346,9 @@ function courseStonetree(){return {id:"stonetree",name:"StoneTree GC",loc:[38.10
   teeSets:[{id:"st-championship",name:"Championship",rating:73.7,slope:140},{id:"st-champ-black-",name:"Champ/Black Combo",rating:72.2,slope:139},{id:"st-black",name:"Black",rating:71.7,slope:137},{id:"st-black-blue-c",name:"Black/Blue Combo",rating:70.5,slope:132},{id:"st-blue",name:"Blue",rating:69.8,slope:127},{id:"st-blue-white-c",name:"Blue/White Combo",rating:67.6,slope:119},{id:"st-white",name:"White",rating:66.5,slope:114},{id:"st-blue-w",name:"Blue (W)",rating:75.2,slope:142}],
   holes:[{par:4,si:15},{par:4,si:11},{par:3,si:17},{par:4,si:5},{par:4,si:3},{par:5,si:9},{par:4,si:7},{par:3,si:13},{par:4,si:1},
          {par:3,si:18},{par:4,si:14},{par:5,si:8},{par:4,si:12},{par:5,si:10},{par:4,si:2},{par:5,si:6},{par:3,si:16},{par:4,si:4}]};}
+function courseStoneTree(){return {id:"stonetree",name:"StoneTree GC",loc:[38.1216,-122.5108],
+  teeSets:[{id:'st-bluew',name:'Blue (W)',rating:75.2,slope:142.0},{id:'st-whitew',name:'White (W)',rating:70.9,slope:125.0},{id:'st-black',name:'Black',rating:71.7,slope:137.0},{id:'st-champi',name:'Championship',rating:73.7,slope:140.0},{id:'st-blue',name:'Blue',rating:69.8,slope:127.0},{id:'st-white',name:'White',rating:66.5,slope:114.0},{id:'st-champ/',name:'Champ/Black Combo',rating:72.2,slope:139.0},{id:'st-black/',name:'Black/Blue Combo',rating:70.5,slope:132.0},{id:'st-blue/w',name:'Blue/White Combo',rating:67.6,slope:119.0},{id:'st-blue/w',name:'Blue/White Combo (W)',rating:72.3,slope:131.0}],
+  holes:[{par:4,si:15},{par:4,si:11},{par:3,si:17},{par:4,si:5},{par:4,si:3},{par:5,si:9},{par:4,si:7},{par:3,si:13},{par:4,si:1},{par:3,si:18},{par:4,si:14},{par:5,si:8},{par:4,si:12},{par:5,si:10},{par:4,si:2},{par:5,si:6},{par:3,si:16},{par:4,si:4}]};}
 function courseTildenPark(){return {id:"tilden-park",name:"Tilden Park GC",loc:[37.8894,-122.242],
   teeSets:[{id:"tp-blue",name:"Blue",rating:71.2,slope:125},{id:"tp-white",name:"White",rating:69,slope:122},{id:"tp-red",name:"Red",rating:67.3,slope:116},{id:"tp-yellow",name:"Yellow",rating:57.1,slope:91},{id:"tp-blue-w",name:"BLUE (W)",rating:76.2,slope:134},{id:"tp-white-w",name:"WHITE (W)",rating:73.5,slope:129},{id:"tp-red-w",name:"RED (W)",rating:71.5,slope:125},{id:"tp-yellow-w",name:"Yellow (W)",rating:59.3,slope:94}],
   holes:[{par:4,si:1},{par:4,si:7},{par:4,si:3},{par:3,si:11},{par:4,si:9},{par:4,si:17},{par:3,si:5},{par:5,si:13},{par:4,si:15},
@@ -358,7 +361,7 @@ function courseDarkHorse(){return {id:'darkhorse',name:'DarkHorse GC',loc:[39.02
   teeSets:[{id:'dh-blk',name:'Black',rating:74.6,slope:137},{id:'dh-cop',name:'Copper',rating:73.1,slope:134},{id:'dh-blu',name:'Blue',rating:71.7,slope:130},{id:'dh-wht',name:'White',rating:69.5,slope:127},{id:'dh-rd',name:'Red',rating:64.4,slope:115},{id:'dh-w-blu',name:'Blue (W)',rating:77.4,slope:138},{id:'dh-w-wht',name:'White (W)',rating:75.0,slope:133},{id:'dh-w-rd',name:'Red (W)',rating:69.4,slope:125}],
   holes:[{par:4,si:10},{par:4,si:16},{par:3,si:8},{par:5,si:2},{par:4,si:4},{par:3,si:18},{par:5,si:6},{par:4,si:14},{par:4,si:12},
          {par:4,si:13},{par:5,si:1},{par:4,si:9},{par:3,si:11},{par:4,si:17},{par:4,si:3},{par:3,si:7},{par:4,si:5},{par:5,si:15}]};}
-function builtinCourses(){return [courseTealBend(),courseRanchoSolano(),courseDarkHorse(),courseCypressLakes(),courseHiddenbrooke(),courseLakeChabot(),courseParadiseValley(),courseGreenValley(),courseSilveradoNorth(),courseDavis(),courseElMacero(),courseWildhorse(),courseWildWings(),courseDiabloCreek(),courseBartleyCavanaugh(),courseYochaDehe(),courseFranklinCanyon(),courseBoundaryOak()];}
+function builtinCourses(){return [courseTealBend(),courseRanchoSolano(),courseDarkHorse(),courseCypressLakes(),courseHiddenbrooke(),courseLakeChabot(),courseParadiseValley(),courseGreenValley(),courseSilveradoNorth(),courseDavis(),courseElMacero(),courseWildhorse(),courseWildWings(),courseDiabloCreek(),courseBartleyCavanaugh(),courseYochaDehe(),courseFranklinCanyon(),courseBoundaryOak(),courseStoneTree(),courseTildenPark(),courseValleyHi()];}
 function clone(o){return JSON.parse(JSON.stringify(o));}
 function defaultCourse(){return courseTealBend();}
 // "Paradise Valley GC" / "Paradise Valley Golf Course" / "paradise valley country club"
@@ -1919,7 +1922,7 @@ function splinePath(path){
 // Courses with professionally-mapped geodata hosted on battletees.app
 // (Golfbert-sourced: fairway-bent hole lines, greens, bunkers, water).
 // Fetched once, cached in course geo like OSM data — no runtime API calls.
-const HOSTED_GEO={'rancho-solano':'geo/rancho-solano.json?v=3','lake-chabot':'geo/lake-chabot.json?v=1','paradise-valley':'geo/paradise-valley.json?v=1','teal-bend':'geo/teal-bend.json?v=1','hiddenbrooke':'geo/hiddenbrooke.json?v=1','green-valley':'geo/green-valley.json?v=1','silverado-north':'geo/silverado-north.json?v=1','davis':'geo/davis.json?v=1','el-macero':'geo/el-macero.json?v=1','wildhorse':'geo/wildhorse.json?v=1','wild-wings':'geo/wild-wings.json?v=1','diablo-creek':'geo/diablo-creek.json?v=1','bartley-cavanaugh':'geo/bartley-cavanaugh.json?v=1','yocha-dehe':'geo/yocha-dehe.json?v=1','franklin-canyon':'geo/franklin-canyon.json?v=1','boundary-oak':'geo/boundary-oak.json?v=1','cypress-lakes':'geo/cypress-lakes.json?v=1'};
+const HOSTED_GEO={'rancho-solano':'geo/rancho-solano.json?v=3','lake-chabot':'geo/lake-chabot.json?v=1','paradise-valley':'geo/paradise-valley.json?v=1','teal-bend':'geo/teal-bend.json?v=1','hiddenbrooke':'geo/hiddenbrooke.json?v=1','green-valley':'geo/green-valley.json?v=1','silverado-north':'geo/silverado-north.json?v=1','davis':'geo/davis.json?v=1','el-macero':'geo/el-macero.json?v=1','wildhorse':'geo/wildhorse.json?v=1','wild-wings':'geo/wild-wings.json?v=1','diablo-creek':'geo/diablo-creek.json?v=1','bartley-cavanaugh':'geo/bartley-cavanaugh.json?v=1','yocha-dehe':'geo/yocha-dehe.json?v=1','franklin-canyon':'geo/franklin-canyon.json?v=1','boundary-oak':'geo/boundary-oak.json?v=1','cypress-lakes':'geo/cypress-lakes.json?v=1','stonetree':'geo/stonetree.json?v=2','tilden-park':'geo/tilden-park.json?v=2','valley-hi':'geo/valley-hi.json?v=2'};
 // ---------- offline tile pack ----------
 // Pre-downloads the satellite tiles for every hole view into the SW's bt-tiles
 // cache, so each hole opens instantly even with no signal on the course.
