@@ -258,7 +258,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1784867549';
+const BUILD='1784868304';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -2129,7 +2129,7 @@ function initGoogleHoleMap(el,geo,geoErr){
         GMAP.moveCamera({center,zoom,heading,tilt:0});
       }
     }catch(e){}
-    mapMarks={greenC,greenPoly,ref:geo.path[0],mePos:null};
+    mapMarks={greenC,greenPoly,ref:geo.path[0],mePos:null,aimC:null};
     updateFMB(geo.path[0],'yards from the tee');
   }else{
     GMAP.setCenter(P(myCoords||[38.6972,-121.6173]));GMAP.setZoom(16);
@@ -2279,8 +2279,39 @@ async function initHoleMap(){
       greenPoly=geo.green;greenC=centroidOf(geo.green);
     }else greenC=pathEnd;
     // no tee dot — the GPS dot is the start of every line (tee position still anchors the yardage label below)
-    var lGreen=L.circleMarker(greenC,{radius:6,color:'#fff',weight:2,fillColor:'#ffd75e',fillOpacity:1}).addTo(LMAP);
-    lGreen.bindTooltip(yd(mDist(geo.path[0],greenC))+'y',{permanent:true,direction:'top',offset:[0,-8],className:'maplbl'});
+    // the gold dot is a DRAGGABLE aim point: hold + drag to measure anywhere,
+    // tap it afterwards to snap back to the green center (aimC rides separately
+    // from greenC so F/M/B always speaks for the real green)
+    var lGreen=L.marker(greenC,{draggable:true,icon:L.divIcon({className:'',
+      html:'<div class="aimdot" style="width:15px;height:15px;border-radius:50%;background:#ffd75e;border:2.5px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.65)"></div>',
+      iconSize:[15,15],iconAnchor:[8,8]})}).addTo(LMAP);
+    lGreen.bindTooltip(yd(mDist(geo.path[0],greenC))+'y',{permanent:true,direction:'top',offset:[0,-10],className:'maplbl'});
+    const aimHome=greenC.slice();
+    let aimJustDragged=false;
+    const aimPaint=()=>{
+      const d2=lGreen.getElement()&&lGreen.getElement().querySelector('.aimdot');
+      if(d2)d2.style.background=mapMarks.aimC?'#ff8a3d':'#ffd75e';
+    };
+    lGreen.on('drag',()=>{
+      const p=lGreen.getLatLng();
+      mapMarks.aimC=[p.lat,p.lng];
+      if(typeof refreshTapLine==='function')refreshTapLine();
+    });
+    lGreen.on('dragend',()=>{
+      const p=lGreen.getLatLng();
+      mapMarks.aimC=mDist([p.lat,p.lng],aimHome)>4?[p.lat,p.lng]:null;
+      if(!mapMarks.aimC)lGreen.setLatLng(aimHome);
+      aimJustDragged=true;setTimeout(()=>{aimJustDragged=false;},300);
+      aimPaint();refreshTapLine();
+    });
+    lGreen.on('click',()=>{
+      if(aimJustDragged)return;
+      if(mapMarks.aimC){
+        mapMarks.aimC=null;
+        lGreen.setLatLng(aimHome);
+        aimPaint();refreshTapLine();
+      }
+    });
     LMAP.fitBounds(L.latLngBounds(geo.path.concat(greenPoly||[])),{padding:[36,36]});
     // Green-up: rotate so the tee sits at the bottom, green at the top, and set
     // the camera so the whole hole fills the screen.
@@ -2303,7 +2334,7 @@ async function initHoleMap(){
       LMAP.setBearing(-bearing);
       LMAP.setView(center,zoom,{animate:false});
     }catch(e){}}
-    mapMarks={greenC,greenPoly,ref:geo.path[0],mePos:null};
+    mapMarks={greenC,greenPoly,ref:geo.path[0],mePos:null,aimC:null};
     updateFMB(geo.path[0],'yards from the tee');
   }else{
     const c=myCoords||[38.6972,-121.6173];
@@ -2317,8 +2348,8 @@ async function initHoleMap(){
   const dropTapLine=()=>{
     [lTapLine,lTapCase].forEach(o=>{if(o)LMAP.removeLayer(o);});
     lTapLine=lTapCase=null;
-    if(mapMarks.greenC&&typeof lGreen!=='undefined'&&lGreen&&mapMarks.ref)
-      lGreen.setTooltipContent(yd(mDist(mapMarks.ref,mapMarks.greenC))+'y');
+    if((mapMarks.aimC||mapMarks.greenC)&&typeof lGreen!=='undefined'&&lGreen&&mapMarks.ref)
+      lGreen.setTooltipContent(yd(mDist(mapMarks.ref,mapMarks.aimC||mapMarks.greenC))+'y'+(mapMarks.aimC?' 🎯':''));
   };
   // the line is live whenever GPS has a fix (me → green) — taps just add waypoints
   const refreshTapLine=()=>{
@@ -2327,7 +2358,8 @@ async function initHoleMap(){
     // keep spots ordered along the hole so the line never zigzags backward
     if(lTaps.length>1)lTaps.sort((a,b)=>mDist(from,tapLL(a))-mDist(from,tapLL(b)));
     const ts=lTaps.map(tapLL);
-    const pts=[from,...ts,mapMarks.greenC].filter(Boolean);
+    const endC=mapMarks.aimC||mapMarks.greenC;
+    const pts=[from,...ts,endC].filter(Boolean);
     if(pts.length<2){dropTapLine();return;}
     if(lTapLine){lTapLine.setLatLngs(pts);lTapCase.setLatLngs(pts);}
     else{
@@ -2338,7 +2370,7 @@ async function initHoleMap(){
     // each dot prices its arriving leg
     let prev=from;
     lTaps.forEach((m,i)=>{m.setTooltipContent(yd(mDist(prev,ts[i]))+'y');prev=ts[i];});
-    if(mapMarks.greenC&&typeof lGreen!=='undefined'&&lGreen)lGreen.setTooltipContent(yd(mDist(prev,mapMarks.greenC))+'y');
+    if(endC&&typeof lGreen!=='undefined'&&lGreen)lGreen.setTooltipContent(yd(mDist(prev,endC))+'y'+(mapMarks.aimC?' 🎯':''));
   };
   const clearTap=m=>{
     if(m){LMAP.removeLayer(m);lTaps=lTaps.filter(x=>x!==m);}
