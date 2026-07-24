@@ -258,7 +258,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1784851425';
+const BUILD='1784852229';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1793,6 +1793,7 @@ function hideMapConfirm(){const b=document.getElementById('mapconfirm');if(b)b.s
 function mapConfirm(){
   const h=mapHole;
   let closed=false;
+  if(greensIsMode())greensConsumeTarget();
   set(()=>{
     const rec=S.round.holes[h];if(!rec)return;
     const mi=myPlayerIdx(),par=(S.course.holes[h]||{par:4}).par;
@@ -1985,6 +1986,11 @@ async function ensureCourseGeo(){
       const r=await fetch(hostedUrl);
       if(r.ok){
         const js=await r.json();
+        if(js&&js.greens&&js.greens.length){
+          set(()=>{S.course.geo={ts:Date.now(),holes:{},greens:js.greens};});
+          preloadCourseTiles(false);
+          return;
+        }
         if(js&&js.holes&&Object.keys(js.holes).length){
           // 9 physical holes under an 18-hole twice-around card (GHIN serves
           // many true nines that way) — flag so physHole() maps 10-18 onto 1-9
@@ -2050,6 +2056,16 @@ function startMapGps(){
   mapWatch=navigator.geolocation.watchPosition(p=>{
     const pos=[p.coords.latitude,p.coords.longitude];
     cacheCoords(pos);
+    if(greensIsMode()){
+      // greens mode: no per-hole frame to guard against — 1400m from the
+      // NEAREST green means browsing from home, keep yardage-book silence
+      const pts=greensPts();
+      const nearest=Math.min(...pts.map(g=>mDist(pos,g)));
+      if(nearest>1400){if(mapMarks.mePos){mapMarks.mePos=null;if(mapMarks.setMe)mapMarks.setMe(null);}return;}
+      mapMarks.mePos=pos;
+      if(mapMarks.setMe)mapMarks.setMe(pos);
+      return;
+    }
     // sanity guard: if you're nowhere near this hole (browsing from home),
     // ignore GPS — measure from the tee like a yardage book instead
     const near=mapMarks.greenC||mapMarks.ref;
@@ -2140,6 +2156,81 @@ function initGoogleHoleMap(el,geo,geoErr){
   startMapGps();
 }
 
+// ---- greens-only rangefinder mode (Nathan's spec): round-aware nearest
+// UNPLAYED green, sticky target, tap-to-override. Played greens gray out;
+// score-confirm consumes the target. ----
+let greensState=null;
+function greensIsMode(){return !!(S.course.geo&&S.course.geo.greens&&S.course.geo.greens.length&&!(S.course.geo.holes&&Object.keys(S.course.geo.holes).length));}
+function greensLoad(){
+  try{const v=JSON.parse(localStorage.getItem('btGreensUsed')||'null');
+    if(v&&v.courseId===S.course.id)return v;}catch(e){}
+  return {courseId:S.course.id,used:[],target:null};
+}
+function greensSave(){try{localStorage.setItem('btGreensUsed',JSON.stringify(greensState));}catch(e){}}
+function greensPts(){return (S.course.geo&&S.course.geo.greens)||[];}
+function greensPickTarget(fromPos){
+  const st=greensState;if(!st)return;
+  if(st.target!=null&&!st.used.includes(st.target))return;   // sticky
+  let best=null,bd=1e12;
+  greensPts().forEach((g,i)=>{if(st.used.includes(i))return;const d=mDist(fromPos,g);if(d<bd){bd=d;best=i;}});
+  st.target=best;greensSave();
+}
+function greensConsumeTarget(){
+  const st=greensState;if(!st||st.target==null)return;
+  if(!st.used.includes(st.target))st.used.push(st.target);
+  st.target=null;greensSave();
+  if(window.greensRepaint)greensRepaint();
+}
+function greensSetTarget(i){
+  const st=greensState;if(!st)return;
+  st.used=st.used.filter(x=>x!==i);   // tapping a grayed green revives it
+  st.target=i;greensSave();
+  if(window.greensRepaint)greensRepaint();
+}
+function initGreensMap(el){
+  greensState=greensLoad();
+  const pts=greensPts();
+  LMAP=L.map(el,{zoomControl:false});
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    {maxZoom:20,maxNativeZoom:19,attribution:'Esri, Maxar | Course data © OpenStreetMap contributors'}).addTo(LMAP);
+  LMAP.fitBounds(L.latLngBounds(pts).pad(0.12));
+  const dots={};let meDot=null;
+  const paint=()=>{
+    const st=greensState;
+    pts.forEach((g,i)=>{
+      const tgt=st.target===i,used=st.used.includes(i);
+      const sty=tgt?{radius:11,color:'#f1c40f',weight:3,fillColor:'#f1c40f',fillOpacity:.35}
+        :used?{radius:6,color:'#5a6478',weight:1.5,fillColor:'#5a6478',fillOpacity:.25}
+        :{radius:8,color:'#2ecc71',weight:2,fillColor:'#2ecc71',fillOpacity:.3};
+      if(dots[i]){dots[i].setStyle(sty);dots[i].setRadius(sty.radius);}
+      else dots[i]=L.circleMarker(g,sty).addTo(LMAP).on('click',()=>greensSetTarget(i));
+    });
+  };
+  const onCourse=p=>p&&pts.some(g=>mDist(p,g)<1400);
+  const updateDist=()=>{
+    const st=greensState;
+    const elF=document.getElementById('fmb'),sub=document.getElementById('fmbsub');
+    let from=mapMarks.mePos;
+    if(!from&&onCourse(myCoords))from=myCoords;
+    if(st.target==null&&from)greensPickTarget(from);
+    paint();
+    if(!elF)return;
+    if(st.target!=null&&from){
+      elF.textContent=Math.round(mDist(from,pts[st.target])*1.09361)+'y';
+      if(sub)sub.textContent=`to the green · tap a dot to switch · ${pts.length-st.used.length} of ${pts.length} left`;
+    }else if(st.target!=null){elF.textContent='—';if(sub)sub.textContent='waiting for GPS · tap a green to range';}
+    else if(st.used.length>=pts.length){elF.textContent='🏁';if(sub)sub.textContent='every green played — tap one to range again';}
+    else{elF.textContent='—';if(sub)sub.textContent='waiting for GPS · tap a green to range';}
+  };
+  window.greensRepaint=()=>{paint();updateDist();};
+  mapMarks={greenC:null,greenPoly:null,ref:pts[0],mePos:null,setMe:(pos)=>{
+    mapMarks.mePos=pos;
+    if(pos){if(!meDot)meDot=L.circleMarker(pos,{radius:7,color:'#2b86ec',weight:2,fillColor:'#fff',fillOpacity:.9}).addTo(LMAP);else meDot.setLatLng(pos);}
+    else if(meDot){try{LMAP.removeLayer(meDot);}catch(e){}meDot=null;}
+    updateDist();
+  }};
+  paint();updateDist();startMapGps();
+}
 async function initHoleMap(){
   const el=document.getElementById('holemap');
   if(!el)return;
@@ -2169,6 +2260,7 @@ async function initHoleMap(){
     }
     const s2=sub();if(s2)s2.textContent='Map needs an internet connection — try again with signal.';return;
   }
+  if(greensIsMode()){initGreensMap(el);return;}
   const canRotate=!!L.Map.prototype.setBearing;
   LMAP=L.map(el,canRotate?{zoomControl:false,rotate:true,rotateControl:false,touchRotate:false,zoomSnap:0}:{zoomControl:false});
   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
@@ -4105,6 +4197,8 @@ function pairGroups(){
 }
 function startRound(){
   pickingCourse=false;
+  try{localStorage.removeItem('btGreensUsed');}catch(e){}
+  greensState=null;
   const withNearby=S.players.some(p=>p.nearby);
   stView=null;
   saveGroupFromRoster();  // a named group is remembered for next time
@@ -4385,7 +4479,7 @@ function advanceToNext(){
         mins:S.round.startedAt?Math.round((Date.now()-S.round.startedAt)/60000):null});}
   }else{S.round.cur=next;if(gameOn()!=='wolf')prefillNines(next);}
 }
-function confirmHole(){const h=S.round.cur;set(()=>{S.round.holes[h].confirmed=true;if(!isReview())advanceToNext();});showSplash(h);}
+function confirmHole(){const h=S.round.cur;if(greensIsMode())greensConsumeTarget();set(()=>{S.round.holes[h].confirmed=true;if(!isReview())advanceToNext();});showSplash(h);}
 // ----- shared rounds: each phone confirms its own rows, then moves on -----
 function myRows(){
   return actIdx().filter(i=>{const p=S.players[i];const dev=p&&(p.ownerDev||p.scorer);return !dev||dev===devId();});
