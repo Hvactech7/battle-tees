@@ -258,7 +258,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1784869950';
+const BUILD='1784870900';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1923,7 +1923,7 @@ function splinePath(path){
 // Courses with professionally-mapped geodata hosted on battletees.app
 // (Golfbert-sourced: fairway-bent hole lines, greens, bunkers, water).
 // Fetched once, cached in course geo like OSM data — no runtime API calls.
-const HOSTED_GEO={'rancho-solano':'geo/rancho-solano.json?v=3','lake-chabot':'geo/lake-chabot.json?v=1','paradise-valley':'geo/paradise-valley.json?v=1','teal-bend':'geo/teal-bend.json?v=1','hiddenbrooke':'geo/hiddenbrooke.json?v=1','green-valley':'geo/green-valley.json?v=1','silverado-north':'geo/silverado-north.json?v=1','davis':'geo/davis.json?v=1','el-macero':'geo/el-macero.json?v=1','wildhorse':'geo/wildhorse.json?v=1','wild-wings':'geo/wild-wings.json?v=1','diablo-creek':'geo/diablo-creek.json?v=1','bartley-cavanaugh':'geo/bartley-cavanaugh.json?v=1','yocha-dehe':'geo/yocha-dehe.json?v=1','franklin-canyon':'geo/franklin-canyon.json?v=1','boundary-oak':'geo/boundary-oak.json?v=1','cypress-lakes':'geo/cypress-lakes.json?v=1','stonetree':'geo/stonetree.json?v=2','tilden-park':'geo/tilden-park.json?v=2','valley-hi':'geo/valley-hi.json?v=2'};
+const HOSTED_GEO={'rancho-solano':'geo/rancho-solano.json?v=4','lake-chabot':'geo/lake-chabot.json?v=1','paradise-valley':'geo/paradise-valley.json?v=1','teal-bend':'geo/teal-bend.json?v=1','hiddenbrooke':'geo/hiddenbrooke.json?v=1','green-valley':'geo/green-valley.json?v=1','silverado-north':'geo/silverado-north.json?v=1','davis':'geo/davis.json?v=1','el-macero':'geo/el-macero.json?v=1','wildhorse':'geo/wildhorse.json?v=1','wild-wings':'geo/wild-wings.json?v=1','diablo-creek':'geo/diablo-creek.json?v=1','bartley-cavanaugh':'geo/bartley-cavanaugh.json?v=1','yocha-dehe':'geo/yocha-dehe.json?v=1','franklin-canyon':'geo/franklin-canyon.json?v=1','boundary-oak':'geo/boundary-oak.json?v=1','cypress-lakes':'geo/cypress-lakes.json?v=1','stonetree':'geo/stonetree.json?v=2','tilden-park':'geo/tilden-park.json?v=2','valley-hi':'geo/valley-hi.json?v=2'};
 // ---------- offline tile pack ----------
 // Pre-downloads the satellite tiles for every hole view into the SW's bt-tiles
 // cache, so each hole opens instantly even with no signal on the course.
