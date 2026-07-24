@@ -258,7 +258,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1784935476';
+const BUILD='1784936107';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -2692,9 +2692,13 @@ function render(){
   const keepScroll={};
   document.querySelectorAll('[data-keepscroll]').forEach(e2=>{if(e2.id)keepScroll[e2.id]=e2.scrollTop;});
   const pageY=window.scrollY;
+  const sameScreen=window.__lastScr===scr;
+  window.__lastScr=scr;
   el.innerHTML=html+holeSplash();
-  Object.entries(keepScroll).forEach(([id,top])=>{const e2=document.getElementById(id);if(e2)e2.scrollTop=top;});
-  if(pageY)window.scrollTo(0,pageY);
+  if(sameScreen){
+    Object.entries(keepScroll).forEach(([id,top])=>{const e2=document.getElementById(id);if(e2)e2.scrollTop=top;});
+    if(pageY)window.scrollTo(0,pageY);
+  }else window.scrollTo(0,0);
   if(scr==='map')requestAnimationFrame(initHoleMap);
   else teardownMap();
 }
@@ -3050,7 +3054,7 @@ function vPickCourse(){
     ${courseListHTML(true)}
     ${courseFinderHTML(true)}
   </div>
-  <div style="height:86px"></div>
+  <div style="height:8px"></div>
   <div style="position:fixed;left:0;right:0;bottom:0;z-index:20;padding:10px 14px calc(12px + env(safe-area-inset-bottom));background:linear-gradient(to top,var(--bg) 65%,transparent)">
     <button class="big" style="margin:0;width:100%" onclick="startRound()">Start Round — ${esc(S.course.name)}</button>
   </div>
@@ -3386,7 +3390,7 @@ function courseListHTML(forPick){
       <span class="tiny" style="font-weight:700;letter-spacing:.08em;color:var(--ink2)">ALL COURSES A–Z</span>
       <div style="flex:1;height:2px;background:var(--line);border-radius:1px"></div>
     </div>
-    <div id="azlist" data-keepscroll style="max-height:295px;overflow-y:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line);border-radius:12px;padding:0 10px">${rest.map(x=>courseRowHTML(x,forPick)).join('')}</div>`:''}`;
+    <div id="azlist" data-keepscroll style="max-height:${forPick?'max(120px,calc(100dvh - 648px))':'295px'};overflow-y:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line);border-radius:12px;padding:0 10px">${rest.map(x=>courseRowHTML(x,forPick)).join('')}</div>`:''}`;
 }
 function vCourses(){
   return topbar('Courses','','home')+`<main>
