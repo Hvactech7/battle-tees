@@ -258,7 +258,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1784777435';
+const BUILD='1784851425';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1979,7 +1979,7 @@ function updateTileBtn(){
     :tilePackFresh()?'✓ Offline maps ready — tap to refresh':'⬇ Download offline hole maps';
 }
 async function ensureCourseGeo(){
-  const hostedUrl=HOSTED_GEO[S.course.id];
+  const hostedUrl=S.course.geoUrl||HOSTED_GEO[S.course.id];
   if(hostedUrl){
     try{
       const r=await fetch(hostedUrl);
@@ -2172,7 +2172,7 @@ async function initHoleMap(){
   const canRotate=!!L.Map.prototype.setBearing;
   LMAP=L.map(el,canRotate?{zoomControl:false,rotate:true,rotateControl:false,touchRotate:false,zoomSnap:0}:{zoomControl:false});
   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    {maxZoom:20,maxNativeZoom:19,attribution:'Esri, Maxar, Earthstar Geographics'}).addTo(LMAP);
+    {maxZoom:20,maxNativeZoom:19,attribution:'Esri, Maxar | Course data © OpenStreetMap contributors'}).addTo(LMAP);
   let greenC=null,greenPoly=null;
   if(geo&&geo.path&&geo.path.length>1){
     // hole line: spline-smoothed through the waypoints, white dashes over a
@@ -3068,11 +3068,64 @@ function backupBlockHTML(){
         <button class="ghost" onclick="openBackup()">☁ Back up</button>
         <button class="ghost" onclick="openRestore()">Restore</button></div>`}`;
 }
+async function natBrowse(){
+  finder={status:'nat',natList:[],natMsg:'Loading course index…'};render();
+  grabCoords();
+  try{
+    if(!window.__natIdx){
+      const r=await fetch('courses-index.json');
+      if(!r.ok)throw new Error('index '+r.status);
+      window.__natIdx=await r.json();
+    }
+    finder.natMsg=null;natFilter('');
+  }catch(e){finder={status:'error',error:'Could not load the course index — check your signal.'};}
+  render();
+}
+function natFilter(q){
+  const idx=window.__natIdx||[];
+  q=(q||'').trim().toLowerCase();
+  let list=q?idx.filter(c=>c[1].toLowerCase().includes(q)||(c[2]||'').toLowerCase()===q):idx.slice();
+  if(myCoords){
+    list.forEach(c=>{c._mi=kmBetween(myCoords[0],myCoords[1],c[3],c[4])*0.621371;});
+    list.sort((a,b)=>a._mi-b._mi);
+  }else list.sort((a,b)=>a[1].localeCompare(b[1]));
+  finder.natList=list.slice(0,25);
+  if(document.getElementById('natQ'))render();
+}
+async function natUse(id){
+  finder={status:'fetching'};render();
+  try{
+    const r=await fetch('courses/'+id+'.json');
+    if(!r.ok)throw new Error('record '+r.status);
+    const rec=await r.json();
+    const course={id:rec.id,name:rec.name,loc:rec.loc,
+      teeSets:(rec.teeSets||[]).filter(t=>t.rating&&t.slope).map(t=>({id:t.id,name:t.name,rating:t.rating,slope:t.slope})),
+      holes:rec.holes,geoUrl:rec.geoUrl||null,tier:rec.tier};
+    if(!course.teeSets.length)course.teeSets=[{id:'na-def',name:'White',rating:70,slope:120}];
+    normalizeNine(course);
+    set(()=>{
+      const i=S.courses.findIndex(c=>c.id===course.id);
+      if(i>=0)S.courses[i]=clone(course);else S.courses.push(clone(course));
+      S.course=clone(course);
+    });
+    finder={status:'idle',choices:[],error:''};
+    ensureCourseGeo();
+    render();
+  }catch(e){finder={status:'error',error:'Could not load that course — check your signal.'};render();}
+}
 function courseFinderHTML(noBlank){
   return `    ${finder.status==='idle'?`<div class="mt" style="display:flex;gap:6px;flex-wrap:wrap">
       <button class="ghost" onclick="addCourse()">📍 Find nearest</button>
       <button class="ghost" onclick="openCourseSearch()">🔎 Search by name</button>
+      <button class="ghost" onclick="natBrowse()">🇺🇸 All courses</button>
       ${noBlank?'':`<button class="ghost" onclick="addBlankCourse()">Add blank</button>`}</div>`:''}
+    ${finder.status==='nat'?`<div class="mt">
+      <input type="text" id="natQ" placeholder="Filter — name or state" oninput="natFilter(this.value)">
+      <div class="tiny mt mb">${finder.natMsg||`${(window.__natIdx||[]).length} US courses — nearest first. ⛳ = GPS hole maps.`}</div>
+      ${(finder.natList||[]).map((c,j)=>`<div class="row"><div style="flex:1;min-width:0"><b>${c[5]==='gps'?'⛳ ':''}${esc(c[1])}</b>
+        <div class="tiny">${esc((c[2]||'').toUpperCase())} · par ${c[6]}${c[7]?' · 9-hole':''}${c._mi!=null?` · ${c._mi<10?c._mi.toFixed(1):Math.round(c._mi)} mi`:''}</div></div>
+        <button class="ghost sel" onclick="natUse('${c[0]}')" style="flex:none">Use</button></div>`).join('')}
+      <button class="ghost mt" onclick="cancelFind()">Cancel</button></div>`:''}
     ${finder.status==='search'?`<div class="mt">
       <input type="text" id="courseQ" placeholder="Course name — e.g. Pebble Beach" onkeydown="if(event.key==='Enter')runCourseSearch()">
       <div class="mt" style="display:flex;gap:6px">
