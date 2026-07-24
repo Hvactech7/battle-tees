@@ -258,7 +258,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1784933805';
+const BUILD='1784934799';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1747,7 +1747,7 @@ function drawTrackPin(){
 function updateTrackBtn(){
   const b=document.getElementById('trackbtn');if(!b)return;
   const armed=trackShot&&trackShot.hole===mapHole;
-  b.textContent=armed?'Mark Ball':'Track Shot';
+  b.textContent=armed?'Mark It':'Track It';
   let x=document.getElementById('trackxbtn');
   if(armed&&!x){
     b.insertAdjacentHTML('afterend','<button id="trackxbtn" onclick="clearTrackStart()" style="position:fixed;left:max(138px,calc(50vw - 102px));bottom:calc(112px + env(safe-area-inset-bottom));z-index:6;width:46px;height:46px;background:var(--card);border:2px solid var(--red,#c0392b);border-radius:12px;color:var(--red,#c0392b);font-size:22px;font-weight:800;box-shadow:2px 2px 0 rgba(0,0,0,.35)">✕</button>');
@@ -1905,7 +1905,7 @@ function vMap(){
     `<div style="display:flex;align-items:center;margin-left:auto">${myScore}${gameBadgeHTML()}</div>`)+`
   <div id="holemap"></div>
   ${mapStatChipsHTML(hole)}
-  <button id="trackbtn" onclick="trackShotTap()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(112px + env(safe-area-inset-bottom));z-index:6;width:120px;height:46px;background:var(--card);border:2px solid ${trackShot&&trackShot.hole===mapHole?'var(--amber-bd)':'var(--green)'};border-radius:12px;color:${trackShot&&trackShot.hole===mapHole?'var(--amber-bd)':'var(--green-mid)'};font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:19px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">${trackShot&&trackShot.hole===mapHole?'Mark Ball':'Track Shot'}</button>
+  <button id="trackbtn" onclick="trackShotTap()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(112px + env(safe-area-inset-bottom));z-index:6;width:120px;height:46px;background:var(--card);border:2px solid ${trackShot&&trackShot.hole===mapHole?'var(--amber-bd)':'var(--green)'};border-radius:12px;color:${trackShot&&trackShot.hole===mapHole?'var(--amber-bd)':'var(--green-mid)'};font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:19px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">${trackShot&&trackShot.hole===mapHole?'Mark It':'Track It'}</button>
   ${trackShot&&trackShot.hole===mapHole?`<button id="trackxbtn" onclick="clearTrackStart()" style="position:fixed;left:max(138px,calc(50vw - 102px));bottom:calc(112px + env(safe-area-inset-bottom));z-index:6;width:46px;height:46px;background:var(--card);border:2px solid var(--red,#c0392b);border-radius:12px;color:var(--red,#c0392b);font-size:22px;font-weight:800;box-shadow:2px 2px 0 rgba(0,0,0,.35)">✕</button>`:''}
   <button onclick="go('hole')" style="position:fixed;right:max(10px,calc(50vw - 230px));top:calc(100px + env(safe-area-inset-top));z-index:6;background:rgba(15,21,34,.82);border:1.5px solid var(--line);border-radius:10px;color:#fff;padding:8px 14px;font-size:14px;font-weight:600;font-family:inherit">Back</button>
   <button id="mapconfirm" onclick="mapConfirm()" style="display:none;position:fixed;right:max(10px,calc(50vw - 230px));bottom:calc(166px + env(safe-area-inset-bottom));z-index:6;width:126px;height:46px;background:var(--elec,#2b86ec);background:#2b86ec;border:2px solid var(--elec-dk,#1c5eb0);border-radius:12px;color:#eef6ff;font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:19px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">✓ Confirm</button>
@@ -3151,8 +3151,8 @@ function vStats(){
     ${extras?'<div class="tiny mt">Only rounds where each stat was recorded count toward its average.</div>':''}</div>
   <div class="card"><h2>🏌️ Club distances</h2>
     ${clubRows?`<table class="st"><tr><th>Club</th><th class="r">Shots</th><th class="r">Avg</th><th class="r">Longest</th></tr>${clubRows}</table>
-    <div class="tiny mt">From Track Shot on the map — GPS-measured, tagged by club.</div>`
-    :'<div class="tiny">Use <b>Track Shot</b> on the hole map: tap at your ball, tap where it lands, tag the club. Your real distances build here.</div>'}</div>
+    <div class="tiny mt">From Track It on the map — GPS-measured, tagged by club.</div>`
+    :'<div class="tiny">Use <b>Track It</b> on the hole map: tap at your ball, tap where it lands, tag the club. Your real distances build here.</div>'}</div>
   </main>`;
 }
 function vRules(){
@@ -4609,7 +4609,23 @@ function confirmMine(){
   });
   if(closed)showSplash(h);
 }
+// FW/GIR chips on the scoring screen too — score entry is the moment every
+// player reliably visits every hole, so the stats survive whatever chaos
+// scoring survives (PV 7/24: restarts orphaned the front-nine chips).
+// Works in review mode = backfill past holes from the hole screen.
+function holeChipsHTML(){
+  if(!S.round.started)return '';
+  const h=S.round.cur,hole=S.course.holes[h]||{par:4};
+  const rec=S.round.holes[h],mi=myPlayerIdx();
+  const on=k=>!!(rec&&rec.stats&&rec.stats[k]&&rec.stats[k][mi]);
+  const chip=(k,label)=>`<button onclick="holeStatToggle('${k}')" style="height:32px;padding:0 14px;border-radius:9px;font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:14px;letter-spacing:.4px;background:${on(k)?'var(--green-lt)':'var(--card)'};border:1.5px solid ${on(k)?'var(--green)':'var(--line)'};color:${on(k)?'var(--green-mid)':'var(--ink3)'}">${on(k)?'✓ ':''}${label}</button>`;
+  return `<div style="display:flex;gap:8px;justify-content:center;margin:2px 0 8px">${hole.par>=4?chip('fw','FW'):''}${chip('gir','GIR')}</div>`;
+}
+function holeStatToggle(k){set(()=>{const a=statArr(S.round.holes[S.round.cur],k);const i=myPlayerIdx();a[i]=a[i]?0:1;});}
 function confirmBlockHTML(done){
+  return holeChipsHTML()+confirmBlockInner(done);
+}
+function confirmBlockInner(done){
   const rec=S.round.holes[S.round.cur];
   if(!S.share.on)return `<button class="big" ${done?'':'disabled'} onclick="confirmHole()">Confirm hole</button>`;
   const act=actIdx(), mine=myRows();
