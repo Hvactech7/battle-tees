@@ -258,7 +258,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1784938939';
+const BUILD='1784952094';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -3588,7 +3588,12 @@ function reopenRound(id){
   if(!S.round.myEndedAt)S.round.myEndedAt=e.endedAt;
   if(!S.round.myStartedAt&&e.mins!=null)S.round.myStartedAt=e.endedAt-e.mins*60000;
   S.screen='hole';stView=null;
-  if(e.code){S.share={on:true,code:e.code,creator:false};S.shareMetaTs=0;S.round.holes.forEach(r=>{r._ts=r._ts||0;});primeCaches(false);save();syncConnect();render();}
+  // REVIEW rejoins the live share only if the round just ended (fixing scores
+  // while the group is still at the 19th hole). Older rounds open OFFLINE —
+  // the relay doc is frozen at end-of-day and its heals clobber review repairs
+  // (PV 7/25: Confirm changes → sync reverted the hole to Friday's chaos state).
+  const fresh=e.endedAt&&(Date.now()-e.endedAt)<6*3600e3;
+  if(e.code&&fresh){S.share={on:true,code:e.code,creator:false};S.shareMetaTs=0;S.round.holes.forEach(r=>{r._ts=r._ts||0;});primeCaches(false);save();syncConnect();render();}
   else{S.share={on:false,code:null};save();render();}
 }
 let armDelHist=null;
