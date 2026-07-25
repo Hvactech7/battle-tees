@@ -258,7 +258,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1784938379';
+const BUILD='1784938939';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -3510,6 +3510,18 @@ let revDirty=false;
 function reviewTouch(){if(isReview())revDirty=true;}
 function reviewCommit(){
   if(!isReview())return;
+  // repair pass: any hole where every active player has a score counts as
+  // CONFIRMED — review edits must light the grid gold and feed Stats (the PV
+  // sync chaos left scored-but-unconfirmed holes that Stats silently skipped)
+  S.round.holes.forEach(r=>{
+    if(!r||r.confirmed)return;
+    const act=actIdx();
+    if(act.length&&act.every(i=>r.gross&&r.gross[i]!=null)){
+      r.confirmed=true;
+      if(!r.cfts)r.cfts=[0,0,0,0];
+      act.forEach(i=>{if(!r.cfts[i])r.cfts[i]=Date.now();});
+    }
+  });
   const e=(S.history||[]).find(x=>x.id===S.round._histId);
   if(e){
     e.round=clone(S.round);
@@ -3521,7 +3533,7 @@ function reviewCommit(){
   revDirty=false;
   save();render();
 }
-function closeReview(){if(revDirty)reviewCommit();endRound();S.screen='history';save();render();}
+function closeReview(){reviewCommit();endRound();S.screen='history';save();render();}
 let armEndRound=false;
 function endRoundConfirm(){
   if(!armEndRound){armEndRound=true;render();setTimeout(()=>{if(armEndRound){armEndRound=false;render();}},4000);return;}
