@@ -258,7 +258,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1785267073';
+const BUILD='1785267337';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1939,7 +1939,7 @@ function vMap(){
       const g=S.course.geo&&S.course.geo.holes&&S.course.geo.holes[physHole(mapHole)+1];
       const mapped=!!(g&&g.green&&g.green.length>2);
       if(mapped)return '';
-      return `<button id="manualbtn" onclick="manualModeTap()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(166px + env(safe-area-inset-bottom));z-index:6;height:46px;padding:0 14px;background:var(--card);border:2px solid var(--elec,#2b86ec);border-radius:12px;color:var(--elec,#2b86ec);font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:17px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">🔄 Manual</button>`;
+      return `<button id="manualbtn" onclick="manualModeTap()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(220px + env(safe-area-inset-bottom));z-index:6;height:46px;padding:0 14px;background:var(--card);border:2px solid var(--elec,#2b86ec);border-radius:12px;color:var(--elec,#2b86ec);font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:17px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">🔄 Manual</button>`;
     }catch(e){return '';}})()}
   <button onclick="go('hole')" style="position:fixed;right:max(10px,calc(50vw - 230px));top:calc(100px + env(safe-area-inset-top));z-index:6;background:rgba(15,21,34,.82);border:1.5px solid var(--line);border-radius:10px;color:#fff;padding:8px 14px;font-size:14px;font-weight:600;font-family:inherit">Back</button>
   <button id="mapconfirm" onclick="mapConfirm()" style="display:none;position:fixed;right:max(10px,calc(50vw - 230px));bottom:calc(166px + env(safe-area-inset-bottom));z-index:6;width:126px;height:46px;background:var(--elec,#2b86ec);background:#2b86ec;border:2px solid var(--elec-dk,#1c5eb0);border-radius:12px;color:#eef6ff;font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:19px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">✓ Confirm</button>
@@ -2144,7 +2144,7 @@ function manualModeTap(){
   }
   if(b){b.style.borderColor='var(--amber-bd)';b.style.color='var(--amber-bd)';b.textContent='🔄 Manual ON';}
   if(!document.getElementById('mgbtn')&&b){
-    b.insertAdjacentHTML('afterend',`<button id="mgbtn" onclick="armSetGreen()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(220px + env(safe-area-inset-bottom));z-index:6;height:46px;padding:0 14px;background:var(--card);border:2px solid var(--green);border-radius:12px;color:var(--green-mid);font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:17px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">📍 Set Green</button>`);
+    b.insertAdjacentHTML('afterend',`<button id="mgbtn" onclick="armSetGreen()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(274px + env(safe-area-inset-bottom));z-index:6;height:46px;padding:0 14px;background:var(--card);border:2px solid var(--green);border-radius:12px;color:var(--green-mid);font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:17px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">📍 Set Green</button>`);
   }
   if(sb)sb.textContent=me
     ? (cardY?`manual mode — two-finger twist to rotate, pinch to zoom. Card says ${cardY}y, so the green sits near the gold ring. Found it? Tap “Set Green”.`
