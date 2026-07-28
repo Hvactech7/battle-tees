@@ -1,7 +1,7 @@
 // Wolf service worker — offline cache + auto-update (stale-while-revalidate).
 // The app loads instantly from cache and refreshes in the background; a new
 // version appears the next time it's opened while online.
-const CACHE = 'battletees-1785215388';
+const CACHE = 'battletees-1785224270';
 // Offline course-map pack: satellite tiles cached cache-first, SURVIVES app
 // updates (excluded from the activate cleanup below).
 const TILES = 'bt-tiles';
@@ -60,6 +60,21 @@ self.addEventListener('fetch', (e) => {
   // own pages — they must NEVER fall back to the cached app, or a first visit
   // to a rules page serves the app instead.
   const path = new URL(req.url).pathname;
+  // relay.json tells the app where the live-sync relay lives. It MUST be
+  // network-first — a cache-first copy would pin every phone to a dead host
+  // forever. Falls back to the cached copy when offline.
+  if (path.endsWith('/relay.json')) {
+    e.respondWith(
+      fetch(req, {cache: 'no-store'}).then((r) => {
+        if (r && r.status === 200) {
+          const clone = r.clone();
+          caches.open(CACHE).then((c) => c.put(req, clone));
+        }
+        return r;
+      }).catch(() => caches.match(req))
+    );
+    return;
+  }
   const isApp = path === '/' || path === '/index.html';
   e.respondWith(
     caches.match(req)

@@ -1,0 +1,5 @@
+{
+  "url": "wss://raspi5.tail734d97.ts.net/battletees",
+  "note": "Live round-sync relay endpoint. Change this file to move the relay — every client picks it up on next launch without an app update.",
+  "updated": "2026-07-26"
+}

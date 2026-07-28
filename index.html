@@ -258,7 +258,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1785215388';
+const BUILD='1785224270';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -576,7 +576,33 @@ function applyTheme(){
 function setTheme(t){set(()=>{S.theme=t;});applyTheme();}
 
 // ---------- live sync (relay on the Pi via Tailscale Funnel) ----------
-const RELAY=localStorage.getItem('wolfRelay')||'wss://raspi5.tail734d97.ts.net/battletees';
+// Relay endpoint is DISCOVERED, not hardcoded: the app asks battletees.app where
+// the relay lives, so the host can move (Pi -> cloud, or failover) without every
+// phone in the wild needing an update. Order: manual override > last discovered >
+// bundled default. The default is only the seed for a brand-new install.
+const RELAY_DEFAULT='wss://raspi5.tail734d97.ts.net/battletees';
+let RELAY=localStorage.getItem('wolfRelay')||localStorage.getItem('btRelayCfg')||RELAY_DEFAULT;
+async function discoverRelay(){
+  if(localStorage.getItem('wolfRelay'))return;            // manual override wins, always
+  try{
+    // ABSOLUTE url on purpose: inside the future iOS shell index.html is
+    // bundled, so a relative fetch would read the frozen bundled copy and
+    // discovery would silently no-op. GitHub Pages sends ACAO:* so the
+    // cross-origin fetch works from a shell context too.
+    const r=await fetch('https://battletees.app/relay.json',{cache:'no-store'});
+    if(!r.ok)return;
+    const j=await r.json();
+    if(!j||typeof j.url!=='string'||!/^wss:\/\//.test(j.url))return;
+    if(j.url===RELAY)return;
+    localStorage.setItem('btRelayCfg',j.url);
+    RELAY=j.url;
+    // drop existing sockets so the next tick reconnects to the new endpoint
+    try{if(typeof sock!=='undefined'&&sock)sock.close();}catch(e){}
+    try{if(typeof lobbySock!=='undefined'&&lobbySock)lobbySock.close();}catch(e){}
+  }catch(e){/* offline or blocked — keep whatever we have */}
+}
+discoverRelay();
+setInterval(discoverRelay,30*60*1000);
 const GMAPS_KEY='AIzaSyDdf3ZpPkQSrw1Ga89Id-1oorFI5tQbZTA';  // Maps JS API key, referrer-restricted to hvactech7.github.io + localhost:8756; Esri fallback if rejected
 const SYNC_KEYS=['meta',...Array.from({length:HOLES},(_,i)=>'h'+i)];
 let sock=null,sockOpen=false,retryMs=1000,applyingRemote=false;
