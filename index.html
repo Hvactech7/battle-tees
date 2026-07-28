@@ -258,7 +258,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1785063779';
+const BUILD='1785203587';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -2132,6 +2132,9 @@ function startMapGps(){
     }
     mapMarks.mePos=pos;
     if(mapMarks.setMe)mapMarks.setMe(pos);
+    // green-only holes have no tee to frame from — keep the green up-screen
+    // and the player down-screen as they walk
+    if(mapMarks.orientFromMe)mapMarks.orientFromMe(pos);
     updateFMB(pos,'yards from you');
   },()=>{},{enableHighAccuracy:true,maximumAge:3000});
 }
@@ -2326,13 +2329,21 @@ async function initHoleMap(){
   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
     {maxZoom:20,maxNativeZoom:19,attribution:'Esri, Maxar | Course data © OpenStreetMap contributors'}).addTo(LMAP);
   let greenC=null,greenPoly=null;
-  if(geo&&geo.path&&geo.path.length>1){
-    // hole line: spline-smoothed through the waypoints, white dashes over a
-    // soft dark casing so it stays readable on light fairways
-    const smooth=splinePath(geo.path);
-    lSpine=[L.polyline(smooth,{color:'#0a1220',weight:5.5,opacity:.45}),L.polyline(smooth,{color:'#ffffff',weight:2.5,opacity:.95,dashArray:'7 7'})];
-    if(showSpine)lSpine.forEach(l=>l.addTo(LMAP));
-    const pathEnd=geo.path[geo.path.length-1];
+  // A hole can arrive green-only (verified green, tee never mapped — the
+  // crowdsourced gap-fills). Everything below that needs the tee is guarded:
+  // the rangefinder only ever needed the green.
+  const hasPath=!!(geo&&geo.path&&geo.path.length>1);
+  const hasGreen=!!(geo&&geo.green&&geo.green.length>2);
+  if(hasPath||hasGreen){
+    let pathEnd=null;
+    if(hasPath){
+      // hole line: spline-smoothed through the waypoints, white dashes over a
+      // soft dark casing so it stays readable on light fairways
+      const smooth=splinePath(geo.path);
+      lSpine=[L.polyline(smooth,{color:'#0a1220',weight:5.5,opacity:.45}),L.polyline(smooth,{color:'#ffffff',weight:2.5,opacity:.95,dashArray:'7 7'})];
+      if(showSpine)lSpine.forEach(l=>l.addTo(LMAP));
+      pathEnd=geo.path[geo.path.length-1];
+    }
     // no hazard/green overlays — the satellite imagery shows them natively
     // (green polygon still powers F/M/B + centroid math below)
     if(geo.green&&geo.green.length>2){
@@ -2345,7 +2356,7 @@ async function initHoleMap(){
     var lGreen=L.marker(greenC,{draggable:true,icon:L.divIcon({className:'',
       html:'<div class="aimdot" style="width:15px;height:15px;border-radius:50%;background:#ffd75e;border:2.5px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.65)"></div>',
       iconSize:[15,15],iconAnchor:[8,8]})}).addTo(LMAP);
-    lGreen.bindTooltip(yd(mDist(geo.path[0],greenC))+'y',{permanent:true,direction:'top',offset:[0,-10],className:'maplbl'});
+    lGreen.bindTooltip(hasPath?yd(mDist(geo.path[0],greenC))+'y':'green',{permanent:true,direction:'top',offset:[0,-10],className:'maplbl'});
     const aimHome=greenC.slice();
     let aimJustDragged=false;
     const aimPaint=()=>{
@@ -2372,10 +2383,12 @@ async function initHoleMap(){
         aimPaint();refreshTapLine();
       }
     });
-    LMAP.fitBounds(L.latLngBounds(geo.path.concat(greenPoly||[])),{padding:[36,36]});
+    LMAP.fitBounds(L.latLngBounds((hasPath?geo.path:[]).concat(greenPoly||[greenC])),{padding:[36,36]});
+    if(!hasPath){try{LMAP.setZoom(Math.min(LMAP.getZoom(),18));}catch(e){}}
     // Green-up: rotate so the tee sits at the bottom, green at the top, and set
-    // the camera so the whole hole fills the screen.
-    if(canRotate){try{
+    // the camera so the whole hole fills the screen. (Needs a tee — green-only
+    // holes stay north-up.)
+    if(hasPath&&canRotate){try{
       const tee=geo.path[0], rad=Math.PI/180, lat0=tee[0]*rad;
       const M=pt=>[(pt[1]-tee[1])*111320*Math.cos(lat0),(pt[0]-tee[0])*110540]; // meters [east,north]
       const g=M(greenC); const len=Math.hypot(g[0],g[1])||1;
@@ -2394,8 +2407,40 @@ async function initHoleMap(){
       LMAP.setBearing(-bearing);
       LMAP.setView(center,zoom,{animate:false});
     }catch(e){}}
-    mapMarks={greenC,greenPoly,ref:geo.path[0],mePos:null,aimC:null};
-    updateFMB(geo.path[0],'yards from the tee');
+    mapMarks={greenC,greenPoly,ref:hasPath?geo.path[0]:greenC,mePos:null,aimC:null};
+    if(hasPath)updateFMB(geo.path[0],'yards from the tee');
+    else{
+      // Green-only hole: no mapped tee, so the player's live GPS plays that
+      // role — green pinned to the top of the screen, player at the bottom,
+      // re-orienting as they walk up the hole.
+      let lastOrient=null;
+      mapMarks.orientFromMe=(from)=>{
+        if(!from||!canRotate)return;
+        if(lastOrient&&mDist(from,lastOrient)<5)return;   // ignore GPS jitter
+        lastOrient=from.slice();
+        try{
+          const rad=Math.PI/180, lat0=from[0]*rad;
+          const M=pt=>[(pt[1]-from[1])*111320*Math.cos(lat0),(pt[0]-from[0])*110540];
+          const g=M(greenC); const len=Math.hypot(g[0],g[1])||1;
+          const u=[g[0]/len,g[1]/len], v=[-u[1],u[0]];
+          let a0=1e9,a1=-1e9,c0=1e9,c1=-1e9;
+          [from].concat(greenPoly||[greenC]).forEach(pt=>{const m=M(pt);
+            const a=m[0]*u[0]+m[1]*u[1], c=m[0]*v[0]+m[1]*v[1];
+            if(a<a0)a0=a;if(a>a1)a1=a;if(c<c0)c0=c;if(c>c1)c1=c;});
+          const vh=el.clientHeight||600, vw=el.clientWidth||360;
+          const mpp=Math.max((a1-a0)*1.18/Math.max(1,vh-110),(c1-c0)*1.35/Math.max(1,vw-30),0.05);
+          const zoom=Math.min(20,Math.log2(156543.03392*Math.cos(lat0)/mpp));
+          const midA=(a0+a1)/2, midC=(c0+c1)/2;
+          const cx=u[0]*midA+v[0]*midC, cy=u[1]*midA+v[1]*midC;
+          const center=[from[0]+cy/110540, from[1]+cx/(111320*Math.cos(lat0))];
+          const bearing=(Math.atan2(g[0],g[1])/rad+360)%360;
+          LMAP.setBearing(-bearing);
+          LMAP.setView(center,zoom,{animate:false});
+        }catch(e){}
+      };
+      if(myCoords){updateFMB(myCoords,'yards from you');mapMarks.orientFromMe(myCoords);}
+      const s3=sub();if(s3)s3.textContent='green mapped here (tee line not mapped) — yardages run off your GPS.';
+    }
   }else{
     const c=myCoords||[38.6972,-121.6173];
     if(canRotate){try{LMAP.setBearing(0);LMAP.touchRotate&&LMAP.touchRotate.enable();}catch(e){}}
