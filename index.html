@@ -258,7 +258,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1785264429';
+const BUILD='1785267073';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1935,6 +1935,12 @@ function vMap(){
   ${mapStatChipsHTML(hole)}
   <button id="trackbtn" onclick="trackShotTap()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(112px + env(safe-area-inset-bottom));z-index:6;width:120px;height:46px;background:var(--card);border:2px solid ${trackShot&&trackShot.hole===mapHole?'var(--amber-bd)':'var(--green)'};border-radius:12px;color:${trackShot&&trackShot.hole===mapHole?'var(--amber-bd)':'var(--green-mid)'};font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:19px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">${trackShot&&trackShot.hole===mapHole?'Mark It':'Track It'}</button>
   ${trackShot&&trackShot.hole===mapHole?`<button id="trackxbtn" onclick="clearTrackStart()" style="position:fixed;left:max(138px,calc(50vw - 102px));bottom:calc(112px + env(safe-area-inset-bottom));z-index:6;width:46px;height:46px;background:var(--card);border:2px solid var(--red,#c0392b);border-radius:12px;color:var(--red,#c0392b);font-size:22px;font-weight:800;box-shadow:2px 2px 0 rgba(0,0,0,.35)">✕</button>`:''}
+  ${(()=>{try{
+      const g=S.course.geo&&S.course.geo.holes&&S.course.geo.holes[physHole(mapHole)+1];
+      const mapped=!!(g&&g.green&&g.green.length>2);
+      if(mapped)return '';
+      return `<button id="manualbtn" onclick="manualModeTap()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(166px + env(safe-area-inset-bottom));z-index:6;height:46px;padding:0 14px;background:var(--card);border:2px solid var(--elec,#2b86ec);border-radius:12px;color:var(--elec,#2b86ec);font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:17px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">🔄 Manual</button>`;
+    }catch(e){return '';}})()}
   <button onclick="go('hole')" style="position:fixed;right:max(10px,calc(50vw - 230px));top:calc(100px + env(safe-area-inset-top));z-index:6;background:rgba(15,21,34,.82);border:1.5px solid var(--line);border-radius:10px;color:#fff;padding:8px 14px;font-size:14px;font-weight:600;font-family:inherit">Back</button>
   <button id="mapconfirm" onclick="mapConfirm()" style="display:none;position:fixed;right:max(10px,calc(50vw - 230px));bottom:calc(166px + env(safe-area-inset-bottom));z-index:6;width:126px;height:46px;background:var(--elec,#2b86ec);background:#2b86ec;border:2px solid var(--elec-dk,#1c5eb0);border-radius:12px;color:#eef6ff;font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:19px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">✓ Confirm</button>
   <div style="position:fixed;right:max(10px,calc(50vw - 230px));bottom:calc(112px + env(safe-area-inset-bottom));z-index:6;display:flex;align-items:center;background:var(--card);border:2px solid var(--green);border-radius:12px;overflow:hidden;box-shadow:2px 2px 0 rgba(0,0,0,.35)">
@@ -2101,6 +2107,58 @@ function loadGoogleMaps(){
   });
   return googleP;
 }
+// MANUAL MODE — two stages, by design:
+//   1) "Manual" unlocks two-finger rotation and declares "this green is unmarked".
+//      It frames the view off the player's GPS at card distance so the green is
+//      somewhere on screen, and reveals stage 2.
+//   2) "Set Green" arms the map: the next tap IS the green — live target for
+//      F/M/B, and a crowdsourced capture that comes back to us to fix the map.
+let manualOn=false;
+function manualModeTap(){
+  const sb=document.getElementById('fmbsub');
+  if(!LMAP){if(sb)sb.textContent='Map still loading…';return;}
+  const b=document.getElementById('manualbtn');
+  manualOn=!manualOn;
+  if(!manualOn){
+    try{LMAP.touchRotate&&LMAP.touchRotate.disable();}catch(e){}
+    try{if(L.Map.prototype.setBearing)LMAP.setBearing(0);}catch(e){}
+    if(mapMarks._ring){try{LMAP.removeLayer(mapMarks._ring);}catch(e){}mapMarks._ring=null;}
+    mapMarks._ringMode=false;mapMarks._manual=false;
+    if(b){b.style.borderColor='var(--elec,#2b86ec)';b.style.color='var(--elec,#2b86ec)';b.textContent='🔄 Manual';}
+    const g=document.getElementById('mgbtn');if(g)g.remove();
+    if(sb)sb.textContent='';
+    return;
+  }
+  // stage 1 ON: unlock rotation, size the view by the card yardage
+  try{if(L.Map.prototype.setBearing){LMAP.touchRotate&&LMAP.touchRotate.enable();}}catch(e){}
+  const me=mapMarks.mePos||myCoords;
+  const ts=(S.course.teeSets||[]);
+  const myTee=(S.players[myPlayerIdx()]||{}).tee;
+  const tset=ts.find(t=>t.id===myTee&&t.yds)||ts.find(t=>t.yds);
+  const cardY=tset&&tset.yds&&tset.yds[physHole(mapHole)];
+  mapMarks._cardY=cardY||null;mapMarks._manual=true;
+  if(me){
+    if(mapMarks._ring){try{LMAP.removeLayer(mapMarks._ring);}catch(e){}}
+    mapMarks._ring=L.circle(me,{radius:(cardY||300)*0.9144,color:'#ffd75e',weight:2.5,opacity:.85,fill:false,dashArray:'10 8'}).addTo(LMAP);
+    try{LMAP.fitBounds(mapMarks._ring.getBounds().pad(0.10));}catch(e){}
+  }
+  if(b){b.style.borderColor='var(--amber-bd)';b.style.color='var(--amber-bd)';b.textContent='🔄 Manual ON';}
+  if(!document.getElementById('mgbtn')&&b){
+    b.insertAdjacentHTML('afterend',`<button id="mgbtn" onclick="armSetGreen()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(220px + env(safe-area-inset-bottom));z-index:6;height:46px;padding:0 14px;background:var(--card);border:2px solid var(--green);border-radius:12px;color:var(--green-mid);font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:17px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">📍 Set Green</button>`);
+  }
+  if(sb)sb.textContent=me
+    ? (cardY?`manual mode — two-finger twist to rotate, pinch to zoom. Card says ${cardY}y, so the green sits near the gold ring. Found it? Tap “Set Green”.`
+            :`manual mode — two-finger twist to rotate, pinch to zoom. Find the green, then tap “Set Green”.`)
+    : 'manual mode — waiting for GPS to size the view. Rotation is unlocked.';
+}
+function armSetGreen(){
+  const sb=document.getElementById('fmbsub');
+  if(mapMarks._ringGreen){try{LMAP.removeLayer(mapMarks._ringGreen);}catch(e){}mapMarks._ringGreen=null;}
+  mapMarks.greenC=null;mapMarks.aimC=null;mapMarks._ringMode=true;
+  const g=document.getElementById('mgbtn');
+  if(g){g.style.borderColor='var(--amber-bd)';g.style.color='var(--amber-bd)';g.textContent='📍 Tap the green';}
+  if(sb)sb.textContent='now tap the middle of the green — drag the pin to fine-tune, tap it again to clear.';
+}
 function mapTapAt(t){
   if(mapMarks._ringMode&&!mapMarks.greenC){
     // ring mode: this tap IS the green. Live target + crowdsourced capture.
@@ -2111,8 +2169,13 @@ function mapTapAt(t){
     mk.bindTooltip('green (you set it)',{permanent:true,direction:'top',offset:[0,-10],className:'maplbl'});
     mapMarks._ringGreen=mk;
     const report=()=>{const p=mk.getLatLng();
+      // remember it for the rest of the round (survives hole changes + reload)
+      try{if(!S.round.manualGreens)S.round.manualGreens={};
+        S.round.manualGreens[physHole(mapHole)]=[+p.lat.toFixed(6),+p.lng.toFixed(6)];save();}catch(e){}
+      if(mapMarks._restoring)return;   // restoring a green we already reported
       stat('greenmark',{course:S.course.id,courseName:S.course.name,hole:physHole(mapHole)+1,
         lat:+p.lat.toFixed(6),lon:+p.lng.toFixed(6),cardY:mapMarks._cardY||null,
+        manual:!!mapMarks._manual,
         fromDist:mapMarks.mePos?Math.round(mDist(mapMarks.mePos,[p.lat,p.lng])*1.09361):null});};
     report();
     let jd=false;
@@ -2124,6 +2187,7 @@ function mapTapAt(t){
       // re-tap clears — back to searching the ring
       try{LMAP.removeLayer(mk);}catch(e){}
       mapMarks._ringGreen=null;mapMarks.greenC=null;
+      try{if(S.round.manualGreens)delete S.round.manualGreens[physHole(mapHole)];save();}catch(e){}
       if(mapMarks.refreshTapLine)mapMarks.refreshTapLine();
       const el=document.getElementById('fmb');if(el)el.textContent='—';});
     if(mapMarks.refreshTapLine)mapMarks.refreshTapLine();
@@ -2144,7 +2208,7 @@ function startMapGps(){
       const pts=greensPts();
       const nearest=Math.min(...pts.map(g=>mDist(pos,g)));
       if(nearest>1400){if(mapMarks.mePos){mapMarks.mePos=null;if(mapMarks.setMe)mapMarks.setMe(null);}return;}
-      mapMarks.mePos=pos;
+      mapMarks.mePos=pos;mapMarks._synthRef=false;
       if(mapMarks.setMe)mapMarks.setMe(pos);
       return;
     }
@@ -2350,6 +2414,7 @@ async function initHoleMap(){
     const s2=sub();if(s2)s2.textContent='Map needs an internet connection — try again with signal.';return;
   }
   if(greensIsMode()){initGreensMap(el);return;}
+  manualOn=false;   // every hole starts in normal (locked) mode
   const canRotate=!!L.Map.prototype.setBearing;
   LMAP=L.map(el,canRotate?{zoomControl:false,rotate:true,rotateControl:false,touchRotate:false,zoomSnap:0}:{zoomControl:false});
   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
@@ -2469,9 +2534,10 @@ async function initHoleMap(){
     }
   }else{
     const c=myCoords||[38.6972,-121.6173];
+    const synthRef=!myCoords;   // no GPS yet: this centre is a placeholder, not a location
     if(canRotate){try{LMAP.setBearing(0);LMAP.touchRotate&&LMAP.touchRotate.enable();}catch(e){}}
     LMAP.setView(c,16);
-    mapMarks={greenC:null,greenPoly:null,ref:c,mePos:null,aimC:null};
+    mapMarks={greenC:null,greenPoly:null,ref:c,mePos:null,aimC:null,_synthRef:synthRef};
     // CARD RING: unmapped hole + known card yardage = the green MUST sit on a
     // ring of that radius around the tee. Eye walks the ring; tap the green
     // when you spot it — becomes the live target AND a crowdsourced capture.
@@ -2483,6 +2549,8 @@ async function initHoleMap(){
       mapMarks._ring=L.circle(c,{radius:cardY*0.9144,color:'#ffd75e',weight:2.5,opacity:.85,fill:false,dashArray:'10 8'}).addTo(LMAP);
       try{LMAP.fitBounds(mapMarks._ring.getBounds().pad(0.12));}catch(e){}
       mapMarks._ringMode=true;mapMarks._cardY=cardY;
+      const mg=(S.round.manualGreens||{})[physHole(mapHole)];
+      if(mg){mapMarks._restoring=true;try{mapTapAt(mg.slice());}catch(e){}mapMarks._restoring=false;}
       const s2=sub();if(s2)s2.textContent=`no map here — card says ${cardY}y (${esc(tset.name)}). The green sits ON the gold ring: two-finger rotate to look, tap it when you spot it.`;
     }else{
       const s2=sub();if(s2)s2.textContent=geoErr||'Hole lines not mapped here — rangefinder still works.';
@@ -2580,6 +2648,12 @@ function updateFMB(pos,label){
   const el=document.getElementById('fmb'),s2=document.getElementById('fmbsub');
   if(!el||!pos)return;
   if(!mapMarks.greenC){el.textContent='—';return;}
+  // a distance measured from the placeholder centre is meaningless — say so
+  if(mapMarks._synthRef&&!mapMarks.mePos){
+    el.textContent='—';
+    if(s2)s2.textContent='waiting for GPS — distance will appear once your phone has a fix.';
+    return;
+  }
   const r=fmbFrom(pos,mapMarks.greenPoly,mapMarks.greenC);
   el.innerHTML=r.f!=null
     ?`<span style="color:var(--ink2);font-size:16px">F</span> ${yd(r.f)} <span style="color:var(--ink2);font-size:16px">M</span> ${yd(r.m)} <span style="color:var(--ink2);font-size:16px">B</span> ${yd(r.b)}`
