@@ -95,6 +95,34 @@
   .splash-burst{position:absolute;width:560px;height:560px;border-radius:50%;pointer-events:none;
     background:repeating-conic-gradient(from 0deg,transparent 0 13deg,var(--sc) 14deg 16deg,transparent 17deg 30deg);
     opacity:.18;animation:spSpin 16s linear infinite;filter:blur(1px)}
+  /* ---- first run: one card, nothing competing with it ---- */
+  main.welcome{display:flex;flex-direction:column;justify-content:center;min-height:calc(100dvh - 24px)}
+  .welcome-card{border-width:3px;padding:20px 18px;box-shadow:6px 6px 0 var(--green),0 0 0 6px rgba(74,222,128,.10);
+    animation:wcRise .5s cubic-bezier(.2,.8,.25,1) both}
+  .card h2.welcome-h{font-size:27px;line-height:1.12;letter-spacing:.2px;margin:0 0 7px;
+    color:var(--green);text-transform:none}
+  .welcome-card input{font-size:17px;padding:13px 12px}
+  .welcome-go{font-size:19px;padding:16px;letter-spacing:.3px;
+    box-shadow:0 0 0 0 rgba(74,222,128,.55);animation:wcPulse 2.4s ease-out 1.1s infinite}
+  .welcome-go:active{animation:none}
+  @keyframes wcRise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+  @keyframes wcPulse{0%{box-shadow:0 0 0 0 rgba(74,222,128,.5)}
+    70%{box-shadow:0 0 0 14px rgba(74,222,128,0)}100%{box-shadow:0 0 0 0 rgba(74,222,128,0)}}
+  @media (prefers-reduced-motion:reduce){
+    .welcome-card{animation:none}.welcome-go{animation:none}}
+  /* ---- email confirmation sheet ---- */
+  .vfWrap{position:fixed;inset:0;z-index:95;background:rgba(6,10,16,.72);
+    display:flex;align-items:center;justify-content:center;padding:18px;
+    animation:vfFade .18s ease-out both}
+  .vfCard{width:min(430px,100%);background:var(--card);border:3px solid var(--green);
+    border-radius:14px;padding:18px;box-shadow:6px 6px 0 var(--green);
+    animation:vfRise .26s cubic-bezier(.2,.8,.25,1) both}
+  .card h2.vfTitle,.vfTitle{font-size:23px;color:var(--green);text-transform:none;
+    letter-spacing:.2px;margin:0 0 8px;line-height:1.15}
+  .vfCard input{font-size:17px;padding:13px 12px;width:100%}
+  @keyframes vfFade{from{opacity:0}to{opacity:1}}
+  @keyframes vfRise{from{opacity:0;transform:translateY(16px) scale(.98)}to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion:reduce){.vfWrap,.vfCard{animation:none}}
   @keyframes spSpin{to{transform:rotate(360deg)}}
   @keyframes spFade{from{opacity:0}}
   .splash-card{position:relative;background:var(--card);border:2px solid var(--sc);border-radius:18px;
@@ -270,7 +298,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1785403338';
+const BUILD='1785468546';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -554,10 +582,15 @@ function abPayload(){
   const courses=S.courses.map(c=>{const {geo,...rest}=c;return rest;});
   return {me:S.me,playerLib:S.playerLib,courses,history:S.history||[],groups:S.groupLib||[],teams:S.teamLib||[]};
 }
+function emailVerified(){
+  const em=(localStorage.getItem('wolfBackupEmail')||'').trim().toLowerCase();
+  return !!em && (localStorage.getItem('btEmailOk')||'').trim().toLowerCase()===em;
+}
 function autoBackupCheck(){
   if(!S.autoBackup)return;
   const em=(localStorage.getItem('wolfBackupEmail')||'').trim();
   if(!em||!S.playerLib.length)return;   // never auto-save an empty library over a good backup
+  if(!emailVerified())return;           // nothing is saved until the address is confirmed
   const data=abPayload();
   const fp=JSON.stringify([data.me,data.playerLib,data.courses,data.history.map(h=>h.id),data.groups,data.teams]);
   if(fp===abFp)return;
@@ -885,6 +918,7 @@ function saveMe(){
     S.me={name,index:+((x&&x.value)||10)||10,pid:(S.me&&S.me.pid)||('u'+Date.now().toString(36)+Math.random().toString(36).slice(2,8))};
     upsertLib({name,index:S.me.index,tee:S.players[0]?S.players[0].tee:undefined,libId:null});
   });
+  try{localStorage.setItem('btOnboarded','1');}catch(x3){}
   stat('profile',{name,email:em||localStorage.getItem('wolfBackupEmail')||''});
   sendHello();
 }
@@ -935,6 +969,54 @@ async function relayBackup(payload){
     try{ws.send(JSON.stringify({t:'backup',rid,...payload}));}
     catch(e){clearTimeout(pendingCourse[rid].timer);delete pendingCourse[rid];rej(e);}
   });
+}
+let verifyUI=null;   // {email,stage,msg,after}
+function openVerify(after){
+  verifyUI={email:(localStorage.getItem('wolfBackupEmail')||'').trim(),stage:0,msg:'',after:after||null};
+  render();
+}
+function closeVerify(){verifyUI=null;render();}
+async function sendVerifyCode(){
+  const el=document.getElementById('vfEmail');
+  const em=(el&&el.value||'').trim().toLowerCase();
+  if(!/^\S+@\S+\.\S+$/.test(em)){verifyUI.msg='Enter a valid email address.';render();return;}
+  localStorage.setItem('wolfBackupEmail',em);
+  verifyUI.email=em;verifyUI.msg='Sending code…';render();
+  try{
+    const r=await relayBackup({op:'verify',email:em});
+    if(r&&r.ok){verifyUI.stage=1;verifyUI.msg='Code sent — check your email (valid 15 min).';}
+    else verifyUI.msg=(r&&r.error)||'Could not send the code.';
+  }catch(e){verifyUI.msg='Could not connect — check your signal and try again.';}
+  render();
+}
+async function confirmVerifyCode(){
+  const el=document.getElementById('vfCode');
+  const cd=(el&&el.value||'').trim();
+  if(!/^\d{6}$/.test(cd)){verifyUI.msg='Enter the 6-digit code from the email.';render();return;}
+  verifyUI.msg='Confirming…';render();
+  try{
+    const r=await relayBackup({op:'confirm',email:verifyUI.email,code:cd});
+    if(r&&r.ok){
+      try{localStorage.setItem('btEmailOk',verifyUI.email);}catch(e){}
+      verifyUI.msg='✓ Email confirmed — saving your library…';render();
+      abFp=null;                       // force the next check to send
+      const ok=await backupNow();
+      verifyUI.msg=ok?'✓ Confirmed and saved. Everything backs up automatically from now on.'
+                     :'✓ Confirmed. Your library will save as soon as you have signal.';
+      verifyUI.stage=2;
+    }else verifyUI.msg=(r&&r.error)||'Could not confirm that code.';
+  }catch(e){verifyUI.msg='Could not connect — check your signal and try again.';}
+  render();
+}
+async function backupNow(){
+  const em=(localStorage.getItem('wolfBackupEmail')||'').trim();
+  if(!em||!emailVerified())return false;
+  try{
+    syncLib();
+    const r=await relayBackup({op:'save',email:em,data:abPayload(),quiet:true});
+    if(r&&r.ok){const d=abPayload();abStamp(JSON.stringify([d.me,d.playerLib,d.courses,d.history.map(h=>h.id),d.groups,d.teams]));return true;}
+  }catch(e){}
+  return false;
 }
 function openBackup(){backupUI={mode:'backup',stage:0,msg:''};render();}
 function openRestore(){backupUI={mode:'restore',stage:0,msg:''};render();}
@@ -1021,6 +1103,7 @@ async function doRestore(){
         });
         if(r.data.me&&r.data.me.pid&&!(S.me&&S.me.pid))S.me.pid=r.data.me.pid;
       });
+      try{localStorage.setItem('btEmailOk',em);}catch(e2){}   // the code proved this address
       backupUI.stage=0;
       backupUI.msg=`✓ Restored — ${added} player${added===1?'':'s'} added, ${updated} updated${backupUI._cAdded?`, ${backupUI._cAdded} course${backupUI._cAdded===1?'':'s'} added`:''}${backupUI._hAdded?`, ${backupUI._hAdded} round${backupUI._hAdded===1?'':'s'} recovered`:''}.`;
     }else backupUI.msg=r.error||'Restore failed.';
@@ -2872,13 +2955,38 @@ function render(){
   const pageY=window.scrollY;
   const sameScreen=window.__lastScr===scr;
   window.__lastScr=scr;
-  el.innerHTML=html+holeSplash();
+  el.innerHTML=html+holeSplash()+verifySheetHTML();
   if(sameScreen){
     Object.entries(keepScroll).forEach(([id,top])=>{const e2=document.getElementById(id);if(e2)e2.scrollTop=top;});
     if(pageY)window.scrollTo(0,pageY);
   }else window.scrollTo(0,0);
   if(scr==='map')requestAnimationFrame(initHoleMap);
   else teardownMap();
+}
+function verifySheetHTML(){
+  if(!verifyUI)return '';
+  const em=esc(verifyUI.email||'');
+  const done=verifyUI.stage===2;
+  const atEnd=verifyUI.after==='roundEnd';
+  return `<div class="vfWrap" role="dialog" aria-modal="true" aria-labelledby="vfTitle">
+    <div class="vfCard">
+      <h2 id="vfTitle" class="vfTitle">${done?'You&rsquo;re all set':(atEnd?'Save this round?':'Confirm your email')}</h2>
+      ${done?'':`<div class="tiny mb">${atEnd
+        ? 'Your round is finished, but nothing has been saved yet. Confirm your email and we&rsquo;ll keep your rounds, players and courses safe — and you can restore them on any phone.'
+        : 'We&rsquo;ll send a 6-digit code. Until it&rsquo;s confirmed, nothing leaves this phone.'}</div>`}
+      ${done?'':(verifyUI.stage===0?`
+        <div class="tiny">Email</div>
+        <input id="vfEmail" type="text" inputmode="email" autocapitalize="off" placeholder="you@email.com" value="${em}">
+        <button class="big mt" onclick="sendVerifyCode()">Send me a code</button>`
+      :`
+        <div class="tiny">6-digit code sent to <b>${em}</b></div>
+        <input id="vfCode" type="text" inputmode="numeric" maxlength="6" placeholder="123456" style="letter-spacing:6px;font-size:22px;text-align:center">
+        <button class="big mt" onclick="confirmVerifyCode()">Confirm</button>
+        <button class="ghost mt" style="width:100%" onclick="sendVerifyCode()">Send a new code</button>`)}
+      ${verifyUI.msg?`<div class="tiny mt" style="color:${/^✓/.test(verifyUI.msg)?'var(--green-mid)':'var(--amber-bd,#d19a2f)'};font-weight:600">${esc(verifyUI.msg)}</div>`:''}
+      <button class="ghost mt" style="width:100%" onclick="closeVerify()">${done?'Done':(atEnd?'Not now':'Close')}</button>
+      ${done||!atEnd?'':'<div class="tiny mt" style="opacity:.7">You can confirm later from the Players screen — your round stays on this phone until then.</div>'}
+    </div></div>`;
 }
 function topbar(title,sub,backTo,cls,right){
   return `<header class="top${cls?' '+cls:''}"><div><h1>${esc(title)}</h1>${sub?`<div class="sub">${esc(sub)}</div>`:''}</div>
@@ -3004,9 +3112,42 @@ function vPickGame(){
   <div class="card">${gameGridHTML('chooseGame')}</div>
   </main>`;
 }
+// ----- first run -----
+function vWelcome(){
+  return `<main class="welcome">
+  <div class="center" style="margin:18px 0 26px"><img src="${art('banner.jpg')}" alt="Battle Tees" style="width:100%;aspect-ratio:1200/509;display:block;border-radius:14px;border:2px solid var(--green);box-shadow:4px 4px 0 var(--green)" onerror="this.outerHTML='<h1 style=&quot;color:var(--green);font-size:26px&quot;>Battle Tees</h1>'"></div>
+  <div class="card welcome-card">
+    <h2 class="welcome-h">Create Your Profile</h2>
+    <div class="tiny mb">Takes a few seconds. Your name is all that's required — it's how nearby phones add you to a round.</div>
+    <div class="grid2">
+      <div><div class="tiny">Your name</div><input type="text" id="meName" onfocus="tapClear(this)" autocomplete="name"></div>
+      <div><div class="tiny">Handicap index</div><input type="text" inputmode="decimal" id="meIdx" placeholder="10.0" onfocus="tapClear(this)"></div>
+    </div>
+    <div class="mt"><div class="tiny">Email <span style="opacity:.6">(optional)</span></div>
+      <input type="text" inputmode="email" autocapitalize="off" id="meEmail" placeholder="you@email.com">
+      <div class="tiny mt">Your players, courses &amp; round history back up automatically — and you can restore them on any phone.</div></div>
+    <div id="meErr" class="tiny mt" style="color:var(--red);font-weight:600"></div>
+    <button class="big mt welcome-go" onclick="saveMe()">Create profile</button>
+    <div class="tiny mt center" style="padding-top:12px;border-top:1px solid var(--line)">
+      Already have a backup?
+      <a href="#" onclick="welcomeRestore();return false" style="color:var(--elec);font-weight:600">Restore it</a>
+    </div>
+  </div>
+  </main>`;
+}
+// Reached from the first-run screen: jump straight to the restore flow without
+// creating a profile first, so a returning player on a new phone gets their data back.
+function welcomeRestore(){
+  try{localStorage.setItem('btOnboarded','1');}catch(e){}
+  openRestore();
+  go('players');
+}
 // ----- home -----
 function vHome(){
   const inRound=S.round.started;
+  // First run = no profile and never onboarded. Nothing here tries to protect an
+  // existing library: a wipe should show onboarding, and Restore brings everything back.
+  if(!S.me.name && !localStorage.getItem('btOnboarded')) return vWelcome();
   return `<main>
   <div class="center" style="margin:10px 0 18px"><img src="${art('banner.jpg')}" alt="Battle Tees" style="width:100%;aspect-ratio:1200/509;display:block;border-radius:14px;border:2px solid var(--green);box-shadow:4px 4px 0 var(--green)" onerror="this.outerHTML='<h1 style=&quot;color:var(--green);font-size:20px&quot;>Battle Tees</h1>'"></div>
   ${!inRound?`
@@ -3762,6 +3903,9 @@ function endRound(){
   resetRoster();   // next round starts with just you — pick a fresh group
   save();
   if(wasShared)leaveShare();else render();
+  // Playing never requires a confirmed address — but once the round is in the books,
+  // ask, because nothing has been saved anywhere yet.
+  if(!emailVerified())setTimeout(()=>openVerify('roundEnd'),450);
 }
 // Resume a past round for real: fully live (not review), with the clock
 // continuing from where it stopped — the break doesn't count against pace.
