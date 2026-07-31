@@ -298,7 +298,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1785469934';
+const BUILD='1785470561';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -3153,7 +3153,14 @@ function vHome(){
   ${!inRound?`
   <button class="big" onclick="goGroup()">⚔️ Create / Join Group</button>
   <button class="big mt" style="background:var(--card);color:var(--green-mid);border-color:var(--green)" onclick="soloRound()">⛳ Single Player Round</button>
-  <div style="height:14px"></div>`:''}
+  <div style="height:14px"></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+    <button class="ghost" style="padding:12px" onclick="go('courses')">⛳ Courses</button>
+    <button class="ghost" style="padding:12px" onclick="go('players')">👥 Players</button>
+    <button class="ghost" style="padding:12px" onclick="go('stats')">📊 Stats</button>
+    <button class="ghost" style="padding:12px" onclick="go('history')">🕰 Rounds</button>
+  </div>
+  `:''}
   ${!S.me.name?`<div class="card"><h2>Your profile</h2>
     <div class="tiny mb">So nearby phones can add you to a round by name.</div>
     <div class="grid2">
@@ -3180,15 +3187,16 @@ function vHome(){
         <button class="ghost danger" onclick="leaveShare()">Leave</button></div>`
       :`<button class="ghost mt" style="width:100%" onclick="shareRound()">📍 Invite nearby players</button>`}
   </div>`:''}
-  <div class="card"><h2>Games &amp; rules</h2>
-    <div class="tiny mb">Tap a game to see how it&rsquo;s played — you&rsquo;ll pick your game when you create a group.</div>
-    ${gameGridHTML('showRules')}
-  </div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+  ${inRound?`  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
     <button class="ghost" style="padding:12px" onclick="go('courses')">⛳ Courses</button>
     <button class="ghost" style="padding:12px" onclick="go('players')">👥 Players</button>
     <button class="ghost" style="padding:12px" onclick="go('stats')">📊 Stats</button>
     <button class="ghost" style="padding:12px" onclick="go('history')">🕰 Rounds</button>
+  </div>
+  `:''}
+  <div class="card"><h2>Games &amp; rules</h2>
+    <div class="tiny mb">Tap a game to see how it&rsquo;s played — you&rsquo;ll pick your game when you create a group.</div>
+    ${gameGridHTML('showRules')}
   </div>
   <div class="center" style="margin:2px 0 12px">
     <span class="seg" style="display:inline-flex;gap:6px">
@@ -3196,13 +3204,6 @@ function vHome(){
       <button class="ghost ${S.theme!=='light'?'sel':''}" style="white-space:nowrap" onclick="setTheme('dark')">🌙 Dark</button>
     </span>
   </div>
-  ${!S.share.on?`<details class="card" style="padding:10px 14px"><summary class="tiny" style="cursor:pointer;color:var(--ink3)">Join a shared round with a code</summary>
-    <div class="row" style="border:none">
-      <input type="text" id="joincode" placeholder="ABCDE" maxlength="8" autocapitalize="characters" style="width:46%;text-transform:uppercase;font-family:Rajdhani,sans-serif;font-size:20px;letter-spacing:3px">
-      <button class="ghost sel" style="flex:1" onclick="joinRound()">Join</button>
-    </div>
-    <div class="tiny">Joining replaces this phone's current round with the shared one.</div>
-  </details>`:''}
   </main>`;
 }
 function pickGame(g){set(()=>{S.config.game=g;S.config.games=[g];S.screen='gate';});}
