@@ -298,7 +298,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1785470561';
+const BUILD='1785472066';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -852,6 +852,11 @@ function joinRoundCode(code){
   S.round.holes.forEach(r=>{r._ts=0;});
   primeCaches(false);
   save();syncConnect();render();
+  // the host's course arrives with the room — ask which tees on this one
+  setTimeout(()=>{
+    if(S.share.on&&S.course&&(S.course.teeSets||[]).length)
+      askTee(null,'Which tees are you playing?',S.course.name);
+  },900);
 }
 function leaveShare(){
   if(S.share.creator&&sockOpen){try{sock.send(JSON.stringify({t:'uninvite',room:S.share.code}));}catch(e){}}
@@ -870,6 +875,9 @@ let myCoords=(()=>{try{const v=JSON.parse(localStorage.getItem('wolfLastCoords')
 function cacheCoords(c){myCoords=c;try{localStorage.setItem('wolfLastCoords',JSON.stringify({c,ts:Date.now()}));}catch(e){}}
 // Usage telemetry: tiny fire-and-forget events to the relay (buffered offline).
 function stat(ev,extra){
+  // A local preview build shares the live relay, so testing here used to post real
+  // rounds into production stats. Anything served from localhost stays local.
+  if(/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname))return;
   const e=Object.assign({t:'stat',ev,dev:devId(),who:(S.me&&S.me.name)||'',build:BUILD,at:Date.now()},extra||{});
   try{
     if(lobbySock&&lobbySock.readyState===1){lobbySock.send(JSON.stringify(e));return;}
@@ -2955,7 +2963,7 @@ function render(){
   const pageY=window.scrollY;
   const sameScreen=window.__lastScr===scr;
   window.__lastScr=scr;
-  el.innerHTML=html+holeSplash()+verifySheetHTML();
+  el.innerHTML=html+holeSplash()+verifySheetHTML()+teeAskSheetHTML();
   if(sameScreen){
     Object.entries(keepScroll).forEach(([id,top])=>{const e2=document.getElementById(id);if(e2)e2.scrollTop=top;});
     if(pageY)window.scrollTo(0,pageY);
@@ -3218,7 +3226,7 @@ function ensureMeFirst(){
     const lib=S.playerLib.find(e=>e.name.trim().toLowerCase()===me);
     const pl={name:S.me.name,index:S.me.index,chOverride:null};
     if(S.me.pid)pl.pid=S.me.pid;
-    if(lib){pl.index=lib.index;pl.libId=lib.id;if(lib.tee&&S.course.teeSets.some(t=>t.id===lib.tee))pl.tee=lib.tee;}
+    if(lib){pl.index=lib.index;pl.libId=lib.id;pl.tee=teeForPlayer(lib,S.course);}
     if(!pl.tee)pl.tee=(S.players[0]&&S.players[0].tee)||(S.course.teeSets[0]&&S.course.teeSets[0].id);
     S.players.unshift(pl);
   }
@@ -3777,6 +3785,8 @@ function vPlayers(){
             <div><div class="tiny">Handicap index</div><input id="meEIdx" type="text" inputmode="decimal" value="${S.me.index}"></div>
           </div>
           <div class="mt"><div class="tiny">Email — backups &amp; restore</div><input id="meEEmail" type="text" inputmode="email" autocapitalize="off" placeholder="you@email.com" value="${esc(localStorage.getItem('wolfBackupEmail')||'')}"></div>
+          ${(()=>{const ml=S.playerLib.find(x=>x.name.trim().toLowerCase()===S.me.name.trim().toLowerCase());
+            return ml?stdTeePicker(ml.id,ml.stdTee||stdTeeOf(ml.teeName)):'';})()}
           <div id="meEErr" class="tiny mt" style="color:var(--red);font-weight:600"></div>
         </div>
       </div>
@@ -3785,7 +3795,7 @@ function vPlayers(){
         <button class="ghost" onclick="cancelEditMe()">Cancel</button>
       </div>`
     :(()=>{const meLib=S.playerLib.find(e=>e.name.trim().toLowerCase()===S.me.name.trim().toLowerCase());
-      return `<div class="row"><div><b>${esc(S.me.name)}</b><div class="tiny">Index ${S.me.index}${meLib&&meLib.teeName?` · prefers ${esc(meLib.teeName)} tees`:''}</div></div>
+      return `<div class="row"><div><b>${esc(S.me.name)}</b><div class="tiny">Index ${S.me.index}${meLib&&(meLib.stdTee||meLib.teeName)?` · ${esc(meLib.stdTee||meLib.teeName)} tees`:''}</div></div>
       <button class="ghost" onclick="editMe()">Edit</button></div>`;})()):''}
     ${scanOpen?`
       <div class="tiny mt">${(lobbySock&&lobbySock.readyState===1)?((scanShown=onlineList()).length?'On the app right now:':'Scanning… no one else is on the app at the moment.'):'Connecting…'}</div>
@@ -3812,12 +3822,13 @@ function vPlayers(){
           <div><div class="tiny">Handicap index</div><input id="epIdx" type="text" inputmode="decimal" value="${e.index}"></div>
         </div>
       </div>
+      <div class="row" style="border-top:none;display:block">${stdTeePicker(e.id,e.stdTee||stdTeeOf(e.teeName))}</div>
       <div class="row" style="border-top:none">
         <button class="ghost sel" style="flex:1" onclick="saveEditPlayer()">Save</button>
         <button class="ghost" onclick="cancelEditPlayer()">Cancel</button>
       </div>`
     :`<div class="row">
-      <div><b>${esc(e.name)}</b><div class="tiny">Index ${e.index}${e.teeName?` · prefers ${esc(e.teeName)} tees`:''}</div></div>
+      <div><b>${esc(e.name)}</b><div class="tiny">Index ${e.index}${(e.stdTee||e.teeName)?` · ${esc(e.stdTee||e.teeName)} tees`:''}</div></div>
       <span style="display:flex;gap:6px">
         <button class="ghost" onclick="startEditPlayer('${e.id}')">Edit</button>
         <button class="ghost danger" onclick="delPlayer('${e.id}')">✕</button>
@@ -3971,8 +3982,7 @@ function delHist(id){
 function pickCourse(i){set(()=>{
   syncLib();
   S.course=clone(S.courses[i]);
-  const t=S.course.teeSets[Math.min(1,S.course.teeSets.length-1)].id;
-  S.players.forEach(p=>{if(!S.course.teeSets.some(ts=>ts.id===p.tee))p.tee=t;});
+  applyTeePrefs();
 });}
 let armDelCourse=-1;
 function delCourse(i){
@@ -3988,8 +3998,7 @@ function delCourse(i){
     if(!S.courses.length)S.courses=builtinCourses();
     if(wasActive){
       S.course=clone(S.courses[0]);
-      const t=S.course.teeSets[Math.min(1,S.course.teeSets.length-1)].id;
-      S.players.forEach(p=>{if(!S.course.teeSets.some(ts=>ts.id===p.tee))p.tee=t;});
+      applyTeePrefs();
     }
   });
 }
@@ -4067,8 +4076,8 @@ function applyGhinCourse(g){
     holes:g.course.holes,_noteOk:true,
     _note:`Loaded from USGA/GHIN: ${shownName}${g.city?` (${g.city}, ${String(g.state||'').replace('US-','')})`:''} — pars, stroke indexes, tee ratings and slopes all included.`};
   normalizeNine(S.course);
-  const t=S.course.teeSets[Math.min(1,S.course.teeSets.length-1)].id;
-  S.players.forEach(p=>p.tee=t);
+  S.players.forEach(p=>{p.tee=null;});
+  applyTeePrefs();
   finder={status:'idle',choices:[],error:''};
   S.screen=pickingCourse?'pickcourse':'course';save();render();
 }
@@ -4473,6 +4482,130 @@ function commitPl(el,i,k){
 function libSaveRoster(){
   try{S.players.forEach(p=>{if(p&&p.name)upsertLib(Object.assign({},p));});}catch(e){}
 }
+// ---- standard tee boxes -------------------------------------------------
+// Courses name their tees anything: Tournament, Championship, Aggie, Palmer,
+// Burgundy, plus combos and (W) variants. A player's library preference is kept
+// in these five buckets so it carries from course to course; an exact pick is
+// still remembered per course for the odd layout that uses its own names.
+const STD_TEES=['Black','Blue','Blue/White','White','Gold','Red'];
+function stdTeeOf(name){
+  let n=String(name||'').trim().toLowerCase();
+  n=n.replace(/\s*\((?:w|m|women|men|ladies|lady)\)\s*$/,'').trim();
+  // Blue/White is common enough to be a standard choice; other combos are not.
+  if(/^blue\s*[\/&+-]\s*white(\s*combo)?$/.test(n))return 'Blue/White';
+  if(/[\/&+]|combo/.test(n))return null;
+  if(n==='black')return 'Black';
+  if(n==='blue')return 'Blue';
+  if(n==='white')return 'White';
+  if(n==='gold')return 'Gold';
+  if(n==='red'||n==='ladies'||n==='lady')return 'Red';
+  return null;
+}
+function isWomensTee(name){return /\((?:w|women|ladies|lady)\)\s*$/i.test(String(name||''));}
+// Does this course use standard colour names at all?
+function courseHasStdTees(course){
+  return (course&&course.teeSets||[]).some(t=>stdTeeOf(t.name));
+}
+// Which tee should this library player get on this course?
+function teeForPlayer(lib,course){
+  const sets=(course&&course.teeSets)||[];
+  if(!sets.length)return null;
+  const saved=lib&&lib.teeByCourse&&lib.teeByCourse[course.id];
+  if(saved&&sets.some(t=>t.id===saved))return saved;      // their pick for this course
+  const want=lib&&lib.stdTee;
+  if(want){
+    const hits=sets.filter(t=>stdTeeOf(t.name)===want);
+    if(hits.length)return (hits.find(t=>!isWomensTee(t.name))||hits[0]).id;
+  }
+  if(lib&&lib.teeName){                                    // legacy exact-name match
+    const t=sets.find(ts=>ts.name.toLowerCase()===String(lib.teeName).toLowerCase());
+    if(t)return t.id;
+  }
+  return sets[Math.min(1,sets.length-1)].id;
+}
+function libOf(pl){
+  if(!pl||!S.playerLib)return null;
+  return (pl.libId&&S.playerLib.find(e=>e.id===pl.libId))||
+         S.playerLib.find(e=>e.name.trim().toLowerCase()===(pl.name||'').trim().toLowerCase())||null;
+}
+// Re-seat everyone on a course change, honouring each player's own preference.
+function applyTeePrefs(){
+  if(!S.course||!S.course.teeSets||!S.course.teeSets.length)return;
+  S.players.forEach(pl=>{
+    if(S.course.teeSets.some(t=>t.id===pl.tee))return;     // already valid here
+    const t=teeForPlayer(libOf(pl),S.course);
+    if(t)pl.tee=t;
+  });
+}
+function stdTeePicker(libId,cur){
+  return `<div class="mt"><div class="tiny">Usual tees</div>
+    <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:4px">
+      ${STD_TEES.map(t=>`<button class="ghost ${cur===t?'sel':''}" style="flex:1;min-width:56px;padding:9px 4px;font-size:14px"
+        onclick="setStdTee('${libId}','${t}')">${t}${t==='Red'?'<span style="font-size:10px;opacity:.7"> ♀</span>':''}</button>`).join('')}
+    </div>
+    <div class="tiny mt" style="opacity:.75">Used on any course with standard tee names. Courses with their own names remember your pick separately.</div>
+  </div>`;
+}
+function setStdTee(libId,t){
+  set(()=>{
+    const e=S.playerLib.find(x=>x.id===libId);
+    if(!e)return;
+    e.stdTee=t;e.teeName=t;
+    // an explicit choice clears per-course overrides on standard-named courses,
+    // so the new preference actually takes effect where it should
+    if(e.teeByCourse){
+      Object.keys(e.teeByCourse).forEach(cid=>{
+        const c=(S.courses||[]).find(x=>x.id===cid);
+        if(c&&courseHasStdTees(c))delete e.teeByCourse[cid];
+      });
+    }
+    S.players.forEach(pl=>{
+      if((pl.libId&&pl.libId===libId)||pl.name.trim().toLowerCase()===e.name.trim().toLowerCase()){
+        const id=teeForPlayer(e,S.course);if(id)pl.tee=id;
+      }
+    });
+  });
+}
+let teeAsk=null;   // {then:fn,title,sub}
+function askTee(then,title,sub){
+  const sets=(S.course&&S.course.teeSets)||[];
+  if(!sets.length){if(then)then();return;}
+  teeAsk={then:then||null,title:title||'Which tees?',sub:sub||''};
+  render();
+}
+function teeAskPick(id){
+  set(()=>{
+    const me=S.players[myPlayerIdx()]||S.players[0];
+    if(me){
+      me.tee=id;
+      upsertLib({name:me.name,index:me.index,tee:id,libId:me.libId,pid:me.pid});
+    }
+  });
+}
+function teeAskDone(){
+  const fn=teeAsk&&teeAsk.then;teeAsk=null;
+  if(fn)fn(); else render();
+}
+function teeAskSheetHTML(){
+  if(!teeAsk)return '';
+  const sets=(S.course&&S.course.teeSets)||[];
+  const me=S.players[myPlayerIdx()]||S.players[0]||{};
+  const cur=me.tee;
+  const tot=t=>{const y=(t.yds&&t.yds.length)?t.yds.reduce((a,b)=>a+(+b||0),0):0;return y?y+' yds':'';};
+  return `<div class="vfWrap" role="dialog" aria-modal="true" aria-labelledby="taTitle">
+    <div class="vfCard">
+      <h2 id="taTitle" class="vfTitle">${esc(teeAsk.title)}</h2>
+      <div class="tiny mb">${esc(teeAsk.sub||S.course.name)}</div>
+      <div id="taList" data-keepscroll style="max-height:44vh;overflow:auto">
+        ${sets.map(t=>{
+          const bits=[tot(t),t.rating?(t.rating+(t.slope?' / '+t.slope:'')):''].filter(Boolean).join(' · ');
+          return `<button class="ghost ${t.id===cur?'sel':''}" style="width:100%;text-align:left;padding:11px 12px;margin-bottom:6px"
+            onclick="teeAskPick('${t.id}')"><b>${esc(t.name)}</b>${bits?`<span class="tiny" style="display:block;opacity:.75">${esc(bits)}</span>`:''}</button>`;
+        }).join('')}
+      </div>
+      <button class="big mt" onclick="teeAskDone()">Play from ${esc((sets.find(t=>t.id===cur)||sets[0]).name)}</button>
+    </div></div>`;
+}
 function upsertLib(p){
   if(!S.playerLib)return;
   const nm=(p.name||'').trim();
@@ -4482,7 +4615,15 @@ function upsertLib(p){
   if(!e){e=S.playerLib.find(x=>x.name.trim().toLowerCase()===nm.toLowerCase());if(e)p.libId=e.id;}
   if(!e){e={id:'pl'+Date.now()+Math.floor(Math.random()*1e4)};S.playerLib.push(e);p.libId=e.id;}
   if(!(/\s\d+$/.test(nm)&&nm.replace(/\s\d+$/,'')===e.name))e.name=nm;
-  e.index=p.index;e.teeName=teeOf(p).name;
+  e.index=p.index;
+  const _t=teeOf(p);
+  e.teeName=_t.name;
+  const _std=stdTeeOf(_t.name);
+  if(_std)e.stdTee=_std;                       // last standard tee used — the sticky one
+  if(S.course&&S.course.id){                   // and exactly what they played here
+    e.teeByCourse=e.teeByCourse||{};
+    e.teeByCourse[S.course.id]=_t.id;
+  }
   if(p.pid)e.pid=p.pid;
 }
 function loadPlayer(i,libId){
@@ -4732,6 +4873,13 @@ function pairGroups(){
   if(err)err.textContent='';
 }
 function startRound(){
+  // Confirm tees against this course before the first hole. The flag means
+  // "already confirmed" and is set by the callback, not before it — setting it
+  // early made the sheet reopen itself forever.
+  if(!startRound._confirmed){
+    return askTee(()=>{startRound._confirmed=true;startRound();},'Confirm your tees',S.course.name);
+  }
+  startRound._confirmed=false;
   pickingCourse=false;
   try{localStorage.removeItem('btGreensUsed');}catch(e){}
   greensState=null;
