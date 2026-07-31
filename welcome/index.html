@@ -10,24 +10,6 @@
 <meta property="og:image" content="https://battletees.app/banner.jpg">
 <link rel="icon" href="/icon-180.png">
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<!-- PRIVATE BETA GATE — remove this block (and the #btgate div) at launch -->
-<meta name="robots" content="noindex, nofollow">
-<style>
-html.gated body>*:not(#btgate){display:none!important}
-#btgate{display:none;position:fixed;inset:0;z-index:2147483647;background:#0f1522;background-image:radial-gradient(ellipse 90% 50% at 50% -10%,rgba(74,168,255,.12),transparent);flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:24px;text-align:center}
-html.gated #btgate{display:flex}
-#btgate .sw{font-size:52px}
-#btgate .nm{font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:36px;letter-spacing:2px;color:#c9a227}
-#btgate .sb{color:#a9b0c0;font-size:13px;letter-spacing:2.5px;text-transform:uppercase;margin-bottom:14px}
-#btgate input{background:#1b2433;border:2px solid #2a3550;border-radius:10px;color:#e8e4d8;font-size:17px;padding:12px 16px;width:min(260px,80vw);text-align:center;outline:none}
-#btgate input:focus{border-color:#4aa8ff}
-#btgate button{font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:19px;letter-spacing:1px;color:#241d08;background:linear-gradient(180deg,#e0bb45,#a8851e);border:2px solid #8a6f1c;border-radius:10px;padding:11px 42px;box-shadow:3px 3px 0 #8a6f1c;cursor:pointer;margin-top:4px}
-#btgate button:active{transform:translate(2px,2px);box-shadow:1px 1px 0 #8a6f1c}
-#btgmsg{color:#ff9b3d;font-size:14px;min-height:18px}
-#btgate.shake{animation:btshake .35s}
-@keyframes btshake{20%{transform:translateX(-8px)}40%{transform:translateX(8px)}60%{transform:translateX(-5px)}80%{transform:translateX(5px)}}
-</style>
-<script>if(localStorage.getItem('btGate')!=='open')document.documentElement.classList.add('gated');</script>
 <style>
 :root{--bg:#0f1522;--card:#1b2433;--gold:#c9a227;--gold-dk:#8a6f1c;--elec:#4aa8ff;--elec-dk:#1d5c9e;
 --ember:#c76a1d;--ink:#e8e4d8;--ink2:#a9b0c0;--ink3:#7d8494;--line:#2a3550}
@@ -37,7 +19,7 @@ background-image:radial-gradient(ellipse 90% 40% at 50% -5%,rgba(74,168,255,.10)
 radial-gradient(ellipse 70% 35% at 85% 100%,rgba(199,106,29,.08),transparent)}
 .wrap{max-width:960px;margin:0 auto;padding:0 20px}
 h1,h2,h3,.rj{font-family:Rajdhani,Inter,sans-serif}
-.card{background:var(--card);border:2px solid var(--gold);border-radius:14px;box-shadow:5px 5px 0 var(--gold-dk);padding:22px}
+.card{background:linear-gradient(180deg,rgba(27,36,51,.93),rgba(20,28,42,.93));backdrop-filter:blur(3px);border:2px solid var(--gold);border-radius:14px;box-shadow:5px 5px 0 var(--gold-dk);padding:22px}
 /* hero */
 .hero{text-align:center;padding:34px 0 10px}
 .hero img.banner{width:100%;max-width:760px;border-radius:14px;border:2px solid var(--gold);box-shadow:6px 6px 0 var(--gold-dk)}
@@ -61,7 +43,7 @@ a.game{text-decoration:none;color:inherit;cursor:pointer;transition:transform .0
 a.game:hover{transform:translate(-1px,-1px)}
 .game b{font-family:Rajdhani;font-size:23px;display:block;line-height:1.15}
 .game span{font-size:13.5px;color:var(--ink2)}
-.game img{height:64px;flex:none;filter:drop-shadow(0 0 6px rgba(0,0,0,.5))}
+.game img{height:78px;flex:none;filter:drop-shadow(0 0 6px rgba(0,0,0,.5))}
 .game .em{font-size:40px;flex:none}
 .g-wolf{background:rgba(199,106,29,.14);border-color:var(--ember);box-shadow:3px 3px 0 #7a3f0f}
 .g-nine{background:rgba(74,168,255,.10);border-color:var(--elec);box-shadow:3px 3px 0 var(--elec-dk)}
@@ -79,7 +61,7 @@ a.game:hover{transform:translate(-1px,-1px)}
 .g-ham{background:rgba(184,115,51,.12);border-color:#b87333;box-shadow:3px 3px 0 #6e4418}
 /* features */
 .feats{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
-.feat{background:var(--card);border:2px solid var(--fc,#2a3550);border-radius:14px;padding:18px 18px 15px;
+.feat{background:linear-gradient(180deg,rgba(27,36,51,.92),rgba(20,28,42,.92));backdrop-filter:blur(3px);border:2px solid var(--fc,#2a3550);border-radius:14px;padding:18px 18px 15px;
   box-shadow:4px 4px 0 rgba(0,0,0,.5);position:relative;overflow:hidden}
 .feat::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 95% 70% at 15% 0%,var(--ft,transparent),transparent);pointer-events:none}
 .feat>*{position:relative}
@@ -94,6 +76,17 @@ a.game:hover{transform:translate(-1px,-1px)}
 .install .os,.modal-card .os{font-family:Rajdhani;font-weight:700;color:var(--gold);font-size:19px;letter-spacing:.5px;margin-top:14px}
 kbd{background:#0d1420;border:1px solid var(--line);border-radius:6px;padding:1px 8px;font-family:inherit;font-size:14px}
 .soon{cursor:default;filter:saturate(.55) brightness(.85)}
+/* beta request form */
+#betaForm label{display:block;margin-bottom:13px;font-family:Rajdhani,Inter,sans-serif;font-weight:700;
+  font-size:15px;letter-spacing:.6px;text-transform:uppercase;color:var(--gold)}
+#betaForm label .opt{color:var(--ink3);font-weight:600;text-transform:none;letter-spacing:0}
+#betaForm input,#betaForm textarea{display:block;width:100%;margin-top:5px;background:#0d1420;
+  border:2px solid var(--line);border-radius:9px;color:var(--ink);font:inherit;font-size:16px;
+  padding:10px 13px;outline:none;font-weight:400;text-transform:none;letter-spacing:0}
+#betaForm input:focus,#betaForm textarea:focus{border-color:var(--elec)}
+#betaForm textarea{resize:vertical;line-height:1.5}
+#betaForm button{width:100%;margin-top:4px;cursor:pointer;font-family:Rajdhani;font-weight:700;border:2px solid var(--gold-dk)}
+.fine{color:var(--ink3);font-size:12.5px;text-align:center;margin-top:12px;line-height:1.5}
 .soon:active{transform:none;box-shadow:4px 4px 0 var(--elec-dk)}
 /* install modal */
 .modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:20px;
@@ -109,6 +102,44 @@ footer{text-align:center;padding:52px 0 42px;color:var(--ink3);font-size:13.5px}
 a{color:var(--elec)}
 .center{text-align:center}
 </style>
+<style>
+
+/* ---- generated storm plate: fixed backdrop, fades into the slate ---- */
+.plate{position:absolute;top:0;left:0;right:0;height:min(86vh,880px);
+  background:url('/storm-sm.webp') no-repeat center top/cover;
+  -webkit-mask-image:linear-gradient(180deg,#000 0,#000 46%,rgba(0,0,0,.55) 72%,transparent 100%);
+  mask-image:linear-gradient(180deg,#000 0,#000 46%,rgba(0,0,0,.55) 72%,transparent 100%);
+  opacity:.92}
+@media (min-width:820px){.plate{background-image:url('/storm.webp')}}
+/* guarantee text contrast no matter how bright the plate gets */
+.plate::after{content:'';position:absolute;inset:0;
+  background:radial-gradient(ellipse 78% 62% at 50% 44%,rgba(15,21,34,.72),rgba(15,21,34,.18) 70%,transparent)}
+
+/* ---- atmosphere: fixed behind all content, never interactive ---- */
+.atmos{position:fixed;inset:0;z-index:-1;pointer-events:none;overflow:hidden}
+.atmos canvas{position:absolute;inset:0;width:100%;height:100%}
+
+/* fire pooling in the lower corners — red/ember left, electric blue right */
+.flame{position:absolute;bottom:-16vh;width:66vw;height:52vh;filter:blur(46px);opacity:.34}
+.flame-l{left:-14vw;background:radial-gradient(ellipse 50% 62% at 50% 100%,
+  rgba(232,96,79,.44),rgba(199,106,29,.26) 42%,transparent 72%);
+  animation:flick 5.5s ease-in-out infinite}
+.flame-r{right:-14vw;background:radial-gradient(ellipse 50% 62% at 50% 100%,
+  rgba(74,168,255,.40),rgba(29,92,158,.22) 44%,transparent 72%);
+  animation:flick 6.9s ease-in-out infinite reverse}
+@keyframes flick{0%,100%{transform:scaleY(1) scaleX(1);opacity:.42}
+  35%{transform:scaleY(1.13) scaleX(.96);opacity:.60}
+  70%{transform:scaleY(.94) scaleX(1.05);opacity:.36}}
+
+/* one sheet-flash element the bolt code strobes */
+.sheet{position:absolute;inset:0;background:linear-gradient(180deg,rgba(120,190,255,.16),transparent 46%);
+  opacity:0;transition:opacity .09s ease-out}
+
+@media (prefers-reduced-motion:reduce){
+  .flame{animation:none}
+  .atmos canvas{display:none}
+}
+</style>
 </head>
 <body>
 
@@ -118,8 +149,8 @@ a{color:var(--elec)}
     <div class="tag">Thirteen battles. One scorecard.</div>
     <p class="sub">The golf side-games your group already argues about — Wolf, Nassau, Skins, Vegas and more —
     played one at a time or <b>stacked together on one scorecard</b>, scored live on every phone, and settled before you reach the parking lot.</p>
-    <span class="cta soon">⚔️ &nbsp;Battle Tees — private beta</span>
-    <div class="free">Free at public launch · No account · Works offline on the course</div>
+    <a class="cta gold" href="#beta" onclick="openBeta();return false">⚔️ &nbsp;Request beta access</a>
+    <div class="free">Private beta · Free · No account · Works offline on the course</div>
   </div>
 
   <section>
@@ -159,11 +190,12 @@ a{color:var(--elec)}
     </div>
   </section>
 
-  <section class="install">
-    <div class="sect-title">GET IT ON YOUR PHONE</div>
-    <p class="sect-sub">Battle Tees installs straight from the web — no app store, nothing to pay.</p>
+  <section class="install" id="beta">
+    <div class="sect-title">WANT IN?</div>
+    <p class="sect-sub">Battle Tees is in <b>private beta</b> — we let groups in a few at a time so we can fix
+    what breaks before the next foursome finds it. Tell us about your group and we'll send you a link.</p>
     <div class="center">
-      <button class="cta gold" onclick="document.getElementById('installModal').classList.add('open')" style="border:2px solid var(--gold-dk);cursor:pointer;font-family:Rajdhani;font-weight:700">📲 &nbsp;Show me how — 10 seconds</button>
+      <button class="cta gold" onclick="openBeta()" style="border:2px solid var(--gold-dk);cursor:pointer;font-family:Rajdhani;font-weight:700">⚔️ &nbsp;Request beta access</button>
     </div>
   </section>
 
@@ -172,51 +204,131 @@ a{color:var(--elec)}
   </footer>
 </div>
 
-<div class="modal" id="installModal" onclick="if(event.target===this)this.classList.remove('open')">
+<div class="modal" id="betaModal" onclick="if(event.target===this)this.classList.remove('open')">
   <div class="modal-card">
-    <button class="modal-x" onclick="document.getElementById('installModal').classList.remove('open')">✕</button>
-    <div class="sect-title" style="margin-bottom:4px">GET IT ON YOUR PHONE</div>
-    <p class="sect-sub" style="margin-bottom:18px">Ten seconds, no app store, nothing to pay.</p>
-    <div class="os">iPhone</div>
-    <ol>
-      <li>Open <b>battletees.app</b> in <b>Safari</b></li>
-      <li>Tap <kbd>Share</kbd> → <kbd>Add to Home Screen</kbd></li>
-    </ol>
-    <div class="os">Android</div>
-    <ol>
-      <li>Open <b>battletees.app</b> in <b>Chrome</b></li>
-      <li>Tap <kbd>⋮</kbd> → <kbd>Add to Home screen</kbd> / <kbd>Install</kbd></li>
-    </ol>
-    <div class="center" style="margin-top:20px"><span class="cta gold soon">🔒 Private beta — public launch soon</span></div>
+    <button class="modal-x" onclick="document.getElementById('betaModal').classList.remove('open')">&#10005;</button>
+    <div class="sect-title" style="margin-bottom:4px">REQUEST BETA ACCESS</div>
+    <p class="sect-sub" style="margin-bottom:18px">A few details so we know who we're letting in.</p>
+    <form id="betaForm" onsubmit="return sendBeta(event)">
+      <label>Your name<input id="bfName" required autocomplete="name"></label>
+      <label>Email<input id="bfEmail" type="email" required autocomplete="email"></label>
+      <label>Home course or city<input id="bfCourse" autocomplete="off"></label>
+      <label>What does your group play? <span class="opt">(optional)</span><textarea id="bfNote" rows="3" placeholder="Wolf every Saturday, dollar a point, four of us"></textarea></label>
+      <button class="cta gold" type="submit">Send request</button>
+    </form>
+    <p class="fine">Opens your email app with the request ready to send to<br>battletees.apps@gmail.com — nothing sends until you tap send.</p>
   </div>
-</div>
-
-<div id="btgate">
-  <div class="sw">⚔️</div>
-  <div class="nm">BATTLE TEES</div>
-  <div class="sb">Private beta · invite only</div>
-  <input id="btgpw" type="password" placeholder="passcode" autocomplete="off" autocapitalize="none">
-  <button id="btgbtn">Enter</button>
-  <div id="btgmsg"></div>
 </div>
 <script>
 (function(){
-if(!document.getElementById('btgate'))return;
-var H='87157500783e10d780146949468699ecdd372fa7996a679beeba0b7dcc37f8c7';
-function go(){
-  var v=(document.getElementById('btgpw').value||'').trim().toLowerCase();
-  if(!v)return;
-  crypto.subtle.digest('SHA-256',new TextEncoder().encode(v)).then(function(b){
-    var h=Array.prototype.map.call(new Uint8Array(b),function(x){return x.toString(16).padStart(2,'0')}).join('');
-    if(h===H){localStorage.setItem('btGate','open');document.documentElement.classList.remove('gated');}
-    else{document.getElementById('btgmsg').textContent='Not it — ask the commissioner.';
-      var g=document.getElementById('btgate');g.classList.remove('shake');void g.offsetWidth;g.classList.add('shake');}
+  var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var cv = document.getElementById('btfx'); if(!cv || reduce) return;
+  var ctx = cv.getContext('2d'), W=0, H=0, DPR=Math.min(devicePixelRatio||1, 2);
+
+  function size(){
+    var w = cv.clientWidth, h = cv.clientHeight;
+    if(!w || !h || (w===W && h===H)) return !!w;      /* nothing to do / not visible yet */
+    W=w; H=h; cv.width=W*DPR; cv.height=H*DPR;
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    return true;
+  }
+  size();
+  var rt; addEventListener('resize', function(){ clearTimeout(rt); rt=setTimeout(size,150); });
+  /* the beta gate hides every body child, so the canvas measures 0 until it is
+     dismissed — and no resize event fires when that happens. Watch the element. */
+  if(window.ResizeObserver) new ResizeObserver(size).observe(cv);
+
+  /* ---------- lightning: midpoint-displacement bolts ---------- */
+  var bolts = [];
+  function makeBolt(){
+    var x0 = W*(.08 + Math.random()*.84), y0 = -20;
+    var x1 = x0 + (Math.random()-.5)*W*.34, y1 = H*(.34 + Math.random()*.4);
+    var pts = [{x:x0,y:y0},{x:x1,y:y1}];
+    for(var pass=0; pass<6; pass++){
+      var out=[];
+      for(var i=0;i<pts.length-1;i++){
+        var a=pts[i], b=pts[i+1];
+        var mx=(a.x+b.x)/2, my=(a.y+b.y)/2;
+        var off=(Math.random()-.5)*Math.abs(b.y-a.y)*.52;
+        out.push(a,{x:mx+off,y:my});
+      }
+      out.push(pts[pts.length-1]); pts=out;
+    }
+    var branches=[];
+    for(var k=0;k<2+((Math.random()*3)|0);k++){
+      var s = pts[(Math.random()*(pts.length-6)+3)|0];
+      var seg=[s]; var bx=s.x, by=s.y;
+      var dir = Math.random()<.5 ? -1 : 1;
+      for(var j=0;j<5;j++){ bx += dir*(8+Math.random()*30); by += 14+Math.random()*34;
+        seg.push({x:bx,y:by}); }
+      branches.push(seg);
+    }
+    return { pts:pts, branches:branches, life:1, born:performance.now() };
+  }
+  function drawPath(p, w, alpha, col){
+    ctx.beginPath(); ctx.moveTo(p[0].x,p[0].y);
+    for(var i=1;i<p.length;i++) ctx.lineTo(p[i].x,p[i].y);
+    ctx.strokeStyle=col; ctx.globalAlpha=alpha; ctx.lineWidth=w;
+    ctx.lineCap='round'; ctx.lineJoin='round'; ctx.stroke();
+  }
+
+  var sheet = document.getElementById('btsheet');
+  var nextStrike = performance.now() + 1600 + Math.random()*3400;
+
+  function frame(now){
+    if(!size() && !W){ raf = requestAnimationFrame(frame); return; }  /* still hidden */
+    ctx.clearRect(0,0,W,H);
+
+    ctx.globalCompositeOperation='lighter';
+
+    /* strikes */
+    if(now > nextStrike){
+      bolts.push(makeBolt());
+      if(Math.random()<.45) setTimeout(function(){ bolts.push(makeBolt()); }, 90+Math.random()*140);
+      sheet.style.opacity = (.55 + Math.random()*.45);
+      setTimeout(function(){ sheet.style.opacity = 0; }, 70 + Math.random()*90);
+      nextStrike = now + 2600 + Math.random()*6500;
+    }
+    for(var b=bolts.length-1; b>=0; b--){
+      var bo=bolts[b], age=(now-bo.born)/470;
+      if(age>=1){ bolts.splice(b,1); continue; }
+      var al=Math.pow(1-age, 1.7);
+      ctx.shadowBlur=26; ctx.shadowColor='rgba(74,168,255,.95)';
+      drawPath(bo.pts, 5.5, al*.34, 'rgba(74,168,255,.95)');
+      for(var k=0;k<bo.branches.length;k++) drawPath(bo.branches[k], 2.4, al*.30, 'rgba(110,190,255,.9)');
+      ctx.shadowBlur=10; ctx.shadowColor='rgba(210,235,255,.9)';
+      drawPath(bo.pts, 1.5, al*.92, 'rgba(238,247,255,.98)');
+      ctx.shadowBlur=0;
+    }
+    ctx.globalAlpha=1; ctx.globalCompositeOperation='source-over';
+    raf = requestAnimationFrame(frame);
+  }
+  var raf = requestAnimationFrame(frame);
+
+  /* stop burning battery in a background tab */
+  document.addEventListener('visibilitychange', function(){
+    if(document.hidden){ cancelAnimationFrame(raf); }
+    else { nextStrike = performance.now() + 1200; raf = requestAnimationFrame(frame); }
   });
-}
-document.getElementById('btgbtn').addEventListener('click',go);
-document.getElementById('btgpw').addEventListener('keydown',function(e){if(e.key==='Enter')go()});
 })();
 </script>
-
+<script>
+function openBeta(){document.getElementById('betaModal').classList.add('open');
+  setTimeout(function(){var n=document.getElementById('bfName');if(n)n.focus()},60);}
+function sendBeta(e){
+  e.preventDefault();
+  var v=function(id){return (document.getElementById(id).value||'').trim();};
+  var name=v('bfName'), email=v('bfEmail'), course=v('bfCourse'), note=v('bfNote');
+  var body='Beta access request from battletees.app\n\n'
+    +'Name:   '+name+'\n'+'Email:  '+email+'\n'+'Course: '+(course||'-')+'\n\n'
+    +'Their group:\n'+(note||'-')+'\n';
+  location.href='mailto:battletees.apps@gmail.com?subject='
+    +encodeURIComponent('Beta access request \u2014 '+name)+'&body='+encodeURIComponent(body);
+  return false;
+}
+document.addEventListener('keydown',function(e){
+  if(e.key==='Escape'){var m=document.getElementById('betaModal');if(m)m.classList.remove('open');}});
+if(location.hash==='#beta')addEventListener('load',openBeta);
+</script>
 </body>
 </html>

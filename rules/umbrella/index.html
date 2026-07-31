@@ -21,35 +21,88 @@ h1,h2,.rj{font-family:Rajdhani,Inter,sans-serif}
 .top{padding:22px 0 6px;font-size:14px}
 .top a{color:var(--elec);text-decoration:none}
 .hero{text-align:center;padding:8px 0 4px}
-.hero img{height:150px;filter:drop-shadow(0 0 14px rgba(0,0,0,.6))}
+.hero img{height:clamp(230px,52vw,340px);filter:drop-shadow(0 0 22px rgba(0,0,0,.62)) drop-shadow(0 0 40px rgba(199,106,29,.20))}
 h1{font-size:clamp(30px,6vw,44px);letter-spacing:.5px;color:var(--gc);margin-top:6px}
 .tag{color:var(--ink2);font-size:16px;margin-bottom:18px}
-.card{background:var(--card);border:2px solid var(--gc);border-radius:14px;box-shadow:5px 5px 0 rgba(0,0,0,.45);padding:20px 22px;margin:16px 0}
-.card h2{color:var(--gold);font-size:21px;letter-spacing:.5px;margin-bottom:8px}
+.card{background:linear-gradient(180deg,rgba(27,36,51,.93),rgba(20,28,42,.93));backdrop-filter:blur(3px);
+  border:2px solid var(--gc);border-radius:14px;box-shadow:5px 5px 0 rgba(0,0,0,.45);padding:20px 22px;margin:16px 0;
+  position:relative;overflow:hidden}
+.card::before{content:'';position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(ellipse 90% 62% at 8% 0%,var(--tint,transparent),transparent 70%)}
+.card>*{position:relative}
+.card h2{color:var(--gold);font-size:21px;letter-spacing:.5px;margin-bottom:8px;display:flex;align-items:center;gap:9px}
+.card h2 .ki{font-size:20px;filter:drop-shadow(0 0 8px currentColor)}
 .card p{font-size:15.5px;color:var(--ink);margin-bottom:10px}
 .card p:last-child{margin-bottom:0}
+/* section flavours */
+.k-strat{border-color:var(--elec);--tint:rgba(74,168,255,.14)}
+.k-strat h2{color:#7cc0ff}
+.k-fun{border-color:#c76a1d;--tint:rgba(232,96,79,.14)}
+.k-fun h2{color:#ff9b3d}
+.k-wager{border-color:var(--gold);--tint:rgba(201,162,39,.15)}
+.k-wager h2{color:#e8c552}
+.card.k-wager p b{color:#f0d271}
+.stake{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 2px}
+.stake span{font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:13.5px;letter-spacing:.6px;
+  background:rgba(201,162,39,.13);border:1px solid rgba(201,162,39,.45);color:#e8c552;
+  border-radius:999px;padding:5px 13px}
+.house{margin-top:14px;padding:11px 14px;border-left:3px solid var(--gold);
+  background:rgba(201,162,39,.07);border-radius:0 8px 8px 0;font-size:14px;color:var(--ink2)}
+.house b{color:var(--ink)}
+.netnote{margin-top:14px;padding:12px 15px;border-left:3px solid var(--elec);
+  background:rgba(74,168,255,.09);border-radius:0 8px 8px 0;font-size:14.5px;color:var(--ink2)}
+.netnote b{color:#9ccfff}
+.netnote .lede{display:block;font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:16px;
+  letter-spacing:.5px;color:#9ccfff;margin-bottom:3px}
+.tune{margin-top:14px;padding:12px 15px;border-left:3px solid var(--gc);
+  background:color-mix(in srgb,var(--gc) 9%,transparent);border-radius:0 8px 8px 0;
+  font-size:14.5px;color:var(--ink2)}
+.tune b{color:var(--ink)}
+.tune .lede{display:block;font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:16px;
+  letter-spacing:.5px;color:var(--gc);margin-bottom:3px}
 .cta{display:block;text-align:center;font-family:Rajdhani;font-weight:700;font-size:21px;color:#f4f9ff;
 background:linear-gradient(180deg,#5cb2ff,#2f7fd4);border:2px solid var(--elec-dk);border-radius:12px;
 padding:14px;text-decoration:none;box-shadow:4px 4px 0 var(--elec-dk);margin:22px 0 8px}
 .all{display:block;text-align:center;color:var(--elec);font-size:14px;margin-top:14px}
 </style>
-<meta name="robots" content="noindex, nofollow">
 <style>
-html.gated body>*:not(#btgate){display:none!important}
-#btgate{display:none;position:fixed;inset:0;z-index:2147483647;background:#0f1522;background-image:radial-gradient(ellipse 90% 50% at 50% -10%,rgba(74,168,255,.12),transparent);flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:24px;text-align:center;font-family:Inter,-apple-system,sans-serif}
-html.gated #btgate{display:flex}
-#btgate .sw{font-size:52px}
-#btgate .nm{font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:36px;letter-spacing:2px;color:#c9a227}
-#btgate .sb{color:#a9b0c0;font-size:13px;letter-spacing:2.5px;text-transform:uppercase;margin-bottom:14px}
-#btgate input{background:#1b2433;border:2px solid #2a3550;border-radius:10px;color:#e8e4d8;font-size:17px;padding:12px 16px;width:min(260px,80vw);text-align:center;outline:none}
-#btgate input:focus{border-color:#4aa8ff}
-#btgate button{font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:19px;letter-spacing:1px;color:#241d08;background:linear-gradient(180deg,#e0bb45,#a8851e);border:2px solid #8a6f1c;border-radius:10px;padding:11px 42px;box-shadow:3px 3px 0 #8a6f1c;cursor:pointer;margin-top:4px}
-#btgate button:active{transform:translate(2px,2px);box-shadow:1px 1px 0 #8a6f1c}
-#btgmsg{color:#ff9b3d;font-size:14px;min-height:18px}
-#btgate.shake{animation:btshake .35s}
-@keyframes btshake{20%{transform:translateX(-8px)}40%{transform:translateX(8px)}60%{transform:translateX(-5px)}80%{transform:translateX(5px)}}
+
+/* ---- generated storm plate: fixed backdrop, fades into the slate ---- */
+.plate{position:absolute;top:0;left:0;right:0;height:min(86vh,880px);
+  background:url('/storm-sm.webp') no-repeat center top/cover;
+  -webkit-mask-image:linear-gradient(180deg,#000 0,#000 46%,rgba(0,0,0,.55) 72%,transparent 100%);
+  mask-image:linear-gradient(180deg,#000 0,#000 46%,rgba(0,0,0,.55) 72%,transparent 100%);
+  opacity:.92}
+@media (min-width:820px){.plate{background-image:url('/storm.webp')}}
+/* guarantee text contrast no matter how bright the plate gets */
+.plate::after{content:'';position:absolute;inset:0;
+  background:radial-gradient(ellipse 78% 62% at 50% 44%,rgba(15,21,34,.72),rgba(15,21,34,.18) 70%,transparent)}
+
+/* ---- atmosphere: fixed behind all content, never interactive ---- */
+.atmos{position:fixed;inset:0;z-index:-1;pointer-events:none;overflow:hidden}
+.atmos canvas{position:absolute;inset:0;width:100%;height:100%}
+
+/* fire pooling in the lower corners — red/ember left, electric blue right */
+.flame{position:absolute;bottom:-16vh;width:66vw;height:52vh;filter:blur(46px);opacity:.34}
+.flame-l{left:-14vw;background:radial-gradient(ellipse 50% 62% at 50% 100%,
+  rgba(232,96,79,.44),rgba(199,106,29,.26) 42%,transparent 72%);
+  animation:flick 5.5s ease-in-out infinite}
+.flame-r{right:-14vw;background:radial-gradient(ellipse 50% 62% at 50% 100%,
+  rgba(74,168,255,.40),rgba(29,92,158,.22) 44%,transparent 72%);
+  animation:flick 6.9s ease-in-out infinite reverse}
+@keyframes flick{0%,100%{transform:scaleY(1) scaleX(1);opacity:.42}
+  35%{transform:scaleY(1.13) scaleX(.96);opacity:.60}
+  70%{transform:scaleY(.94) scaleX(1.05);opacity:.36}}
+
+/* one sheet-flash element the bolt code strobes */
+.sheet{position:absolute;inset:0;background:linear-gradient(180deg,rgba(120,190,255,.16),transparent 46%);
+  opacity:0;transition:opacity .09s ease-out}
+
+@media (prefers-reduced-motion:reduce){
+  .flame{animation:none}
+  .atmos canvas{display:none}
+}
 </style>
-<script>if(localStorage.getItem('btGate')!=='open')document.documentElement.classList.add('gated');</script>
 </head>
 <body>
 <div class="wrap">
@@ -59,37 +112,114 @@ html.gated #btgate{display:flex}
     <h1>Umbrella</h1>
     <div class="tag">Six points a hole — sweep them all for twelve</div>
   </div>
-  <div class="card"><h2>The basics</h2><p>Umbrella is a 2-v-2 game where every hole has <b>six points</b> on offer across four categories: low ball <b>2</b>, low team total <b>2</b>, closest to pin <b>1</b>, gross birdie <b>1</b>.</p><p>Ties on a category mean nobody gets it. The birdie point is always gross — no strokes.</p></div>
-  <div class="card"><h2>☂ The umbrella</h2><p>Win all six points on one hole and it <b>doubles to twelve</b>. Dominance pays. Battle Tees counts your “umbrellas opened” in the standings.</p><p>Closest-to-pin is tapped every hole — any hole, not just par 3s — so short game matters everywhere.</p></div>
-  <div class="card"><h2>In Battle Tees</h2><p>Fixed teams picked in setup, net or gross via the scoring options, pairwise settlement per point.</p></div>
+  <div class="card "><h2>The basics</h2><p>Umbrella is a 2-v-2 game where every hole has <b>six points</b> on offer across four categories: low ball <b>2</b>, low team total <b>2</b>, closest to pin <b>1</b>, gross birdie <b>1</b>.</p><p>Ties on a category mean nobody gets it. The birdie point is always gross — no strokes.</p></div>
+  <div class="card "><h2>☂ The umbrella</h2><p>Win all six points on one hole and it <b>doubles to twelve</b>. Dominance pays. Battle Tees counts your “umbrellas opened” in the standings.</p><p>Closest-to-pin is tapped every hole — any hole, not just par 3s — so short game matters everywhere.</p></div>
+  <div class="card k-strat"><h2><span class="ki">⚡</span>How to actually win it</h2><p><b>Chase the sweep, but not stupidly.</b> Taking all six points doubles the hole to twelve. That's the whole game — one swept hole is worth two ordinary ones. When your team already has low ball and low total locked up, spending a shot to steal the closest-to-pin is genuinely correct.</p><p><b>Closest to pin is a full point every par 3.</b> That's four or five free points a round that most groups treat as an afterthought. Aim at the middle of the green and let the point come to you rather than short-siding yourself at a tucked flag.</p><p><b>The birdie point is exclusive — it doesn't stack.</b> Know which points are still live before deciding how aggressive to be on your approach.</p><p><b>Low team total rewards the partner having a bad day.</b> Two bogeys often beat a birdie and a double. Keep your partner in the hole even when their ball can't win it outright.</p></div>
+  <div class="card k-fun"><h2><span class="ki">🔥</span>Why the sweep is worth the wait</h2><p>Umbrella gives every hole four separate things to fight over, so there's always something at stake even when the hole is otherwise decided. Lost the low ball? Low total is still live. Lost both? There's still a birdie and a closest-to-pin.</p><p>Then there's the sweep. Taking all six and watching the hole double to twelve is the loudest moment in the game — and the app counts them for you at the end, so you know exactly how many <b>umbrellas you opened</b>.</p><p>It's the thinking golfer's team game: four small battles per hole, and knowing which one to fight is the skill.</p></div>
+  <div class="card k-wager"><h2><span class="ki">💰</span>The wager</h2><p>Six points a hole, twelve on a sweep — <b>108 points minimum</b> across 18 holes and considerably more if anyone is sweeping.</p><div class="stake"><span>Friendly · $0.10 / pt</span><span>Standard · $0.25 / pt</span><span>Grown folks · $0.50–1 / pt</span></div><p>The spread usually lands <b>20–45 points</b>, so a quarter a point is a $5–12 round. Sweeps are where the variance lives: two of them in a round can decide the whole thing.</p><div class="netnote"><span class="lede">Mixed handicaps? Play it net.</span>Umbrella takes strokes off the low man across all six points — so a stroke can win you low ball and low total on the same hole, which is four of the six points in one go. Battle Tees computes every player's course handicap from their index and the tees they actually played, then keeps <b>gross and net side by side, live, on every phone</b> — so the scratch sees their real number while everyone bets the one that decides the money. It is the difference between a group that bets and a group that talks about betting.</div><div class="house"><b>Battle Tees never touches the money.</b> The app scores it, applies your handicaps, and shows exactly who owes whom at the end — one clean list, no arguing on the tailgate. You settle it in the parking lot, the way golfers always have.</div></div>
+  <div class="card "><h2>In Battle Tees</h2><div class="tune"><span class="lede">Your group, your point structure.</span>Every group has its own house rules, and the app bends to them instead of the other way round. In Umbrella that means <b>team pairings</b>, and because closest-to-pin is one of the six points, the CTP picker is forced on every hole so nobody forgets to award it. Change any of it in setup before the round — the scoring, the standings and the settle math all follow automatically, and the numbers ride along to every phone in the group.</div><p>Fixed teams picked in setup, net or gross via the scoring options, pairwise settlement per point.</p></div>
   
-  <span class="cta" style="cursor:default;filter:saturate(.55) brightness(.85)">⚔️ &nbsp;Umbrella — in Battle Tees, private beta · public launch soon</span>
+  <a class="cta" href="/welcome/#beta">⚔️ &nbsp;Play Umbrella in Battle Tees — request beta access</a>
   <a class="all" href="/welcome/">Battle Tees — thirteen golf games, one scorecard, settled before the parking lot</a>
 </div>
-<div id="btgate">
-  <div class="sw">⚔️</div>
-  <div class="nm">BATTLE TEES</div>
-  <div class="sb">Private beta · invite only</div>
-  <input id="btgpw" type="password" placeholder="passcode" autocomplete="off" autocapitalize="none">
-  <button id="btgbtn">Enter</button>
-  <div id="btgmsg"></div>
+<div class="atmos" aria-hidden="true">
+  <div class="plate"></div>
+  <canvas id="btfx"></canvas>
+  <div class="flame flame-l"></div>
+  <div class="flame flame-r"></div>
+  <div class="sheet" id="btsheet"></div>
 </div>
 <script>
 (function(){
-if(!document.getElementById('btgate'))return;
-var H='87157500783e10d780146949468699ecdd372fa7996a679beeba0b7dcc37f8c7';
-function go(){
-  var v=(document.getElementById('btgpw').value||'').trim().toLowerCase();
-  if(!v)return;
-  crypto.subtle.digest('SHA-256',new TextEncoder().encode(v)).then(function(b){
-    var h=Array.prototype.map.call(new Uint8Array(b),function(x){return x.toString(16).padStart(2,'0')}).join('');
-    if(h===H){localStorage.setItem('btGate','open');document.documentElement.classList.remove('gated');}
-    else{document.getElementById('btgmsg').textContent='Not it — ask the commissioner.';
-      var g=document.getElementById('btgate');g.classList.remove('shake');void g.offsetWidth;g.classList.add('shake');}
+  var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var cv = document.getElementById('btfx'); if(!cv || reduce) return;
+  var ctx = cv.getContext('2d'), W=0, H=0, DPR=Math.min(devicePixelRatio||1, 2);
+
+  function size(){
+    var w = cv.clientWidth, h = cv.clientHeight;
+    if(!w || !h || (w===W && h===H)) return !!w;      /* nothing to do / not visible yet */
+    W=w; H=h; cv.width=W*DPR; cv.height=H*DPR;
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    return true;
+  }
+  size();
+  var rt; addEventListener('resize', function(){ clearTimeout(rt); rt=setTimeout(size,150); });
+  /* the beta gate hides every body child, so the canvas measures 0 until it is
+     dismissed — and no resize event fires when that happens. Watch the element. */
+  if(window.ResizeObserver) new ResizeObserver(size).observe(cv);
+
+  /* ---------- lightning: midpoint-displacement bolts ---------- */
+  var bolts = [];
+  function makeBolt(){
+    var x0 = W*(.08 + Math.random()*.84), y0 = -20;
+    var x1 = x0 + (Math.random()-.5)*W*.34, y1 = H*(.34 + Math.random()*.4);
+    var pts = [{x:x0,y:y0},{x:x1,y:y1}];
+    for(var pass=0; pass<6; pass++){
+      var out=[];
+      for(var i=0;i<pts.length-1;i++){
+        var a=pts[i], b=pts[i+1];
+        var mx=(a.x+b.x)/2, my=(a.y+b.y)/2;
+        var off=(Math.random()-.5)*Math.abs(b.y-a.y)*.52;
+        out.push(a,{x:mx+off,y:my});
+      }
+      out.push(pts[pts.length-1]); pts=out;
+    }
+    var branches=[];
+    for(var k=0;k<2+((Math.random()*3)|0);k++){
+      var s = pts[(Math.random()*(pts.length-6)+3)|0];
+      var seg=[s]; var bx=s.x, by=s.y;
+      var dir = Math.random()<.5 ? -1 : 1;
+      for(var j=0;j<5;j++){ bx += dir*(8+Math.random()*30); by += 14+Math.random()*34;
+        seg.push({x:bx,y:by}); }
+      branches.push(seg);
+    }
+    return { pts:pts, branches:branches, life:1, born:performance.now() };
+  }
+  function drawPath(p, w, alpha, col){
+    ctx.beginPath(); ctx.moveTo(p[0].x,p[0].y);
+    for(var i=1;i<p.length;i++) ctx.lineTo(p[i].x,p[i].y);
+    ctx.strokeStyle=col; ctx.globalAlpha=alpha; ctx.lineWidth=w;
+    ctx.lineCap='round'; ctx.lineJoin='round'; ctx.stroke();
+  }
+
+  var sheet = document.getElementById('btsheet');
+  var nextStrike = performance.now() + 1600 + Math.random()*3400;
+
+  function frame(now){
+    if(!size() && !W){ raf = requestAnimationFrame(frame); return; }  /* still hidden */
+    ctx.clearRect(0,0,W,H);
+
+    ctx.globalCompositeOperation='lighter';
+
+    /* strikes */
+    if(now > nextStrike){
+      bolts.push(makeBolt());
+      if(Math.random()<.45) setTimeout(function(){ bolts.push(makeBolt()); }, 90+Math.random()*140);
+      sheet.style.opacity = (.55 + Math.random()*.45);
+      setTimeout(function(){ sheet.style.opacity = 0; }, 70 + Math.random()*90);
+      nextStrike = now + 2600 + Math.random()*6500;
+    }
+    for(var b=bolts.length-1; b>=0; b--){
+      var bo=bolts[b], age=(now-bo.born)/470;
+      if(age>=1){ bolts.splice(b,1); continue; }
+      var al=Math.pow(1-age, 1.7);
+      ctx.shadowBlur=26; ctx.shadowColor='rgba(74,168,255,.95)';
+      drawPath(bo.pts, 5.5, al*.34, 'rgba(74,168,255,.95)');
+      for(var k=0;k<bo.branches.length;k++) drawPath(bo.branches[k], 2.4, al*.30, 'rgba(110,190,255,.9)');
+      ctx.shadowBlur=10; ctx.shadowColor='rgba(210,235,255,.9)';
+      drawPath(bo.pts, 1.5, al*.92, 'rgba(238,247,255,.98)');
+      ctx.shadowBlur=0;
+    }
+    ctx.globalAlpha=1; ctx.globalCompositeOperation='source-over';
+    raf = requestAnimationFrame(frame);
+  }
+  var raf = requestAnimationFrame(frame);
+
+  /* stop burning battery in a background tab */
+  document.addEventListener('visibilitychange', function(){
+    if(document.hidden){ cancelAnimationFrame(raf); }
+    else { nextStrike = performance.now() + 1200; raf = requestAnimationFrame(frame); }
   });
-}
-document.getElementById('btgbtn').addEventListener('click',go);
-document.getElementById('btgpw').addEventListener('keydown',function(e){if(e.key==='Enter')go()});
 })();
 </script>
 </body>

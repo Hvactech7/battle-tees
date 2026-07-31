@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+
+# Course data — thousands of JSON files, no search value, saves crawl budget.
+Disallow: /geo/
+Disallow: /courses/
+Disallow: /courses-index.json
+
+Sitemap: https://battletees.app/sitemap.xml
