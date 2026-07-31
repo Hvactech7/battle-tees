@@ -298,7 +298,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1785468546';
+const BUILD='1785469934';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -782,7 +782,7 @@ function scheduleReconnect(){
 // NOW instead of waiting out the backoff timer.
 function kickSync(){if(S.share&&S.share.on&&!sock){retryMs=1000;syncConnect();}}
 window.addEventListener('online',kickSync);
-document.addEventListener('visibilitychange',()=>{if(!document.hidden)kickSync();});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){autoEndStaleRound();kickSync();}});
 // In a shared round, each phone claims the player slot matching its profile
 // name. Claimed rows are score-locked on OTHER phones (tap ✎ to override).
 function claimMySlot(steal){
@@ -3890,6 +3890,28 @@ function resetRoster(){
   S.players.forEach((pl,i)=>{if(/^Player \d$/.test(pl.name))pl.name='Player '+(i+1);});
   syncGroupCounts();
 }
+// A round left open overnight is not a round. Cap it at 8 hours: the clock stops
+// at the 8-hour mark rather than wherever the app happened to be reopened, so a
+// forgotten round can't post a 3,000-minute pace. Rounds with no confirmed holes
+// are dropped rather than archived — they were never played.
+const MAX_ROUND_MS=8*60*60*1000;
+function autoEndStaleRound(){
+  if(!S.round||!S.round.started)return false;
+  const t0=S.round.myStartedAt||S.round.startedAt;
+  if(!t0||Date.now()-t0<MAX_ROUND_MS)return false;
+  const thru=(S.round.holes||[]).filter(r=>r&&r.confirmed).length;
+  S.round.myEndedAt=t0+MAX_ROUND_MS;      // cap the clock, don't use "now"
+  S.round._autoEnded=true;
+  try{stat('round_autoend',{game:S.round.game,thru,hours:8});}catch(e){}
+  if(!thru){                              // nothing was ever scored — discard it
+    const wasShared=S.share.on;
+    S.round=blankRound();S.screen='home';stView=null;resetRoster();save();
+    if(wasShared)leaveShare();else render();
+    return true;
+  }
+  endRound();
+  return true;
+}
 function endRound(){
   if(!S.round.started){S.screen='home';save();render();return;}
   if(!S.round.myEndedAt)S.round.myEndedAt=Date.now();  // clock stops once, forever
@@ -5788,6 +5810,7 @@ function art(f){return ART[f]||f;}
 setInterval(()=>{if(S.round.started&&!S.round.myEndedAt&&S.round.startedAt&&(S.screen==='hole'||S.screen==='standings'))render();},60000);
 stat('open',{ua:(navigator.userAgent.match(/iPhone OS [0-9_]+|Android [0-9.]+/)||[''])[0]});
 applyTheme();
+autoEndStaleRound();
 render();
 if(S.share&&S.share.on){primeCaches(false);syncConnect();}
 else lobbyConnect();
