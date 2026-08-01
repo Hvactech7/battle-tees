@@ -328,7 +328,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1785615754';
+const BUILD='1785621860';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -3163,6 +3163,10 @@ function gameGridHTML(fn){
     `;
 }
 function ruleOpened(d){
+  // one open at a time: reading a second game closes the first, so the list stays
+  // scannable instead of turning into a wall of prose. Collapse BEFORE measuring,
+  // since closing a card above this one changes where it sits on screen.
+  try{document.querySelectorAll('details.rulecard').forEach(x=>{if(x!==d&&x.open)x.open=false;});}catch(e){}
   // Park the opened card's TITLE just under the sticky topbar, so the rules read
   // from their first line. Two failure modes this fixes: the title hiding BEHIND
   // the sticky bar, and (on a phone) a card tapped low on screen whose rules open
@@ -3484,7 +3488,7 @@ function ruleCard(art,title,tag,body,key){
   // ontoggle: when a card opens, make sure its title is visible BELOW the sticky
   // topbar. scroll-margin-top handles the offset; we only scroll if the title is
   // actually hidden, so opening a card already on screen doesn't yank the page.
-  return `<details class="card" style="padding:12px 14px" ontoggle="if(this.open)ruleOpened(this)">
+  return `<details class="card rulecard" style="padding:12px 14px" ontoggle="if(this.open)ruleOpened(this)">
     <summary style="cursor:pointer;list-style:none;display:flex;align-items:center;gap:12px">
       ${art}<span style="flex:1;min-width:0"><b style="font-family:Rajdhani,sans-serif;font-size:22px">${title}</b>
       <span class="tiny" style="display:block">${tag}</span></span><span style="color:var(--ink3)">▾</span></summary>
