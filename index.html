@@ -298,7 +298,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1785560537';
+const BUILD='1785560856';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -6008,7 +6008,6 @@ function vSettleStack(G){
   </div>`;
   return topbar('Settlement — game stack',G.map(gameName).join(' · '),'')+`<main>
     ${cards}${totCard}
-    <button class="big warn" onclick="newRound()">${armNewRound?'Tap again to clear this round':'Start a new round'}</button>
   </main>`+tabs('settle');
 }
 // Settle now lives INSIDE Standings (Nathan's nav redesign 7/25): reuse the
@@ -6038,7 +6037,6 @@ function vSettle(){
         <table class="st"><tr><th>Player</th><th class="r">Pts</th><th class="r">Quota</th><th class="r">+/−</th></tr>
         ${margins.map(({i,d})=>`<tr><td>${esc(S.players[i].name)}</td><td class="r num" style="font-size:22px">${q.ledgers.gross[i]}</td><td class="r num" style="font-size:18px;color:var(--ink2)">${q.targets[i]}</td><td class="r num" style="font-size:26px;font-weight:700">${d>0?'+':''}${d}</td></tr>`).join('')}
         </table></div>
-      <button class="big warn" onclick="newRound()">${armNewRound?'Tap again to clear this round':'Start a new round'}</button>
     </main>`+tabs('settle');
   }
   if(gameOn()==='scramble'&&scrambleTeams().length===1){
@@ -6052,7 +6050,6 @@ function vSettle(){
     }).join('');
     return topbar('Team card','','')+`<main>${blocks}
       <div class="card tiny">Tournament tracker — one team, nothing to settle. Hand this card to the committee.</div>
-      <button class="big warn" onclick="newRound()">${armNewRound?'Tap again to clear this round':'Start a new round'}</button>
     </main>`+tabs('settle');
   }
   const all=computeGame();
@@ -6087,7 +6084,6 @@ function vSettle(){
     ${PAIRS_GAMES.includes(gameOn())&&gameOn()!=='skins'&&actIdx().length>1?`<div class="card"><div class="row"><span class="muted">$ per ${['stroke','scramble'].includes(gameOn())?'stroke':gameOn()==='bestball'?'hole':gameOn()==='nassau'?'bet':'point'} (optional)</span>
       <input type="number" step="0.25" min="0" value="${S.round.dollarPerPt||''}" placeholder="0" style="width:90px" onchange="set(()=>S.round.dollarPerPt=+this.value||0)"></div></div>`:''}
     ${blocks}
-    <button class="big warn" onclick="newRound()">${armNewRound?'Tap again to clear this round':'Start a new round'}</button>
   </main>`+tabs('settle');
 }
 let armNewRound=false;
