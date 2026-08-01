@@ -298,7 +298,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1785545458';
+const BUILD='1785545663';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1957,7 +1957,7 @@ function mapConfirm(){
     if(rec.gross[mi]==null){rec.gross[mi]=par;rec.gts[mi]=Date.now();}
     if(S.share.on){
       if(!rec.cfts)rec.cfts=[0,0,0,0];
-      myRows().forEach(i=>{if(rec.gross[i]!=null)rec.cfts[i]=Date.now();});
+      myRows(h).forEach(i=>{if(rec.gross[i]!=null)rec.cfts[i]=Date.now();});
       if(!rec.confirmed&&actIdx().every(i=>rec.cfts[i]>0)){rec.confirmed=true;closed=true;}
     }else if(!rec.confirmed&&actIdx().every(i=>rec.gross[i]!=null)){
       rec.confirmed=true;closed=true;
@@ -5165,8 +5165,15 @@ function advanceToNext(){
 }
 function confirmHole(){const h=S.round.cur;if(greensIsMode())greensConsumeTarget();set(()=>{S.round.holes[h].confirmed=true;if(!isReview())advanceToNext();});showSplash(h);}
 // ----- shared rounds: each phone confirms its own rows, then moves on -----
-function myRows(){
-  return actIdx().filter(i=>{const p=S.players[i];const dev=p&&(p.ownerDev||p.scorer);return !dev||dev===devId();});
+function myRows(h){
+  // A row is mine to confirm if nobody owns it, my phone owns it, OR I have
+  // tap-unlocked it on this hole. THE DEAD-PHONE FIX (PV 7/31): unlockRow used to
+  // grant edit rights only, so a group could type an absent player's score but
+  // never stamp their cfts — the hole could never confirm and the round could
+  // never end. Unlocking now carries the right to ratify what you typed.
+  const hh = (h==null ? S.round.cur : h);
+  return actIdx().filter(i=>{const p=S.players[i];const dev=p&&(p.ownerDev||p.scorer);
+    return !dev||dev===devId()||!!unlockedRows[hh+'-'+i];});
 }
 function cfOn(rec,i){return !!(rec&&rec.cfts&&rec.cfts[i]>0);}
 function confirmMine(){
@@ -5175,7 +5182,7 @@ function confirmMine(){
   set(()=>{
     const rec=S.round.holes[h];
     if(!rec.cfts)rec.cfts=[0,0,0,0];
-    myRows().forEach(i=>{if(rec.gross[i]!=null)rec.cfts[i]=Date.now();});
+    myRows(h).forEach(i=>{if(rec.gross[i]!=null)rec.cfts[i]=Date.now();});
     if(!rec.confirmed&&actIdx().every(i=>rec.cfts[i]>0)){rec.confirmed=true;closed=true;}
     if(!isReview())advanceToNext();
   });
