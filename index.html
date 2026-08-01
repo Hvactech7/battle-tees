@@ -298,7 +298,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1785545663';
+const BUILD='1785546189';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -818,7 +818,10 @@ function rowLock(h,i){
 }
 function shareRound(){
   lobbyClose();
+  const midRound=!!(S.round&&S.round.started);
   S.share={on:true,code:makeCode(),creator:true};
+  if(midRound)stat('round_share',{side:'host',game:S.round.game,
+    thru:S.round.holes.filter(r=>r.confirmed).length,players:NP()});
   S.shareMetaTs=Date.now();
   S.round.holes.forEach(r=>{if(!r._ts)r._ts=Date.now();});
   claimMySlot(true);
@@ -846,6 +849,7 @@ function guardedJoin(code){
 function joinFromInvite(code){if(!guardedJoin(code))return;joinRoundCode(code);}
 function joinRoundCode(code){
   lobbyClose();
+  stat('round_share',{side:'joiner'});
   S.share={on:true,code,creator:false};
   S.round.myStartedAt=Date.now();
   S.shareMetaTs=0;
@@ -4904,6 +4908,7 @@ function startRound(){
     S.round.span=clone(S.config.span||{count:18,start:0});S.round.startedAt=Date.now();S.round.myStartedAt=Date.now();
     S.round.cur=playOrder()[0];S.screen='hole';
     if(S.config.game!=='wolf')prefillNines(S.round.cur);});
+  S.round._sharedAtStart=!!S.share.on;
   stat('round_start',{game:S.round.game,course:S.course.name,holes:S.round.span.count,firstTee:S.round.span.start+1,
     lens:S.config.lens,players:NP(),shared:!!S.share.on,stack:(S.round.games||[]).join('+'),
     opts:S.round.game==='nines'?{n:S.config.nines.n,blitz:S.config.nines.blitz,ctp:S.config.nines.ctp}
@@ -5160,7 +5165,12 @@ function advanceToNext(){
     S.screen='settle';
     if(!S.round._statFin){S.round._statFin=true;
       stat('round_finish',{game:S.round.game,thru:S.round.holes.filter(r=>r.confirmed).length,
-        mins:S.round.startedAt?Math.round((Date.now()-S.round.startedAt)/60000):null});}
+        mins:S.round.startedAt?Math.round((Date.now()-S.round.startedAt)/60000):null,
+        // shared state AT THE END — round_start's flag is captured before anyone
+        // joins, so a round shared later used to log shared:false forever (PV 7/31)
+        shared:!!S.share.on, role:S.share.on?(S.share.creator?'host':'joiner'):'solo',
+        players:NP(), sharedAtStart:!!S.round._sharedAtStart,
+        sharedLater:!!(S.share.on&&!S.round._sharedAtStart)});}
   }else{S.round.cur=next;if(gameOn()!=='wolf')prefillNines(next);}
 }
 function confirmHole(){const h=S.round.cur;if(greensIsMode())greensConsumeTarget();set(()=>{S.round.holes[h].confirmed=true;if(!isReview())advanceToNext();});showSplash(h);}
