@@ -298,7 +298,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1785559375';
+const BUILD='1785560537';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -426,6 +426,8 @@ function defaultConfig(){
     game:'wolf',
     pts:{partnerWin:1, fieldBeatsPartners:2, loneWin:2, fieldBeatsLone:1, blindWin:3, fieldBeatsBlind:1, ctp:1},
     ctpAll:true,   // offer a closest-to-pin pick on every par 3, whatever the game
+    ctpMoney:{amt:0,carry:false},   // side bet on those picks; carry rolls an unclaimed par 3
+
     nines:{n:4,blitz:false,ctp:true},
     vegas:{pairing:0,rotate:'none',flip:true,ctp:false},
     stroke:{n:4},
@@ -473,6 +475,7 @@ function load(){
       if(s.autoBackup==null)s.autoBackup=true;
       if(!s.config.game)s.config.game='wolf';
       if(s.config.ctpAll===undefined)s.config.ctpAll=true;
+      if(!s.config.ctpMoney)s.config.ctpMoney={amt:0,carry:false};
       if(!s.config.nines)s.config.nines={n:4,blitz:false,ctp:true};
       if(!s.config.vegas)s.config.vegas={pairing:0,rotate:'none',flip:true,ctp:false};
       if(!s.config.stroke)s.config.stroke={n:4};
@@ -5118,6 +5121,85 @@ function ctpCardHTML(rec,idxs,title){
     <button class="ghost ${rec.ctp===-1?'sel':''}" onclick="setCtp(-1)">No one on green</button></div>
     <div class="tiny mt">Ball must be on the green.${scored?' Unclaimed = no point (no carryover).':' Recorded on your card — optional.'}</div></div>`;
 }
+// Does the running game already pay for CTP? Wolf/Nines/Vegas/Umbrella score it
+// as points, so a separate side bet there would pay twice. The money card is for
+// the games that only got a picker.
+function ctpGameScores(){
+  return stackHas('umbrella')||S.config.game==='wolf'
+    ||(stackHas('nines')&&S.config.nines.ctp)||(stackHas('vegas')&&S.config.vegas.ctp);
+}
+// Walk the par 3s in play order. Each one adds its stake to the pot; a claimed
+// hole hands the whole pot over. Unclaimed either rolls (carry on) or is void.
+function computeCtpPot(){
+  const cfg=S.config.ctpMoney||{amt:0,carry:false};
+  const amt=Math.max(0,+cfg.amt||0);
+  const act=actIdx();
+  const out={counts:[0,0,0,0],money:[0,0,0,0],pot:0,par3s:0,unclaimed:0,amt,carry:!!cfg.carry};
+  let pot=0;
+  for(const h of playOrder()){
+    const rec=S.round.holes[h];
+    if(!rec||!rec.confirmed)continue;
+    const hole=S.course.holes[physHole(h)];
+    if(!hole||hole.par!==3)continue;
+    out.par3s++;
+    pot=+(pot+amt).toFixed(2);
+    if(rec.ctp!=null&&rec.ctp>=0&&act.includes(rec.ctp)){
+      out.counts[rec.ctp]++;
+      out.money[rec.ctp]=+(out.money[rec.ctp]+pot).toFixed(2);
+      pot=0;
+    }else{
+      out.unclaimed++;
+      if(!out.carry)pot=0;
+    }
+  }
+  out.pot=pot;
+  return out;
+}
+function ctpSettleCardHTML(){
+  if(ctpGameScores())return '';           // already paid inside the game
+  if(!S.config.ctpAll)return '';
+  const c=computeCtpPot();
+  if(!c.par3s)return '';
+  const act=actIdx();
+  const order=act.slice().sort((a,b)=>(c.money[b]-c.money[a])||(c.counts[b]-c.counts[a]));
+  const any=c.money.some(v=>v>0);
+  const pairs=[];
+  if(c.amt>0&&act.length>1){
+    for(let a=0;a<act.length;a++)for(let b=a+1;b<act.length;b++){
+      const i=act[a],j=act[b],d=+(c.money[i]-c.money[j]).toFixed(2);
+      // settle on the full difference, exactly as skins does — one convention, not two
+      if(d!==0)pairs.push(`${esc(S.players[d>0?j:i].name)} → ${esc(S.players[d>0?i:j].name)}: <b class="num">${fmtMoney(Math.abs(d))}</b>`);
+    }
+  }
+  return `<div class="card"><h2>⛳ Closest to pin · ${c.par3s} par 3${c.par3s===1?'':'s'}</h2>
+    <div class="row"><span class="muted">Each CTP is worth</span>
+      <div class="stepper"><button onclick="chCtpAmt(-1)">−</button>
+      <span class="val num">${fmtMoney(c.amt)}</span>
+      <button onclick="chCtpAmt(1)">+</button></div></div>
+    <div class="row"><span class="muted">Carry unclaimed par 3s</span>
+      <button class="ghost ${c.carry?'sel':''}" onclick="toggleCtpCarry()">${c.carry?'On':'Off'}</button></div>
+    <table class="st"><tr><th>Player</th><th class="r">CTPs</th>${c.amt>0?'<th class="r">$</th>':''}</tr>
+    ${order.map(i=>`<tr><td>${esc(S.players[i].name)}</td>
+      <td class="r num" style="font-size:18px">${c.counts[i]}</td>
+      ${c.amt>0?`<td class="r num" style="font-size:18px">${fmtMoney(c.money[i])}</td>`:''}</tr>`).join('')}</table>
+    ${c.pot>0?`<div class="tiny mt">${fmtMoney(c.pot)} still riding — carries to the next par 3.</div>`:''}
+    ${c.unclaimed&&!c.carry?`<div class="tiny mt">${c.unclaimed} par 3${c.unclaimed===1?'':'s'} went unclaimed — no carryover, so ${c.unclaimed===1?'that stake is':'those stakes are'} void.</div>`:''}
+    ${!any&&c.amt>0?'<div class="tiny mt">Nobody has claimed one yet.</div>':''}
+    ${pairs.length?`<div class="mt"><h2>Pairwise</h2>${pairs.map(x=>`<div class="row">${x}</div>`).join('')}</div>`:''}
+    ${c.amt===0?'<div class="tiny mt">Set an amount above to settle CTPs for money.</div>':''}
+  </div>`;
+}
+function chCtpAmt(d){set(()=>{
+  const c=S.config.ctpMoney=S.config.ctpMoney||{amt:0,carry:false};
+  const cur=Math.max(0,+c.amt||0);
+  // dollar steps below $5, then five-dollar steps — same feel as the skins stepper
+  const step=cur<5?1:5;
+  c.amt=Math.max(0,+(cur+d*step).toFixed(2));
+});}
+function toggleCtpCarry(){set(()=>{
+  const c=S.config.ctpMoney=S.config.ctpMoney||{amt:0,carry:false};
+  c.carry=!c.carry;
+});}
 function toggleCtpAll(){set(()=>{S.config.ctpAll=!S.config.ctpAll;});}
 function setCtp(i){set(()=>{S.round.holes[S.round.cur].ctp=i;});}
 function setBBB(k,i){set(()=>{const rec=S.round.holes[S.round.cur];rec.bbb=Object.assign({},rec.bbb);rec.bbb[k]=i;});}
@@ -5936,7 +6018,8 @@ function settleSectionHTML(){
     const raw=vSettle();
     const a=raw.indexOf('<main>'),b=raw.lastIndexOf('</main>');
     if(a<0||b<0)return '';
-    return `<div style="display:flex;align-items:center;gap:8px;margin:20px 4px 6px"><span style="font-size:22px">💰</span><b style="font-size:19px;font-family:Rajdhani,Inter,sans-serif;letter-spacing:.5px">SETTLE UP</b></div>`+raw.slice(a+6,b);
+    return `<div style="display:flex;align-items:center;gap:8px;margin:20px 4px 6px"><span style="font-size:22px">💰</span><b style="font-size:19px;font-family:Rajdhani,Inter,sans-serif;letter-spacing:.5px">SETTLE UP</b></div>`
+      +ctpSettleCardHTML()+raw.slice(a+6,b);
   }catch(e){return '';}
 }
 function vSettle(){
