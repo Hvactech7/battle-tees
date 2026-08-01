@@ -298,7 +298,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1785558696';
+const BUILD='1785559375';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -425,6 +425,7 @@ function defaultConfig(){
     lens:'net', allowance:100, carryTies:false, last2LastPlace:true, _v:3,
     game:'wolf',
     pts:{partnerWin:1, fieldBeatsPartners:2, loneWin:2, fieldBeatsLone:1, blindWin:3, fieldBeatsBlind:1, ctp:1},
+    ctpAll:true,   // offer a closest-to-pin pick on every par 3, whatever the game
     nines:{n:4,blitz:false,ctp:true},
     vegas:{pairing:0,rotate:'none',flip:true,ctp:false},
     stroke:{n:4},
@@ -471,6 +472,7 @@ function load(){
       if(!s.theme)s.theme='dark';
       if(s.autoBackup==null)s.autoBackup=true;
       if(!s.config.game)s.config.game='wolf';
+      if(s.config.ctpAll===undefined)s.config.ctpAll=true;
       if(!s.config.nines)s.config.nines={n:4,blitz:false,ctp:true};
       if(!s.config.vegas)s.config.vegas={pairing:0,rotate:'none',flip:true,ctp:false};
       if(!s.config.stroke)s.config.stroke={n:4};
@@ -4321,6 +4323,11 @@ function vSetup(){
   return topbar(`Round setup — ${gameName(S.config.game)}${stackN>1?` +${stackN-1}`:''}`,SUBS[S.config.game]||'Order = tee order on hole 1 (wolf rotation)','gate')+`<main>
   <button class="ghost" style="width:100%;margin-bottom:12px" onclick="go('gate')">⚔️ Edit group — add or remove golfers</button>
   ${rows}
+  <div class="card"><div class="row"><span class="muted">⛳ Closest to pin on every par 3</span>
+    <button class="ghost ${S.config.ctpAll?'sel':''}" onclick="toggleCtpAll()">${S.config.ctpAll?'On':'Off'}</button></div>
+    <div class="tiny mt">${S.config.ctpAll
+      ? 'Every par 3 offers a CTP pick and it lands on your scorecard. Games that score CTP still do.'
+      : 'CTP only appears in games that score it — Wolf, Nines, Vegas, Umbrella.'}</div></div>
   ${(STACKABLE.includes(S.config.game)||S.config.game==='wolf'||S.config.game==='vegas')?(()=>{
     const four=NP()===4;
     const cur=S.config.games||[S.config.game];
@@ -5021,17 +5028,14 @@ function vHole(){
           <button onclick="chScore(${i},1)">+</button>
         </div>`}
       </div>`;}).join('');
-    const ctpRow=(hole.par===3||stackHas('umbrella'))?`<div class="card"><h2>Closest to pin (+${S.config.pts.ctp} pt)</h2>
-      <div class="flexwrap">${S.players.map((p,i)=>`<button class="ghost ${rec.ctp===i?'sel':''}" onclick="setCtp(${i})">${esc(p.name)}</button>`).join('')}
-      <button class="ghost ${rec.ctp===-1?'sel':''}" onclick="setCtp(-1)">No one on green</button></div>
-      <div class="tiny mt">Ball must be on the green. Unclaimed = no point (no carryover).</div></div>`:'';
+    const ctpRow=ctpCardHTML(rec,S.players.map((p,i)=>i),ctpScored()?` (+${S.config.pts.ctp} pt)`:'');
     // guest games stacked on a wolf round — same shared cards as the stacked hole screen
     const hamCard=hammerOn()?hammerCardHTML():'';
     const nasCard=stackHas('nassau')?nassauCardHTML():'';
     const skCard=stackHas('skins')?skinsCardHTML():'';
     const bbbOn=stackHas('bbb');
     const bbbCard=bbbOn?bbbCardHTML(rec,actIdx()):'';
-    let done=rec.gross.every(g=>g!=null)&&((hole.par!==3&&!stackHas('umbrella'))||rec.ctp!=null)
+    let done=rec.gross.every(g=>g!=null)&&(!ctpScored()||rec.ctp!=null)
       &&(!bbbOn||(rec.bbb&&['bingo','bango','bongo'].every(k=>rec.bbb[k]!=null)));
     const hamSt=hammerOn()?hamState(rec):null;
     if(hamSt&&hamSt.pend>=0)done=false;
@@ -5092,6 +5096,29 @@ function pickLone(){set(()=>{const r=S.round.holes[S.round.cur];r.mode='lone';pr
 function prefill(r){const par=S.course.holes[S.round.cur].par;if(!r.gts)r.gts=[0,0,0,0];r.gross=r.gross.map((g,i)=>{if(g==null){r.gts[i]=r.gts[i]||1;return par;}return g;});}
 function redoPick(){set(()=>{const r=S.round.holes[S.round.cur];r.mode=null;r.partner=null;});}
 function chScore(i,d){reviewTouch();set(()=>{const r=S.round.holes[S.round.cur];const v=(r.gross[i]??S.course.holes[S.round.cur].par)+d;r.gross[i]=Math.min(15,Math.max(1,v));if(!r.gts)r.gts=[0,0,0,0];r.gts[i]=Date.now();});}
+// A par 3 gets a closest-to-pin pick regardless of what game is running.
+// Games that SCORE ctp (wolf, nines, vegas, umbrella) still require it before the
+// hole can be confirmed; the always-on picker is optional so it never blocks play.
+function ctpScored(){
+  const hole=S.course.holes[physHole(S.round.cur)]||{};
+  if(hole.par!==3)return stackHas('umbrella');
+  return stackHas('umbrella')||S.config.game==='wolf'
+    ||(stackHas('nines')&&S.config.nines.ctp)||(stackHas('vegas')&&S.config.vegas.ctp);
+}
+function ctpShown(){
+  const hole=S.course.holes[physHole(S.round.cur)]||{};
+  return ctpScored()||(S.config.ctpAll&&hole.par===3);
+}
+function ctpCardHTML(rec,idxs,title){
+  if(!ctpShown())return '';
+  const ids=idxs&&idxs.length?idxs:actIdx();
+  const scored=ctpScored();
+  return `<div class="card"><h2>Closest to pin${title||''}</h2>
+    <div class="flexwrap">${ids.map(i=>`<button class="ghost ${rec.ctp===i?'sel':''}" onclick="setCtp(${i})">${esc(S.players[i].name)}</button>`).join('')}
+    <button class="ghost ${rec.ctp===-1?'sel':''}" onclick="setCtp(-1)">No one on green</button></div>
+    <div class="tiny mt">Ball must be on the green.${scored?' Unclaimed = no point (no carryover).':' Recorded on your card — optional.'}</div></div>`;
+}
+function toggleCtpAll(){set(()=>{S.config.ctpAll=!S.config.ctpAll;});}
 function setCtp(i){set(()=>{S.round.holes[S.round.cur].ctp=i;});}
 function setBBB(k,i){set(()=>{const rec=S.round.holes[S.round.cur];rec.bbb=Object.assign({},rec.bbb);rec.bbb[k]=i;});}
 // BBB tap card — shared by the stacked hole screen and the wolf (host) hole screen.
@@ -5292,11 +5319,8 @@ function vHoleNines(){
         <button onclick="chScore(${i},1)">+</button>
       </div>`}
     </div>`;}).join('');
-  const ctpOn=(isN&&S.config.nines.ctp&&hole.par===3)||stackHas('umbrella');
-  const ctpRow=ctpOn?`<div class="card"><h2>Closest to pin (+1 pt)</h2>
-    <div class="flexwrap">${act.map(i=>`<button class="ghost ${rec.ctp===i?'sel':''}" onclick="setCtp(${i})">${esc(S.players[i].name)}</button>`).join('')}
-    <button class="ghost ${rec.ctp===-1?'sel':''}" onclick="setCtp(-1)">No one on green</button></div>
-    <div class="tiny mt">Ball must be on the green. Unclaimed = no point.</div></div>`:'';
+  const ctpOn=ctpScored();
+  const ctpRow=ctpCardHTML(rec,act,ctpOn?' (+1 pt)':'');
   const hamSt=hammerOn()?hamState(rec):null;
   const hamCard=hammerOn()?hammerCardHTML():'';
   const nasCard=stackHas('nassau')?nassauCardHTML():'';
@@ -5382,10 +5406,8 @@ function vHoleVegas(){
       ${t.map(scoreRow).join('')}
     </div>`;
   }).join('');
-  const ctpOn=(S.config.vegas.ctp&&hole.par===3)||stackHas('umbrella');
-  const ctpRow=ctpOn?`<div class="card"><h2>Closest to pin${stackHas('umbrella')?' — umbrella point':' (+1 pt)'}</h2>
-    <div class="flexwrap">${[0,1,2,3].map(i=>`<button class="ghost ${rec.ctp===i?'sel':''}" onclick="setCtp(${i})">${esc(S.players[i].name)}</button>`).join('')}
-    <button class="ghost ${rec.ctp===-1?'sel':''}" onclick="setCtp(-1)">No one on green</button></div></div>`:'';
+  const ctpOn=ctpScored();
+  const ctpRow=ctpCardHTML(rec,[0,1,2,3],ctpOn?(stackHas('umbrella')?' — umbrella point':' (+1 pt)'):'');
   // vegas can host a stack: guest games ride along like they do on wolf holes
   const hamSt=hammerOn()?hamState(rec):null;
   const hamCard=hammerOn()?hammerCardHTML():'';
