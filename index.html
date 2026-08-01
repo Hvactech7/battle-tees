@@ -304,7 +304,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1785613893';
+const BUILD='1785614499';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1886,7 +1886,8 @@ function mapGeoNote(){
   const s2=document.getElementById('fmbsub');
   if(!s2||S.screen!=='map')return;
   if(mapMarks&&mapMarks.mePos)return;               // we have a fix; leave the yardage alone
-  if(geoState==='denied')s2.innerHTML='Location is off for Battle Tees — turn it on in Settings › Privacy › Location, then reopen this screen. Yardages are from the tee until then.';
+  // the map bar is short; a long sentence here wraps and shoves the fixed buttons
+  if(geoState==='denied')s2.innerHTML='Location off — yardages from the tee. Enable in Settings › Privacy.';
   else if(geoState==='waiting')s2.textContent='waiting for GPS — distance will appear once your phone has a fix.';
 }
 function openMap(){
@@ -2042,9 +2043,11 @@ function mapStatChipsHTML(hole){
   const mi=myPlayerIdx();
   const chip=(k,label)=>{
     const on=!!(rec.stats&&rec.stats[k]&&rec.stats[k][mi]);
-    return `<button id="map${k}" onclick="mapStatToggle('${k}')" style="height:32px;padding:0 12px;border-radius:9px;font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:14px;letter-spacing:.4px;background:${on?'var(--green-lt)':'rgba(15,21,34,.82)'};border:1.5px solid ${on?'var(--green)':'var(--line)'};color:${on?'var(--green-mid)':'var(--ink3)'};box-shadow:1px 1px 0 rgba(0,0,0,.3)">${on?'✓ ':''}${label}</button>`;
+    return `<button id="map${k}" onclick="mapStatToggle('${k}')" style="height:32px;flex:1;min-width:0;padding:0;border-radius:9px;font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:14px;letter-spacing:.4px;background:${on?'var(--green-lt)':'rgba(15,21,34,.82)'};border:1.5px solid ${on?'var(--green)':'var(--line)'};color:${on?'var(--green-mid)':'var(--ink3)'};box-shadow:1px 1px 0 rgba(0,0,0,.3)">${on?'✓ ':''}${label}</button>`;
   };
-  return `<div style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(166px + env(safe-area-inset-bottom));z-index:6;display:flex;gap:6px">
+  // the pair spans exactly the Track It button beneath it; on a par 3 the single
+  // GIR chip flexes to the same 120px so the stack still lines up
+  return `<div style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(166px + env(safe-area-inset-bottom));z-index:6;display:flex;gap:6px;width:120px">
     ${hole.par>=4?chip('fw','FW'):''}${chip('gir','GIR')}
   </div>`;
 }
@@ -2098,7 +2101,7 @@ function vMap(){
       <button class="ghost" onclick="mapPrev()">◀</button>
       <div class="center" style="flex:1">
         <div class="num" id="fmb" style="font-size:29px;white-space:nowrap">—</div>
-        <div class="tiny" id="fmbsub">loading…</div>
+        <div class="tiny" id="fmbsub" style="max-height:2.7em;overflow:hidden">loading…</div>
       </div>
       <button id="spinebtn" class="ghost" onclick="toggleSpine()" style="width:40px;height:40px;padding:0;display:flex;align-items:center;justify-content:center;opacity:${showSpine?'1':'.45'};border-color:${showSpine?'var(--green)':''}">
         <svg width="20" height="26" viewBox="0 0 20 26" fill="none"><path d="M12 2 C 5 9, 15 17, 8 24" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-dasharray="4 3"/></svg>
