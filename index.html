@@ -328,7 +328,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1785621860';
+const BUILD='1785650159';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -3498,7 +3498,7 @@ function ruleCard(art,title,tag,body,key){
 function vPickCourse(){
   return topbar(`Where are you playing?`,`${gameName(S.config.game)} · ${actIdx().map(i=>esc((S.players[i].name||'').split(' ')[0])).join(', ')}`,'setup')+`<main>
   <div class="card"><h2>Pick the course</h2>
-    ${courseListHTML(true)}
+    ${finder.status==='idle'?courseListHTML(true):''}
     ${courseFinderHTML(true)}
   </div>
   <div style="height:8px"></div>
@@ -3852,7 +3852,7 @@ function courseListHTML(forPick){
 function vCourses(){
   return topbar('Courses','','home')+`<main>
   <div class="card"><h2>Course</h2>
-    ${courseListHTML(false)}
+    ${finder.status==='idle'?courseListHTML(false):''}
     ${courseFinderHTML()}
     ${S.round.started?`<div class="tiny mt">Switching courses re-scores the round in progress against the new card.</div>`:''}
     ${backupBlockHTML()}
@@ -4165,12 +4165,9 @@ async function piCourseLookup(q,lat,lon){
 }
 function applyGhinCourse(g){
   syncLib();
-  const parts=String(g.matched||'').split(' - ');
-  const shownName=(parts.length===2&&parts[0].trim()===parts[1].trim())?parts[0].trim():(g.matched||g.course.name);
   S.course={id:'ghin-'+Date.now(),name:g.course.name,
     teeSets:g.course.teeSets.map((t,i)=>({id:'t'+Date.now()+i,name:t.name,rating:+t.rating||72,slope:+t.slope||113})),
-    holes:g.course.holes,_noteOk:true,
-    _note:`Loaded from USGA/GHIN: ${shownName}${g.city?` (${g.city}, ${String(g.state||'').replace('US-','')})`:''} — pars, stroke indexes, tee ratings and slopes all included.`};
+    holes:g.course.holes};
   normalizeNine(S.course);
   S.players.forEach(p=>{p.tee=null;});
   applyTeePrefs();
@@ -4181,8 +4178,13 @@ function openCourseSearch(){
   finder={status:'search',choices:[],results:[],error:''};
   grabCoords();
   render();
+  window.scrollTo(0,0);
   const el=document.getElementById('courseQ');
-  if(el)el.focus();
+  if(el){
+    el.focus();
+    // iOS opens the keyboard after focus returns; re-seat the input once it has
+    setTimeout(()=>{try{el.scrollIntoView({block:'center'});}catch(e){}},380);
+  }
 }
 async function runCourseSearch(){
   const el=document.getElementById('courseQ');
