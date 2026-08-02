@@ -328,7 +328,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1785650159';
+const BUILD='1785650836';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -3519,8 +3519,8 @@ function vHistory(){
           <div class="tiny">${when} · thru ${e.thru} · ${e.mins!=null?e.mins+' min':''}${e.code?' · shared '+esc(e.code):''}</div>
           <div class="tiny">${(e.players||[]).map(esc).join(' · ')}</div></div>
         <span style="display:flex;gap:6px;flex:none">
-          <button class="ghost" onclick="resumeRound('${e.id}')">▶ Continue</button>
-          <button class="ghost sel" onclick="reopenRound('${e.id}')">Open</button>
+          <button class="ghost" onclick="resumeRound('${e.id}')">▶ Continue Playing</button>
+          <button class="ghost sel" onclick="reopenRound('${e.id}')">Edit Round</button>
           <button class="ghost danger" onclick="delHist('${e.id}')">${armDelHist===e.id?'Delete?':'✕'}</button>
         </span></div>
     </div>`;}).join('')
