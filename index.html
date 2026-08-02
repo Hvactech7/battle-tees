@@ -337,7 +337,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1785657801';
+const BUILD='1785658152';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -3615,15 +3615,14 @@ function vHistory(){
     const d=new Date(e.endedAt);
     const when=`${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()]} ${d.getMonth()+1}/${d.getDate()}`;
     return `<div class="card" style="padding:12px 14px">
-      <div class="row" style="border-top:none">
-        <div style="flex:1;min-width:0"><b style="font-family:Rajdhani,sans-serif;font-size:20px">${gameName(e.game)} · ${esc(e.courseName)}</b>
-          <div class="tiny">${when} · thru ${e.thru} · ${e.mins!=null?e.mins+' min':''}${e.code?' · shared '+esc(e.code):''}</div>
-          <div class="tiny">${(e.players||[]).map(esc).join(' · ')}</div></div>
-        <span style="display:flex;gap:6px;flex:none">
-          <button class="ghost" onclick="resumeRound('${e.id}')">▶ Continue Playing</button>
-          <button class="ghost sel" onclick="reopenRound('${e.id}')">Edit Round</button>
-          <button class="ghost danger" onclick="delHist('${e.id}')">${armDelHist===e.id?'Delete?':'✕'}</button>
-        </span></div>
+      <b style="font-family:Rajdhani,sans-serif;font-size:20px">${gameName(e.game)} · ${esc(e.courseName)}</b>
+      <div class="tiny">${when} · thru ${e.thru} · ${e.mins!=null?e.mins+' min':''}${e.code?' · shared '+esc(e.code):''}</div>
+      <div class="tiny">${(e.players||[]).map(esc).join(' · ')}</div>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="ghost" style="flex:1.35;margin:0;white-space:nowrap" onclick="resumeRound('${e.id}')">▶ Continue Playing</button>
+        <button class="ghost sel" style="flex:1;margin:0;white-space:nowrap" onclick="reopenRound('${e.id}')">Edit Round</button>
+        <button class="ghost danger" style="flex:none;width:46px;margin:0" onclick="delHist('${e.id}')">${armDelHist===e.id?'Del?':'✕'}</button>
+      </div>
     </div>`;}).join('')
   :`<div class="card center muted">No finished rounds yet — they land here when you tap “End round”.</div>`}
   </main>`;
