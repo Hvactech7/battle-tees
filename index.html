@@ -124,6 +124,15 @@
   .card h2.vfTitle,.vfTitle{font-size:23px;color:var(--green);text-transform:none;
     letter-spacing:.2px;margin:0 0 8px;line-height:1.15}
   .vfCard input{font-size:17px;padding:13px 12px;width:100%}
+  /* yardage flash after marking a shot */
+  .ydflash{display:flex;flex-direction:column;align-items:center;line-height:.9;
+    color:var(--green-mid);opacity:.78;text-shadow:0 2px 18px rgba(0,0,0,.55);
+    font-family:Rajdhani,Inter,sans-serif;font-weight:800;font-size:110px;
+    animation:ydflash 1.5s ease-out forwards}
+  @keyframes ydflash{0%{opacity:0;transform:scale(.82)}12%{opacity:.78;transform:scale(1)}
+    62%{opacity:.78}100%{opacity:0;transform:scale(1.06)}}
+  @media (prefers-reduced-motion:reduce){.ydflash{animation:ydflash-static 1.5s forwards}
+    @keyframes ydflash-static{0%,80%{opacity:.78}100%{opacity:0}}}
   @keyframes vfFade{from{opacity:0}to{opacity:1}}
   @keyframes vfRise{from{opacity:0;transform:translateY(16px) scale(.98)}to{opacity:1;transform:none}}
   @media (prefers-reduced-motion:reduce){.vfWrap,.vfCard{animation:none}}
@@ -328,7 +337,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1785653228';
+const BUILD='1785655991';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1861,13 +1870,45 @@ function computeGame(){const g=gameOn();
 
 // ---------- hole map: satellite view + GPS distances (Phase 1) ----------
 let mapHole=0,LMAP=null,mapWatch=null,mapMarks={},leafletP=null;
-let lSpine=null,gmSpine=null,showSpine=(localStorage.btSpine==='on');
-function toggleSpine(){
-  showSpine=!showSpine;localStorage.btSpine=showSpine?'on':'off';
-  if(LMAP&&lSpine)lSpine.forEach(l=>showSpine?l.addTo(LMAP):LMAP.removeLayer(l));
-  if(typeof GMAP!=='undefined'&&GMAP&&gmSpine)gmSpine.setMap(showSpine?GMAP:null);
-  const b=document.getElementById('spinebtn');
-  if(b){b.style.opacity=showSpine?'1':'.45';b.style.borderColor=showSpine?'var(--green)':'';}
+let lSpine=null,gmSpine=null,showSpine=false;   // spines retired — always off
+let lShots=[],gmShots=[],showShots=(localStorage.btShots!=='off');
+function shotsForHole(h){
+  const log=(S.shotLog&&S.shotLog['s'+(S.round.startedAt||0)])||[];
+  return log.filter(e=>e&&e.h===h&&e.a&&e.b);
+}
+// residual tracked-shot lines — they stay up all round (and re-appear when a
+// past round is opened, since the log is keyed by the round's start stamp)
+function lastLinesFor(h){
+  // course-level memory: the lines from the LAST round that tracked this hole.
+  // Ghosted only in a live round that hasn't tracked the hole itself yet —
+  // the round's own log stays untouched, so past rounds keep their lines.
+  const cid=S.course&&S.course.id;
+  const mem=cid&&S.shotLast&&S.shotLast[cid]&&S.shotLast[cid][h];
+  if(!mem||!mem.shots||!mem.shots.length)return [];
+  if(isReview())return [];
+  if(mem.round===(S.round.startedAt||0))return [];   // it's this round's own set
+  return mem.shots;
+}
+function drawShotLines(){
+  lShots.forEach(l=>{try{LMAP.removeLayer(l);}catch(e){}});lShots=[];
+  if(!LMAP)return;
+  lastLinesFor(mapHole).forEach(e=>{
+    lShots.push(L.polyline([e.a,e.b],{color:'#0a1220',weight:4.5,opacity:.35,interactive:false}));
+    lShots.push(L.polyline([e.a,e.b],{color:'#6ecbff',weight:2.4,opacity:.75,dashArray:'7 5',interactive:false}));
+  });
+  shotsForHole(mapHole).forEach(e=>{
+    lShots.push(L.polyline([e.a,e.b],{color:'#0a1220',weight:5,opacity:.4,interactive:false}));
+    lShots.push(L.polyline([e.a,e.b],{color:'#e8604f',weight:2.5,opacity:.92,interactive:false}));
+    lShots.push(L.circleMarker(e.b,{radius:4,color:'#0a1220',weight:1.5,fillColor:'#e8604f',fillOpacity:1,interactive:false}));
+  });
+  if(showShots)lShots.forEach(l=>l.addTo(LMAP));
+}
+function toggleShots(){
+  showShots=!showShots;localStorage.btShots=showShots?'on':'off';
+  if(LMAP)lShots.forEach(l=>showShots?l.addTo(LMAP):LMAP.removeLayer(l));
+  if(typeof GMAP!=='undefined'&&GMAP)gmShots.forEach(o=>o.setMap(showShots?GMAP:null));
+  const b=document.getElementById('shotsbtn');
+  if(b){b.style.opacity=showShots?'1':'.45';b.style.borderColor=showShots?'var(--green)':'';}
 }
 function loadLeaflet(){
   if(window.L&&L.Map.prototype.setBearing)return Promise.resolve();
@@ -1945,7 +1986,7 @@ function mapNext(){mapHole=(mapHole+1)%18;render();}
 function teardownMap(){
   if(mapWatch!=null&&navigator.geolocation){navigator.geolocation.clearWatch(mapWatch);mapWatch=null;}
   if(LMAP){try{LMAP.remove();}catch(e){}LMAP=null;}
-  mapMarks={};lSpine=null;gmSpine=null;
+  mapMarks={};lSpine=null;gmSpine=null;lShots=[];gmShots=[];
 }
 // whose phone is this? self-claimed slot first, then profile-name match, else slot 0
 // ---------- shot tracker ----------
@@ -1996,15 +2037,36 @@ function openClubSheet(yds){
   document.body.appendChild(d);
 }
 function closeClubSheet(){const d=document.getElementById('clubsheet');if(d)d.remove();}
+function flashYardage(yds,club){
+  const d=document.createElement('div');
+  d.style.cssText='position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;pointer-events:none';
+  d.innerHTML=`<div class="ydflash"><span class="num">${yds}</span><span style="font-size:.36em">yds${club?` · ${esc(club)}`:''}</span></div>`;
+  document.body.appendChild(d);
+  setTimeout(()=>{try{d.remove();}catch(e){}},1600);
+}
 function saveShot(club){
   if(!pendingShot)return;
+  flashYardage(pendingShot.yds,club);
   const key='s'+(S.round.startedAt||0);
   if(!S.shotLog)S.shotLog={};
   if(!S.shotLog[key])S.shotLog[key]=[];
   S.shotLog[key].push({h:pendingShot.hole,a:pendingShot.a,b:pendingShot.b,yds:pendingShot.yds,club,at:Date.now()});
+  // course memory: first shot on a hole this round REPLACES the remembered set
+  // (so next time out, the ghost is last time's lines, not an accumulation);
+  // later shots the same round append to it
+  const cid=S.course&&S.course.id;
+  if(cid){
+    if(!S.shotLast)S.shotLast={};
+    if(!S.shotLast[cid])S.shotLast[cid]={};
+    const st=S.round.startedAt||0;
+    if(!S.shotLast[cid][pendingShot.hole]||S.shotLast[cid][pendingShot.hole].round!==st)
+      S.shotLast[cid][pendingShot.hole]={round:st,shots:[]};
+    S.shotLast[cid][pendingShot.hole].shots.push({a:pendingShot.a,b:pendingShot.b,yds:pendingShot.yds,club});
+  }
   save();
   pendingShot=null;trackShot=null;
   if(trackPin){try{LMAP.removeLayer(trackPin);}catch(e){}trackPin=null;}
+  if(LMAP)drawShotLines();           // the residual line lands the moment it's logged
   closeClubSheet();updateTrackBtn();
 }
 // X on the club sheet: cancel just the endpoint/mark — the start point stays
@@ -2144,13 +2206,13 @@ function vMap(){
   <div class="mapbar">
     <div class="row" style="border:none;padding:2px 0">
       <button class="ghost" onclick="mapPrev()">◀</button>
+      <button id="shotsbtn" class="ghost" onclick="toggleShots()" style="width:40px;height:40px;padding:0;display:flex;align-items:center;justify-content:center;opacity:${showShots?'1':'.45'};border-color:${showShots?'var(--green)':''}">
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><circle cx="4.5" cy="17.5" r="2.4" fill="currentColor"/><path d="M6 16 L16 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><circle cx="17.5" cy="4.5" r="2.4" fill="currentColor"/></svg>
+      </button>
       <div class="center" style="flex:1">
         <div class="num" id="fmb" style="font-size:29px;white-space:nowrap">—</div>
         <div class="tiny" id="fmbsub" style="max-height:2.7em;overflow:hidden">loading…</div>
       </div>
-      <button id="spinebtn" class="ghost" onclick="toggleSpine()" style="width:40px;height:40px;padding:0;display:flex;align-items:center;justify-content:center;opacity:${showSpine?'1':'.45'};border-color:${showSpine?'var(--green)':''}">
-        <svg width="20" height="26" viewBox="0 0 20 26" fill="none"><path d="M12 2 C 5 9, 15 17, 8 24" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-dasharray="4 3"/></svg>
-      </button>
       <button class="ghost" onclick="mapNext()">▶</button>
     </div>
   </div>`;
@@ -2463,8 +2525,17 @@ function initGoogleHoleMap(el,geo,geoErr){
   let greenC=null,greenPoly=null;
   if(geo&&geo.path&&geo.path.length>1){
     gmSpine=new gm.Polyline({path:geo.path.map(P),strokeOpacity:0,clickable:false,
-      icons:[{icon:{path:'M 0,-1 0,1',strokeOpacity:.95,strokeColor:'#ffffff',scale:2.2},offset:'0',repeat:'14px'}],map:showSpine?GMAP:null});
+      icons:[{icon:{path:'M 0,-1 0,1',strokeOpacity:.95,strokeColor:'#ffffff',scale:2.2},offset:'0',repeat:'14px'}],map:null});
     gmOverlays.push(gmSpine);
+    gmShots=[];
+    lastLinesFor(mapHole).forEach(e=>{
+      const gl=new gm.Polyline({path:[P(e.a),P(e.b)],strokeColor:'#6ecbff',strokeOpacity:.75,strokeWeight:2.4,clickable:false,map:showShots?GMAP:null});
+      gmOverlays.push(gl);gmShots.push(gl);
+    });
+    shotsForHole(mapHole).forEach(e=>{
+      const ln=new gm.Polyline({path:[P(e.a),P(e.b)],strokeColor:'#e8604f',strokeOpacity:.92,strokeWeight:2.5,clickable:false,map:showShots?GMAP:null});
+      gmOverlays.push(ln);gmShots.push(ln);
+    });
     const pathEnd=geo.path[geo.path.length-1];
     if(geo.green&&geo.green.length>2){
       greenPoly=geo.green;greenC=centroidOf(geo.green);
@@ -2651,9 +2722,10 @@ async function initHoleMap(){
       // soft dark casing so it stays readable on light fairways
       const smooth=splinePath(geo.path);
       lSpine=[L.polyline(smooth,{color:'#0a1220',weight:5.5,opacity:.45}),L.polyline(smooth,{color:'#ffffff',weight:2.5,opacity:.95,dashArray:'7 7'})];
-      if(showSpine)lSpine.forEach(l=>l.addTo(LMAP));
+      // spines retired — built for geometry (pathEnd) but never drawn
       pathEnd=geo.path[geo.path.length-1];
     }
+    drawShotLines();
     // no hazard/green overlays — the satellite imagery shows them natively
     // (green polygon still powers F/M/B + centroid math below)
     if(geo.green&&geo.green.length>2){
@@ -2861,6 +2933,7 @@ async function initHoleMap(){
   mapMarks._suppress=()=>suppressClick;
   startMapGps();
   drawTrackPin();
+  drawShotLines();                   // residual shot lines — geo or no geo
   LMAP.on('click',e=>{if(mapMarks._suppress&&mapMarks._suppress())return;mapTapAt([e.latlng.lat,e.latlng.lng]);});
 }
 function updateFMB(pos,label){
