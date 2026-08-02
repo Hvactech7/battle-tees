@@ -328,7 +328,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1785651012';
+const BUILD='1785652739';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -837,6 +837,27 @@ function claimMySlot(steal){
     // from their library gets corrected to my current profile the moment I join
     if(match&&p.ownerDev===devId()&&S.me.index!=null&&+p.index!==+S.me.index){p.index=+S.me.index;changed=true;}
   });
+  // Mid-round pickup group: someone joins whose name matches NO row. Seat them in
+  // the first placeholder slot (default "Player N" name, unowned, unscored) and
+  // widen the game's active-player count so their column scores. The meta doc
+  // carries players+config together, so one stamp propagates the whole seat.
+  const seated=S.players.some(p=>p.ownerDev===devId());
+  if(!seated){
+    const taken=i=>S.players[i].pid||S.players[i].ownerDev||!/^Player \d$/.test((S.players[i].name||'').trim());
+    const scored=i=>S.round.holes.some(r=>r&&r.confirmed&&r.gross[i]!=null);
+    let free=-1;
+    for(let i=0;i<4;i++)if(!taken(i)&&!scored(i)){free=i;break;}
+    if(free>=0){
+      const p=S.players[free];
+      p.name=S.me.name.trim();p.index=S.me.index!=null?+S.me.index:p.index;
+      if(S.me.pid)p.pid=S.me.pid;
+      p.ownerDev=devId();p.tee=null;
+      ['stroke','stbl','quota','skins','bbb'].forEach(k=>{
+        if(S.config[k]&&S.config[k].n!=null)S.config[k].n=Math.max(S.config[k].n,free+1);});
+      applyTeePrefs();
+      changed=true;
+    }
+  }
   if(changed){stampChanges();save();syncPush();}
 }
 let unlockedRows={};
@@ -3079,10 +3100,12 @@ function gameArtFile(g){return {wolf:'wolf.png',nines:'nine.png',vegas:'vegas.pn
 
 function gameBadgeHTML(){
   if(!S.round.started)return '';
-  const G=gamesOn(), g=G[0];
+  // lead with THIS phone's main game (per-phone choice); the +N counts the rest
+  const G=gamesOn(), g=(S.round.game&&(G.includes(S.round.game)||true))?S.round.game:G[0];
   if(!g)return '';
+  const others=G.filter(x=>x!==g).length;
   const f=gameArtFile(g);
-  return `<div class="gbadge">${f?`<img src="${art(f)}" alt="" onerror="this.style.display='none'">`:''}<span>${esc(gameName(g))}${G.length>1?` +${G.length-1}`:''}</span></div>`;
+  return `<div class="gbadge">${f?`<img src="${art(f)}" alt="" onerror="this.style.display='none'">`:''}<span>${esc(gameName(g))}${others?` +${others}`:''}</span></div>`;
 }
 function go(scr){S.screen=scr;save();render();}
 function tabs(sel){
@@ -3272,7 +3295,8 @@ function vHome(){
     ${S.share.on?`<div class="row mt" style="border-top:1px solid var(--line)">
         <span class="tiny">Live sync · <b class="num" style="font-size:16px;letter-spacing:2px">${esc(S.share.code)}</b> ${sockOpen?'<span style="color:var(--elec)">● connected</span>':'<span style="color:var(--red)">○ reconnecting…</span>'}</span>
         <button class="ghost danger" onclick="leaveShare()">Leave</button></div>`
-      :`<button class="ghost mt" style="width:100%" onclick="shareRound()">📍 Invite nearby players</button>`}
+      :`<button class="ghost mt" style="width:100%" onclick="shareRound()">👥 Make this a group round</button>
+        <div class="tiny mt">Get a code your group can join — your scores so far come with you.</div>`}
   </div>`:''}
   ${inRound?`  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
     <button class="ghost" style="padding:12px" onclick="go('courses')">⛳ Courses</button>
@@ -5730,6 +5754,11 @@ function setStView(v){
   const vt2=document.querySelector('.vtabs');
   if(vt2)vt2.scrollLeft=sl;
 }
+function makeMainGame(g){
+  if(g==='match')return;                       // lens only — no hole-screen engine
+  set(()=>{S.round.game=g;});
+  setStView(null);                             // the main view now IS this game
+}
 function stViews(){
   const g=S.round.game||S.config.game||'wolf';
   const four=NP()===4;
@@ -5845,7 +5874,9 @@ function vStandings(){
   const lbl=L=>L==='net'?'Net (hcp)':'Gross';
   const vtabs=views.length<2?'':`<div class="vtabs">${views.map(([k,l])=>
     `<button class="ghost ${view===k?'sel':''}" onclick="setStView(${k===g?'null':`'${k}'`})">${k===g?'⛳ ':''}${l}</button>`).join('')}</div>`;
-  const whatIf=view!==g?`<div class="tiny mb">What-if view from the same scores — settlement still pays by ${gameName(g)}.</div>`:'';
+  const whatIf=view!==g&&!stackHas(view)?`<div class="tiny mb">What-if view from the same scores — settlement still pays by the round's games.</div>`:'';
+  const mainBtn=view!==g&&view!=='match'
+    ?`<button class="ghost mb" style="width:100%" onclick="makeMainGame('${view}')">★ Make Main Game — lead with ${gameName(view)} on my score screen</button>`:'';
   const genericCard=(title,led,fmt,asc,note)=>{
     const order=actIdx().slice().sort((a,b)=>asc?led[prim][a]-led[prim][b]:led[prim][b]-led[prim][a]);
     return `<div class="card"><h2>${title} · thru ${thru}</h2>${whatIf}
@@ -6004,7 +6035,7 @@ function vStandings(){
   const extra=(thru>0?`
     <div class="card" onclick="openFullCard()" style="cursor:pointer"><h2>Scorecard · gross strokes <span class="tiny" style="font-weight:400">— tap for all 18</span></h2>${scorecardHTML()}
       <div class="tiny mt">Green = under par · amber = bogey · red = double or worse. Swipe the card sideways.</div></div>`:'')+statsCard;
-  return topbar('Standings',esc(S.course.name),'','','')+`<main>${vtabs}${paceLine()}${tables}${extra}
+  return topbar('Standings',esc(S.course.name),'','','')+`<main>${vtabs}${mainBtn}${paceLine()}${tables}${extra}
     ${all!=null?`<div class="card"><h2>Hole history (tap to edit)</h2>${hist||'<div class="muted">No holes confirmed yet.</div>'}</div>`:''}
     ${settleSectionHTML()}
   </main>`+tabs('standings');
