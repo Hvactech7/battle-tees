@@ -337,7 +337,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1785655991';
+const BUILD='1785657801';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1285,9 +1285,14 @@ function courseHandicaps(){
     return Math.round(p.index*(t.slope/113)+(t.rating-pt));
   });
 }
+// Which game the currently-running ENGINE is scoring for. Strokes rules differ by
+// game (stroke play = full handicap, everything else = off the low man), and with
+// per-phone main games the viewer's main must not leak into another game's math —
+// two phones watching different mains have to settle every stacked game identically.
+let engineGame=null;
 function playingStrokes(){
   const ch=courseHandicaps();
-  if(gameOn()==='stroke') // stroke play: net is against the course — full handicap
+  if((engineGame||gameOn())==='stroke') // stroke play: net against the course — full handicap
     return ch.map(c=>Math.max(0,Math.round(c*S.config.allowance/100)));
   const lo=Math.min(...actIdx().map(i=>ch[i]));  // low man among the players actually in the game
   return ch.map(c=>Math.max(0,Math.round((c-lo)*S.config.allowance/100)));
@@ -1344,7 +1349,7 @@ function gameOn(){
 }
 function gameName(g){const x=g||gameOn();return x==='nines'?'9’s':x==='vegas'?'Vegas':x==='stroke'?'Stroke':x==='bestball'?'Best Ball':x==='scramble'?'Scramble':x==='stableford'?'Stableford':x==='quota'?'Quota':x==='sixes'?'Sixes':x==='umbrella'?'Umbrella':x==='bbb'?'Bingo Bango Bongo':x==='nassau'?'Nassau':x==='skins'?'Skins':'Wolf';}
 function NP(){
-  const g=gameOn();
+  const g=engineGame||gameOn();   // engines size their roster by THEIR game, not the viewer's main
   if(g==='nines'&&S.config.nines&&S.config.nines.n===3)return 3;
   if(g==='stroke'&&S.config.stroke)return Math.min(4,Math.max(1,S.config.stroke.n||4));
   if(g==='stableford'&&S.config.stbl)return Math.min(4,Math.max(1,S.config.stbl.n||4));
@@ -5936,6 +5941,18 @@ function teamPickerRow(g){
   return `<div class="mt" style="display:flex;gap:6px;flex-wrap:wrap">${P.map((T,pi)=>
     `<button class="ghost ${cur===pi?'sel':''}" onclick="setTeamPairing('${g}',${pi})">${nm(T[0][0])}+${nm(T[0][1])} v ${nm(T[1][0])}+${nm(T[1][1])}</button>`).join('')}</div>`;
 }
+// pin each engine to its own game for strokes purposes (see engineGame above)
+(function(){
+  const wrap=(n,g)=>{const o=window[n];if(!o)return;
+    window[n]=function(){const p=engineGame;engineGame=g;
+      try{return o.apply(this,arguments);}finally{engineGame=p;}};};
+  wrap('computeAll','wolf');wrap('computeNines','nines');wrap('computeVegas','vegas');
+  wrap('computeBestBall','bestball');wrap('computeScramble','scramble');
+  wrap('computeQuota','quota');wrap('computeBBB','bbb');wrap('computeSkins','skins');
+  wrap('computeNassau','nassau');wrap('computeSixes','sixes');wrap('computeUmbrella','umbrella');
+  wrap('computeStroke','stroke');wrap('computeStableford','stableford');
+  wrap('computeMatch','bestball');
+})();
 function vStandings(){
   const g=S.round.game||S.config.game||'wolf';
   const views=stViews();
@@ -6073,9 +6090,10 @@ function vStandings(){
     tables=`<div class="card"><h2>Match play · best ball · thru ${thru}</h2>${whatIf}${blocks}${teamPickerRow('bestball')}
       <div class="tiny mt">Better ball of each team wins the hole; most holes up wins the match.</div></div>`;
   }
-  const hist=all==null?'':S.round.holes.map((r,h)=>{
+  const hist=(all==null||!all.perHole)?'':S.round.holes.map((r,h)=>{
     if(!r.confirmed)return '';
     const info=all.perHole[h];
+    if(!info)return '';               // confirmed hole outside the current span
     const res=info.results[prim];
     if(gameOn()==='nines'){
       if(!res)return '';
@@ -6109,7 +6127,7 @@ function vStandings(){
     <div class="card" onclick="openFullCard()" style="cursor:pointer"><h2>Scorecard · gross strokes <span class="tiny" style="font-weight:400">— tap for all 18</span></h2>${scorecardHTML()}
       <div class="tiny mt">Green = under par · amber = bogey · red = double or worse. Swipe the card sideways.</div></div>`:'')+statsCard;
   return topbar('Standings',esc(S.course.name),'','','')+`<main>${vtabs}${mainBtn}${paceLine()}${tables}${extra}
-    ${all!=null?`<div class="card"><h2>Hole history (tap to edit)</h2>${hist||'<div class="muted">No holes confirmed yet.</div>'}</div>`:''}
+    ${(all!=null&&all.perHole)?`<div class="card"><h2>Hole history (tap to edit)</h2>${hist||'<div class="muted">No holes confirmed yet.</div>'}</div>`:''}
     ${settleSectionHTML()}
   </main>`+tabs('standings');
 }
