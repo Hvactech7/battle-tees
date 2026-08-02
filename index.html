@@ -328,7 +328,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1785652739';
+const BUILD='1785653228';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -5141,7 +5141,7 @@ function vHole(){
     </div>`:'';
     body=`<div class="card">
       <div class="row" style="border:none;padding-top:0"><span class="pill wolf">${modeLbl}</span>
-        ${!rec.confirmed?`<button class="ghost" onclick="redoPick()">Redo pick</button>`:''}</div>
+        ${!isReview()?`<button class="ghost" onclick="redoPick()">Redo pick</button>`:''}</div>
       ${scoreRows}
       </div>${hamCard}${nasCard}${skCard}${bbbCard}${ctpRow}${extrasCard}${resultNote}
       ${rec.confirmed
