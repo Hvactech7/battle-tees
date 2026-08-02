@@ -328,7 +328,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1785650836';
+const BUILD='1785651012';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -3069,7 +3069,6 @@ function verifySheetHTML(){
         <button class="ghost mt" style="width:100%" onclick="sendVerifyCode()">Send a new code</button>`)}
       ${verifyUI.msg?`<div class="tiny mt" style="color:${/^✓/.test(verifyUI.msg)?'var(--green-mid)':'var(--amber-bd,#d19a2f)'};font-weight:600">${esc(verifyUI.msg)}</div>`:''}
       <button class="ghost mt" style="width:100%" onclick="closeVerify()">${done?'Done':(atEnd?'Not now':'Close')}</button>
-      ${done||!atEnd?'':'<div class="tiny mt" style="opacity:.7">You can confirm later from the Players screen — your round stays on this phone until then.</div>'}
     </div></div>`;
 }
 function topbar(title,sub,backTo,cls,right){
