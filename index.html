@@ -337,7 +337,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1785658152';
+const BUILD='1785658682';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -3612,7 +3612,7 @@ function vHistory(){
   const H=S.history||[];
   return topbar('Past rounds','Reopen one to view or fix scores','home')+`<main>
   ${H.length?H.map(e=>{
-    const d=new Date(e.endedAt);
+    const d=new Date(e.startedAt||(e.endedAt-(e.mins||0)*60000));   // the day it was played
     const when=`${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()]} ${d.getMonth()+1}/${d.getDate()}`;
     return `<div class="card" style="padding:12px 14px">
       <b style="font-family:Rajdhani,sans-serif;font-size:20px">${gameName(e.game)} · ${esc(e.courseName)}</b>
@@ -4041,8 +4041,14 @@ function archiveRound(){
   if(!S.round._histId)S.round._histId='r'+Date.now()+Math.floor(Math.random()*1e4);
   const thru=S.round.holes.filter(r=>r.confirmed).length;
   const t0=S.round.myStartedAt||S.round.startedAt;
+  // A round's identity is the day it was PLAYED. Re-archiving after an edit keeps
+  // the original end stamp (no reorder, no date change); a live continue gets a
+  // fresh end stamp but startedAt still pins the displayed date to day one.
+  const prev=(S.history||[]).find(e=>e.id===S.round._histId);
   const entry={
-    id:S.round._histId,endedAt:Date.now(),
+    id:S.round._histId,
+    startedAt:(prev&&prev.startedAt)||S.round.startedAt||null,
+    endedAt:(S.round.reopened&&prev)?prev.endedAt:Date.now(),
     game:S.round.game||S.config.game,courseId:S.course.id,courseName:S.course.name,
     code:S.share.on?S.share.code:null,thru,
     mins:t0?Math.round(((S.round.myEndedAt||Date.now())-t0)/60000):null,
