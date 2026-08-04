@@ -337,7 +337,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1785824561';
+const BUILD='1785827486';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1137,6 +1137,91 @@ async function requestRestoreCode(){
   }catch(e){backupUI.msg='Could not connect — check your signal and try again.';}
   render();
 }
+// Ask the relay to email a fresh sign-in link. Used from the restore panel and
+// from the banner when a link turns out to be expired or already used — so a
+// dead link never strands anyone without a way forward.
+async function sendMagicLink(em, onMsg){
+  em = String(em||'').trim().toLowerCase();
+  if(!/^\S+@\S+\.\S+$/.test(em)){ onMsg('Enter a valid email address.', false); return false; }
+  try{ localStorage.setItem('wolfBackupEmail', em); }catch(e){}
+  onMsg('Sending your link…', null);
+  try{
+    const r = await relayBackup({op:'maglink', email:em});
+    if(r && r.ok){
+      onMsg(r.returning
+        ? '✓ Sent. Open it on this phone and your library comes back with it.'
+        : '✓ Sent. Open it on this phone to finish setting up.', true);
+      return true;
+    }
+    onMsg((r && r.error) || 'Could not send the link.', false);
+  }catch(e){
+    onMsg('Could not connect — check your signal and try again.', false);
+  }
+  return false;
+}
+
+// From the restore panel.
+async function requestRestoreLink(){
+  const em = bkEmail(); if(!em) return;
+  await sendMagicLink(em, (msg)=>{ backupUI.msg = msg; render(); });
+}
+
+// From the error banner — the address box lives in the banner itself.
+async function magRequestNew(){
+  const el = document.getElementById('magEmail');
+  await sendMagicLink(el && el.value, (msg, ok)=>{
+    magUI = {stage: ok===true ? 'ok' : (ok===false ? 'err' : 'working'), msg: msg,
+             askEmail: ok!==true};
+    render();
+  });
+}
+
+// ------------------------------------------------------- add to home screen
+// Nobody can silently install a PWA. iOS has no API at all — Add to Home Screen
+// is a manual Safari action. Android fires beforeinstallprompt, which lets us
+// offer a real one-tap install. So: capture the Android prompt, and show iOS
+// users the only route they actually have. Shown right after a successful
+// sign-in, which is the moment the app has just proved itself.
+let btInstallEvt = null;
+window.addEventListener('beforeinstallprompt', (e)=>{ e.preventDefault(); btInstallEvt = e; });
+window.addEventListener('appinstalled', ()=>{ btInstallEvt = null; if(magUI){magUI.install=false;render();} });
+
+function btStandalone(){
+  try{ return window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true; }
+  catch(e){ return false; }
+}
+function btIsIOS(){ return /iPad|iPhone|iPod/.test(navigator.userAgent||''); }
+// Gmail / Facebook style in-app browsers cannot add to the home screen at all —
+// the user has to reopen in Safari first, so say that instead of the recipe.
+function btInAppBrowser(){
+  const ua = navigator.userAgent||'';
+  return /FBAN|FBAV|Instagram|Line\/|Twitter|GSA\//.test(ua);
+}
+
+function installCtaHTML(){
+  if(!magUI || magUI.stage!=='ok') return '';      // only after a good sign-in
+  if(btStandalone()) return '';                    // already on the home screen
+  const wrap = (inner)=>`<div style="margin-top:12px;padding-top:12px;
+    border-top:1px solid #2a3550;font:500 14px/1.45 system-ui;color:#c9d2e4">${inner}</div>`;
+  if(btInstallEvt){
+    return wrap(`<button onclick="btDoInstall()" style="background:#e9c46a;border:0;border-radius:9px;
+      color:#0f1522;font:700 15px system-ui;padding:10px 18px;cursor:pointer">
+      &#128241; Add Battle Tees to your home screen</button>`);
+  }
+  if(btIsIOS()){
+    if(btInAppBrowser())
+      return wrap('To keep Battle Tees on your home screen, open this page in <b>Safari</b> first — tap the &#9757; menu and choose <b>Open in Safari</b>.');
+    return wrap('Keep it one tap away: press <b>Share</b> &#8679; at the bottom of Safari, then <b>Add to Home Screen</b>.');
+  }
+  return '';
+}
+async function btDoInstall(){
+  if(!btInstallEvt) return;
+  const e = btInstallEvt; btInstallEvt = null;
+  try{ e.prompt(); await e.userChoice; }catch(err){}
+  render();
+}
+
 // ---------------------------------------------------------------- magic link
 // Arriving at /app/?k=<token> means the user clicked a link we emailed them.
 // Reaching the inbox IS the proof of ownership, so there is no code to type.
@@ -1147,11 +1232,23 @@ let magUI = null;   // {stage:'working'|'ok'|'err', msg}
 function magBanner(){
   if(!magUI) return '';
   const tone = magUI.stage==='err' ? '#e8604f' : (magUI.stage==='ok' ? '#4ade80' : '#e9c46a');
+  // A dead link must offer a live one — otherwise the only way back is knowing
+  // to go and find the website again.
+  const recover = magUI.askEmail ? `
+    <div style="margin-top:10px;display:flex;gap:6px;justify-content:center;flex-wrap:wrap">
+      <input id="magEmail" type="text" inputmode="email" autocapitalize="off"
+        placeholder="you@email.com" value="${esc(localStorage.getItem('wolfBackupEmail')||'')}"
+        style="flex:1;min-width:180px;max-width:280px;background:#0d1420;border:2px solid #2a3550;
+        border-radius:9px;color:#e8e2d6;font:400 16px system-ui;padding:9px 12px;outline:none">
+      <button onclick="magRequestNew()" style="background:#e9c46a;border:0;border-radius:9px;
+        color:#0f1522;font:700 15px system-ui;padding:9px 16px;cursor:pointer">Email me a new link</button>
+    </div>` : '';
   return `<div id="magBanner" style="position:fixed;left:0;right:0;top:0;z-index:9999;
     background:#0f1522;border-bottom:2px solid ${tone};color:#e8e2d6;
     padding:14px 16px;font:600 15px/1.4 system-ui,sans-serif;text-align:center">
     ${magUI.msg}${magUI.stage!=='working'?` <span onclick="magUI=null;render()"
       style="color:${tone};cursor:pointer;text-decoration:underline;margin-left:8px">dismiss</span>`:''}
+    ${recover}${installCtaHTML()}
   </div>`;
 }
 
@@ -1159,6 +1256,10 @@ async function tryMagicLink(){
   const m = String(location.search||'').match(/[?&]k=([A-Za-z0-9_-]{16,})/);
   if(!m) return;
   const tok = m[1];
+  // Hold off any auto-update reload until this finishes. The token is burned on
+  // the relay the moment it is redeemed, so a reload landing mid-flight would
+  // destroy a sign-in that cannot be repeated.
+  window.__btMagBusy = true;
   // Strip the token from the address bar immediately — before any network call —
   // so it never lingers in history, screenshots or a shared URL.
   try{ history.replaceState(null,'',location.pathname); }catch(e){}
@@ -1183,11 +1284,14 @@ async function tryMagicLink(){
       abFp = null;               // force the next auto-backup to actually send
       save();
     }else{
-      magUI = {stage:'err', msg:(r && r.error) || 'That link could not be used. Request a new one.'};
+      magUI = {stage:'err', askEmail:true,
+               msg:(r && r.error) || 'That link could not be used.'};
     }
   }catch(e){
-    magUI = {stage:'err', msg:'Could not reach the relay — check your signal and open the link again.'};
+    magUI = {stage:'err', askEmail:true,
+             msg:'Could not reach the relay — check your signal and try again.'};
   }
+  window.__btMagBusy = false;
   render();
 }
 
@@ -3898,8 +4002,10 @@ function backupBlockHTML(){
             <button class="ghost" onclick="closeBackup()">Close</button></div>`
         :backupUI.stage===0
           ?`<div class="mt" style="display:flex;gap:6px">
-              <button class="ghost sel" style="flex:1" onclick="requestRestoreCode()">Email me a code</button>
-              <button class="ghost" onclick="closeBackup()">Close</button></div>`
+              <button class="ghost sel" style="flex:1" onclick="requestRestoreLink()">Email me a link</button>
+              <button class="ghost" onclick="closeBackup()">Close</button></div>
+            <div class="tiny mt" style="text-align:center;opacity:.75">Tap the link in the email and your library restores itself &mdash; no code to type.<br>
+              <span onclick="requestRestoreCode()" style="text-decoration:underline;cursor:pointer">Send a 6-digit code instead</span></div>`
           :`<input id="bkCode" class="mt" type="text" inputmode="numeric" placeholder="6-digit code" maxlength="6" style="letter-spacing:5px;font-family:Rajdhani,sans-serif;font-size:20px;margin-top:8px">
             <div class="mt" style="display:flex;gap:6px">
               <button class="ghost sel" style="flex:1" onclick="doRestore()">Restore library</button>
@@ -6378,6 +6484,9 @@ if ('serviceWorker' in navigator) {
   var btHadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', function () {
     if (btReloading || !btHadController) return;   // first install: nothing to replace
+    // A magic-link sign-in burns its token on first use — reloading through one
+    // would lose it for good, and the link cannot be reused.
+    if (window.__btMagBusy) return;
     // Never yank the page out from under a live round. The fresh build is
     // already cached and loads on the next launch.
     try { if (window.S && S.round && S.round.started) return; } catch (e) {}
