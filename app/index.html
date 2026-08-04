@@ -337,7 +337,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1785827486';
+const BUILD='1785830113';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -485,13 +485,68 @@ function defaultConfig(){
     track:{putts:false,bunker:false,chips:false,pen:false},
   };
 }
-function trackKeys(){
-  const T=S.config.track||{};
-  return [['putts','Putts'],['bunker','Bunkers'],['chips','Chips'],['pen','Penalties']].filter(([k])=>T[k]);
+// Track-extras toggles for the rows THIS phone owns — you, plus anyone you're
+// scoring who has no phone of their own. Everybody else sets their own.
+function trackCardHTML(){
+  const mine=actIdx().filter(ownsRow);
+  if(!mine.length) return '';
+  const LBL={putts:'Putts',bunker:'Bunker shots',chips:'Chips',pen:'Penalties'};
+  const many=mine.length>1;
+  return `<div class="card"><h2>Track extras <span class="tiny" style="font-weight:400">&mdash; per hole</span></h2>
+    ${mine.map(i=>{
+      const T=trackOf(i);
+      return `${many?`<div class="tiny mt" style="color:var(--gold)"><b>${esc(S.players[i].name)}</b></div>`:''}
+        ${TRACK_DEFS.map(([k])=>`<div class="row"><span class="muted">${LBL[k]}</span>
+          <button class="ghost ${T[k]?'sel':''}" onclick="toggleTrack(${i},'${k}')">${T[k]?'On':'Off'}</button></div>`).join('')}`;
+    }).join('')}
+    <div class="tiny mt">${many?'Applies to these players only':'Applies to you only'} &mdash; anyone else in the group turns their own on from their phone.</div>
+  </div>`;
+}
+function toggleTrack(i,k){ if(!ownsRow(i))return; set(()=>{const T=trackOf(i);T[k]=!T[k];}); }
+
+const TRACK_DEFS=[['putts','Putts'],['bunker','Bunkers'],['chips','Chips'],['pen','Penalties']];
+// Extras tracking is PER PLAYER, not per round. It used to live on S.config,
+// which shareMeta() syncs to every phone — so one person switching putts on
+// switched it on for all four. Now each row carries its own flags and only the
+// row's owner may change them: you set them for yourself and for anyone you're
+// scoring who has no phone; everyone else sets their own.
+function trackOf(i){
+  const p=S.players[i]; if(!p) return {};
+  if(!p.track) p.track={putts:false,bunker:false,chips:false,pen:false};
+  return p.track;
+}
+function trackKeysFor(i){const T=trackOf(i);return TRACK_DEFS.filter(([k])=>T[k]);}
+// Union across the field — for the round-stats table, which needs a column for
+// anything anyone tracked.
+function trackKeysAny(idxs){
+  const on={};
+  (idxs||actIdx()).forEach(i=>{const T=trackOf(i);TRACK_DEFS.forEach(([k])=>{if(T[k])on[k]=1;});});
+  return TRACK_DEFS.filter(([k])=>on[k]);
+}
+// A row is mine to configure if nobody owns it or my phone does.
+function ownsRow(i){
+  const p=S.players[i]; if(!p) return false;
+  const dev=p.ownerDev||p.scorer;
+  return !dev||dev===devId();
+}
+// One Extras card for every game screen — each player shows only the stats
+// their own scorer switched on.
+function extrasCardHTML(idxs, rec){
+  const rows=idxs.map(i=>{
+    const en=trackKeysFor(i), p=S.players[i];
+    if(!en.length||!p) return '';
+    return `<div class="scorebar"><b style="min-width:62px;font-size:13px">${esc(p.name)}</b>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;justify-content:flex-end">${en.map(([k,l])=>{
+        const v=(rec.stats&&rec.stats[k])?rec.stats[k][i]:0;
+        return `<div style="text-align:center"><div class="tiny">${l}</div>
+          <div class="stepper mini"><button onclick="chStat('${k}',${i},-1)">\u2212</button><span class="val num">${v}</span><button onclick="chStat('${k}',${i},1)">+</button></div></div>`;
+      }).join('')}</div></div>`;
+  }).join('');
+  return rows?`<div class="card"><h2>Extras</h2>${rows}</div>`:'';
 }
 function defaultPlayers(){
   return [
-    {name:'Player 1',index:10.0,chOverride:null,tee:'tb-blu'},
+    {name:'Player 1',index:10.0,chOverride:null,tee:'tb-blu',track:{putts:false,bunker:false,chips:false,pen:false}},
     {name:'Player 2',index:10.0,chOverride:null,tee:'tb-blu'},
     {name:'Player 3',index:10.0,chOverride:null,tee:'tb-blu'},
     {name:'Player 4',index:10.0,chOverride:null,tee:'tb-blu'},
@@ -508,6 +563,10 @@ function load(){
     if(raw){const s=JSON.parse(raw); if(s&&s.course&&s.players&&s.round){
       if(!s.config._v){s.config._v=2;s.config.carryTies=false;}
       if(!s.config.track)s.config.track={bunker:false,chips:false,pen:false};
+      // track flags moved config -> player. Seed each player from the old shared
+      // value so a round already in progress keeps behaving exactly as it did.
+      (s.players||[]).forEach(p=>{ if(p&&!p.track)
+        p.track=Object.assign({putts:false,bunker:false,chips:false,pen:false}, s.config.track||{}); });
       if(!s.share)s.share={on:false,code:null};
       if(!s.me)s.me={name:'',index:10};
       if(!s.theme)s.theme='dark';
@@ -881,6 +940,9 @@ function rowLock(h,i){
   if(dev===devId())return 'mine';
   return unlockedRows[h+'-'+i]?'open':'locked';
 }
+// From the mid-round group editor: share, then land on home, where the join
+// code and sync status are shown.
+function startGroupFromGate(){shareRound();go('home');}
 function shareRound(){
   lobbyClose();
   const midRound=!!(S.round&&S.round.started);
@@ -3296,6 +3358,7 @@ function render(){
   else if(scr==='pickcourse') html=vPickCourse();
   else if(scr==='course') html=vCourse();
   else if(scr==='setup') html=vSetup();
+  else if(scr==='roundopts') html=vRoundOpts();
   else if(scr==='gate') html=vGate();
   else if(scr==='hole') html=vHole();
   else if(scr==='standings') html=vStandings();
@@ -3539,11 +3602,12 @@ function vHome(){
   ${inRound?`<div class="card"><h2>${S.round.reopened?'Past round open':'Round in progress'}</h2>
     <div class="muted mb">${gameName()} · ${esc(S.course.name)} · thru ${S.round.holes.filter(r=>r.confirmed).length} holes</div>
     <button class="big" onclick="go('hole')">Continue round</button>
+    <button class="ghost mt" style="width:100%" onclick="openRoundOpts()">⚙️ Adjust round settings</button>
     <button class="big danger mt" onclick="endRoundConfirm()">${armEndRound?'⚠️ Tap again to confirm':'End round now'}</button>
     ${S.share.on?`<div class="row mt" style="border-top:1px solid var(--line)">
         <span class="tiny">Live sync · <b class="num" style="font-size:16px;letter-spacing:2px">${esc(S.share.code)}</b> ${sockOpen?'<span style="color:var(--elec)">● connected</span>':'<span style="color:var(--red)">○ reconnecting…</span>'}</span>
         <button class="ghost danger" onclick="leaveShare()">Leave</button></div>`
-      :`<button class="ghost mt" style="width:100%" onclick="shareRound()">👥 Make this a group round</button>
+      :`<button class="ghost mt" style="width:100%" onclick="goGroup()">👥 Make this a group round</button>
         <div class="tiny mt">Get a code your group can join — your scores so far come with you.</div>`}
   </div>`:''}
   ${inRound?`  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
@@ -3670,7 +3734,7 @@ function vGate(){
       <div><b>${esc(e.name)}</b><div class="tiny">Index ${e.index}${e.teeName?` · ${esc(e.teeName)}`:''}</div></div>
       <span class="pill wolf">+ add</span>
     </div>`).join('');
-  return topbar('Your group','Build the crew — then pick your game','home')+`<main>
+  return topbar('Your group',S.round.started?'Add whoever is with you — the round keeps going':'Build the crew — then pick your game','home')+`<main>
   ${!S.me.name?`<div class="card"><h2>Your profile first</h2>
     <div class="tiny mb">You're always Golfer 1 on your own phone — no need to add yourself.</div>
     <div class="grid2">
@@ -3729,7 +3793,10 @@ function vGate(){
       <button class="ghost mt" style="width:100%" onclick="pairGroups()">Use these two teams</button>
       <div id="duoErr" class="tiny" style="color:var(--red);font-weight:600"></div>`:''}
   </div>
-  <button class="big" onclick="go('pickgame')">Next \u2014 pick your game \u2192</button>
+  <button ${S.round.started
+      ? `<button class="big" onclick="startGroupFromGate()">👥 Start the group round \u2192</button>
+         <div class="tiny mt">Anyone you typed in or picked is already on your card \u2014 you keep their scores. The rest join with the code, or tap the invite when it pops up on their phone.</div>`
+      : `<button class="big" onclick="go('pickgame')">Next \u2014 pick your game \u2192</button>`}
   <details class="card" style="padding:10px 14px;margin-top:12px"><summary class="tiny" style="cursor:pointer;color:var(--ink3)">Join with a code instead</summary>
     <div class="row" style="border:none">
       <input type="text" id="joincode" placeholder="ABCDE" maxlength="8" autocapitalize="characters" style="width:46%;text-transform:uppercase;font-family:Rajdhani,sans-serif;font-size:20px;letter-spacing:3px">
@@ -4612,6 +4679,57 @@ function addTee(){set(()=>{S.course.teeSets.push({id:'t'+Date.now(),name:'New',r
 function delTee(i){if(S.course.teeSets.length<=1)return;set(()=>{S.course.teeSets.splice(i,1);});}
 
 // ----- round setup -----
+function stackCardHTML(){
+  if(!(STACKABLE.includes(S.config.game)||S.config.game==='wolf'||S.config.game==='vegas')) return '';
+
+    const four=NP()===4;
+    const cur=S.config.games||[S.config.game];
+    const NEED4=['bestball','sixes','umbrella','vegas'];
+    // solo round: only the games one player can actually play — hide the rest
+    const SOLO_OK=['stroke','stableford','quota'];
+    const opts=STACK_GUESTS.filter(g=>g!==S.config.game&&(NP()>1||SOLO_OK.includes(g))).map(g=>{
+      const on=cur.includes(g);
+      let dis='',why='';
+      if(NEED4.includes(g)&&!four){dis='disabled';why='needs 4';}
+      if(g==='nines'&&NP()<3){dis='disabled';why='needs 3+';}
+      if(g==='nassau'&&!(four||NP()===2)){dis='disabled';why='1v1 or 2v2';}
+      if((g==='bestball'&&cur.includes('sixes'))||(g==='sixes'&&cur.includes('bestball'))){if(!on){dis='disabled';why='pick one';}}
+      return `<button class="ghost ${on?'sel':''}" ${dis} style="margin:0 6px 6px 0" onclick="toggleStackGame('${g}')">${on?'✓ ':''}${gameName(g)}${why?` <span class="tiny">(${why})</span>`:''}</button>`;
+    }).join('');
+    return `<div class="card"><h2>⚔️ Stack more games <span class="tiny" style="font-weight:400">— same scores, all settled together</span></h2>
+      <div class="flexwrap" style="margin-top:8px">${opts}</div>
+      <div class="tiny mt">Everyone plays one scorecard — every stacked game scores it its own way, and Settle nets the whole pile into one payout. One person can tap closest-to-pin, hammers or presses for the group; it feeds every game that uses them.</div>
+    </div>`;
+}
+
+// Mid-round settings. Deliberately a SUBSET of setup: the course, the golfers,
+// team pairings and the hole span are all locked once scoring has begun,
+// because changing any of them rewrites a scorecard that is already in play.
+let roundOptsBack='hole';
+function openRoundOpts(){ roundOptsBack=(S.screen==='roundopts'?'hole':S.screen); S.screen='roundopts'; save(); render(); }
+function vRoundOpts(){
+  const wolf=S.config.game==='wolf';
+  return topbar('Round options',S.course?S.course.name:'','','','')+`<main>
+    ${stackCardHTML()}
+    <div class="card"><h2>Scoring options</h2>
+      <div class="seg">
+        ${['gross','net','both'].map(L=>`<button class="ghost ${S.config.lens===L?'sel':''}" onclick="set(()=>S.config.lens='${L}')">${L[0].toUpperCase()+L.slice(1)}</button>`).join('')}
+      </div>
+      <div class="row mt"><span class="muted">Handicap allowance</span>
+        <div class="stepper"><button onclick="chAllow(-5)">&#8722;</button><span class="val num" style="font-size:17px">${S.config.allowance}%</span><button onclick="chAllow(5)">+</button></div></div>
+    </div>
+    ${trackCardHTML()}
+    ${wolf?`<div class="card"><h2>Rules</h2>
+      <div class="row"><span class="muted">Ties carry over</span>
+        <button class="ghost ${S.config.carryTies?'sel':''}" onclick="set(()=>S.config.carryTies=!S.config.carryTies)">${S.config.carryTies?'On':'Off'}</button></div>
+      <div class="row"><span class="muted">Last place is wolf on 17&ndash;18</span>
+        <button class="ghost ${S.config.last2LastPlace?'sel':''}" onclick="set(()=>S.config.last2LastPlace=!S.config.last2LastPlace)">${S.config.last2LastPlace?'On':'Off'}</button></div>
+    </div>`:''}
+    <div class="card"><div class="tiny">Locked while a round is running: the course, the golfers, team pairings and which holes you&rsquo;re playing &mdash; those need a new round. Everything above is safe to change now, and a game you add here scores the whole round from the scores already on the card.</div></div>
+    <button class="big" onclick="go(roundOptsBack)">Done</button>
+  </main>`;
+}
+
 function vSetup(){
   nbShown=onlineList();
   const ch=courseHandicaps(), st=playingStrokes();
@@ -4664,25 +4782,7 @@ function vSetup(){
     <div class="tiny mt">${S.config.ctpAll
       ? 'Every par 3 offers a CTP pick and it lands on your scorecard. Games that score CTP still do.'
       : 'CTP only appears in games that score it — Wolf, Nines, Vegas, Umbrella.'}</div></div>
-  ${(STACKABLE.includes(S.config.game)||S.config.game==='wolf'||S.config.game==='vegas')?(()=>{
-    const four=NP()===4;
-    const cur=S.config.games||[S.config.game];
-    const NEED4=['bestball','sixes','umbrella','vegas'];
-    // solo round: only the games one player can actually play — hide the rest
-    const SOLO_OK=['stroke','stableford','quota'];
-    const opts=STACK_GUESTS.filter(g=>g!==S.config.game&&(NP()>1||SOLO_OK.includes(g))).map(g=>{
-      const on=cur.includes(g);
-      let dis='',why='';
-      if(NEED4.includes(g)&&!four){dis='disabled';why='needs 4';}
-      if(g==='nines'&&NP()<3){dis='disabled';why='needs 3+';}
-      if(g==='nassau'&&!(four||NP()===2)){dis='disabled';why='1v1 or 2v2';}
-      if((g==='bestball'&&cur.includes('sixes'))||(g==='sixes'&&cur.includes('bestball'))){if(!on){dis='disabled';why='pick one';}}
-      return `<button class="ghost ${on?'sel':''}" ${dis} style="margin:0 6px 6px 0" onclick="toggleStackGame('${g}')">${on?'✓ ':''}${gameName(g)}${why?` <span class="tiny">(${why})</span>`:''}</button>`;
-    }).join('');
-    return `<div class="card"><h2>⚔️ Stack more games <span class="tiny" style="font-weight:400">— same scores, all settled together</span></h2>
-      <div class="flexwrap" style="margin-top:8px">${opts}</div>
-      <div class="tiny mt">Everyone plays one scorecard — every stacked game scores it its own way, and Settle nets the whole pile into one payout. One person can tap closest-to-pin, hammers or presses for the group; it feeds every game that uses them.</div>
-    </div>`;})():''}
+  ${stackCardHTML()}
   ${sixes?`<div class="card"><h2>Starting partners</h2>
     ${[[[0,1],[2,3]],[[0,2],[1,3]],[[0,3],[1,2]]].map((T,pi)=>`
       <button class="ghost ${S.config.sixes.pairing===pi?'sel':''}" style="width:100%;text-align:left;margin-bottom:8px" onclick="set(()=>S.config.sixes.pairing=${pi})">${pairLbl(T)}</button>`).join('')}
@@ -4835,10 +4935,7 @@ function vSetup(){
     <div class="row"><span class="muted">Last place is wolf on 17–18</span>
       <button class="ghost ${S.config.last2LastPlace?'sel':''}" onclick="set(()=>S.config.last2LastPlace=!S.config.last2LastPlace)">${S.config.last2LastPlace?'On':'Off'}</button></div>
   </div>`}
-  <div class="card"><h2>Track extras (per player, per hole)</h2>
-    ${[['putts','Putts'],['bunker','Bunker shots'],['chips','Chips'],['pen','Penalties']].map(([k,l])=>`<div class="row"><span class="muted">${l}</span>
-      <button class="ghost ${S.config.track[k]?'sel':''}" onclick="set(()=>S.config.track.${k}=!S.config.track.${k})">${S.config.track[k]?'On':'Off'}</button></div>`).join('')}
-  </div>
+  ${trackCardHTML()}
   <button class="big" onclick="startPick()">Next — pick the course →</button>
   </main>`;
 }
@@ -5385,15 +5482,7 @@ function vHole(){
         return `<div class="banner ok">${L}: ${who} +${r.per*r.mult} pt${r.per*r.mult===1?'':'s'} each${r.mult>1?` (×${r.mult} carry)`:''}</div>`;
       }).join('');
     }
-    const en=trackKeys();
-    const extrasCard=en.length?`<div class="card"><h2>Extras</h2>
-      ${S.players.map((p,i)=>`<div class="scorebar"><b style="min-width:62px;font-size:13px">${esc(p.name)}</b>
-        <div style="display:flex;gap:14px;flex-wrap:wrap;justify-content:flex-end">${en.map(([k,l])=>{
-          const v=(rec.stats&&rec.stats[k])?rec.stats[k][i]:0;
-          return `<div style="text-align:center"><div class="tiny">${l}</div>
-            <div class="stepper mini"><button onclick="chStat('${k}',${i},-1)">−</button><span class="val num">${v}</span><button onclick="chStat('${k}',${i},1)">+</button></div></div>`;
-        }).join('')}</div></div>`).join('')}
-    </div>`:'';
+    const extrasCard=extrasCardHTML(S.players.map((_,i)=>i), rec);
     body=`<div class="card">
       <div class="row" style="border:none;padding-top:0"><span class="pill wolf">${modeLbl}</span>
         ${!isReview()?`<button class="ghost" onclick="redoPick()">Redo pick</button>`:''}</div>
@@ -5753,15 +5842,7 @@ function vHoleNines(){
       return `<div class="banner ok">${L}: ${r.blitz?'⚡ Blitz! ':''}${split}</div>`;
     }).join('');
   }
-  const en=trackKeys();
-  const extrasCard=en.length?`<div class="card"><h2>Extras</h2>
-    ${act.map(i=>{const p=S.players[i];return `<div class="scorebar"><b style="min-width:62px;font-size:13px">${esc(p.name)}</b>
-      <div style="display:flex;gap:14px;flex-wrap:wrap;justify-content:flex-end">${en.map(([k,l])=>{
-        const v=(rec.stats&&rec.stats[k])?rec.stats[k][i]:0;
-        return `<div style="text-align:center"><div class="tiny">${l}</div>
-          <div class="stepper mini"><button onclick="chStat('${k}',${i},-1)">−</button><span class="val num">${v}</span><button onclick="chStat('${k}',${i},1)">+</button></div></div>`;
-      }).join('')}</div></div>`;}).join('')}
-  </div>`:'';
+  const extrasCard=extrasCardHTML(act, rec);
   const body=`<div class="card">
     ${act.some(i=>rec.gross[i]==null)?`<button class="ghost mb" style="width:100%" onclick="set(()=>prefillNines(${h}))">Everyone to par ${hole.par} — adjust from there</button>`:''}
     ${scoreRows}
@@ -5843,15 +5924,7 @@ function vHoleVegas(){
       return `<div class="banner ok">${LL}: ${r.nums[0]} vs ${r.nums[1]} — ${txt}${flipTxt}</div>`;
     }).join('');
   }
-  const en=trackKeys();
-  const extrasCard=en.length?`<div class="card"><h2>Extras</h2>
-    ${[0,1,2,3].map(i=>{const p=S.players[i];return `<div class="scorebar"><b style="min-width:62px;font-size:13px">${esc(p.name)}</b>
-      <div style="display:flex;gap:14px;flex-wrap:wrap;justify-content:flex-end">${en.map(([k,l])=>{
-        const v=(rec.stats&&rec.stats[k])?rec.stats[k][i]:0;
-        return `<div style="text-align:center"><div class="tiny">${l}</div>
-          <div class="stepper mini"><button onclick="chStat('${k}',${i},-1)">−</button><span class="val num">${v}</span><button onclick="chStat('${k}',${i},1)">+</button></div></div>`;
-      }).join('')}</div></div>`;}).join('')}
-  </div>`:'';
+  const extrasCard=extrasCardHTML([0,1,2,3], rec);
   return topbar(`Hole ${h+1} · Par ${hole.par}`,`Handicap ${hole.si}${S.share.on?` · ${esc(S.share.code)} ${sockOpen?'●':'○ will sync'}`:''}`,'','hero',`<div style="display:flex;align-items:center;margin-left:auto;gap:12px">${gameBadgeHTML()}</div>`)+`<main>
     ${reviewBanner()}${runningTotalsCard()}
     <div class="vegascard">
@@ -6293,13 +6366,18 @@ function vStandings(){
       <span><b class="num">${h+1}</b> · 🐺 ${r.wolfAt!=null?esc(S.players[r.wolfAt].name):'—'} ${modeLbl}</span>
       <span class="muted">${out}${S.course.holes[h].par===3&&r.ctp!=null&&r.ctp>=0?` · CTP ${esc(S.players[r.ctp].name)}`:''}</span></div>`;
   }).join('');
-  const en=trackKeys();
+  // Columns are the union of what anyone tracked; a player who did not track a
+  // stat shows a dash rather than a misleading zero.
+  const en=trackKeysAny(S.players.slice(0,NP()).map((_,i)=>i));
   const statsCard=en.length?`<div class="card"><h2>Round stats</h2>
     <table class="st"><tr><th>Player</th>${en.map(([k,l])=>`<th class="r">${l}</th>`).join('')}</tr>
-    ${S.players.slice(0,NP()).map((p,i)=>`<tr><td>${esc(p.name)}</td>${en.map(([k])=>{
-      const tot=S.round.holes.reduce((a,r)=>a+((r.stats&&r.stats[k])?r.stats[k][i]:0),0);
-      return `<td class="r num" style="font-size:26px">${tot}</td>`;
-    }).join('')}</tr>`).join('')}</table></div>`:'';
+    ${S.players.slice(0,NP()).map((p,i)=>{
+      const mine=trackKeysFor(i).map(([k])=>k);
+      return `<tr><td>${esc(p.name)}</td>${en.map(([k])=>{
+        if(!mine.includes(k)) return '<td class="r muted">\u2014</td>';
+        const tot=S.round.holes.reduce((a,r)=>a+((r.stats&&r.stats[k])?r.stats[k][i]:0),0);
+        return `<td class="r num" style="font-size:26px">${tot}</td>`;
+      }).join('')}</tr>`;}).join('')}</table></div>`:'';
   const extra=(thru>0?`
     <div class="card" onclick="openFullCard()" style="cursor:pointer"><h2>Scorecard · gross strokes <span class="tiny" style="font-weight:400">— tap for all 18</span></h2>${scorecardHTML()}
       <div class="tiny mt">Green = under par · amber = bogey · red = double or worse. Swipe the card sideways.</div></div>`:'')+statsCard;
