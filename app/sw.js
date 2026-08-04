@@ -1,7 +1,7 @@
 // Wolf service worker — offline cache + auto-update (stale-while-revalidate).
 // The app loads instantly from cache and refreshes in the background; a new
 // version appears the next time it's opened while online.
-const CACHE = 'battletees-1785823886';
+const CACHE = 'battletees-1785824561';
 // Offline course-map pack: satellite tiles cached cache-first, SURVIVES app
 // updates (excluded from the activate cleanup below).
 const TILES = 'bt-tiles';
@@ -56,9 +56,8 @@ self.addEventListener('fetch', (e) => {
     }
     return;
   }
-  // The APP shell is only the root document. /welcome/ and /rules/* are their
-  // own pages — they must NEVER fall back to the cached app, or a first visit
-  // to a rules page serves the app instead.
+  // The app shell is the /app/ document. The marketing page at / and the
+  // /rules/* pages are separate documents outside this worker's scope.
   const path = new URL(req.url).pathname;
   // relay.json tells the app where the live-sync relay lives. It MUST be
   // network-first — a cache-first copy would pin every phone to a dead host
@@ -75,15 +74,42 @@ self.addEventListener('fetch', (e) => {
     );
     return;
   }
-  const isApp = path === '/' || path === '/index.html';
+  const isApp = path === '/app/' || path === '/app/index.html';
+  // ---- the app document: NETWORK-FIRST -------------------------------------
+  // Stale-while-revalidate used to serve the cached copy and refresh the cache
+  // behind it, so a new build only appeared on the NEXT launch — which is why
+  // updating took two or three restarts. Going to the network first means an
+  // online launch is always the current build; the cache is the fallback, so
+  // opening it with no signal on the course still works instantly.
+  if (isApp) {
+    e.respondWith((async () => {
+      const cache = await caches.open(CACHE);
+      const fresh = fetch(req.url, {cache: 'no-store'}).then(clean).then((resp) => {
+        if (resp && resp.status === 200) cache.put('index.html', resp.clone());
+        return resp;
+      });
+      // Don't let a dead-slow connection hold the app hostage — after a short
+      // wait, serve what we have. The fetch above still finishes and updates
+      // the cache for next time.
+      const timed = new Promise((res) => setTimeout(() => res(null), 3000));
+      try {
+        const won = await Promise.race([fresh.catch(() => null), timed]);
+        if (won && won.status === 200) return won;
+      } catch (err) { /* fall through to cache */ }
+      const cached = await cache.match('index.html') || await cache.match('./');
+      if (cached) return cached.redirected ? clean(cached) : cached;
+      return fresh;
+    })());
+    return;
+  }
+
+  // ---- everything else: cache-first, refreshed in the background ------------
   e.respondWith(
     caches.match(req)
-      .then((hit) => hit || (isApp ? caches.match('index.html') : undefined))
       .then((cached) => {
-        // belt & braces: never serve a redirect-tainted entry from an old cache
         const safeCached = cached && cached.redirected ? clean(cached) : Promise.resolve(cached);
         return safeCached.then((cachedResp) => {
-          const network = (isApp ? fetch(req.url, {cache: 'no-store'}) : fetch(req)).then(clean).then((resp) => {
+          const network = fetch(req).then(clean).then((resp) => {
             if (resp && resp.status === 200) {
               const clone = resp.clone();
               caches.open(CACHE).then((c) => c.put(req, clone));

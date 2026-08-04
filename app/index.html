@@ -337,7 +337,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1785823886';
+const BUILD='1785824561';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -6367,8 +6367,32 @@ else lobbyConnect();
 </script>
 <script>
 if ('serviceWorker' in navigator) {
+  // Keep installed phones current without anyone remembering to restart.
+  //  1. updateViaCache:'none' — never let the HTTP cache hand back a stale sw.js.
+  //  2. reg.update() on load AND on every return to the foreground, because a
+  //     phone usually RESUMES an installed PWA instead of cold-starting it, so
+  //     a load-only check misses most real launches.
+  //  3. controllerchange -> reload, so a build that lands while the app is open
+  //     is picked up straight away instead of on some later restart.
+  var btReloading = false;
+  var btHadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', function () {
+    if (btReloading || !btHadController) return;   // first install: nothing to replace
+    // Never yank the page out from under a live round. The fresh build is
+    // already cached and loads on the next launch.
+    try { if (window.S && S.round && S.round.started) return; } catch (e) {}
+    btReloading = true;
+    location.reload();
+  });
   window.addEventListener('load', function () {
-    navigator.serviceWorker.register('sw.js');
+    navigator.serviceWorker.register('sw.js', {updateViaCache: 'none'}).then(function (reg) {
+      var check = function () { try { reg.update(); } catch (e) {} };
+      check();
+      document.addEventListener('visibilitychange', function () {
+        if (!document.hidden) check();
+      });
+      window.addEventListener('focus', check);
+    }).catch(function () {});
   });
 }
 </script>
