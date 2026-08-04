@@ -337,7 +337,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1785822909';
+const BUILD='1785823886';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1137,6 +1137,104 @@ async function requestRestoreCode(){
   }catch(e){backupUI.msg='Could not connect — check your signal and try again.';}
   render();
 }
+// ---------------------------------------------------------------- magic link
+// Arriving at /app/?k=<token> means the user clicked a link we emailed them.
+// Reaching the inbox IS the proof of ownership, so there is no code to type.
+// The token is single-use and dies on the relay the moment it is redeemed, so
+// a forwarded link that has already been opened is worthless to anyone else.
+let magUI = null;   // {stage:'working'|'ok'|'err', msg}
+
+function magBanner(){
+  if(!magUI) return '';
+  const tone = magUI.stage==='err' ? '#e8604f' : (magUI.stage==='ok' ? '#4ade80' : '#e9c46a');
+  return `<div id="magBanner" style="position:fixed;left:0;right:0;top:0;z-index:9999;
+    background:#0f1522;border-bottom:2px solid ${tone};color:#e8e2d6;
+    padding:14px 16px;font:600 15px/1.4 system-ui,sans-serif;text-align:center">
+    ${magUI.msg}${magUI.stage!=='working'?` <span onclick="magUI=null;render()"
+      style="color:${tone};cursor:pointer;text-decoration:underline;margin-left:8px">dismiss</span>`:''}
+  </div>`;
+}
+
+async function tryMagicLink(){
+  const m = String(location.search||'').match(/[?&]k=([A-Za-z0-9_-]{16,})/);
+  if(!m) return;
+  const tok = m[1];
+  // Strip the token from the address bar immediately — before any network call —
+  // so it never lingers in history, screenshots or a shared URL.
+  try{ history.replaceState(null,'',location.pathname); }catch(e){}
+  magUI = {stage:'working', msg:'Signing you in…'};
+  render();
+  try{
+    const r = await relayBackup({op:'redeem', code:tok, email:''});
+    if(r && r.ok && r.email){
+      try{
+        localStorage.setItem('wolfBackupEmail', r.email);
+        localStorage.setItem('btEmailOk', r.email);   // the link proved the address
+      }catch(e){}
+      if(r.data){
+        const c = applyLibrary(r.data);
+        magUI = {stage:'ok', msg:`✓ Welcome back — ${c.added} player${c.added===1?'':'s'} restored`
+          + (c.cAdded?`, ${c.cAdded} course${c.cAdded===1?'':'s'}`:'')
+          + (c.hAdded?`, ${c.hAdded} round${c.hAdded===1?'':'s'}`:'') + '.'};
+      }else{
+        S.autoBackup = true;
+        magUI = {stage:'ok', msg:'✓ You’re signed in as '+r.email+' — your library will back up automatically.'};
+      }
+      abFp = null;               // force the next auto-backup to actually send
+      save();
+    }else{
+      magUI = {stage:'err', msg:(r && r.error) || 'That link could not be used. Request a new one.'};
+    }
+  }catch(e){
+    magUI = {stage:'err', msg:'Could not reach the relay — check your signal and open the link again.'};
+  }
+  render();
+}
+
+// Merge a restored library into local state. Extracted from doRestore so the
+// emailed-code restore and the magic-link sign-in behave identically — one
+// merge rule, not two that can drift apart.
+function applyLibrary(d){
+  d = d || {};
+  let cAdded=0, hAdded=0;
+    let added=0,updated=0;
+    set(()=>{
+      (d.playerLib||[]).forEach(e=>{
+        if(!e||!e.name)return;
+        const ex=S.playerLib.find(x=>x.name.trim().toLowerCase()===String(e.name).trim().toLowerCase());
+        if(ex){ex.index=e.index;if(e.teeName)ex.teeName=e.teeName;updated++;}
+        else{S.playerLib.push({id:e.id||('pl'+Date.now()+Math.floor(Math.random()*1e4)),name:e.name,index:e.index,teeName:e.teeName});added++;}
+      });
+      if(!S.me.name&&d.me&&d.me.name)S.me=d.me;
+      let cAdded=0;
+      (d.courses||[]).forEach(c=>{
+        if(!c||!c.id||!c.holes)return;
+        const i=S.courses.findIndex(x=>x.id===c.id);
+        normalizeNine(c);
+        if(i>=0){if(S.courses[i].geo&&!c.geo)c.geo=S.courses[i].geo;S.courses[i]=c;}
+        else{S.courses.push(c);cAdded++;}
+      });
+      
+      let hAdded=0;
+      (d.history||[]).forEach(e=>{
+        if(!e||!e.id)return;
+        if(!(S.history||[]).some(x=>x.id===e.id)){(S.history=S.history||[]).push(e);hAdded++;}
+      });
+      if(hAdded){S.history.sort((a,b)=>(b.endedAt||0)-(a.endedAt||0));S.history=S.history.slice(0,12);}
+      
+      (d.groups||[]).forEach(g2=>{
+        if(!g2||!g2.name)return;
+        if(!(S.groupLib=S.groupLib||[]).some(x=>x.name.trim().toLowerCase()===g2.name.trim().toLowerCase()))S.groupLib.push(g2);
+      });
+      (d.teams||[]).forEach(t2=>{
+        if(!t2||!t2.key||!t2.name)return;
+        if(!(S.teamLib=S.teamLib||[]).some(x=>x.key===t2.key))S.teamLib.push(t2);
+      });
+      if(d.me&&d.me.pid&&!(S.me&&S.me.pid))S.me.pid=d.me.pid;
+    });
+  return {added, updated, cAdded, hAdded};
+}
+
 async function doRestore(){
   const em=(localStorage.getItem('wolfBackupEmail')||'').trim();
   const cd=(document.getElementById('bkCode')&&document.getElementById('bkCode').value||'').trim();
@@ -1145,41 +1243,9 @@ async function doRestore(){
   try{
     const r=await relayBackup({op:'get',email:em,code:cd});
     if(r.ok&&r.data){
-      let added=0,updated=0;
-      set(()=>{
-        (r.data.playerLib||[]).forEach(e=>{
-          if(!e||!e.name)return;
-          const ex=S.playerLib.find(x=>x.name.trim().toLowerCase()===String(e.name).trim().toLowerCase());
-          if(ex){ex.index=e.index;if(e.teeName)ex.teeName=e.teeName;updated++;}
-          else{S.playerLib.push({id:e.id||('pl'+Date.now()+Math.floor(Math.random()*1e4)),name:e.name,index:e.index,teeName:e.teeName});added++;}
-        });
-        if(!S.me.name&&r.data.me&&r.data.me.name)S.me=r.data.me;
-        let cAdded=0;
-        (r.data.courses||[]).forEach(c=>{
-          if(!c||!c.id||!c.holes)return;
-          const i=S.courses.findIndex(x=>x.id===c.id);
-          normalizeNine(c);
-          if(i>=0){if(S.courses[i].geo&&!c.geo)c.geo=S.courses[i].geo;S.courses[i]=c;}
-          else{S.courses.push(c);cAdded++;}
-        });
-        backupUI._cAdded=cAdded;
-        let hAdded=0;
-        (r.data.history||[]).forEach(e=>{
-          if(!e||!e.id)return;
-          if(!(S.history||[]).some(x=>x.id===e.id)){(S.history=S.history||[]).push(e);hAdded++;}
-        });
-        if(hAdded){S.history.sort((a,b)=>(b.endedAt||0)-(a.endedAt||0));S.history=S.history.slice(0,12);}
-        backupUI._hAdded=hAdded;
-        (r.data.groups||[]).forEach(g2=>{
-          if(!g2||!g2.name)return;
-          if(!(S.groupLib=S.groupLib||[]).some(x=>x.name.trim().toLowerCase()===g2.name.trim().toLowerCase()))S.groupLib.push(g2);
-        });
-        (r.data.teams||[]).forEach(t2=>{
-          if(!t2||!t2.key||!t2.name)return;
-          if(!(S.teamLib=S.teamLib||[]).some(x=>x.key===t2.key))S.teamLib.push(t2);
-        });
-        if(r.data.me&&r.data.me.pid&&!(S.me&&S.me.pid))S.me.pid=r.data.me.pid;
-      });
+      const _r=applyLibrary(r.data);
+      const added=_r.added, updated=_r.updated;
+      backupUI._cAdded=_r.cAdded; backupUI._hAdded=_r.hAdded;
       try{localStorage.setItem('btEmailOk',em);}catch(e2){}   // the code proved this address
       backupUI.stage=0;
       backupUI.msg=`✓ Restored — ${added} player${added===1?'':'s'} added, ${updated} updated${backupUI._cAdded?`, ${backupUI._cAdded} course${backupUI._cAdded===1?'':'s'} added`:''}${backupUI._hAdded?`, ${backupUI._hAdded} round${backupUI._hAdded===1?'':'s'} recovered`:''}.`;
@@ -3138,7 +3204,7 @@ function render(){
   const pageY=window.scrollY;
   const sameScreen=window.__lastScr===scr;
   window.__lastScr=scr;
-  el.innerHTML=html+holeSplash()+verifySheetHTML()+teeAskSheetHTML();
+  el.innerHTML=magBanner()+html+holeSplash()+verifySheetHTML()+teeAskSheetHTML();
   if(sameScreen){
     Object.entries(keepScroll).forEach(([id,top])=>{const e2=document.getElementById(id);if(e2)e2.scrollTop=top;});
     if(pageY)window.scrollTo(0,pageY);
@@ -6295,6 +6361,7 @@ stat('open',{ua:(navigator.userAgent.match(/iPhone OS [0-9_]+|Android [0-9.]+/)|
 applyTheme();
 autoEndStaleRound();
 render();
+tryMagicLink();
 if(S.share&&S.share.on){primeCaches(false);syncConnect();}
 else lobbyConnect();
 </script>

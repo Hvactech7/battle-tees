@@ -86,15 +86,15 @@ a.game:hover{transform:translate(-1px,-1px)}
 kbd{background:#0d1420;border:1px solid var(--line);border-radius:6px;padding:1px 8px;font-family:inherit;font-size:14px}
 .soon{cursor:default;filter:saturate(.55) brightness(.85)}
 /* beta request form */
-#betaForm label{display:block;margin-bottom:13px;font-family:Rajdhani,Inter,sans-serif;font-weight:700;
+#betaForm label,#linkForm label{display:block;margin-bottom:13px;font-family:Rajdhani,Inter,sans-serif;font-weight:700;
   font-size:15px;letter-spacing:.6px;text-transform:uppercase;color:var(--gold)}
-#betaForm label .opt{color:var(--ink3);font-weight:600;text-transform:none;letter-spacing:0}
-#betaForm input,#betaForm textarea{display:block;width:100%;margin-top:5px;background:#0d1420;
+#betaForm label .opt,#linkForm label .opt{color:var(--ink3);font-weight:600;text-transform:none;letter-spacing:0}
+#betaForm input,#betaForm textarea,#linkForm input{display:block;width:100%;margin-top:5px;background:#0d1420;
   border:2px solid var(--line);border-radius:9px;color:var(--ink);font:inherit;font-size:16px;
   padding:10px 13px;outline:none;font-weight:400;text-transform:none;letter-spacing:0}
-#betaForm input:focus,#betaForm textarea:focus{border-color:var(--elec)}
+#betaForm input:focus,#betaForm textarea:focus,#linkForm input:focus{border-color:var(--elec)}
 #betaForm textarea{resize:vertical;line-height:1.5}
-#betaForm button{width:100%;margin-top:4px;cursor:pointer;font-family:Rajdhani;font-weight:700;border:2px solid var(--gold-dk)}
+#betaForm button,#linkForm button{width:100%;margin-top:4px;cursor:pointer;font-family:Rajdhani;font-weight:700;border:2px solid var(--gold-dk)}
 .fine{color:var(--ink3);font-size:12.5px;text-align:center;margin-top:12px;line-height:1.5}
 .soon:active{transform:none;box-shadow:4px 4px 0 var(--elec-dk)}
 /* install modal */
@@ -161,7 +161,7 @@ a{color:var(--elec)}
     <h1 class="tag">A Golf App With Betting Games, Not Just Distance and Score</h1>
     <p class="sub">The golf side-games your group already argues about — Wolf, Nassau, Skins, Vegas and more —
     played one at a time or <b>stacked together on one scorecard</b>, scored live on every phone, and settled before you reach the parking lot.</p>
-    <a class="cta gold" href="#beta" onclick="openBeta();return false">⚔️ &nbsp;Request beta access</a>
+    <a class="cta gold" href="#beta" onclick="openLink();return false">⚔️ &nbsp;Email me my link</a>
     <div class="free">Private beta · Free · No account · Works offline on the course</div>
   </div>
 
@@ -204,10 +204,11 @@ a{color:var(--elec)}
 
   <section class="install" id="beta">
     <h2 class="sect-title">WANT IN?</h2>
-    <p class="sect-sub">Battle Tees is in <b>private beta</b> — we let groups in a few at a time so we can fix
-    what breaks before the next foursome finds it. Tell us about your group and we'll send you a link.</p>
+    <p class="sect-sub">Enter your email and we'll send you a link that opens Battle Tees on your phone.
+    Played before? Your players, courses and round history come back with it.</p>
     <div class="center">
-      <button class="cta gold" onclick="openBeta()" style="border:2px solid var(--gold-dk);cursor:pointer;font-family:Rajdhani;font-weight:700">⚔️ &nbsp;Request beta access</button>
+      <button class="cta gold" onclick="openLink()" style="border:2px solid var(--gold-dk);cursor:pointer;font-family:Rajdhani;font-weight:700">⚔️ &nbsp;Email me my link</button>
+      <p class="sect-sub" style="margin-top:16px;font-size:.92em">Want to tell us about your group first? <a href="#beta" onclick="openBeta();return false" style="color:var(--gold)">Request beta access</a> instead.</p>
     </div>
   </section>
 
@@ -216,6 +217,18 @@ a{color:var(--elec)}
   </footer>
 </div>
 
+<div class="modal" id="linkModal" onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="modal-card">
+    <button class="modal-x" onclick="document.getElementById('linkModal').classList.remove('open')">&#10005;</button>
+    <div class="sect-title" style="margin-bottom:4px">GET YOUR LINK</div>
+    <p class="sect-sub" style="margin-bottom:18px">We'll email you a link that opens the app. No password, no code to type.</p>
+    <form id="linkForm" onsubmit="return sendLink(event)">
+      <label>Email<input id="lkEmail" type="email" required autocomplete="email" placeholder="you@email.com"></label>
+      <button class="cta gold" type="submit" id="lkBtn">Email me my link</button>
+    </form>
+    <p class="fine" id="lkMsg" style="margin-top:14px">The link works once and expires in 30 minutes.</p>
+  </div>
+</div>
 <div class="modal" id="betaModal" onclick="if(event.target===this)this.classList.remove('open')">
   <div class="modal-card">
     <button class="modal-x" onclick="document.getElementById('betaModal').classList.remove('open')">&#10005;</button>
@@ -332,6 +345,51 @@ a{color:var(--elec)}
 })();
 </script>
 <script>
+// ---- magic link -----------------------------------------------------------
+// Same Pi relay the app uses. relay.json is read at call time so the endpoint
+// can move without redeploying this page.
+function relayCall(payload){
+  return fetch('/relay.json',{cache:'no-store'}).then(function(r){return r.json();}).then(function(cfg){
+    return new Promise(function(res,rej){
+      var ws=new WebSocket(cfg.url);
+      var rid='w'+Math.random().toString(36).slice(2,8);
+      var t=setTimeout(function(){try{ws.close();}catch(e){} rej(new Error('timeout'));},20000);
+      ws.onopen=function(){ws.send(JSON.stringify(Object.assign({t:'backup',rid:rid},payload)));};
+      ws.onmessage=function(ev){
+        var m;try{m=JSON.parse(ev.data);}catch(e){return;}
+        if(m.t==='backupResult'&&m.rid===rid){clearTimeout(t);try{ws.close();}catch(e){} res(m);}
+      };
+      ws.onerror=function(){clearTimeout(t);rej(new Error('connect'));};
+    });
+  });
+}
+function openLink(){
+  document.getElementById('linkModal').classList.add('open');
+  var m=document.getElementById('lkMsg');
+  m.textContent='The link works once and expires in 30 minutes.';m.style.color='';
+  setTimeout(function(){var e=document.getElementById('lkEmail');if(e)e.focus();},60);
+}
+function sendLink(e){
+  e.preventDefault();
+  var em=(document.getElementById('lkEmail').value||'').trim().toLowerCase();
+  var msg=document.getElementById('lkMsg'), btn=document.getElementById('lkBtn');
+  if(!/^\S+@\S+\.\S+$/.test(em)){msg.textContent='Enter a valid email address.';msg.style.color='#e8604f';return false;}
+  btn.disabled=true;btn.textContent='Sending…';
+  msg.style.color='';msg.textContent='Sending your link…';
+  relayCall({op:'maglink',email:em}).then(function(r){
+    btn.disabled=false;btn.textContent='Email me my link';
+    if(r&&r.ok){
+      msg.style.color='#4ade80';
+      msg.textContent=r.returning
+        ? '✓ Sent. Open it on your phone and your library comes back with it.'
+        : '✓ Sent. Open it on your phone to set up Battle Tees.';
+    }else{msg.style.color='#e8604f';msg.textContent=(r&&r.error)||'Could not send the link.';}
+  }).catch(function(){
+    btn.disabled=false;btn.textContent='Email me my link';
+    msg.style.color='#e8604f';msg.textContent='Could not reach the server. Try again in a moment.';
+  });
+  return false;
+}
 function openBeta(){document.getElementById('betaModal').classList.add('open');
   setTimeout(function(){var n=document.getElementById('bfName');if(n)n.focus()},60);}
 function sendBeta(e){
@@ -346,7 +404,7 @@ function sendBeta(e){
   return false;
 }
 document.addEventListener('keydown',function(e){
-  if(e.key==='Escape'){var m=document.getElementById('betaModal');if(m)m.classList.remove('open');}});
+  if(e.key==='Escape'){['betaModal','linkModal'].forEach(function(id){var m=document.getElementById(id);if(m)m.classList.remove('open');});}});
 if(location.hash==='#beta')addEventListener('load',openBeta);
 </script>
 </body>
