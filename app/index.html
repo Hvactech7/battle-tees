@@ -337,7 +337,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1785830113';
+const BUILD='1785894900';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1314,6 +1314,61 @@ function magBanner(){
   </div>`;
 }
 
+// Pull a token out of a full link or a bare token string.
+function tokenFrom(v){
+  const t = String(v||'').trim();
+  const m = t.match(/[?&]k=([A-Za-z0-9_-]{16,})/) || t.match(/^([A-Za-z0-9_-]{16,})$/);
+  return m ? m[1] : null;
+}
+
+// Redeem a sign-in token and apply whatever comes back. Shared by the ?k= URL
+// route and by pasting the link into the Restore panel.
+//
+// The paste route is not a convenience — on iOS a Home Screen web app gets its
+// OWN storage container, separate from Safari. A link tapped in Mail opens in
+// Safari, so the library restores into Safari and the installed app never sees
+// it, while the single-use token is spent. Text crosses that boundary; a
+// navigation does not. Same reason the 6-digit code works.
+async function redeemToken(tok){
+  const r = await relayBackup({op:'redeem', code:tok, email:''});
+  if(!(r && r.ok && r.email))
+    return {ok:false, msg:(r && r.error) || 'That link could not be used. Ask for a new one.'};
+  try{
+    localStorage.setItem('wolfBackupEmail', r.email);
+    localStorage.setItem('btEmailOk', r.email);   // the link proved the address
+  }catch(e){}
+  let msg;
+  if(r.data){
+    const c = applyLibrary(r.data);
+    msg = `✓ Restored — ${c.added} player${c.added===1?'':'s'}`
+      + (c.updated?`, ${c.updated} updated`:'')
+      + (c.cAdded?`, ${c.cAdded} course${c.cAdded===1?'':'s'}`:'')
+      + (c.hAdded?`, ${c.hAdded} round${c.hAdded===1?'':'s'}`:'') + '.';
+  }else{
+    S.autoBackup = true;
+    msg = '✓ Signed in as ' + r.email + ' — your library will back up automatically.';
+  }
+  abFp = null;
+  save();
+  return {ok:true, msg};
+}
+
+// Restore from a link pasted into the panel — the reliable route on iPhone.
+async function pasteRestore(){
+  const el = document.getElementById('bkLink');
+  const tok = tokenFrom(el && el.value);
+  if(!tok){ backupUI.msg = 'Paste the whole link from your email (or just the code after "k=").'; render(); return; }
+  backupUI.msg = 'Restoring…'; render();
+  try{
+    const res = await redeemToken(tok);
+    backupUI.msg = res.msg;
+    if(res.ok) backupUI.stage = 0;
+  }catch(e){
+    backupUI.msg = 'Could not connect — check your signal and try again.';
+  }
+  render();
+}
+
 async function tryMagicLink(){
   const m = String(location.search||'').match(/[?&]k=([A-Za-z0-9_-]{16,})/);
   if(!m) return;
@@ -1328,26 +1383,11 @@ async function tryMagicLink(){
   magUI = {stage:'working', msg:'Signing you in…'};
   render();
   try{
-    const r = await relayBackup({op:'redeem', code:tok, email:''});
-    if(r && r.ok && r.email){
-      try{
-        localStorage.setItem('wolfBackupEmail', r.email);
-        localStorage.setItem('btEmailOk', r.email);   // the link proved the address
-      }catch(e){}
-      if(r.data){
-        const c = applyLibrary(r.data);
-        magUI = {stage:'ok', msg:`✓ Welcome back — ${c.added} player${c.added===1?'':'s'} restored`
-          + (c.cAdded?`, ${c.cAdded} course${c.cAdded===1?'':'s'}`:'')
-          + (c.hAdded?`, ${c.hAdded} round${c.hAdded===1?'':'s'}`:'') + '.'};
-      }else{
-        S.autoBackup = true;
-        magUI = {stage:'ok', msg:'✓ You’re signed in as '+r.email+' — your library will back up automatically.'};
-      }
-      abFp = null;               // force the next auto-backup to actually send
-      save();
+    const res = await redeemToken(tok);
+    if(res.ok){
+      magUI = {stage:'ok', msg:res.msg};
     }else{
-      magUI = {stage:'err', askEmail:true,
-               msg:(r && r.error) || 'That link could not be used.'};
+      magUI = {stage:'err', askEmail:true, msg:res.msg};
     }
   }catch(e){
     magUI = {stage:'err', askEmail:true,
@@ -4068,10 +4108,14 @@ function backupBlockHTML(){
             <button class="ghost sel" style="flex:1" onclick="doBackup()">Back up now</button>
             <button class="ghost" onclick="closeBackup()">Close</button></div>`
         :backupUI.stage===0
-          ?`<div class="mt" style="display:flex;gap:6px">
-              <button class="ghost sel" style="flex:1" onclick="requestRestoreLink()">Email me a link</button>
+          ?`<div class="tiny mt" style="opacity:.8">Already have a sign-in link? Paste the whole thing here &mdash; this is the one that works once the app is on your home screen.</div>
+            <input id="bkLink" class="mt" type="text" inputmode="url" autocapitalize="off" placeholder="https://battletees.app/app/?k=..." style="margin-top:6px">
+            <button class="ghost sel mt" style="width:100%" onclick="pasteRestore()">Restore from link</button>
+            <div class="tiny mt" style="text-align:center;opacity:.6">or</div>
+            <div class="mt" style="display:flex;gap:6px">
+              <button class="ghost" style="flex:1" onclick="requestRestoreLink()">Email me a link</button>
               <button class="ghost" onclick="closeBackup()">Close</button></div>
-            <div class="tiny mt" style="text-align:center;opacity:.75">Tap the link in the email and your library restores itself &mdash; no code to type.<br>
+            <div class="tiny mt" style="text-align:center;opacity:.75">
               <span onclick="requestRestoreCode()" style="text-decoration:underline;cursor:pointer">Send a 6-digit code instead</span></div>`
           :`<input id="bkCode" class="mt" type="text" inputmode="numeric" placeholder="6-digit code" maxlength="6" style="letter-spacing:5px;font-family:Rajdhani,sans-serif;font-size:20px;margin-top:8px">
             <div class="mt" style="display:flex;gap:6px">
