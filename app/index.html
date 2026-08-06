@@ -337,7 +337,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1785995872';
+const BUILD='1785996394';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -4244,13 +4244,32 @@ function vCourses(){
 }
 function groupsCardHTML(){
   const G=S.groupLib||[];
-  if(!G.length)return '';
   return `<div class="card"><h2>⚔️ Groups</h2>
     ${G.map(g2=>`<div class="row"><div style="flex:1;min-width:0"><b>${esc(g2.name)}</b>
       <div class="tiny">${g2.members.map(m=>esc(m.name)).join(' · ')}</div></div>
       <span style="display:flex;gap:6px;flex:none"><button class="ghost" onclick="openGroupEditor('${g2.id}')">✎</button><button class="ghost danger" onclick="delGroup('${g2.id}')">✕</button></span></div>`).join('')}
-    <div class="tiny mt">Name a group in Round setup to save it — tap it there to reload the whole crew.</div>
+    <button class="ghost mt" style="width:100%" onclick="openGroupBuild()">＋ New group</button>
+    <div class="tiny mt">Build tomorrow's group tonight — pick it in Round setup and the whole crew loads in one tap. Course maps download from the course's page in ⛳ Courses.</div>
   </div>`;
+}
+// standalone builder from the Players screen — no round, no setup name required
+function openGroupBuild(){
+  const meLow=(S.me&&S.me.name||'').trim().toLowerCase();
+  grpEditTarget={id:null,name:'',sel:new Set(meLow?[meLow]:[]),loadOnSave:false};
+  renderGroupEditor();
+}
+// type a brand-new player straight into the group: joins the library, joins the pick
+function grpEdAddNew(){
+  const nEl=document.getElementById('grpNewName'),iEl=document.getElementById('grpNewIdx');
+  const nm=((nEl&&nEl.value)||'').trim();
+  if(!nm)return;
+  const idx=Math.max(-10,Math.min(54,parseFloat((iEl&&iEl.value)||'')||10));
+  const low=nm.toLowerCase();
+  const t=grpEditTarget;if(!t)return;
+  const nmEl=document.getElementById('grpEdName');if(nmEl)t.name=nmEl.value;
+  set(()=>{upsertLib({name:nm,index:idx});});
+  if(t.sel.size<4)t.sel.add(low);
+  renderGroupEditor();
 }
 function vPlayers(){
   return topbar('Players','','home')+`<main>
@@ -5268,6 +5287,12 @@ function renderGroupEditor(){
         <div><b>${esc(e.name)}</b><div class="tiny">Index ${e.index}</div></div>
         <input type="checkbox" style="width:24px;height:24px;accent-color:var(--elec);pointer-events:none" ${on?'checked':''}>
       </div>`;}).join('')}
+    <div class="tiny mt">New player</div>
+    <div style="display:flex;gap:6px">
+      <input id="grpNewName" type="text" placeholder="Name" style="flex:1.6" onkeydown="if(event.key==='Enter')grpEdAddNew()">
+      <input id="grpNewIdx" type="text" inputmode="decimal" placeholder="Hdcp" style="flex:.8" onkeydown="if(event.key==='Enter')grpEdAddNew()">
+      <button class="ghost" style="flex:none" onclick="grpEdAddNew()">Add</button>
+    </div>
     <div style="display:flex;gap:8px;margin-top:12px">
       <button class="big" style="flex:1;margin:0" ${ok?'':'disabled'} onclick="saveGroupEdit()">Save group</button>
       <button class="ghost" onclick="closeGroupEditor()">Cancel</button>
