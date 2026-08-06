@@ -1,6 +1,13 @@
 <!doctype html>
 <html lang="en">
 <head>
+<script>
+// Home-screen icons minted before the app moved to /app/ open "/" inside the
+// installed shell. Standalone mode = an app icon launch, never a browser visit —
+// send those straight to the app. Browser traffic sees the website untouched.
+if(navigator.standalone===true||matchMedia('(display-mode: standalone)').matches)
+  location.replace('/app/'+location.search);
+</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>A Golf App With Betting Games, Not Just Distance and Score</title>
