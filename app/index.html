@@ -337,7 +337,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786000771';
+const BUILD='1786001159';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -3942,9 +3942,14 @@ function vBfWatch(){
       return `<div class="card"><h2>${gameName(g)}</h2>
         ${order.map(i=>`<div class="row"><span>${esc((S.players[i]||{}).name||'?')}</span><b class="num" style="font-size:24px">${g==='nines'?fmtPts(led[L][i]):led[L][i]}</b></div>`).join('')}
       </div>`;}).join('')}
-    <div class="card"><h2>Round shape</h2>
-      ${act.map((i,k)=>`<div class="row"><span>${esc((S.players[i]||{}).name||'?')}</span>
-        <span class="tiny">${tally[k].eag?tally[k].eag+' eagle · ':''}${tally[k].bird} birdie · ${tally[k].par} par · ${tally[k].bog} bogey${tally[k].worse?' · '+tally[k].worse+' worse':''}</span></div>`).join('')}
+    <div class="card"><h2>Round highlights</h2>
+      ${act.map((i,k)=>{
+        const bits=[];
+        if(tally[k].eag)bits.push(tally[k].eag+(tally[k].eag>1?' eagles':' eagle'));
+        if(tally[k].bird)bits.push(tally[k].bird+(tally[k].bird>1?' birdies':' birdie'));
+        if(tally[k].par)bits.push(tally[k].par+(tally[k].par>1?' pars':' par'));
+        return `<div class="row"><span>${esc((S.players[i]||{}).name||'?')}</span>
+        <span class="tiny">${bits.length?bits.join(' · '):'—'}</span></div>`;}).join('')}
     </div>
     ${wolfBits.length?`<div class="card"><h2>🐺 Lone wolves</h2><div class="tiny">${wolfBits.join('<br>')}</div></div>`:''}
     ${ctps.length?`<div class="card"><h2>🎯 Closest to the pin</h2><div class="tiny">${ctps.join('<br>')}</div></div>`:''}
