@@ -337,7 +337,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1785996394';
+const BUILD='1785996787';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -461,7 +461,7 @@ function courseDisplayOrder(){
 }
 function defaultConfig(){
   return {
-    lens:'net', allowance:100, carryTies:false, last2LastPlace:true, _v:3,
+    lens:'both', allowance:100, carryTies:false, last2LastPlace:true, _v:4,
     game:'wolf',
     pts:{partnerWin:1, fieldBeatsPartners:2, loneWin:2, fieldBeatsLone:1, blindWin:3, fieldBeatsBlind:1, ctp:1},
     ctpAll:true,   // offer a closest-to-pin pick on every par 3, whatever the game
@@ -626,6 +626,12 @@ function load(){
           }
           return false;
         });
+      }
+      if((s.config._v||2)<4){
+        s.config._v=4;
+        // Net/Gross/Both now defaults to Both. One-time flip for configs still on
+        // the old 'net' default — anyone re-picking Net after this keeps it.
+        if(s.config.lens==='net')s.config.lens='both';
       }
       if((s.config._v||2)<3){
         s.config._v=3;
