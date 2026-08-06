@@ -337,7 +337,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1785996787';
+const BUILD='1785999717';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -462,6 +462,7 @@ function courseDisplayOrder(){
 function defaultConfig(){
   return {
     lens:'both', allowance:100, carryTies:false, last2LastPlace:true, _v:4,
+    bf:{broadcast:true,emails:true},
     game:'wolf',
     pts:{partnerWin:1, fieldBeatsPartners:2, loneWin:2, fieldBeatsLone:1, blindWin:3, fieldBeatsBlind:1, ctp:1},
     ctpAll:true,   // offer a closest-to-pin pick on every par 3, whatever the game
@@ -567,6 +568,7 @@ function load(){
       // value so a round already in progress keeps behaving exactly as it did.
       (s.players||[]).forEach(p=>{ if(p&&!p.track)
         p.track=Object.assign({putts:false,bunker:false,chips:false,pen:false}, s.config.track||{}); });
+      if(!s.config.bf)s.config.bf={broadcast:true,emails:true};
       if(!s.share)s.share={on:false,code:null};
       if(!s.me)s.me={name:'',index:10};
       if(!s.theme)s.theme='dark';
@@ -762,7 +764,9 @@ const SYNC_KEYS=['meta',...Array.from({length:HOLES},(_,i)=>'h'+i)];
 let sock=null,sockOpen=false,retryMs=1000,applyingRemote=false;
 const sentCache={},localContent={};
 function makeCode(){const A='ABCDEFGHJKMNPQRSTUVWXYZ23456789';let s='';for(let i=0;i<5;i++)s+=A[Math.floor(Math.random()*A.length)];return s;}
-function shareMeta(){return {course:S.course,players:S.players,config:S.config,started:S.round.started,dollarPerPt:S.round.dollarPerPt,span:S.round.span,startedAt:S.round.startedAt,games:S.round.games||null,rates:S.round.rates||null,_ts:S.shareMetaTs||0};}
+function shareMeta(){return {course:S.course,players:S.players,config:S.config,started:S.round.started,dollarPerPt:S.round.dollarPerPt,span:S.round.span,startedAt:S.round.startedAt,games:S.round.games||null,rates:S.round.rates||null,
+  shots:((S.shotLog&&S.shotLog['s'+(S.round.startedAt||0)])||[]).slice(0,80),   // spectator shot lines
+  _ts:S.shareMetaTs||0};}
 function contentKey(k){
   if(k==='meta'){const {_ts,...rest}=shareMeta();return JSON.stringify(rest);}
   const {_ts,...rest}=S.round.holes[+k.slice(1)];return JSON.stringify(rest);
@@ -878,7 +882,7 @@ function syncConnect(){
     let m;try{m=JSON.parse(ev.data);}catch(e){return;}
     if(m.t==='state')onStateDoc(m.doc);
     else if(m.t==='op')applyOp(m.k,m.v,false);
-    else if(m.t==='courseResult'||m.t==='backupResult')handleCourseResult(m);
+    else if(m.t==='courseResult'||m.t==='backupResult'||m.t==='battleResult')handleCourseResult(m);
   };
   sock.onclose=()=>{sockOpen=false;sock=null;render();scheduleReconnect();};
   sock.onerror=()=>{try{sock&&sock.close();}catch(e){}};
@@ -1112,6 +1116,39 @@ async function relayBackup(payload){
     const rid='b'+Math.random().toString(36).slice(2,8);
     pendingCourse[rid]={res,timer:setTimeout(()=>{delete pendingCourse[rid];rej(new Error('timeout'));},20000)};
     try{ws.send(JSON.stringify({t:'backup',rid,...payload}));}
+    catch(e){clearTimeout(pendingCourse[rid].timer);delete pendingCourse[rid];rej(e);}
+  });
+}
+// ---- Community Battlefield ----------------------------------------------
+// Starting a round announces it (default ON, Settings > Battlefield to stop).
+// The relay resolves library pids to verified emails PRIVATELY — addresses
+// never travel between phones — and mails friends a watch link.
+function bfBroadcastStart(){
+  try{
+    if(!S.config.bf||!S.config.bf.broadcast)return;
+    if(!S.round.started)return;
+    if(!S.share.on){                       // solo round: open a room so spectators have a doc
+      S.share={on:true,code:makeCode(),creator:true};
+      S.shareMetaTs=Date.now();
+      S.round.holes.forEach(r=>{if(!r._ts)r._ts=Date.now();});
+      save();syncConnect();
+    }
+    const pids=[...new Set((S.playerLib||[]).map(p=>p.pid).filter(Boolean))];
+    relayBattle({op:'start',code:S.share.code,
+      starter:(S.me&&S.me.name)||'A Friend',starterPid:(S.me&&S.me.pid)||'',
+      course:S.course.name,game:gameName(S.round.game),pids}).catch(()=>{});
+  }catch(e){}
+}
+function bfBroadcastEnd(){
+  try{if(S.share.on&&S.share.code)relayBattle({op:'end',code:S.share.code}).catch(()=>{});}catch(e){}
+}
+async function relayBattle(payload){
+  const ws=await waitForRelay(6000);
+  return new Promise((res,rej)=>{
+    if(!ws)return rej(new Error('relay offline'));
+    const rid='f'+Math.random().toString(36).slice(2,8);
+    pendingCourse[rid]={res,timer:setTimeout(()=>{delete pendingCourse[rid];rej(new Error('timeout'));},20000)};
+    try{ws.send(JSON.stringify({t:'battle',rid,...payload}));}
     catch(e){clearTimeout(pendingCourse[rid].timer);delete pendingCourse[rid];rej(e);}
   });
 }
@@ -1376,6 +1413,12 @@ async function pasteRestore(){
 }
 
 async function tryMagicLink(){
+  // ?watch=CODE — a Battlefield email link straight into spectating
+  const w = String(location.search||'').match(/[?&]watch=([A-Za-z0-9]{4,8})/);
+  if(w){
+    try{ history.replaceState(null,'',location.pathname); }catch(e){}
+    setTimeout(()=>openBfWatch(w[1].toUpperCase()),400);
+  }
   const m = String(location.search||'').match(/[?&]k=([A-Za-z0-9_-]{16,})/);
   if(!m) return;
   const tok = m[1];
@@ -1515,7 +1558,7 @@ function lobbyConnect(){
     else if(m.t==='invite'){invites=invites.filter(i=>i.code!==m.info.code).concat([m.info]);render();}
     else if(m.t==='uninvite'){invites=invites.filter(i=>i.code!==m.code);render();}
     else if(m.t==='nearby'){nearby=(m.list||[]).filter(p=>p.id!==devId());if(S.screen==='home'||S.screen==='players'||S.screen==='setup'||S.screen==='gate')render();}
-    else if(m.t==='courseResult'||m.t==='backupResult')handleCourseResult(m);
+    else if(m.t==='courseResult'||m.t==='backupResult'||m.t==='battleResult')handleCourseResult(m);
   };
   lobbySock.onclose=()=>{lobbySock=null;nearby=[];if(!(S.share&&S.share.on))setTimeout(lobbyConnect,10000);};
   lobbySock.onerror=()=>{try{lobbySock&&lobbySock.close();}catch(e){}};
@@ -3405,6 +3448,9 @@ function render(){
   else if(scr==='course') html=vCourse();
   else if(scr==='setup') html=vSetup();
   else if(scr==='roundopts') html=vRoundOpts();
+  else if(scr==='settings') html=vSettings();
+  else if(scr==='bfield') html=vBattlefield();
+  else if(scr==='bfwatch') html=vBfWatch();
   else if(scr==='gate') html=vGate();
   else if(scr==='hole') html=vHole();
   else if(scr==='standings') html=vStandings();
@@ -3627,6 +3673,7 @@ function vHome(){
     <button class="ghost" style="padding:12px" onclick="go('stats')">📊 Stats</button>
     <button class="ghost" style="padding:12px" onclick="go('history')">🕰 Rounds</button>
   </div>
+  <button class="ghost" style="width:100%;padding:12px;margin-bottom:16px" onclick="openBattlefield()">⚔️ Community Battlefield</button>
   `:''}
   ${!S.me.name?`<div class="card"><h2>Your profile</h2>
     <div class="tiny mb">So nearby phones can add you to a round by name.</div>
@@ -3662,6 +3709,7 @@ function vHome(){
     <button class="ghost" style="padding:12px" onclick="go('stats')">📊 Stats</button>
     <button class="ghost" style="padding:12px" onclick="go('history')">🕰 Rounds</button>
   </div>
+  <button class="ghost" style="width:100%;padding:12px;margin-bottom:16px" onclick="openBattlefield()">⚔️ Community Battlefield</button>
   `:''}
   <div class="card"><h2>Games &amp; rules</h2>
     ${gameGridHTML('showRules')}
@@ -3672,7 +3720,251 @@ function vHome(){
       <button class="ghost ${S.theme!=='light'?'sel':''}" style="white-space:nowrap" onclick="setTheme('dark')">🌙 Dark</button>
     </span>
   </div>
+  <div class="center" style="margin:0 0 14px">
+    <button class="ghost" onclick="go('settings')">⚙️ Settings</button>
+  </div>
   </main>`;
+}
+function vSettings(){
+  const bf=S.config.bf||{broadcast:true,emails:true};
+  const row=(label,sub,key)=>`<div class="row"><div style="flex:1;min-width:0"><b>${label}</b>
+      <div class="tiny">${sub}</div></div>
+    <button class="ghost ${bf[key]?'sel':''}" onclick="bfToggle('${key}')">${bf[key]?'On':'Off'}</button></div>`;
+  return topbar('Settings','','home')+`<main>
+  <div class="card"><h2>⚔️ Battlefield</h2>
+    ${row('Announce my rounds','Starting a round emails your Battle Friends a watch link and puts the round on the Community Battlefield.','broadcast')}
+    ${row('Email me when friends play','Get the “Battlefield is set” email when someone who has you in their library tees off.','emails')}
+    <div class="tiny mt">Announcements go out once per round, from Battle Tees — never from a personal address.</div>
+  </div>
+  </main>`;
+}
+// ---------- Community Battlefield: list + spectator ----------
+let bfList=null,bfWatch=null,bfTimer=null,bfLens='net',bfHole=null;
+// Battles live on THIS phone forever once seen — their own localStorage key,
+// deliberately outside the backup payload: never backed up, never restored.
+function bfStore(){try{return JSON.parse(localStorage.getItem('btBattles'))||{};}catch(e){return {};}}
+function bfStorePut(code,entry,doc){
+  try{
+    const st=bfStore();
+    st[code]={entry:entry||st[code]&&st[code].entry||{code},doc:doc||(st[code]&&st[code].doc)||null,at:Date.now()};
+    localStorage.setItem('btBattles',JSON.stringify(st));
+  }catch(e){}   // storage full: the battle still shows while the relay has it
+}
+function bfForget(code){
+  const st=bfStore();delete st[code];
+  try{localStorage.setItem('btBattles',JSON.stringify(st));}catch(e){}
+  openBattlefield();
+}
+function openBattlefield(){
+  bfList=null;S.screen='bfield';render();
+  relayBattle({op:'list'}).then(r=>{
+    const live=(r&&r.list)||[];
+    live.forEach(e=>{bfStorePut(e.code,e,null);
+      // pull the doc for anything new or still moving so it survives the relay's sweep
+      const st=bfStore();
+      if(e.live||!(st[e.code]&&st[e.code].doc))
+        relayBattle({op:'peek',code:e.code}).then(pr=>{
+          if(pr&&pr.doc&&pr.doc.meta)bfStorePut(e.code,pr.entry||e,pr.doc);
+        }).catch(()=>{});
+    });
+    const st=bfStore();
+    const seen=new Set(live.map(e=>e.code));
+    const archived=Object.values(st).filter(x=>x.entry&&!seen.has(x.entry.code))
+      .map(x=>Object.assign({},x.entry,{live:false,_archived:true}))
+      .sort((a,b)=>(b.at||0)-(a.at||0));
+    bfList=[...live,...archived];render();
+  }).catch(()=>{
+    const st=bfStore();
+    const archived=Object.values(st).filter(x=>x.entry)
+      .map(x=>Object.assign({},x.entry,{live:false,_archived:true}))
+      .sort((a,b)=>(b.at||0)-(a.at||0));
+    bfList=archived.length?archived:'offline';render();
+  });
+}
+function vBattlefield(){
+  const L=bfList;
+  const dur=e=>{
+    const end=e.endedAt?e.endedAt*1000:Date.now();
+    const m=Math.max(1,Math.round((end-e.at*1000)/60000));
+    return m>=60?`${Math.floor(m/60)}h ${m%60}m`:`${m} min`;
+  };
+  return topbar('Community Battlefield','Watch your Battle Friends fight it out','home')+`<main>
+  ${L===null?'<div class="card center muted">Checking the Battlefield…</div>'
+   :L==='offline'?'<div class="card center muted">Could not reach the Battlefield — check your signal.</div>'
+   :!L.length?'<div class="card center muted">No battles right now. Start a round and yours shows up here for your friends.</div>'
+   :L.map(e=>{
+      const day=e.at?new Date(e.at*1000).toLocaleDateString(undefined,{month:'short',day:'numeric'}):'';
+      return `<div class="card" style="padding:12px 14px;cursor:pointer" onclick="openBfWatch('${esc(e.code)}')">
+      <div class="row" style="border-top:none">
+        <div style="flex:1;min-width:0"><b style="font-family:Rajdhani,sans-serif;font-size:20px">${esc(e.starter)}</b>
+          <div class="tiny">${esc(e.course||'')} · ${esc(e.game||'')}</div>
+          <div class="tiny">${e.live?'<span style="color:var(--elec)">● live</span> · playing '+dur(e):(day?day+' · ':'')+'finished · '+dur(e)}</div></div>
+        <span class="pill wolf" style="flex:none">${e.live?'Watch':'View'}</span>
+        ${e._archived?`<button class="ghost danger" style="flex:none;margin-left:6px" onclick="event.stopPropagation();bfForget('${esc(e.code)}')">✕</button>`:''}
+      </div></div>`;}).join('')}
+  <button class="ghost mt" style="width:100%" onclick="openBattlefield()">↻ Refresh</button>
+  </main>`;
+}
+function openBfWatch(code){
+  const st=bfStore()[code];
+  bfWatch={code,doc:(st&&st.doc)||null,entry:(st&&st.entry)||null,err:null};bfHole=null;
+  S.screen='bfwatch';render();
+  bfPoll();
+  clearInterval(bfTimer);bfTimer=setInterval(bfPoll,20000);
+}
+function bfPoll(){
+  if(!bfWatch||S.screen!=='bfwatch'){clearInterval(bfTimer);bfTimer=null;return;}
+  const finished=bfWatch.entry&&bfWatch.entry.endedAt&&bfWatch.doc;
+  if(finished){clearInterval(bfTimer);bfTimer=null;return;}   // archive is final — stop polling
+  relayBattle({op:'peek',code:bfWatch.code}).then(r=>{
+    if(!bfWatch)return;
+    if(r&&r.doc&&r.doc.meta){
+      bfWatch.doc=r.doc;bfWatch.entry=r.entry||bfWatch.entry;bfWatch._miss=0;
+      bfStorePut(bfWatch.code,bfWatch.entry,r.doc);   // keep the local copy current
+    }else if(bfWatch.doc){
+      // the relay has moved on — this battle now lives only on this phone
+      bfWatch._miss=(bfWatch._miss||0)+1;
+      if(bfWatch._miss>=2){
+        if(bfWatch.entry&&!bfWatch.entry.endedAt)bfWatch.entry.endedAt=Math.floor(Date.now()/1000);
+        bfStorePut(bfWatch.code,bfWatch.entry,bfWatch.doc);
+        clearInterval(bfTimer);bfTimer=null;
+      }
+    }
+    bfWatch.err=null;render();
+  }).catch(()=>{if(bfWatch&&!bfWatch.doc){bfWatch.err='offline';render();}});
+}
+// run fn with S temporarily pointing at the friend's round — engines are pure
+// readers, so every game computes exactly as it does on their own phone.
+// NOTHING inside may call set()/save().
+function withDoc(doc,fn){
+  const meta=doc.meta||{};
+  const holes=[];
+  for(let i=0;i<18;i++){const h=doc['h'+i];holes.push(h?JSON.parse(JSON.stringify(h)):blankHole());}
+  const keep={course:S.course,players:S.players,config:S.config,round:S.round};
+  // normalize a foreign doc so no engine can trip: every course needs a tee set,
+  // every player a tee id that exists in it
+  const course=JSON.parse(JSON.stringify(meta.course||S.course||{holes:[]}));
+  if(!course.teeSets||!course.teeSets.length)course.teeSets=[{id:'t0',name:'Tee',rating:72,slope:113}];
+  const players=(meta.players||[]).map(pl=>{
+    const q=Object.assign({},pl);
+    if(!q.tee||!course.teeSets.some(t=>t.id===q.tee))q.tee=course.teeSets[0].id;
+    if(q.index==null||isNaN(+q.index))q.index=10;
+    return q;});
+  S.course=course;
+  S.players=players;
+  S.config=Object.assign({},S.config,meta.config||{});
+  S.round=Object.assign(blankRound(),{started:true,game:(meta.games&&meta.games[0])||(meta.config&&meta.config.game)||'stroke',
+    games:meta.games||null,span:meta.span||{count:18,start:0},startedAt:meta.startedAt||0,holes});
+  try{return fn();}finally{
+    S.course=keep.course;S.players=keep.players;S.config=keep.config;S.round=keep.round;
+  }
+}
+function vBfWatch(){
+  const W=bfWatch||{};
+  const doc=W.doc,e=W.entry||{};
+  if(!doc)return topbar('Battlefield','','bfield')+`<main><div class="card center muted">${W.err?'Could not reach the Battlefield.':'Loading the battle…'}</div></main>`;
+  const meta=doc.meta||{};
+  if(!meta.course)return topbar('Battlefield','','bfield')+`<main><div class="card center muted">Nothing here yet — the round may just be teeing off.</div></main>`;
+  return withDoc(doc,()=>{
+    const act=actIdx(),course=S.course;
+    const confirmed=S.round.holes.filter(r=>r&&r.confirmed).length;
+    const started=(e.at||meta.startedAt/1000||0)*1000||meta.startedAt||0;
+    const end=e.endedAt?e.endedAt*1000:Date.now();
+    const mins=started?Math.max(1,Math.round((end-started)/60000)):null;
+    const L=bfLens;
+    // score-to-par tallies from gross (net uses strokes)
+    const tally=act.map(()=>({bird:0,par:0,bog:0,worse:0,eag:0}));
+    S.round.holes.forEach((r,h)=>{
+      if(!r||!r.confirmed)return;
+      const par=(course.holes[h%course.holes.length]||{}).par||4;
+      act.forEach((i,k)=>{
+        let g=r.gross[i];if(g==null)return;
+        if(L==='net')g-=fullDotsOn(i,h%course.holes.length);
+        const d=g-par;
+        if(d<=-2)tally[k].eag++;else if(d===-1)tally[k].bird++;else if(d===0)tally[k].par++;
+        else if(d===1)tally[k].bog++;else tally[k].worse++;
+      });
+    });
+    const games=gamesOn();
+    const ledgers={};games.forEach(g=>{try{ledgers[g]=computeFor(g).ledgers;}catch(err){}});
+    // wolf detail: lone/blind holes
+    const wolfBits=[];
+    if(games.includes('wolf'))S.round.holes.forEach((r,h)=>{
+      if(r&&r.confirmed&&(r.mode==='lone'||r.mode==='blind')&&r.wolfAt!=null)
+        wolfBits.push(`h${h+1}: ${esc((S.players[r.wolfAt]||{}).name||'?')} ${r.mode==='blind'?'blind ':''}lone wolf`);
+    });
+    // ctp
+    const ctps=[];S.round.holes.forEach((r,h)=>{
+      if(r&&r.confirmed&&r.ctp!=null&&r.ctp>=0)ctps.push(`h${h+1}: ${esc((S.players[r.ctp]||{}).name||'?')}`);});
+    // teams
+    let teamLine='';
+    const tg=games.find(g=>['bestball','scramble','vegas','nassau','sixes','umbrella'].includes(g));
+    if(tg&&NP()===4){try{const T=matchTeams(tg==='vegas'?'vegas':tg);
+      teamLine=T.map(t=>t.map(i=>esc((S.players[i]||{}).name||'?')).join(' & ')).join('  vs  ');}catch(err){}}
+    const shots=meta.shots||[];
+    const holeRows=S.round.holes.map((r,h)=>{
+      if(!r||!r.confirmed)return '';
+      const par=(course.holes[h%course.holes.length]||{}).par||4;
+      const sc=act.map(i=>{let g=r.gross[i];if(g==null)return '–';
+        if(L==='net')g-=fullDotsOn(i,h%course.holes.length);return g;}).join(' · ');
+      const hs=shots.filter(x=>x.h===h);
+      return `<div class="row" style="cursor:${hs.length?'pointer':'default'}" ${hs.length?`onclick="bfHole=${h};render()"`:''}>
+        <span><b class="num">${h+1}</b> <span class="tiny">par ${par}</span></span>
+        <span class="num">${sc}</span>
+        <span class="tiny" style="flex:none">${hs.length?`📍${hs.length}`:''}</span></div>
+      ${bfHole===h&&hs.length?`<div style="background:var(--bg);border-radius:10px;padding:8px 10px;margin:4px 0">
+        ${hs.map(x=>`<div class="tiny">${esc(x.club||'shot')} — ${x.yds}y</div>`).join('')}
+        <div id="bfmap" style="height:210px;border-radius:8px;margin-top:6px"></div></div>`:''}`;
+    }).join('');
+    setTimeout(bfMiniMap,80);
+    return topbar(esc(e.starter||'Battle'),`${esc(course.name)} · ${games.map(g=>gameName(g)).join(' + ')}`,'bfield')+`<main>
+    <div class="card" style="padding:10px 14px"><div class="row" style="border-top:none">
+      <span>${e.endedAt?'Final':'<span style="color:var(--elec)">● LIVE</span>'} · thru ${confirmed} ${mins?`· ${mins>=60?Math.floor(mins/60)+'h '+mins%60+'m':mins+' min'}`:''}</span>
+      <span class="seg" style="display:inline-flex;gap:4px">
+        <button class="ghost ${L==='net'?'sel':''}" onclick="bfLens='net';render()">Net</button>
+        <button class="ghost ${L==='gross'?'sel':''}" onclick="bfLens='gross';render()">Gross</button>
+      </span></div>
+      ${teamLine?`<div class="tiny mt">⚔️ ${teamLine}</div>`:''}</div>
+    ${games.map(g=>{const led=ledgers[g];if(!led)return '';
+      const order=act.slice().sort((a,b)=>['stroke','stableford'].includes(g)?(led[L][a]-led[L][b]):(led[L][b]-led[L][a]));
+      return `<div class="card"><h2>${gameName(g)}</h2>
+        ${order.map(i=>`<div class="row"><span>${esc((S.players[i]||{}).name||'?')}</span><b class="num" style="font-size:24px">${g==='nines'?fmtPts(led[L][i]):led[L][i]}</b></div>`).join('')}
+      </div>`;}).join('')}
+    <div class="card"><h2>Round shape</h2>
+      ${act.map((i,k)=>`<div class="row"><span>${esc((S.players[i]||{}).name||'?')}</span>
+        <span class="tiny">${tally[k].eag?tally[k].eag+' eagle · ':''}${tally[k].bird} birdie · ${tally[k].par} par · ${tally[k].bog} bogey${tally[k].worse?' · '+tally[k].worse+' worse':''}</span></div>`).join('')}
+    </div>
+    ${wolfBits.length?`<div class="card"><h2>🐺 Lone wolves</h2><div class="tiny">${wolfBits.join('<br>')}</div></div>`:''}
+    ${ctps.length?`<div class="card"><h2>🎯 Closest to the pin</h2><div class="tiny">${ctps.join('<br>')}</div></div>`:''}
+    <div class="card"><h2>Holes ${L==='net'?'· net':'· gross'}</h2>${holeRows||'<div class="muted">No holes confirmed yet.</div>'}</div>
+    </main>`;
+  });
+}
+// tiny read-only Leaflet with the tracked lines for the opened hole
+function bfMiniMap(){
+  const el=document.getElementById('bfmap');
+  if(!el||el._done||bfHole==null||!bfWatch||!bfWatch.doc)return;
+  el._done=true;
+  const meta=bfWatch.doc.meta||{};
+  const shots=(meta.shots||[]).filter(x=>x.h===bfHole&&x.a&&x.b);
+  if(!shots.length||typeof L==='undefined')return;
+  const m=L.map(el,{zoomControl:false,attributionControl:false,dragging:true});
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19}).addTo(m);
+  const pts=[];
+  shots.forEach(x=>{
+    L.polyline([x.a,x.b],{color:'#0a1220',weight:4.5,opacity:.4,interactive:false}).addTo(m);
+    L.polyline([x.a,x.b],{color:'#e8604f',weight:2.5,opacity:.95,interactive:false}).addTo(m);
+    L.circleMarker(x.b,{radius:4,color:'#0a1220',weight:1.5,fillColor:'#e8604f',fillOpacity:1,interactive:false}).addTo(m);
+    pts.push(x.a,x.b);
+  });
+  m.fitBounds(L.latLngBounds(pts).pad(0.3));
+}
+function bfToggle(key){
+  set(()=>{S.config.bf=S.config.bf||{broadcast:true,emails:true};S.config.bf[key]=!S.config.bf[key];});
+  if(key==='emails'){
+    const em=(localStorage.getItem('wolfBackupEmail')||'').trim();
+    if(em)relayBattle({op:'optout',email:em,out:!S.config.bf.emails}).catch(()=>{});
+  }
 }
 function pickGame(g){set(()=>{S.config.game=g;S.config.games=[g];S.screen='gate';});}
 // After picking a game: join a nearby group or build your own.
@@ -4441,6 +4733,7 @@ function endRound(){
     const t0=S.round.myStartedAt||S.round.startedAt;
     stat('round_end',{game:S.round.game,thru:S.round.holes.filter(r=>r.confirmed).length,
       mins:t0?Math.round((S.round.myEndedAt-t0)/60000):null});}
+  bfBroadcastEnd();
   archiveRound();
   const wasShared=S.share.on;
   S.round=blankRound();S.screen='home';stView=null;
@@ -5442,6 +5735,7 @@ function startRound(){
   saveGroupFromRoster();  // a named group is remembered for next time
   libSaveRoster();  // starting a round remembers everyone in it
   setTimeout(()=>preloadCourseTiles(false),1500);  // quiet tile-pack top-up while signal is good
+  setTimeout(bfBroadcastStart,2500);               // tell the Battlefield (opt-out in Settings)
   set(()=>{S.round=blankRound();S.round.started=true;S.round.game=S.config.game;
     S.round.games=(S.config.games&&S.config.games.length?S.config.games.slice():[S.config.game]).filter((g,i,a)=>a.indexOf(g)===i);
     S.round.rates=S.round.rates||{};
