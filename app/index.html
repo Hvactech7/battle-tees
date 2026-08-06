@@ -337,7 +337,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1785999717';
+const BUILD='1786000771';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -873,7 +873,7 @@ function syncConnect(){
   sock.onopen=()=>{
     sockOpen=true;retryMs=1000;
     sock.send(JSON.stringify({t:'join',room:S.share.code}));
-    if(S.share.creator)sock.send(JSON.stringify({t:'invite',room:S.share.code,
+    if(S.share.creator&&!S.share.bf)sock.send(JSON.stringify({t:'invite',room:S.share.code,
       info:{course:S.course.name,players:S.players.map(p=>p.name),group:S.config.groupName||'',ts:Date.now()}}));
     syncPush();  // catch-up: anything edited while offline goes out immediately
     render();
@@ -955,6 +955,7 @@ function rowLock(h,i){
 function startGroupFromGate(){shareRound();go('home');}
 function shareRound(){
   lobbyClose();
+  if(S.share.on&&S.share.bf){delete S.share.bf;save();syncConnect();}   // now it's a real invite
   const midRound=!!(S.round&&S.round.started);
   S.share={on:true,code:makeCode(),creator:true};
   if(midRound)stat('round_share',{side:'host',game:S.round.game,
@@ -1128,7 +1129,7 @@ function bfBroadcastStart(){
     if(!S.config.bf||!S.config.bf.broadcast)return;
     if(!S.round.started)return;
     if(!S.share.on){                       // solo round: open a room so spectators have a doc
-      S.share={on:true,code:makeCode(),creator:true};
+      S.share={on:true,code:makeCode(),creator:true,bf:true};   // bf: broadcast-only, no lobby invite
       S.shareMetaTs=Date.now();
       S.round.holes.forEach(r=>{if(!r._ts)r._ts=Date.now();});
       save();syncConnect();
@@ -3739,7 +3740,7 @@ function vSettings(){
   </main>`;
 }
 // ---------- Community Battlefield: list + spectator ----------
-let bfList=null,bfWatch=null,bfTimer=null,bfLens='net',bfHole=null;
+let bfList=null,bfWatch=null,bfTimer=null,bfLens='net',bfHole=null,bfCardFull=false;
 // Battles live on THIS phone forever once seen — their own localStorage key,
 // deliberately outside the backup payload: never backed up, never restored.
 function bfStore(){try{return JSON.parse(localStorage.getItem('btBattles'))||{};}catch(e){return {};}}
@@ -3807,7 +3808,7 @@ function vBattlefield(){
 }
 function openBfWatch(code){
   const st=bfStore()[code];
-  bfWatch={code,doc:(st&&st.doc)||null,entry:(st&&st.entry)||null,err:null};bfHole=null;
+  bfWatch={code,doc:(st&&st.doc)||null,entry:(st&&st.entry)||null,err:null};bfHole=null;bfCardFull=false;
   S.screen='bfwatch';render();
   bfPoll();
   clearInterval(bfTimer);bfTimer=setInterval(bfPoll,20000);
@@ -3917,7 +3918,18 @@ function vBfWatch(){
         <div id="bfmap" style="height:210px;border-radius:8px;margin-top:6px"></div></div>`:''}`;
     }).join('');
     setTimeout(bfMiniMap,80);
+    // scorecard first — the current nine until tapped, then the full card
+    let scCard='';
+    if(confirmed>0){
+      const nineBase=S.round.holes.some((r,i)=>r&&r.confirmed&&i>=9)?9:0;
+      const is9=(S.round.span&&S.round.span.count===9);
+      const sc=(bfCardFull||is9)?scorecardHTML():scorecard9HTML(nineBase);
+      scCard=`<div class="card" onclick="bfCardFull=!bfCardFull;render()" style="cursor:pointer">
+        <h2>Scorecard · gross <span class="tiny" style="font-weight:400">${is9?'':bfCardFull?'— tap for the current nine':'— tap for all 18'}</span></h2>
+        ${sc}</div>`;
+    }
     return topbar(esc(e.starter||'Battle'),`${esc(course.name)} · ${games.map(g=>gameName(g)).join(' + ')}`,'bfield')+`<main>
+    ${scCard}
     <div class="card" style="padding:10px 14px"><div class="row" style="border-top:none">
       <span>${e.endedAt?'Final':'<span style="color:var(--elec)">● LIVE</span>'} · thru ${confirmed} ${mins?`· ${mins>=60?Math.floor(mins/60)+'h '+mins%60+'m':mins+' min'}`:''}</span>
       <span class="seg" style="display:inline-flex;gap:4px">
