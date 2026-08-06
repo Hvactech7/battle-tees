@@ -337,7 +337,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786004634';
+const BUILD='1786047042';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1144,9 +1144,12 @@ function bfBroadcastStart(){
       save();syncConnect();
     }
     const pids=[...new Set((S.playerLib||[]).map(p=>p.pid).filter(Boolean))];
+    // names ride along for friends whose library row never picked up a pid —
+    // the relay matches them to verified profile names privately
+    const names=[...new Set((S.playerLib||[]).map(p=>(p.name||'').trim()).filter(Boolean))];
     relayBattle({op:'start',code:S.share.code,
       starter:(S.me&&S.me.name)||'A Friend',starterPid:(S.me&&S.me.pid)||'',
-      course:S.course.name,game:gameName(S.round.game),pids}).catch(()=>{});
+      course:S.course.name,game:gameName(S.round.game),pids,names}).catch(()=>{});
   }catch(e){}
 }
 function bfBroadcastEnd(){
