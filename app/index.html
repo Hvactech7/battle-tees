@@ -337,7 +337,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786001159';
+const BUILD='1786004634';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -955,9 +955,18 @@ function rowLock(h,i){
 function startGroupFromGate(){shareRound();go('home');}
 function shareRound(){
   lobbyClose();
-  if(S.share.on&&S.share.bf){delete S.share.bf;save();syncConnect();}   // now it's a real invite
   const midRound=!!(S.round&&S.round.started);
-  S.share={on:true,code:makeCode(),creator:true};
+  if(S.share.on&&S.share.code){
+    // a room already exists (battlefield broadcast, or re-tap): KEEP its code.
+    // Minting a new one here stranded every spectator on a zombie room that
+    // still answered polls as "LIVE" and never received its end stamp.
+    delete S.share.bf;S.share.creator=true;
+    if(typeof sockOpen!=='undefined'&&sockOpen&&sock){
+      // already connected — the on-connect invite won't re-fire, so send it now
+      try{sock.send(JSON.stringify({t:'invite',room:S.share.code,
+        info:{course:S.course.name,players:S.players.map(p=>p.name),group:S.config.groupName||'',ts:Date.now()}}));}catch(e){}
+    }
+  }else S.share={on:true,code:makeCode(),creator:true};
   if(midRound)stat('round_share',{side:'host',game:S.round.game,
     thru:S.round.holes.filter(r=>r.confirmed).length,players:NP()});
   S.shareMetaTs=Date.now();
@@ -3698,7 +3707,7 @@ function vHome(){
     <button class="big" onclick="go('hole')">Continue round</button>
     <button class="ghost mt" style="width:100%" onclick="openRoundOpts()">⚙️ Adjust round settings</button>
     <button class="big danger mt" onclick="endRoundConfirm()">${armEndRound?'⚠️ Tap again to confirm':'End round now'}</button>
-    ${S.share.on?`<div class="row mt" style="border-top:1px solid var(--line)">
+    ${S.share.on&&!S.share.bf?`<div class="row mt" style="border-top:1px solid var(--line)">
         <span class="tiny">Live sync · <b class="num" style="font-size:16px;letter-spacing:2px">${esc(S.share.code)}</b> ${sockOpen?'<span style="color:var(--elec)">● connected</span>':'<span style="color:var(--red)">○ reconnecting…</span>'}</span>
         <button class="ghost danger" onclick="leaveShare()">Leave</button></div>`
       :`<button class="ghost mt" style="width:100%" onclick="goGroup()">👥 Make this a group round</button>
