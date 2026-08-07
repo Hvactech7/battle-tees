@@ -346,7 +346,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786140687';
+const BUILD='1786140819';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -4587,7 +4587,7 @@ function courseFinderHTML(noBlank){
       <div class="tiny mt mb">${finder.natMsg||`${(window.__natIdx||[]).length} US courses — nearest first. ⛳ = GPS hole maps.`}</div>
       ${(finder.natList||[]).map((c,j)=>`<div class="row"><div style="flex:1;min-width:0"><b>${c[5]==='gps'?'⛳ ':''}${esc(c[1])}</b>
         <div class="tiny">${esc((c[2]||'').toUpperCase())} · par ${c[6]}${c[7]?' · 9-hole':''}${c._mi!=null?` · ${c._mi<10?c._mi.toFixed(1):Math.round(c._mi)} mi`:''}</div></div>
-        <button class="ghost sel" onclick="natUse('${c[0]}')" style="flex:none">Use</button></div>`).join('')}
+        <button class="ghost sel" onclick="natUse('${c[0]}')" style="flex:none">Add</button></div>`).join('')}
       <button class="ghost mt" onclick="cancelFind()">Cancel</button></div>`:''}
     ${finder.status==='search'?`<div class="mt">
       <input type="text" id="courseQ" placeholder="Course name — e.g. Pebble Beach" onkeydown="if(event.key==='Enter')runCourseSearch()">
@@ -4597,7 +4597,7 @@ function courseFinderHTML(noBlank){
       ${finder.error?`<div class="tiny mt">${esc(finder.error)}</div>`:''}</div>`:''}
     ${finder.status==='searchResults'?`<div class="mt"><div class="tiny mb">Results for “${esc(finder.q||'')}” — closest first:</div>
       ${finder.results.map((c,j)=>`<div class="row"><div><b>${esc(c.name)}</b><div class="tiny">${esc(c.city||'')}${c.state?`, ${esc(c.state)}`:''}${c.km!=null?` · ${(c.km*0.621).toFixed(c.km>160?0:1)} mi`:''}</div></div>
-      <button class="ghost sel" onclick="useSearchResult(${j})">Use</button></div>`).join('')}
+      <button class="ghost sel" onclick="useSearchResult(${j})">Add</button></div>`).join('')}
       <div class="mt" style="display:flex;gap:6px">
         <button class="ghost" onclick="openCourseSearch()">Search again</button>
         <button class="ghost" onclick="cancelFind()">Cancel</button></div></div>`:''}
@@ -4605,7 +4605,7 @@ function courseFinderHTML(noBlank){
     ${finder.status==='fetching'?'<div class="tiny mt">⬇ Downloading hole data…</div>':''}
     ${finder.status==='choices'?`<div class="mt"><div class="tiny mb">Nearest courses:</div>
       ${finder.choices.map((c,i)=>`<div class="row"><div><b>${esc(c.name)}</b><div class="tiny">${(c.km*0.621).toFixed(1)} mi away</div></div>
-      <button class="ghost sel" onclick="useFoundCourse(${i})">Use</button></div>`).join('')}
+      <button class="ghost sel" onclick="useFoundCourse(${i})">Add</button></div>`).join('')}
       <button class="ghost mt" onclick="cancelFind()">Cancel</button></div>`:''}
     ${finder.status==='error'?`<div class="banner carry mt">${esc(finder.error)}</div>
       <div style="display:flex;gap:6px"><button class="ghost" onclick="addBlankCourse()">Start blank instead</button>
