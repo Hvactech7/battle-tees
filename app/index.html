@@ -346,7 +346,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786142905';
+const BUILD='1786143170';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -5973,8 +5973,8 @@ function vHole(){
     ${reviewBanner()}${runningTotalsCard()}
     <div class="wolfcard">
       <div style="flex:1;min-width:0"><b>${esc(names[rec.wolfAt??wolf])} is the Wolf</b>
-      <div class="tiny">hits first · ${dots(rec.wolfAt??wolf)>0?`<span class="dots">${'●'.repeat(dots(rec.wolfAt??wolf))}</span> gets ${dots(rec.wolfAt??wolf)===2?'2 strokes':'a stroke'} here`:'no stroke here'}${h>=16&&S.config.last2LastPlace?' · last place picks up the wolf here':''}</div></div>
-      ${rec.mode&&!isReview()?`<button class="ghost" style="flex:none" onclick="redoPick()">Redo pick</button>`:''}
+      <div class="tiny">hits first · ${dots(rec.wolfAt??wolf)>0?`<span class="dots">${'●'.repeat(dots(rec.wolfAt??wolf))}</span> gets ${dots(rec.wolfAt??wolf)===2?'2 strokes':'a stroke'} here`:'no stroke here'}${h>=16&&S.config.last2LastPlace?' · last place picks up the wolf here':''}</div>
+      ${rec.mode&&!isReview()?`<button class="ghost" style="margin-top:7px;padding:5px 14px" onclick="redoPick()">Redo pick</button>`:''}</div>
       <img class="wolf-art" src="${art('/wolf.png')}" alt="" onerror="this.style.display='none'"></div>
     ${carryNote}
     ${body}
