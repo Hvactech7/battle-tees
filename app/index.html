@@ -346,7 +346,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786140819';
+const BUILD='1786141877';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -5928,7 +5928,7 @@ function vHole(){
       const lk=rowLock(h,i);
       return `<div class="scorebar ${lk==='mine'?'rowmine':lk==='locked'?'rowlocked':''}">
         <div style="min-width:118px"><b>${esc(p.name)}</b> ${side==='wolf'?'<span class="pill wolf">wolf side</span>':''}
-          <div class="tiny">${dots(i)>0?`<span class="dots">${'●'.repeat(dots(i))}</span>`:''} ${g!=null&&S.config.lens!=='gross'?`net ${net}`:''}</div></div>
+          <div class="tiny" style="font-size:15.5px">${dots(i)>0?`<span class="dots">${'●'.repeat(dots(i))}</span>`:''} ${g!=null&&S.config.lens!=='gross'?`net ${net} · `:''}hcp ${p.index}</div></div>
         ${lk==='locked'
           ?`<div style="display:flex;align-items:center;gap:12px"><span class="val num" style="font-size:24px">${g==null?'–':g}</span><button class="ghost" onclick="unlockRow(${h},${i})">✎</button></div>`
           :`<div class="stepper">
@@ -6290,7 +6290,7 @@ function vHoleNines(){
     const lk=rowLock(h,i);
     return `<div class="scorebar ${lk==='mine'?'rowmine':lk==='locked'?'rowlocked':''}">
       <div style="min-width:118px"><b>${esc(p.name)}</b>
-        <div class="tiny">${dots(i)>0?`<span class="dots">${'●'.repeat(dots(i))}</span>`:''} ${g!=null&&S.config.lens!=='gross'?`net ${net}`:''}</div></div>
+        <div class="tiny" style="font-size:15.5px">${dots(i)>0?`<span class="dots">${'●'.repeat(dots(i))}</span>`:''} ${g!=null&&S.config.lens!=='gross'?`net ${net} · `:''}hcp ${p.index}</div></div>
       ${lk==='locked'
         ?`<div style="display:flex;align-items:center;gap:12px"><span class="val num" style="font-size:24px">${g==null?'–':g}</span><button class="ghost" onclick="unlockRow(${h},${i})">✎</button></div>`
         :`<div class="stepper">
@@ -6359,7 +6359,7 @@ function vHoleVegas(){
     const lk=rowLock(h,i);
     return `<div class="scorebar ${lk==='mine'?'rowmine':lk==='locked'?'rowlocked':''}">
       <div style="min-width:112px"><b>${esc(p.name)}</b>
-        <div class="tiny">${dots(i)>0?`<span class="dots">${'●'.repeat(dots(i))}</span>`:''} ${g!=null&&S.config.lens!=='gross'?`net ${net}`:''}</div></div>
+        <div class="tiny" style="font-size:15.5px">${dots(i)>0?`<span class="dots">${'●'.repeat(dots(i))}</span>`:''} ${g!=null&&S.config.lens!=='gross'?`net ${net} · `:''}hcp ${p.index}</div></div>
       ${lk==='locked'
         ?`<div style="display:flex;align-items:center;gap:12px"><span class="val num" style="font-size:24px">${g==null?'–':g}</span><button class="ghost" onclick="unlockRow(${h},${i})">✎</button></div>`
         :`<div class="stepper">
@@ -6426,7 +6426,7 @@ function vHoleScramble(){
     const g=rec.gross[capt[k]], d=scrambleDots(k,h);
     return `<div class="scorebar">
       <div style="min-width:140px"><b>${teamLbl(t)}</b>
-        <div class="tiny">${d>0?`<span class="dots">${'●'.repeat(d)}</span>`:''} ${g!=null&&S.config.lens!=='gross'?`net ${g-d}`:''}</div></div>
+        <div class="tiny" style="font-size:15.5px">${d>0?`<span class="dots">${'●'.repeat(d)}</span>`:''} ${g!=null&&S.config.lens!=='gross'?`net ${g-d}`:''}</div></div>
       <div class="stepper">
         <button onclick="chScore(${capt[k]},-1)">−</button>
         <span class="val num">${g==null?'–':g}</span>
