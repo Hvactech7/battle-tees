@@ -346,7 +346,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786135287';
+const BUILD='1786140687';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1202,15 +1202,43 @@ async function confirmVerifyCode(){
     const r=await relayBackup({op:'confirm',email:verifyUI.email,code:cd});
     if(r&&r.ok){
       try{localStorage.setItem('btEmailOk',verifyUI.email);}catch(e){}
-      verifyUI.msg='✓ Email confirmed — saving your library…';render();
-      abFp=null;                       // force the next check to send
-      const ok=await backupNow();
-      verifyUI.msg=ok?'✓ Confirmed and saved. Everything backs up automatically from now on.'
-                     :'✓ Confirmed. Your library will save as soon as you have signal.';
-      verifyUI.stage=2;
+      if(r.hasBackup&&r.rcode){
+        // this email already has a saved library — offer restore BEFORE the
+        // first auto-save clobbers the backup slot with an empty profile
+        verifyUI.rcode=r.rcode;verifyUI.stage=3;verifyUI.msg='';
+      }else{
+        verifyUI.msg='✓ Email confirmed — saving your library…';render();
+        abFp=null;                       // force the next check to send
+        const ok=await backupNow();
+        verifyUI.msg=ok?'✓ Confirmed and saved. Everything backs up automatically from now on.'
+                       :'✓ Confirmed. Your library will save as soon as you have signal.';
+        verifyUI.stage=2;
+      }
     }else verifyUI.msg=(r&&r.error)||'Could not confirm that code.';
   }catch(e){verifyUI.msg='Could not connect — check your signal and try again.';}
   render();
+}
+async function verifyRestoreExisting(){
+  verifyUI.msg='Restoring your library…';render();
+  try{
+    const r=await relayBackup({op:'get',email:verifyUI.email,code:verifyUI.rcode});
+    if(r.ok&&r.data){
+      const _r=applyLibrary(r.data);
+      abFp=null;
+      verifyUI.msg=`✓ Restored — ${_r.added} player${_r.added===1?'':'s'} added${_r.hAdded?`, ${_r.hAdded} round${_r.hAdded===1?'':'s'} recovered`:''}. Everything backs up automatically from now on.`;
+      verifyUI.stage=2;
+      backupNow();
+    }else verifyUI.msg=(r&&r.error)||'Restore failed — you can also use Restore from the Home screen.';
+  }catch(e){verifyUI.msg='Could not connect — check your signal and try again.';}
+  render();
+}
+async function verifyStartFresh(){
+  verifyUI.msg='Saving your new library…';render();
+  abFp=null;
+  const ok=await backupNow();
+  verifyUI.msg=ok?'✓ Saved. Everything backs up automatically from now on.'
+                 :'✓ Confirmed. Your library will save as soon as you have signal.';
+  verifyUI.stage=2;render();
 }
 async function backupNow(){
   const em=(localStorage.getItem('wolfBackupEmail')||'').trim();
@@ -3500,14 +3528,19 @@ function verifySheetHTML(){
   const atEnd=verifyUI.after==='roundEnd';
   return `<div class="vfWrap" role="dialog" aria-modal="true" aria-labelledby="vfTitle">
     <div class="vfCard">
-      <h2 id="vfTitle" class="vfTitle">${done?'You&rsquo;re all set':(atEnd?'Save this round?':'Confirm your email')}</h2>
-      ${done?'':`<div class="tiny mb">${atEnd
+      <h2 id="vfTitle" class="vfTitle">${done?'You&rsquo;re all set':verifyUI.stage===3?'Welcome back!':(atEnd?'Save this round?':'Confirm your email')}</h2>
+      ${done||verifyUI.stage===3?'':`<div class="tiny mb">${atEnd
         ? 'Your round is finished, but nothing has been saved yet. Confirm your email and we&rsquo;ll keep your rounds, players and courses safe — and you can restore them on any phone.'
         : 'We&rsquo;ll send a 6-digit code. Until it&rsquo;s confirmed, nothing leaves this phone.'}</div>`}
       ${done?'':(verifyUI.stage===0?`
         <div class="tiny">Email</div>
         <input id="vfEmail" type="text" inputmode="email" autocapitalize="off" placeholder="you@email.com" value="${em}">
         <button class="big mt" onclick="sendVerifyCode()">Send me a code</button>`
+      :verifyUI.stage===3?`
+        <div class="tiny mb"><b>${em}</b> already has a saved Battle Tees library.</div>
+        <button class="big mt" onclick="verifyRestoreExisting()">⚔️ &nbsp;Restore my library</button>
+        <button class="ghost mt" style="width:100%" onclick="verifyStartFresh()">Start fresh instead</button>
+        <div class="tiny mt">Starting fresh replaces the saved library the next time this phone backs up.</div>`
       :`
         <div class="tiny">6-digit code sent to <b>${em}</b></div>
         <input id="vfCode" type="text" inputmode="numeric" maxlength="6" placeholder="123456" style="letter-spacing:6px;font-size:22px;text-align:center">
@@ -3747,6 +3780,27 @@ function vHome(){
   </div>
   </main>`;
 }
+// ---------- Start Over: full reset of phone + cloud backup ----------
+// Keeps identity (name/email/pid), theme, and the per-phone Battlefield
+// archive. Everything stats are built from — players, courses, history —
+// is erased locally AND saved over the cloud slot, so a later restore
+// returns the clean slate. The relay's rotation archive is the only copy left.
+let soUI=0,soMsg='';   // 0 idle · 1 are-you-sure · 2 done
+function soArm(){soUI=1;render();}
+function soCancel(){soUI=0;soMsg='';render();}
+async function soGo(){
+  soUI=2;soMsg='Erasing…';render();
+  const me=S.me,th=S.theme;
+  S={screen:'settings',course:defaultCourse(),courses:builtinCourses(),playerLib:[],groupLib:[],teamLib:[],
+     config:defaultConfig(),players:defaultPlayers(),round:blankRound(),share:{on:false,code:null},
+     me:me||{name:'',index:10},theme:th||'dark',history:[],autoBackup:true};
+  save();
+  abFp=null;
+  const saved=await backupNow();
+  soMsg=saved?'✓ Fresh start. This phone and your cloud backup are both clean — new stats begin with your next round.'
+             :'✓ Fresh start on this phone. Your library will save once your email is confirmed.';
+  render();
+}
 function vSettings(){
   const bf=S.config.bf||{broadcast:true,emails:true};
   const row=(label,sub,key)=>`<div class="row"><div style="flex:1;min-width:0"><b>${label}</b>
@@ -3757,6 +3811,21 @@ function vSettings(){
     ${row('Announce my rounds','Starting a round emails your Battle Friends a watch link and puts the round on the Community Battlefield.','broadcast')}
     ${row('Email me when friends play','Get the “Battlefield is set” email when someone who has you in their library tees off.','emails')}
     <div class="tiny mt">Announcements go out once per round, from Battle Tees — never from a personal address.</div>
+  </div>
+  <div class="card"><h2>🧨 Start Over</h2>
+    ${soUI===0?`
+    <div class="tiny">Wipe this phone's Battle Tees library and begin again with a clean slate — new stats, new history. Your name, email and Battlefield archive are kept.</div>
+    <button class="ghost mt" style="width:100%;color:var(--red);border-color:var(--red)" onclick="soArm()">Start Over…</button>`
+    :soUI===1?`
+    <div class="tiny"><b style="color:var(--red)">This permanently erases:</b><br>
+      &bull; every player in your library<br>
+      &bull; every saved course<br>
+      &bull; every round you've ever recorded — and all the stats built from them<br>
+      &bull; any round currently in progress</div>
+    <div class="tiny mt">It also <b>replaces your cloud backup</b> with the empty library, so restoring on any phone brings back <b>nothing</b> — your history cannot be recovered. Kept: your name and email, and the Battlefield archive on this phone.</div>
+    <button class="big mt" style="background:var(--red);border-color:var(--red)" onclick="soGo()">Are you sure? Erase it all</button>
+    <button class="ghost mt" style="width:100%" onclick="soCancel()">Cancel</button>`
+    :`<div class="tiny" style="color:var(--green-mid);font-weight:600">${esc(soMsg)}</div>`}
   </div>
   </main>`;
 }
