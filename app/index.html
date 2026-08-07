@@ -65,7 +65,7 @@
   header.top.hero .sub{font-size:13px;letter-spacing:.4px}
   header.top.maphero h1{font-size:26px;letter-spacing:1.2px;white-space:nowrap}
   header.top button{background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:8px;padding:7px 12px;font-size:13px;font-weight:600;font-family:inherit}
-  main{flex:1;padding:14px 14px 90px}
+  main{flex:1;padding:14px 14px calc(110px + env(safe-area-inset-bottom))}
   .card{background:var(--card);border:2px solid var(--green);border-radius:10px;padding:14px;margin-bottom:16px;box-shadow:4px 4px 0 var(--green)}
   details.card summary{outline:none}
   .card h2{font-size:13px;font-weight:600;color:var(--ink2);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px}
@@ -346,7 +346,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786141877';
+const BUILD='1786142905';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1828,8 +1828,8 @@ function runningTotalsCard(){
   }
   return `<div class="card" style="padding:12px 10px 8px"><div style="display:flex;gap:6px">${tiles}</div>
     <div style="display:flex;justify-content:center;align-items:center;gap:8px;margin-top:7px">
-      <button class="ghost ${L==='gross'?'sel':''}" style="padding:3px 14px;font-size:13px" onclick="setTopLens('gross')">Gross</button>
-      <button class="ghost ${L==='net'?'sel':''}" style="padding:3px 14px;font-size:13px" onclick="setTopLens('net')">Net</button>
+      <button class="ghost ${L==='gross'?'sel':''}" style="padding:3px 14px;font-size:13px${L==='gross'?'':';color:var(--ink3);border-color:var(--line);box-shadow:2px 2px 0 rgba(0,0,0,.2)'}" onclick="setTopLens('gross')">Gross</button>
+      <button class="ghost ${L==='net'?'sel':''}" style="padding:3px 14px;font-size:13px${L==='net'?'':';color:var(--ink3);border-color:var(--line);box-shadow:2px 2px 0 rgba(0,0,0,.2)'}" onclick="setTopLens('net')">Net</button>
       <span class="tiny">${foot?foot+' · ':''}thru ${thru}</span>
     </div></div>`;
 }
@@ -5920,7 +5920,7 @@ function vHole(){
     </div>`;
   }else{
     // score phase
-    const modeLbl=rec.mode==='blind'?'Blind lone wolf':rec.mode==='lone'?'Lone wolf':`Partner: ${esc(names[rec.partner])}`;
+    const modeLbl=rec.mode==='blind'?'Blind lone wolf':rec.mode==='lone'?'Lone wolf':'';
     const scoreRows=S.players.map((p,i)=>{
       const g=rec.gross[i];
       const side=(i===rec.wolfAt||i===rec.partner)?'wolf':'field';
@@ -5960,8 +5960,7 @@ function vHole(){
     }
     const extrasCard=extrasCardHTML(S.players.map((_,i)=>i), rec);
     body=`<div class="card">
-      <div class="row" style="border:none;padding-top:0"><span class="pill wolf">${modeLbl}</span>
-        ${!isReview()?`<button class="ghost" onclick="redoPick()">Redo pick</button>`:''}</div>
+      ${modeLbl?`<div class="row" style="border:none;padding-top:0"><span class="pill wolf">${modeLbl}</span></div>`:''}
       ${scoreRows}
       </div>${hamCard}${nasCard}${skCard}${bbbCard}${ctpRow}${extrasCard}${resultNote}
       ${rec.confirmed
@@ -5975,6 +5974,7 @@ function vHole(){
     <div class="wolfcard">
       <div style="flex:1;min-width:0"><b>${esc(names[rec.wolfAt??wolf])} is the Wolf</b>
       <div class="tiny">hits first · ${dots(rec.wolfAt??wolf)>0?`<span class="dots">${'●'.repeat(dots(rec.wolfAt??wolf))}</span> gets ${dots(rec.wolfAt??wolf)===2?'2 strokes':'a stroke'} here`:'no stroke here'}${h>=16&&S.config.last2LastPlace?' · last place picks up the wolf here':''}</div></div>
+      ${rec.mode&&!isReview()?`<button class="ghost" style="flex:none" onclick="redoPick()">Redo pick</button>`:''}
       <img class="wolf-art" src="${art('/wolf.png')}" alt="" onerror="this.style.display='none'"></div>
     ${carryNote}
     ${body}
@@ -6258,8 +6258,14 @@ function confirmBlockHTML(done){
 }
 function confirmBlockInner(done){
   const rec=S.round.holes[S.round.cur];
-  if(!S.share.on)return `<button class="big" ${done?'':'disabled'} onclick="confirmHole()">Confirm hole</button>`;
+  // Pills only when a row genuinely lives on another phone. A Battlefield
+  // broadcast opens a share room for a SOLO round, and "is the round shared?"
+  // then showed four confirmation pills nobody else would ever tap — every
+  // row is on this phone, so it's the plain offline confirm. The pills come
+  // back the instant a joined phone owns a row (group rounds, conversions).
   const act=actIdx(), mine=myRows();
+  if(!S.share.on||act.every(i=>mine.includes(i)))
+    return `<button class="big" ${done?'':'disabled'} onclick="confirmHole()">Confirm hole</button>`;
   const first=i=>esc((S.players[i].name||'').split(' ')[0]);
   const chips=act.map(i=>`<span class="pill ${cfOn(rec,i)?'wolf':'gray'}" style="margin-right:6px">${cfOn(rec,i)?'✓ ':''}${first(i)}</span>`).join('');
   const waitingOn=act.filter(i=>!cfOn(rec,i));
