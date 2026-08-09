@@ -346,7 +346,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786314455';
+const BUILD='1786319703';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -3715,6 +3715,71 @@ function holeSplash(){
     </div>
   </div>`;
 }
+// ---------- DOM patcher ----------
+// Keeps the live nodes and edits them in place instead of rebuilding the screen.
+// Beyond killing the flicker this means a Leaflet map, a running canvas, image
+// loads, scroll boxes and whatever you are typing all SURVIVE a remote update.
+const MORPH_KEEP={CANVAS:1,IFRAME:1,VIDEO:1,OBJECT:1};      // never re-create these
+const MORPH_SKIP_ID={holemap:1,bfmap:1};                     // Leaflet owns the inside
+function morphAttrs(a,b){
+  for(let i=a.attributes.length-1;i>=0;i--){
+    const n=a.attributes[i].name;
+    if(!b.hasAttribute(n))a.removeAttribute(n);
+  }
+  for(let i=0;i<b.attributes.length;i++){
+    const at=b.attributes[i];
+    if(a.getAttribute(at.name)!==at.value)a.setAttribute(at.name,at.value);
+  }
+}
+function morphNode(a,b){
+  if(a.nodeType===3||a.nodeType===8){                        // text / comment
+    if(a.nodeValue!==b.nodeValue)a.nodeValue=b.nodeValue;
+    return;
+  }
+  if(a.nodeType!==1)return;
+  if(MORPH_SKIP_ID[a.id])return;
+  const tag=a.tagName;
+  if(MORPH_KEEP[tag])return;                                 // leave it running
+  morphAttrs(a,b);
+  if(tag==='INPUT'||tag==='TEXTAREA'){
+    // never yank the field out from under someone mid-keystroke
+    if(a===document.activeElement)return;
+    const want=b.tagName==='TEXTAREA'?b.textContent:(b.getAttribute('value')||'');
+    if(a.type==='checkbox'||a.type==='radio')a.checked=b.hasAttribute('checked');
+    else if(a.value!==want)a.value=want;
+    return;
+  }
+  morphKids(a,b);
+  if(tag==='SELECT'&&a!==document.activeElement&&a.value!==b.value)a.value=b.value;
+}
+// Only patch against a REAL DOM. The headless test harness mocks every property
+// access, so a sibling walk there never terminates — probe once, then fall back
+// to a plain innerHTML swap anywhere the probe fails.
+let MORPH_OK=null;
+function morphSupported(){
+  if(MORPH_OK!==null)return MORPH_OK;
+  try{
+    const p=document.createElement('div');
+    p.innerHTML='<i></i><i></i>';
+    MORPH_OK=!!(p.childNodes&&p.childNodes.length===2&&p.firstChild&&p.firstChild.nodeType===1);
+  }catch(e){MORPH_OK=false;}
+  return MORPH_OK;
+}
+function morphKids(a,b){
+  const bk=[];for(let n=b.firstChild;n&&bk.length<20000;n=n.nextSibling)bk.push(n);
+  let ac=a.firstChild;
+  for(let i=0;i<bk.length;i++){
+    const bc=bk[i];
+    if(!ac){a.appendChild(bc.cloneNode(true));continue;}
+    const same=ac.nodeType===bc.nodeType&&
+      (ac.nodeType!==1||(ac.tagName===bc.tagName&&(ac.id||'')===(bc.id||'')));
+    const next=ac.nextSibling;
+    if(same)morphNode(ac,bc);
+    else a.replaceChild(bc.cloneNode(true),ac);
+    ac=next;
+  }
+  while(ac){const next=ac.nextSibling;a.removeChild(ac);ac=next;}   // trim leftovers
+}
 function render(){
   if(S.screen!=='gate'&&gatePick.timer){clearInterval(gatePick.timer);gatePick.timer=null;gatePick.open=false;}
   const el=$('#app');
@@ -3753,7 +3818,18 @@ function render(){
   const pageY=window.scrollY;
   const sameScreen=window.__lastScr===scr;
   window.__lastScr=scr;
-  el.innerHTML=magBanner()+html+holeSplash()+verifySheetHTML()+teeAskSheetHTML();
+  const full=magBanner()+html+holeSplash()+verifySheetHTML()+teeAskSheetHTML();
+  // Four phones syncing means render() fires constantly. Blowing away innerHTML
+  // each time repainted the whole screen — that was the flicker on the course.
+  // Identical output is a no-op; otherwise patch only the nodes that differ.
+  if(window.__lastHtml!==full){
+    window.__lastHtml=full;
+    if(morphSupported()){
+      const tmp=document.createElement('div');
+      tmp.innerHTML=full;
+      morphKids(el,tmp);
+    }else el.innerHTML=full;
+  }
   if(sameScreen){
     Object.entries(keepScroll).forEach(([id,top])=>{const e2=document.getElementById(id);if(e2)e2.scrollTop=top;});
     if(pageY)window.scrollTo(0,pageY);
