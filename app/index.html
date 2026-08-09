@@ -346,7 +346,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786305666';
+const BUILD='1786306563';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -777,8 +777,28 @@ const SYNC_KEYS=['meta',...Array.from({length:HOLES},(_,i)=>'h'+i)];
 let sock=null,sockOpen=false,retryMs=1000,applyingRemote=false;
 const sentCache={},localContent={};
 function makeCode(){const A='ABCDEFGHJKMNPQRSTUVWXYZ23456789';let s='';for(let i=0;i<5;i++)s+=A[Math.floor(Math.random()*A.length)];return s;}
+// Shot lines for SPECTATORS only — a player's own map always draws from his
+// local log, so nobody's screen fills up with three other guys' lines.
+// Keyed BY PLAYER: meta syncs whole-object last-write-wins, so a flat array
+// let whichever phone wrote last erase everyone else's shots (per-hole scores
+// already merge slot-by-slot for exactly this reason — meta never did).
+function myShotKey(){return (S.me&&S.me.pid)||devId();}
+function myShots(){return (S.shotLog&&S.shotLog['s'+(S.round.startedAt||0)])||[];}
+function shotsForShare(){
+  const out=Object.assign({},S.round.sharedShots||{});
+  const mine=myShots();
+  if(mine.length)out[myShotKey()]=mine.slice(-80);
+  return out;
+}
+// accepts the legacy flat array from rounds played before the per-player change
+function flatShots(shots){
+  if(!shots)return [];
+  if(Array.isArray(shots))return shots;
+  return Object.keys(shots).reduce((a,k)=>a.concat((shots[k]||[]).map(s=>Object.assign({pk:k},s))),[]);
+}
+function lastShotAt(a){return (a&&a.length)?Math.max(...a.map(s=>s.at||0)):0;}
 function shareMeta(){return {course:S.course,players:S.players,config:S.config,started:S.round.started,dollarPerPt:S.round.dollarPerPt,span:S.round.span,startedAt:S.round.startedAt,games:S.round.games||null,rates:S.round.rates||null,
-  shots:((S.shotLog&&S.shotLog['s'+(S.round.startedAt||0)])||[]).slice(0,80),   // spectator shot lines
+  shots:shotsForShare(),
   _ts:S.shareMetaTs||0};}
 function contentKey(k){
   if(k==='meta'){const {_ts,...rest}=shareMeta();return JSON.stringify(rest);}
@@ -811,6 +831,17 @@ function applyOp(k,v,defer){
   applyingRemote=true;
   try{
     if(k==='meta'){
+      // shots merge per player and OUTSIDE the last-write-wins gate — an older
+      // meta may still carry the only copy of another phone's lines
+      if(v.shots){
+        const inc=Array.isArray(v.shots)?{_legacy:v.shots}:v.shots;
+        const cur=Object.assign({},S.round.sharedShots||{});
+        Object.keys(inc).forEach(pk=>{
+          if(pk===myShotKey())return;            // my own log is the truth for me
+          if(lastShotAt(inc[pk])>=lastShotAt(cur[pk]))cur[pk]=inc[pk]||[];
+        });
+        S.round.sharedShots=cur;
+      }
       if((v._ts||0)>=(S.shareMetaTs||0)){
         S.course=v.course;S.players=v.players;S.config=v.config;
         S.round.started=v.started;S.round.dollarPerPt=v.dollarPerPt;
@@ -1278,6 +1309,13 @@ function bkEmail(){
   return em;
 }
 let armEmptyBackup=false;
+// keep the backup small: the newest 40 rounds of shots is years of golf, and
+// the per-course ghost lines (shotLast) are what actually matter long-term
+function trimShotLog(log){
+  const keys=Object.keys(log||{}).sort((a,b)=>(+b.slice(1)||0)-(+a.slice(1)||0)).slice(0,40);
+  const out={};keys.forEach(k=>{out[k]=log[k];});
+  return out;
+}
 async function doBackup(){
   const em=bkEmail();if(!em)return;
   if(!S.playerLib.length&&!armEmptyBackup){
@@ -1292,7 +1330,10 @@ async function doBackup(){
     // course geo (satellite hole maps) re-downloads on-site — strip it so the
     // backup stays small enough for the relay even with round history aboard
     const courses=S.courses.map(c=>{const {geo,...rest}=c;return rest;});
-    const r=await relayBackup({op:'save',email:em,data:{me:S.me,playerLib:S.playerLib,courses,history:S.history||[],groups:S.groupLib||[],teams:S.teamLib||[]}});
+    // shot lines were local-only until now: a cleared cache or a new phone lost
+    // every tracked shot, including the per-course "last time out" ghost lines
+    const r=await relayBackup({op:'save',email:em,data:{me:S.me,playerLib:S.playerLib,courses,history:S.history||[],groups:S.groupLib||[],teams:S.teamLib||[],
+      shotLog:trimShotLog(S.shotLog),shotLast:S.shotLast||{}}});
     if(r&&r.ok){const d=abPayload();abStamp(JSON.stringify([d.me,d.playerLib,d.courses,d.history.map(h=>h.id)]));}
     const nh=(S.history||[]).length;
     backupUI.msg=r.ok?`✓ ${S.playerLib.length} player${S.playerLib.length===1?'':'s'} + ${S.courses.length} course${S.courses.length===1?'':'s'}${nh?` + ${nh} round${nh===1?'':'s'}`:''} safely backed up${r.emailed?' — confirmation emailed':''}.`:(r.error||'Backup failed.');
@@ -1543,6 +1584,18 @@ function applyLibrary(d){
         if(!(S.history||[]).some(x=>x.id===e.id)){(S.history=S.history||[]).push(e);hAdded++;}
       });
       if(hAdded){S.history.sort((a,b)=>(b.endedAt||0)-(a.endedAt||0));S.history=S.history.slice(0,12);}
+      // tracked shots + per-course ghost lines — merge, never replace, so a
+      // restore onto a phone that has been out playing keeps both sides
+      if(d.shotLog){S.shotLog=S.shotLog||{};
+        Object.keys(d.shotLog).forEach(k=>{if(!S.shotLog[k]||!S.shotLog[k].length)S.shotLog[k]=d.shotLog[k];});}
+      if(d.shotLast){S.shotLast=S.shotLast||{};
+        Object.keys(d.shotLast).forEach(cid=>{
+          const mine=S.shotLast[cid]||{},theirs=d.shotLast[cid]||{};
+          Object.keys(theirs).forEach(h=>{
+            if(!mine[h]||(theirs[h].round||0)>(mine[h].round||0))mine[h]=theirs[h];   // newest round's lines win
+          });
+          S.shotLast[cid]=mine;
+        });}
       
       (d.groups||[]).forEach(g2=>{
         if(!g2||!g2.name)return;
@@ -2385,9 +2438,12 @@ function teardownMap(){
 // by round start (never synced — one player's shots can't clobber another's).
 let trackShot=null,pendingShot=null,trackPin=null;
 const CLUBS=['Dr','3W','5W','Hy','3i','4i','5i','6i','7i','8i','9i','PW','GW','SW','LW','Putt'];
+// A tracked shot is only ever as good as a REAL fix. Falling back to the map
+// centre invented a plausible-looking number from wherever the view happened to
+// sit (an 8/9 field round logged a driver at 77 yds that way) and never said so.
 function shotPos(){
   if(mapMarks&&mapMarks.mePos)return mapMarks.mePos.slice();
-  try{const c=LMAP.getCenter();return [c.lat,c.lng];}catch(e){return null;}
+  return null;
 }
 function drawTrackPin(){
   if(trackPin){try{LMAP.removeLayer(trackPin);}catch(e){}trackPin=null;}
@@ -2406,7 +2462,8 @@ function updateTrackBtn(){
   b.style.color=armed?'var(--amber-bd)':'var(--green-mid)';
 }
 function trackShotTap(){
-  const p=shotPos();if(!p)return;
+  const p=shotPos();
+  if(!p){shotToast('Waiting for GPS — without a fix that distance would be a guess.');return;}
   if(!trackShot||trackShot.hole!==mapHole){
     trackShot={hole:mapHole,a:p};
     drawTrackPin();updateTrackBtn();
@@ -2427,6 +2484,14 @@ function openClubSheet(yds){
   document.body.appendChild(d);
 }
 function closeClubSheet(){const d=document.getElementById('clubsheet');if(d)d.remove();}
+// brief centred message — same throwaway-overlay pattern as flashYardage
+function shotToast(msg){
+  const d=document.createElement('div');
+  d.style.cssText='position:fixed;left:50%;transform:translateX(-50%);bottom:calc(178px + env(safe-area-inset-bottom));z-index:90;max-width:min(420px,92vw);background:var(--card);border:2px solid var(--amber-bd,#c9922e);border-radius:12px;padding:10px 14px;box-shadow:3px 3px 0 rgba(0,0,0,.4);pointer-events:none;text-align:center';
+  d.innerHTML=`<span class="tiny" style="font-size:14px">${esc(msg)}</span>`;
+  document.body.appendChild(d);
+  setTimeout(()=>{try{d.remove();}catch(e){}},2600);
+}
 function flashYardage(yds,club){
   const d=document.createElement('div');
   d.style.cssText='position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;pointer-events:none';
@@ -4129,7 +4194,7 @@ function vBfWatch(){
     const tg=games.find(g=>['bestball','scramble','vegas','nassau','sixes','umbrella'].includes(g));
     if(tg&&NP()===4){try{const T=matchTeams(tg==='vegas'?'vegas':tg);
       teamLine=T.map(t=>t.map(i=>esc((S.players[i]||{}).name||'?')).join(' & ')).join('  vs  ');}catch(err){}}
-    const shots=meta.shots||[];
+    const shots=flatShots(meta.shots);
     const holeRows=S.round.holes.map((r,h)=>{
       if(!r||!r.confirmed)return '';
       const par=(course.holes[h%course.holes.length]||{}).par||4;
@@ -4190,15 +4255,27 @@ function bfMiniMap(){
   if(!el||el._done||bfHole==null||!bfWatch||!bfWatch.doc)return;
   el._done=true;
   const meta=bfWatch.doc.meta||{};
-  const shots=(meta.shots||[]).filter(x=>x.h===bfHole&&x.a&&x.b);
+  const shots=flatShots(meta.shots).filter(x=>x.h===bfHole&&x.a&&x.b);
   if(!shots.length||typeof L==='undefined')return;
   const m=L.map(el,{zoomControl:false,attributionControl:false,dragging:true});
   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19}).addTo(m);
   const pts=[];
+  // now that all four players' lines land here, one colour would be a tangle —
+  // colour by whose phone logged it, in roster order
+  const SHOT_COLS=['#e8604f','#4aa8ff','#f5c542','#6fdc8c'];
+  const pkOrder=[];
+  const colFor=pk=>{
+    if(pk==null)return SHOT_COLS[0];
+    let i=pkOrder.indexOf(pk);
+    if(i<0){const p=(bfWatch.doc.meta.players||[]).findIndex(q=>q&&(q.pid===pk||q.ownerDev===pk));
+      i=p>=0?p:pkOrder.length;pkOrder[i]=pk;}
+    return SHOT_COLS[i%SHOT_COLS.length];
+  };
   shots.forEach(x=>{
+    const col=colFor(x.pk);
     L.polyline([x.a,x.b],{color:'#0a1220',weight:4.5,opacity:.4,interactive:false}).addTo(m);
-    L.polyline([x.a,x.b],{color:'#e8604f',weight:2.5,opacity:.95,interactive:false}).addTo(m);
-    L.circleMarker(x.b,{radius:4,color:'#0a1220',weight:1.5,fillColor:'#e8604f',fillOpacity:1,interactive:false}).addTo(m);
+    L.polyline([x.a,x.b],{color:col,weight:2.5,opacity:.95,interactive:false}).addTo(m);
+    L.circleMarker(x.b,{radius:4,color:'#0a1220',weight:1.5,fillColor:col,fillOpacity:1,interactive:false}).addTo(m);
     pts.push(x.a,x.b);
   });
   m.fitBounds(L.latLngBounds(pts).pad(0.3));
