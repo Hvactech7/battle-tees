@@ -346,7 +346,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786306563';
+const BUILD='1786307318';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -702,9 +702,19 @@ function syncLib(){
 let abTimer=null;
 let abFp=localStorage.getItem('btAbFp')||'';
 function abStamp(fp){abFp=fp;try{localStorage.setItem('btAbFp',fp);localStorage.setItem('btAbAt',String(Date.now()));}catch(e){}}
+// MUST carry everything doBackup() sends: auto-backup fires on every save, so
+// anything missing here gets stripped from the cloud copy within seconds of a
+// manual backup that did include it.
 function abPayload(){
   const courses=S.courses.map(c=>{const {geo,...rest}=c;return rest;});
-  return {me:S.me,playerLib:S.playerLib,courses,history:S.history||[],groups:S.groupLib||[],teams:S.teamLib||[]};
+  return {me:S.me,playerLib:S.playerLib,courses,history:S.history||[],groups:S.groupLib||[],teams:S.teamLib||[],
+    shotLog:trimShotLog(S.shotLog),shotLast:S.shotLast||{}};
+}
+// cheap signature so a newly tracked shot actually triggers an auto-backup
+function shotFp(){
+  const log=S.shotLog||{},last=S.shotLast||{};
+  return Object.keys(log).map(k=>k+':'+(log[k]||[]).length).join(',')+'|'+
+         Object.keys(last).map(c=>c+':'+Object.keys(last[c]||{}).length).join(',');
 }
 function emailVerified(){
   const em=(localStorage.getItem('wolfBackupEmail')||'').trim().toLowerCase();
@@ -716,7 +726,7 @@ function autoBackupCheck(){
   if(!em||!S.playerLib.length)return;   // never auto-save an empty library over a good backup
   if(!emailVerified())return;           // nothing is saved until the address is confirmed
   const data=abPayload();
-  const fp=JSON.stringify([data.me,data.playerLib,data.courses,data.history.map(h=>h.id),data.groups,data.teams]);
+  const fp=JSON.stringify([data.me,data.playerLib,data.courses,data.history.map(h=>h.id),data.groups,data.teams,shotFp()]);
   if(fp===abFp)return;
   clearTimeout(abTimer);
   abTimer=setTimeout(async()=>{
