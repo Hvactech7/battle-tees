@@ -346,7 +346,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786308082';
+const BUILD='1786314455';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -4081,6 +4081,33 @@ function bfStorePut(code,entry,doc){
     localStorage.setItem('btBattles',JSON.stringify(st));
   }catch(e){}   // storage full: the battle still shows while the relay has it
 }
+// ---- friends ----
+// A friend is anyone you have shared a round with — the relay links you both
+// automatically and permanently. They are the only people who see your rounds
+// on the Battlefield, and the only ones emailed when you start one.
+function myPid(){return (S.me&&S.me.pid)||'';}
+let friendMap=null;           // {pid:{name,friend}} for names in MY library
+function loadFriends(force){
+  if(!myPid()||(friendMap&&!force))return;
+  const names=[...new Set((S.playerLib||[]).map(p=>(p.name||'').trim()).filter(Boolean))];
+  relayBattle({op:'friends',pid:myPid(),names}).then(r=>{
+    if(r&&r.ok){friendMap=r.friends||{};render();}
+  }).catch(()=>{});
+}
+function friendEntryFor(name){
+  if(!friendMap)return null;
+  const n=(name||'').trim().toLowerCase();
+  for(const pid in friendMap){
+    if(((friendMap[pid].name||'').trim().toLowerCase())===n)return Object.assign({pid},friendMap[pid]);
+  }
+  return null;
+}
+function setFriend(pid,on){
+  if(!myPid()||!pid)return;
+  if(friendMap&&friendMap[pid])friendMap[pid].friend=on;   // optimistic
+  render();
+  relayBattle({op:'friends',pid:myPid(),set:{[pid]:on}}).then(()=>loadFriends(true)).catch(()=>loadFriends(true));
+}
 function bfForget(code){
   const st=bfStore();delete st[code];
   try{localStorage.setItem('btBattles',JSON.stringify(st));}catch(e){}
@@ -4088,7 +4115,8 @@ function bfForget(code){
 }
 function openBattlefield(){
   bfList=null;S.screen='bfield';render();
-  relayBattle({op:'list'}).then(r=>{
+  // the feed is friend-scoped now — the relay needs to know who is asking
+  relayBattle({op:'list',pid:myPid()}).then(r=>{
     const live=(r&&r.list)||[];
     live.forEach(e=>{bfStorePut(e.code,e,null);
       // pull the doc for anything new or still moving so it survives the relay's sweep
@@ -4945,6 +4973,7 @@ function grpEdAddNew(){
   renderGroupEditor();
 }
 function vPlayers(){
+  loadFriends();          // fills the ⚔️ markers; no-op once cached
   return topbar('Players','','home')+`<main>
   ${groupsCardHTML()}
   <div class="card"><h2>Players</h2>
@@ -4994,12 +5023,19 @@ function vPlayers(){
         </div>
       </div>
       <div class="row" style="border-top:none;display:block">${stdTeePicker(e.id,e.stdTee||stdTeeOf(e.teeName))}</div>
+      ${(()=>{const f=friendEntryFor(e.name);
+        if(!f)return `<div class="row" style="border-top:none"><div class="tiny">⚔️ Battle friend<div style="opacity:.75">Not registered yet — play a shared round together and they link automatically.</div></div></div>`;
+        return `<div class="row" style="border-top:none">
+          <div style="flex:1"><b>⚔️ Battle friend</b>
+            <div class="tiny">${f.friend?'Sees your rounds on the Battlefield and gets your round-start email.':'Will not see your rounds or get your emails.'}</div></div>
+          <button class="ghost ${f.friend?'sel':''}" style="flex:none" onclick="setFriend('${esc(f.pid)}',${f.friend?'false':'true'})">${f.friend?'On':'Off'}</button>
+        </div>`;})()}
       <div class="row" style="border-top:none">
         <button class="ghost sel" style="flex:1" onclick="saveEditPlayer()">Save</button>
         <button class="ghost" onclick="cancelEditPlayer()">Cancel</button>
       </div>`
     :`<div class="row">
-      <div><b>${esc(e.name)}</b><div class="tiny">Index ${e.index}${(e.stdTee||e.teeName)?` · ${esc(e.stdTee||e.teeName)} tees`:''}</div></div>
+      <div><b>${(()=>{const f=friendEntryFor(e.name);return f&&f.friend?'<span title="Battle friend">⚔️</span> ':'';})()}${esc(e.name)}</b><div class="tiny">Index ${e.index}${(e.stdTee||e.teeName)?` · ${esc(e.stdTee||e.teeName)} tees`:''}</div></div>
       <span style="display:flex;gap:6px">
         <button class="ghost" onclick="startEditPlayer('${e.id}')">Edit</button>
         <button class="ghost danger" onclick="delPlayer('${e.id}')">✕</button>
@@ -5155,7 +5191,11 @@ let armDelHist=null;
 function delHist(id){
   if(armDelHist!==id){armDelHist=id;render();setTimeout(()=>{if(armDelHist===id){armDelHist=null;render();}},3500);return;}
   armDelHist=null;
-  set(()=>{S.history=S.history.filter(e=>e.id!==id);});
+  const e=(S.history||[]).find(x=>x.id===id);
+  // dropping a round from YOUR library takes it off your friends' Battlefield.
+  // It survives for anyone else who played it and still keeps their copy.
+  if(e&&e.code&&myPid())relayBattle({op:'forget',code:e.code,pid:myPid()}).catch(()=>{});
+  set(()=>{S.history=S.history.filter(x=>x.id!==id);});
 }
 function pickCourse(i){set(()=>{
   syncLib();
