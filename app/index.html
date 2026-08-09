@@ -346,7 +346,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786261704';
+const BUILD='1786305666';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -607,6 +607,10 @@ function load(){
       if(s.config.nassau&&s.config.nassau.pairing==null)s.config.nassau.pairing=0;
       if(!s.config.span)s.config.span={count:18,start:0};
       if(!s.round.span)s.round.span={count:18,start:0};
+      // empty map caches written while the hosted path was 404ing (app moved to
+      // /app/, national geoUrls were root-relative) — drop them so they refetch
+      (s.courses||[]).forEach(c=>{if(c&&c.geo&&c.geo.empty)delete c.geo;});
+      if(s.course&&s.course.geo&&s.course.geo.empty)delete s.course.geo;
       // installs predating a new builtin course never get it from the _v migration
       // below (it only refreshes matching ids) — append what's missing, every load
       builtinCourses().forEach(fc=>{if(!s.courses.some(c=>c.id===fc.id))s.courses.push(clone(fc));});
@@ -1161,8 +1165,21 @@ function bfBroadcastStart(){
       course:S.course.name,game:gameName(S.round.game),pids,names}).catch(()=>{});
   }catch(e){}
 }
+// MUST send on the socket we already hold, synchronously: endRound() calls
+// leaveShare() on a later line, which closes that socket — an awaited send
+// resumes after the close and silently never goes out, so every round stayed
+// "LIVE" on the Battlefield forever.
 function bfBroadcastEnd(){
-  try{if(S.share.on&&S.share.code)relayBattle({op:'end',code:S.share.code}).catch(()=>{});}catch(e){}
+  try{
+    if(!(S.share.on&&S.share.code))return;
+    const ws=(sockOpen&&sock)||((lobbySock&&lobbySock.readyState===1)?lobbySock:null);
+    if(ws&&ws.readyState===1){
+      ws.send(JSON.stringify({t:'battle',op:'end',code:S.share.code,
+        rid:'f'+Math.random().toString(36).slice(2,8)}));
+      return;
+    }
+    relayBattle({op:'end',code:S.share.code}).catch(()=>{});   // no socket: best effort
+  }catch(e){}
 }
 async function relayBattle(payload){
   const ws=await waitForRelay(6000);
@@ -2667,8 +2684,21 @@ function updateTileBtn(){
   el.textContent=tilePre.busy?`⬇ Downloading maps… ${tilePre.done}/${tilePre.total}`
     :tilePackFresh()?'✓ Offline maps ready — tap to refresh':'⬇ Download offline hole maps';
 }
+const GEO_RETRY_MS=3*60000;   // don't re-ask OSM more than once every 3 min
+// One-time heal: drop empty map caches saved before the /app/ path fix, so a
+// course added at home isn't permanently stuck on the ring view.
+function healEmptyGeo(){
+  let n=0;
+  const drop=c=>{if(c&&c.geo&&c.geo.empty){delete c.geo;n++;}};
+  (S.courses||[]).forEach(drop); drop(S.course);
+  return n;
+}
 async function ensureCourseGeo(){
-  const hostedUrl=S.course.geoUrl||HOSTED_GEO[S.course.id];
+  let hostedUrl=S.course.geoUrl||HOSTED_GEO[S.course.id];
+  // national records store a root-relative path ('geo/nat/ca/1348.json'). The
+  // app runs from /app/, where that resolves to /app/geo/... and 404s — so the
+  // hosted maps silently lost to the OSM fallback on every national course.
+  if(hostedUrl&&!/^(https?:)?\/\//i.test(hostedUrl)&&hostedUrl[0]!=='/')hostedUrl='/'+hostedUrl;
   if(hostedUrl){
     try{
       const r=await fetch(hostedUrl);
@@ -3049,13 +3079,16 @@ async function initHoleMap(){
   teardownMap();
   const sub=()=>document.getElementById('fmbsub');
   let geoErr='';
-  if(!S.course.geo){
+  // "found nothing" is an answer about WHERE YOU WERE, not about the course —
+  // adding a course at home caches an empty map that used to stick forever.
+  // Retry it (throttled) so standing on the 1st tee heals the record.
+  if(!S.course.geo||(S.course.geo.empty&&Date.now()-(S.course.geo.ts||0)>GEO_RETRY_MS)){
     const s2=sub();if(s2)s2.textContent='Downloading course map…';
     try{
       await ensureCourseGeo();
       // success re-renders via set(); abort this init to avoid a double map.
       // NO data (card-only course) → fall through and build the ring view.
-      if(S.course.geo)return;
+      if(S.course.geo&&!S.course.geo.empty)return;
     }catch(e){geoErr=e.message;}
     if(S.screen!=='map')return;
   }
@@ -5779,6 +5812,47 @@ function setPl(i,k,v){set(()=>{
   if(k==='name'||k==='index'||k==='tee')upsertLib(S.players[i]);
 });}
 function movePl(i){set(()=>{const a=S.players;[a[i-1],a[i]]=[a[i],a[i-1]];});}
+// ---- fixing the tee order after the round has already started ----
+// Only while NOTHING is confirmed. Player index is the key for every per-hole
+// array, so a bare S.players swap would leave scores, stats and wolf picks
+// pointing at the wrong golfer — carry all of it across together.
+let reorderOpen=false;
+function canReorderRoster(){
+  return !!(S.round.started&&!isReview()&&!S.round.holes.some(r=>r.confirmed));
+}
+function toggleReorder(){reorderOpen=!reorderOpen;render();}
+function swapRoundPlayers(a,b){
+  const P=S.players;[P[a],P[b]]=[P[b],P[a]];
+  const sw=arr=>{if(Array.isArray(arr)&&arr.length>Math.max(a,b))[arr[a],arr[b]]=[arr[b],arr[a]];};
+  const fix=v=>v===a?b:v===b?a:v;
+  (S.round.holes||[]).forEach(r=>{
+    if(!r)return;
+    sw(r.gross);sw(r.gts);sw(r.cfts);sw(r.net);
+    if(r.stats){sw(r.stats.gir);sw(r.stats.fw);sw(r.stats.putts);sw(r.stats.bunker);sw(r.stats.chips);sw(r.stats.pen);}
+    if(r.wolfAt!=null)r.wolfAt=fix(r.wolfAt);
+    if(r.partner!=null)r.partner=fix(r.partner);
+    if(r.ctp!=null&&r.ctp>=0)r.ctp=fix(r.ctp);
+    if(Array.isArray(r.passes))r.passes=r.passes.map(fix);
+    if(r.hammer&&r.hammer.by!=null)r.hammer.by=fix(r.hammer.by);
+  });
+}
+function movePlRound(i){
+  if(!canReorderRoster()||i<1)return;
+  set(()=>{
+    swapRoundPlayers(i-1,i);
+    // hole 1's wolf is derived from the order — drop an unconfirmed pick so it re-derives
+    const r=S.round.holes[S.round.cur];
+    if(r&&!r.confirmed){r.mode=null;r.partner=null;r.wolfAt=null;r.passes=[];}
+  });
+}
+function reorderHTML(){
+  if(!canReorderRoster())return '';
+  if(!reorderOpen)return `<button class="ghost mt" style="width:100%" onclick="toggleReorder()">⇅ Fix tee order</button>`;
+  return `<div class="card mt"><div class="tiny mb">Tap ↑ to move a golfer up. Only available until the first hole is confirmed.</div>
+    ${S.players.map((p,i)=>`<div class="row"><div style="flex:1;min-width:0"><b>${['1st','2nd','3rd','4th'][i]} · ${esc(p.name)}</b></div>
+      ${i>0?`<button class="ghost" onclick="movePlRound(${i})" style="flex:none">↑</button>`:''}</div>`).join('')}
+    <button class="ghost mt" style="width:100%" onclick="toggleReorder()">Done</button></div>`;
+}
 function chPt(k,d){set(()=>{S.config.pts[k]=Math.max(0,S.config.pts[k]+d);});}
 function chQuotaPt(k,d){set(()=>{S.config.quota.pts[k]=Math.min(10,Math.max(-5,S.config.quota.pts[k]+d));});}
 function chStblPt(k,d){set(()=>{S.config.stbl.pts[k]=Math.min(10,Math.max(-5,S.config.stbl.pts[k]+d));});}
@@ -6079,7 +6153,7 @@ function vHole(){
             <div class="tiny">${dots(i)>0?`<span class="dots">${'●'.repeat(dots(i))}</span> gets ${dots(i)===2?'2 strokes':'a stroke'} here`:'no stroke here'}</div></div>
           <span class="pill wolf">take</span>
         </div>`).join('')}
-    </div>`;
+    </div>${reorderHTML()}`;
   }else{
     // score phase
     const modeLbl=rec.mode==='blind'?'Blind lone wolf':rec.mode==='lone'?'Lone wolf':'';
@@ -6128,7 +6202,7 @@ function vHole(){
       ${rec.confirmed
         ?`${isReview()?'':`<button class="big" onclick="nextHole()">${posOf(h)<playOrder().length-1?'Next hole →':'Finish round'}</button>`}
           <button class="ghost mt" style="width:100%" onclick="unconfirm()">Edit this hole</button>`
-        :`${confirmBlockHTML(done)}`}
+        :`${confirmBlockHTML(done)}${reorderHTML()}`}
     `;
   }
   return topbar(`Hole ${h+1} · Par ${hole.par}`,`Handicap ${hole.si}${S.share.on?` · ${esc(S.share.code)} ${sockOpen?'●':'○ will sync'}`:''}`,'','hero',`<div style="display:flex;align-items:center;margin-left:auto;gap:12px">${gameBadgeHTML()}</div>`)+`<main>
