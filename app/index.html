@@ -346,7 +346,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786307318';
+const BUILD='1786308082';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -562,8 +562,14 @@ function defaultPlayers(){
     {name:'Player 4',index:10.0,chOverride:null,tee:'tb-blu'},
   ];
 }
-function blankHole(){return {mode:null,partner:null,passes:[],wolfAt:null,gross:[null,null,null,null],gts:[0,0,0,0],ctp:null,confirmed:false,stats:{}};}
+function blankHole(){return {mode:null,partner:null,passes:[],wolfAt:null,gross:[null,null,null,null],gts:[0,0,0,0],sts:[0,0,0,0],ctp:null,confirmed:false,stats:{}};}
 function statArr(rec,k){if(!rec.stats)rec.stats={};if(!rec.stats[k])rec.stats[k]=[0,0,0,0];return rec.stats[k];}
+// FW/GIR (and putts/bunker/chips/penalties) are per-player, but the whole stats
+// block used to ride on the hole record wholesale — so two phones tagging
+// different players on the same hole overwrote each other and GIR survived on
+// 2 of 18 holes. Stamp the slot the way gross[] is stamped by gts[], so the
+// merge can keep each player's own entry. A player only ever writes his own slot.
+function stampStat(rec,i){if(!rec.sts)rec.sts=[0,0,0,0];rec.sts[i]=Date.now();}
 function blankRound(){return {started:false,holes:Array.from({length:HOLES},blankHole),cur:0,dollarPerPt:0,span:{count:18,start:0},startedAt:null,myStartedAt:null};}
 
 let S=load();
@@ -888,6 +894,27 @@ function applyOp(k,v,defer){
       const ogts=other.gts||[0,0,0,0], og=other.gross||[null,null,null,null];
       for(let p=0;p<4;p++){
         if((ogts[p]||0)>(merged.gts[p]||0)){merged.gross[p]=og[p];merged.gts[p]=ogts[p];}
+      }
+      // FW/GIR/putts/etc merge per slot on their own stamps, so two phones
+      // tagging different players on one hole no longer erase each other.
+      // Un-stamped legacy records fall back to the newer record's block.
+      {
+        const bs=base.stats||{},os=other.stats||{};
+        const bt=base.sts||[0,0,0,0],ot=other.sts||[0,0,0,0];
+        const keys=Object.keys(bs).concat(Object.keys(os).filter(k2=>!(k2 in bs)));
+        if(keys.length){
+          const ms={};
+          keys.forEach(sk=>{
+            const ba=bs[sk],oa=os[sk];
+            if(!Array.isArray(oa)){ms[sk]=Array.isArray(ba)?ba.slice():ba;return;}
+            if(!Array.isArray(ba)){ms[sk]=oa.slice();return;}
+            const out=ba.slice();
+            for(let p=0;p<4;p++)if((ot[p]||0)>(bt[p]||0))out[p]=oa[p];   // that player touched his slot later
+            ms[sk]=out;
+          });
+          merged.stats=ms;
+        }
+        merged.sts=[0,1,2,3].map(p=>Math.max(bt[p]||0,ot[p]||0));
       }
       // per-player confirm stamps merge like scores: per slot, newest wins
       // (positive = confirmed-at, negative = unconfirmed-at from an edit)
@@ -2601,6 +2628,7 @@ function mapStatToggle(k){reviewTouch();
   const i=myPlayerIdx();
   const a=statArr(rec,k);
   a[i]=a[i]?0:1;
+  stampStat(rec,i);
   stampChanges();save();syncPush();
   const b=document.getElementById('map'+k);
   if(b){const on=!!a[i];
@@ -6520,7 +6548,7 @@ function hammerCardHTML(){
   }
   return `<div class="card hamcard"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><h2 style="margin-bottom:0">🔨 Hammer</h2><img src="${art('/hammer.png')}" style="height:52px;flex:none" onerror="this.style.display='none'"></div><div style="height:8px"></div>${inner}</div>`;
 }
-function chStat(k,i,d){reviewTouch();set(()=>{const a=statArr(S.round.holes[S.round.cur],k);a[i]=Math.max(0,a[i]+d);});}
+function chStat(k,i,d){reviewTouch();set(()=>{const rec=S.round.holes[S.round.cur];const a=statArr(rec,k);a[i]=Math.max(0,a[i]+d);stampStat(rec,i);});}
 function advanceToNext(){
   const o=playOrder();
   const cur=Math.max(0,o.indexOf(S.round.cur));
@@ -6575,7 +6603,7 @@ function holeChipsHTML(){
   const chip=(k,label)=>`<button onclick="holeStatToggle('${k}')" style="height:32px;padding:0 14px;border-radius:9px;font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:14px;letter-spacing:.4px;background:${on(k)?'var(--green-lt)':'var(--card)'};border:1.5px solid ${on(k)?'var(--green)':'var(--line)'};color:${on(k)?'var(--green-mid)':'var(--ink3)'}">${on(k)?'✓ ':''}${label}</button>`;
   return `<div style="display:flex;gap:8px;justify-content:center;margin:2px 0 8px">${hole.par>=4?chip('fw','FW'):''}${chip('gir','GIR')}</div>`;
 }
-function holeStatToggle(k){reviewTouch();set(()=>{const a=statArr(S.round.holes[S.round.cur],k);const i=myPlayerIdx();a[i]=a[i]?0:1;});}
+function holeStatToggle(k){reviewTouch();set(()=>{const rec=S.round.holes[S.round.cur];const a=statArr(rec,k);const i=myPlayerIdx();a[i]=a[i]?0:1;stampStat(rec,i);});}
 function confirmBlockHTML(done){
   return holeChipsHTML()+confirmBlockInner(done);
 }
