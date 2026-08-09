@@ -346,7 +346,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786144793';
+const BUILD='1786261704';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -4648,16 +4648,28 @@ async function natBrowse(){
   }catch(e){finder={status:'error',error:'Could not load the course index — check your signal.'};}
   render();
 }
-function natFilter(q){
+function natFilter(raw){
   const idx=window.__natIdx||[];
-  q=(q||'').trim().toLowerCase();
+  // keep the text exactly as typed — trimming it here would eat the space the
+  // moment you type one, so "blue rock" could never be entered
+  finder.natQ=raw==null?'':String(raw);
+  const q=finder.natQ.trim().toLowerCase();
   let list=q?idx.filter(c=>c[1].toLowerCase().includes(q)||(c[2]||'').toLowerCase()===q):idx.slice();
   if(myCoords){
     list.forEach(c=>{c._mi=kmBetween(myCoords[0],myCoords[1],c[3],c[4])*0.621371;});
     list.sort((a,b)=>a._mi-b._mi);
   }else list.sort((a,b)=>a[1].localeCompare(b[1]));
   finder.natList=list.slice(0,25);
-  if(document.getElementById('natQ'))render();
+  finder.ghinList=null;finder.ghinErr='';finder.ghinBusy=false;  // new query, old GHIN hits are stale
+  // render() rebuilds the field, so carry the text and the caret back across —
+  // without this you can only ever type one character
+  const live=document.getElementById('natQ');
+  if(live){
+    const caret=live.selectionStart;
+    render();
+    const el=document.getElementById('natQ');
+    if(el){try{el.focus();const p=caret==null?el.value.length:caret;el.setSelectionRange(p,p);}catch(e){}}
+  }
 }
 async function natUse(id){
   finder={status:'fetching'};render();
@@ -4680,31 +4692,35 @@ async function natUse(id){
     render();
   }catch(e){finder={status:'error',error:'Could not load that course — check your signal.'};render();}
 }
+// Our index ships ~7k courses; USGA/GHIN reaches a few we don't (mostly resort
+// and destination tracks). That's a second pass off the SAME box, not a second
+// button — nobody can tell two "search" buttons apart, and the one that skips
+// our own records is the one that loses hole maps.
+function ghinFallbackHTML(){
+  const q=(finder.natQ||'').trim();
+  const rows=finder.ghinList||[];
+  if(rows.length)return `<div class="tiny mt mb" style="font-weight:700">USGA/GHIN — card only, no hole maps</div>
+    ${rows.map((c,j)=>`<div class="row"><div style="flex:1;min-width:0"><b>${esc(c.name)}</b>
+      <div class="tiny">${esc(c.city||'')}${c.state?`, ${esc(c.state)}`:''}${c.km!=null?` · ${(c.km*0.621).toFixed(c.km>160?0:1)} mi`:''}</div></div>
+      <button class="ghost sel" onclick="useSearchResult(${j})" style="flex:none">Add</button></div>`).join('')}`;
+  if(finder.ghinBusy)return `<div class="tiny mt">⬇ Searching USGA/GHIN…</div>`;
+  if(finder.ghinErr)return `<div class="tiny mt">${esc(finder.ghinErr)}</div>`;
+  if(q.length<3)return '';
+  return `<button class="ghost mt" style="width:100%" onclick="runCourseSearch()">🔎 Not listed? Search USGA/GHIN for “${esc(q)}”</button>`;
+}
 function courseFinderHTML(noBlank){
   return `    ${finder.status==='idle'?`<div class="mt" style="display:flex;gap:6px;flex-wrap:wrap">
       <button class="ghost" onclick="addCourse()">📍 Find nearest</button>
-      <button class="ghost" onclick="openCourseSearch()">🔎 Search by name</button>
-      <button class="ghost" onclick="natBrowse()">🇺🇸 All courses</button>
+      <button class="ghost" onclick="natBrowse()">🔎 Search courses</button>
       ${noBlank?'':`<button class="ghost" onclick="addBlankCourse()">Add blank</button>`}</div>`:''}
     ${finder.status==='nat'?`<div class="mt">
-      <input type="text" id="natQ" placeholder="Filter — name or state" oninput="natFilter(this.value)">
+      <input type="text" id="natQ" placeholder="Course name or state" value="${esc(finder.natQ||'')}" oninput="natFilter(this.value)">
       <div class="tiny mt mb">${finder.natMsg||`${(window.__natIdx||[]).length} US courses — nearest first. ⛳ = GPS hole maps.`}</div>
       ${(finder.natList||[]).map((c,j)=>`<div class="row"><div style="flex:1;min-width:0"><b>${c[5]==='gps'?'⛳ ':''}${esc(c[1])}</b>
         <div class="tiny">${esc((c[2]||'').toUpperCase())} · par ${c[6]}${c[7]?' · 9-hole':''}${c._mi!=null?` · ${c._mi<10?c._mi.toFixed(1):Math.round(c._mi)} mi`:''}</div></div>
         <button class="ghost sel" onclick="natUse('${c[0]}')" style="flex:none">Add</button></div>`).join('')}
+      ${ghinFallbackHTML()}
       <button class="ghost mt" onclick="cancelFind()">Cancel</button></div>`:''}
-    ${finder.status==='search'?`<div class="mt">
-      <input type="text" id="courseQ" placeholder="Course name — e.g. Pebble Beach" onkeydown="if(event.key==='Enter')runCourseSearch()">
-      <div class="mt" style="display:flex;gap:6px">
-        <button class="ghost sel" style="flex:1" onclick="runCourseSearch()">Search</button>
-        <button class="ghost" onclick="cancelFind()">Cancel</button></div>
-      ${finder.error?`<div class="tiny mt">${esc(finder.error)}</div>`:''}</div>`:''}
-    ${finder.status==='searchResults'?`<div class="mt"><div class="tiny mb">Results for “${esc(finder.q||'')}” — closest first:</div>
-      ${finder.results.map((c,j)=>`<div class="row"><div><b>${esc(c.name)}</b><div class="tiny">${esc(c.city||'')}${c.state?`, ${esc(c.state)}`:''}${c.km!=null?` · ${(c.km*0.621).toFixed(c.km>160?0:1)} mi`:''}</div></div>
-      <button class="ghost sel" onclick="useSearchResult(${j})">Add</button></div>`).join('')}
-      <div class="mt" style="display:flex;gap:6px">
-        <button class="ghost" onclick="openCourseSearch()">Search again</button>
-        <button class="ghost" onclick="cancelFind()">Cancel</button></div></div>`:''}
     ${finder.status==='locating'?'<div class="tiny mt">📍 Locating the nearest course…</div>':''}
     ${finder.status==='fetching'?'<div class="tiny mt">⬇ Downloading hole data…</div>':''}
     ${finder.status==='choices'?`<div class="mt"><div class="tiny mb">Nearest courses:</div>
@@ -5092,34 +5108,31 @@ function applyGhinCourse(g){
   finder={status:'idle',choices:[],error:''};
   S.screen=pickingCourse?'pickcourse':'course';save();render();
 }
-function openCourseSearch(){
-  finder={status:'search',choices:[],results:[],error:''};
-  grabCoords();
-  render();
-  window.scrollTo(0,0);
-  const el=document.getElementById('courseQ');
-  if(el){
-    el.focus();
-    // iOS opens the keyboard after focus returns; re-seat the input once it has
-    setTimeout(()=>{try{el.scrollIntoView({block:'center'});}catch(e){}},380);
-  }
-}
+// second pass on the same query — stays inside the list so the typed text and
+// our own results are still on screen behind it
 async function runCourseSearch(){
-  const el=document.getElementById('courseQ');
-  const q=(el&&el.value||'').trim();
-  if(q.length<3){finder.error='Type at least 3 letters of the course name.';render();return;}
-  finder={status:'fetching',choices:[],results:[],error:''};render();
+  const el=document.getElementById('natQ');
+  const q=((el&&el.value)||finder.natQ||'').trim();
+  if(q.length<3){finder.ghinErr='Type at least 3 letters of the course name.';render();return;}
+  finder.natQ=q;finder.ghinBusy=true;finder.ghinErr='';finder.ghinList=null;render();
   try{
     const r=await piCourseLookup2({mode:'search',q,lat:myCoords?myCoords[0]:null,lon:myCoords?myCoords[1]:null});
-    if(r.ok&&r.list&&r.list.length){finder={status:'searchResults',choices:[],results:r.list,q,error:''};}
-    else finder={status:'error',choices:[],results:[],error:r.error||'No courses found.'};
-  }catch(e){finder={status:'error',choices:[],results:[],error:'Could not connect — check your signal and try again.'};}
+    finder.ghinBusy=false;
+    if(r.ok&&r.list&&r.list.length)finder.ghinList=r.list;
+    else finder.ghinErr=r.error||`No USGA/GHIN match for “${q}”.`;
+  }catch(e){finder.ghinBusy=false;finder.ghinErr='Could not reach USGA/GHIN — check your signal.';}
   render();
 }
 async function useSearchResult(j){
-  const c=(finder.results||[])[j];
+  const c=(finder.ghinList||finder.results||[])[j];
   if(!c)return;
   finder={status:'fetching',choices:[],results:[],error:''};render();
+  // prefer our own record when we ship this course — GHIN hands back the layout
+  // name alone ("East") and no hole maps
+  try{
+    const natId=await matchNatCourse(c.name,c.lat,c.lon,c.state);
+    if(natId){await natUse(natId);return;}
+  }catch(e){}
   try{
     const g=await piCourseLookup2({mode:'get',course_id:c.id,q:c.name});
     if(g.ok&&g.course&&g.course.holes&&g.course.teeSets.length){
@@ -5145,18 +5158,59 @@ function piCourseLookup2(payload){
 // hand back the real record — matched by proximity to the course center, with
 // a normalized-name check as backup. Custom lookalikes are the #1 way users
 // end up without hole maps.
+function courseNorm(s){
+  return String(s||'').toLowerCase().replace(/\b(golf|course|club|links|muni|municipal|country|gc|cc|the)\b/g,' ').replace(/[^a-z0-9]+/g,' ').trim();
+}
 function matchBuiltinCourse(name,lat,lon){
-  const norm=s=>String(s||'').toLowerCase().replace(/\b(golf|course|club|links|muni|municipal|country|gc|cc|the)\b/g,' ').replace(/[^a-z0-9]+/g,' ').trim();
-  const nn=norm(name);
+  const nn=courseNorm(name);
   let best=null;
   builtinCourses().forEach(bc=>{
     if(!bc.loc)return;
     const d=(lat!=null&&lon!=null)?mDist([lat,lon],bc.loc):Infinity;
-    const bn=norm(bc.name);
+    const bn=courseNorm(bc.name);
     const nameHit=nn&&bn&&(nn.includes(bn)||bn.includes(nn));
     if(d<2500||(nameHit&&d<15000))best=bc;
   });
   return best;
+}
+// Words that name a LAYOUT rather than the club. A 36-hole club's two courses
+// share one address — GHIN even reports one set of coordinates for both — so
+// distance alone cannot tell East from West. When both names carry a layout
+// word and they disagree, that is a hard no, not a low score.
+const LAYOUT_WORDS=['north','south','east','west','gold','silver','blue','red','white','black','green','lake','river','valley','ridge','canyon','creek','meadow','highland','championship','tournament','old','new','original','first','second','one','two'];
+function courseTokens(s){
+  return courseNorm(s).split(' ').filter(Boolean).map(w=>w.replace(/s$/,''));  // spring/springs
+}
+function layoutTokens(s){
+  return courseTokens(s).filter(w=>LAYOUT_WORDS.indexOf(w)>=0);
+}
+// Same idea as matchBuiltinCourse, against the 7k-course national index.
+async function matchNatCourse(name,lat,lon,state){
+  if(lat==null||lon==null)return null;
+  try{
+    if(!window.__natIdx){
+      const r=await fetch('/courses-index.json');
+      if(!r.ok)return null;
+      window.__natIdx=await r.json();
+    }
+  }catch(e){return null;}
+  const qTok=courseTokens(name), qLay=layoutTokens(name);
+  const st=String(state||'').replace(/^US-/,'').toLowerCase();
+  let best=null,bestScore=0;
+  (window.__natIdx||[]).forEach(c=>{
+    const km=kmBetween(lat,lon,c[3],c[4]);
+    if(km>3)return;                          // must be the same piece of land
+    const cLay=layoutTokens(c[1]);
+    if(qLay.length&&cLay.length&&!qLay.some(w=>cLay.indexOf(w)>=0))return;
+    const cTok=courseTokens(c[1]);
+    const overlap=qTok.filter(w=>cTok.indexOf(w)>=0).length;
+    if(!overlap)return;                      // wrong club — let GHIN handle it
+    const layHit=qLay.length&&cLay.length?25:0;
+    const stHit=(st&&c[2]&&c[2].toLowerCase().slice(0,2)===st.slice(0,2))?5:0;
+    const score=overlap*10+layHit+stHit-km;
+    if(score>bestScore){bestScore=score;best=c;}
+  });
+  return best?best[0]:null;
 }
 async function useFoundCourse(idx){
   const c=finder.choices[idx];
@@ -5173,14 +5227,18 @@ async function useFoundCourse(idx){
     return;
   }
   finder={status:'fetching',choices:[],error:''};render();
-  // 1) USGA/GHIN via the Pi — authoritative pars, stroke indexes, ratings, slopes
+  // 1) our own national record, if we ship one here — full club name + hosted
+  // hole maps, which the GHIN record below has neither of
+  const natId=await matchNatCourse(c.name,c.lat,c.lon);
+  if(natId){await natUse(natId);return;}
+  // 2) USGA/GHIN via the Pi — authoritative pars, stroke indexes, ratings, slopes
   let g=null;
   try{g=await piCourseLookup(c.name,c.lat,c.lon);}catch(e){}
   if(g&&g.ok&&g.course&&g.course.holes&&g.course.teeSets.length){
     applyGhinCourse(g);
     return;
   }
-  // 2) fallback: OpenStreetMap hole data
+  // 3) fallback: OpenStreetMap hole data
   try{
     const q=`[out:json][timeout:15];way["golf"="hole"](around:2000,${c.lat},${c.lon});out tags;`;
     const js=await overpassQuery(q);
