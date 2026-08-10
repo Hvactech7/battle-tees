@@ -184,8 +184,10 @@
   .cagewrap{position:relative;display:inline-block}
   /* on-map yardage pills next to the tap/green dots (Google label + Leaflet tooltip) */
   .maplbl{background:transparent!important;border:none!important;box-shadow:none!important;
-    color:#fff!important;font-weight:800;font-size:16px;padding:0;white-space:nowrap;
-    text-shadow:0 0 3px rgba(5,10,20,.95),0 0 6px rgba(5,10,20,.85),0 0 10px rgba(5,10,20,.6),0 1px 2px rgba(0,0,0,.9)}
+    color:#fff!important;font-weight:800;font-size:21.6px;padding:0;white-space:nowrap;
+    /* 35% up from 16px — read at arm's length in sunlight. The glow scales with
+       it, or the bigger glyphs lose their edge against bright fairway. */
+    text-shadow:0 0 4px rgba(5,10,20,.95),0 0 8px rgba(5,10,20,.85),0 0 14px rgba(5,10,20,.6),0 1px 3px rgba(0,0,0,.9)}
   .leaflet-tooltip.maplbl::before{display:none}
   /* the topbar is sticky and 65px tall — without this, scrolling a rules card to the
      top hides its title and the first lines of the rules underneath it */
@@ -346,7 +348,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786347335';
+const BUILD='1786348112';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -3053,7 +3055,7 @@ function initGoogleHoleMap(el,geo,geoErr){
   gm.event.trigger(GMAP,'resize');
   const P=a=>({lat:a[0],lng:a[1]});
   const dot=(pos,color,r)=>{const m=new gm.Marker({position:P(pos),map:GMAP,clickable:false,icon:{path:gm.SymbolPath.CIRCLE,scale:r||6,fillColor:color,fillOpacity:1,strokeColor:'#fff',strokeWeight:2,labelOrigin:new gm.Point(0,-2.6)}});gmOverlays.push(m);return m;};
-  const lbl=t=>({text:t,className:'maplbl',color:'#fff',fontSize:'12px',fontWeight:'700'});
+  const lbl=t=>({text:t,className:'maplbl',color:'#fff',fontSize:'16.2px',fontWeight:'700'});  // 35% up, matches .maplbl
   let greenC=null,greenPoly=null;
   if(geo&&geo.path&&geo.path.length>1){
     gmSpine=new gm.Polyline({path:geo.path.map(P),strokeOpacity:0,clickable:false,
