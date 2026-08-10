@@ -249,6 +249,15 @@
   .pickcard.decided{opacity:.6}
   .gamebtn{display:flex;align-items:center;gap:12px;width:100%;text-align:left;color:var(--ink);background:var(--amber-lt);border:2px solid var(--amber-bd);border-radius:12px;padding:0 0 0 14px;margin:0 0 12px;box-shadow:3px 3px 0 var(--amber-bd);cursor:pointer;overflow:hidden;min-height:74px;font-family:inherit}
   .gamebtn:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--amber-bd)}
+  /* checkbox skin for the rules-card grid when it is used as the multi-game
+     picker — the ::before becomes the first flex item, so it reads as a box */
+  .gamebtn.gpick::before{content:'\25CB';font-size:30px;line-height:1;flex:none;color:var(--ink2)}
+  .gamebtn.gpick.gpon::before{content:'\25CF';color:var(--green)}
+  .gamebtn.gpick.gpmain::before{content:'\26F3';font-size:26px;color:var(--green)}
+  .gamebtn.gpick.gpdis{opacity:.42;filter:grayscale(.7)}
+  /* flex:none or the column flexbox shrinks the bar and clips the button */
+  .gpbar{flex:none;max-height:0;overflow:hidden;transition:max-height .2s ease-out}
+  .gpbar.on{max-height:130px}
   .gamebtn .gname{font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:25px;letter-spacing:.5px}
   /* the game blurb is body copy, not a caption: ink3 at .85 measured 3.26:1 on the
      card, under the 4.5:1 minimum. ink2 at full opacity is 7.2:1. */
@@ -348,7 +357,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786349805';
+const BUILD='1786352400';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -3905,7 +3914,7 @@ function render(){
   const pageY=window.scrollY;
   const sameScreen=window.__lastScr===scr;
   window.__lastScr=scr;
-  const full=magBanner()+html+holeSplash()+verifySheetHTML()+teeAskSheetHTML()+endAskSheetHTML();
+  const full=magBanner()+html+holeSplash()+verifySheetHTML()+teeAskSheetHTML()+endAskSheetHTML()+gamePickSheetHTML();
   // Four phones syncing means render() fires constantly. Blowing away innerHTML
   // each time repainted the whole screen — that was the flicker on the course.
   // Identical output is a no-op; otherwise patch only the nodes that differ.
@@ -3957,6 +3966,13 @@ function topbar(title,sub,backTo,cls,right){
   return `<header class="top${cls?' '+cls:''}"><div><h1>${esc(title)}</h1>${sub?`<div class="sub">${esc(sub)}</div>`:''}</div>
   ${right||''}${backTo?`<button onclick="go('${backTo}')">Back</button>`:''}</header>`;
 }
+// The rules-card grid is shared by the home screen, the rules screen and the
+// Standings multi-game picker. gridDeco is null for the first two, so those
+// render byte-for-byte what they always did; the picker sets it to paint check
+// state onto the same buttons instead of maintaining a second list of games.
+let gridDeco=null;
+function gdCls(k){return gridDeco?(' '+gridDeco.cls(k)):'';}
+function gdTag(k){return gridDeco?(' '+gridDeco.tag(k)):'';}
 function gameArtFile(g){return {wolf:'/wolf.png',nines:'/nine.png',vegas:'/vegas.png',quota:'/quota.png',sixes:'/sixes.png',umbrella:'/umbrella.png',bbb:'/bbb.png',stroke:'/stroke.png',stableford:'/stableford.png',bestball:'/bestball.png',scramble:'/scramble.png',nassau:'/nassau.png',skins:'/skins.png'}[g];}
 
 function gameBadgeHTML(){
@@ -3967,6 +3983,86 @@ function gameBadgeHTML(){
   const others=G.filter(x=>x!==g).length;
   const f=gameArtFile(g);
   return `<div class="gbadge">${f?`<img src="${art(f)}" alt="" onerror="this.style.display='none'">`:''}<span>${esc(gameName(g))}${others?` +${others}`:''}</span></div>`;
+}
+
+// ----- multi-game picker (Standings) -------------------------------------
+// Wolf, scramble and Bingo Bango Bongo need calls made at the tee -- the order,
+// the partner, who was on the green first -- so a scorecard cannot reconstruct
+// them after the fact. They can only be picked before the round starts.
+const START_ONLY=['wolf','scramble','bbb'];
+function mainGameNow(){return S.round.game||S.config.game||'wolf';}
+function gamePickWhy(g){
+  if(stackHas(g))return '';                       // already scoring -- always removable
+  const n=NP(),four=n===4;
+  if(START_ONLY.includes(g))return S.round.started?'start only':'';
+  if(!STACK_GUESTS.includes(g))return 'start only';
+  if(['bestball','sixes','umbrella','vegas'].includes(g)&&!four)return 'needs 4';
+  if(g==='nines'&&n<3)return 'needs 3+';
+  if(g==='nassau'&&!(four||n===2))return '1v1 or 2v2';
+  if(n<2&&!['stroke','stableford','quota'].includes(g))return 'needs 2+';
+  const sel=gamePick?gamePick.sel:{};
+  if(g==='bestball'&&sel.sixes)return 'pick one';
+  if(g==='sixes'&&sel.bestball)return 'pick one';
+  return '';
+}
+let gamePick=null;
+function openGamePick(){const sel={};gamesOn().forEach(x=>sel[x]=true);gamePick={sel,touched:false};render();}
+function closeGamePick(){gamePick=null;render();}
+function gamePickCount(){return Object.keys(gamePick.sel).filter(k=>gamePick.sel[k]).length;}
+// Toggling patches the tapped button in place. A render() here would rebuild
+// the sheet and throw away the scroll position, which is the same bug the group
+// editor had -- the list jumped every time you checked a name.
+function pickToggleGame(g){
+  if(!gamePick)return;
+  if(g===mainGameNow())return;                    // the game driving the score screen stays on
+  if(!gamePick.sel[g]&&gamePickWhy(g))return;
+  gamePick.sel[g]=!gamePick.sel[g];gamePick.touched=true;
+  ['bestball','sixes',g].forEach(x=>{const e=document.querySelector('[data-gp="'+x+'"]');if(!e)return;
+    e.classList.toggle('gpon',!!gamePick.sel[x]);
+    e.classList.toggle('gpdis',!gamePick.sel[x]&&!!gamePickWhy(x));});
+  const bar=document.getElementById('gpbar');if(bar)bar.classList.add('on');
+  const c=document.getElementById('gpcount');if(c)c.textContent=gamePickTxt();
+}
+function gamePickTxt(){const n=gamePickCount();return `Confirm ${n} game${n===1?'':'s'}`;}
+function confirmGamePick(){
+  if(!gamePick)return;
+  const keep=Object.keys(gamePick.sel).filter(k=>gamePick.sel[k]);
+  gamePick=null;setRoundGames(keep);
+}
+// Mid-round the stack lives on the round (and rides shareMeta to every phone,
+// because settlement has to agree); before the tee it lives on the config.
+function setRoundGames(list){set(()=>{
+  const host=mainGameNow();
+  const a=list.filter((x,i,arr)=>arr.indexOf(x)===i);
+  if(!a.includes(host))a.unshift(host);
+  if(S.round.started)S.round.games=a;
+  S.config.games=a;
+});}
+function gamePickSheetHTML(){
+  if(!gamePick)return '';
+  const main=mainGameNow();
+  gridDeco={
+    cls:k=>['gpick',gamePick.sel[k]?'gpon':'',(!gamePick.sel[k]&&gamePickWhy(k))?'gpdis':'',k===main?'gpmain':''].filter(Boolean).join(' '),
+    tag:k=>`data-gp="${k}"`};
+  let grid='';
+  try{grid=gameGridHTML('pickToggleGame');}finally{gridDeco=null;}
+  const off=['wolf','vegas','skins','stroke','nines','bestball','scramble','sixes','umbrella','quota','stableford','bbb','nassau']
+    .map(k=>[k,gamePick.sel[k]?'':gamePickWhy(k)]).filter(([,r])=>r);
+  const why=off.length?`<div class="tiny mt" style="opacity:.75">Greyed out — ${off.map(([k,r])=>`${gameName(k)} <span style="opacity:.7">(${r})</span>`).join(' · ')}</div>`:'';
+  return `<div class="vfWrap" role="dialog" aria-modal="true" aria-labelledby="gpTitle">
+    <div class="vfCard" style="width:min(480px,100%);max-height:92vh;display:flex;flex-direction:column">
+      <h2 id="gpTitle" class="vfTitle">Choose game(s)</h2>
+      <div class="tiny">Check every game you want scored off the same card. ⛳ is your main game — it stays on.</div>
+      <div id="gpscroll" data-keepscroll style="overflow:auto;-webkit-overflow-scrolling:touch;margin:10px 0 0;flex:1;min-height:0">${grid}${why}</div>
+      <div id="gpbar" class="gpbar${gamePick.touched?' on':''}"><button class="big mt" style="width:100%" onclick="confirmGamePick()">✓ &nbsp;<span id="gpcount">${gamePickTxt()}</span></button></div>
+      <button class="ghost mt" style="width:100%;flex:none" onclick="closeGamePick()">Cancel</button>
+    </div></div>`;
+}
+function gamePickCardHTML(){
+  const n=gamesOn().length;
+  return `<div class="card"><h2>⚔️ Wanna Play More Than One Game..?</h2>
+    <div class="tiny">One scorecard, every game scored its own way — Settle nets the whole pile into a single payout.${n>1?` You're playing <b>${n}</b> right now.`:''}</div>
+    <button class="ghost mt" style="width:100%" onclick="openGamePick()">Choose Game(s)</button></div>`;
 }
 function go(scr){S.screen=scr;save();render();}
 function tabs(sel){
@@ -3979,66 +4075,66 @@ function tabs(sel){
 }
 
 function gameGridHTML(fn){
-  return `    <button class="gamebtn" onclick="${fn}('wolf')">
+  return `    <button class="gamebtn${gdCls('wolf')}"${gdTag('wolf')} onclick="${fn}('wolf')">
       <div style="flex:1;min-width:0"><span class="gname">Wolf</span>
         <div class="tiny">Hunt with a partner — or go lone wolf</div></div>
       <img src="${art('/wolf.png')}" alt="" onerror="this.style.display='none'">
     </button>
-    <button class="gamebtn vegasg" onclick="${fn}('vegas')">
+    <button class="gamebtn vegasg${gdCls('vegas')}"${gdTag('vegas')} onclick="${fn}('vegas')">
       <div style="flex:1;min-width:0"><span class="gname">Vegas</span>
         <div class="tiny">2 v 2 — team digits duel, birdies flip the number</div></div>
       <img src="${art('/vegas.png')}" alt="" onerror="this.outerHTML='<span class=&quot;vegas-ph&quot;>🎲</span>'">
     </button>
-    <button class="gamebtn sking" onclick="${fn}('skins')">
+    <button class="gamebtn sking${gdCls('skins')}"${gdTag('skins')} onclick="${fn}('skins')">
       <div style="flex:1;min-width:0"><span class="gname">Skins</span>
         <div class="tiny">Win the hole outright — ties roll the pot</div></div>
       <img src="${art('/skins.png')}" alt="" style="height:92px;margin:4px 8px 4px 0;filter:drop-shadow(0 0 6px rgba(61,220,151,.5))" onerror="this.outerHTML='<span class=&quot;skin-ph&quot;>🪙</span>'">
-    </button><button class="gamebtn strokeg" onclick="${fn}('stroke')">
+    </button><button class="gamebtn strokeg${gdCls('stroke')}"${gdTag('stroke')} onclick="${fn}('stroke')">
       <div style="flex:1;min-width:0"><span class="gname">Stroke</span>
         <div class="tiny">Classic scoring — lowest total wins</div></div>
       <img src="${art('/stroke.png')}" alt="" style="height:92px;margin:4px 8px 4px 0;filter:drop-shadow(0 0 6px rgba(224,187,69,.5))" onerror="this.outerHTML='<span class=&quot;stroke-ph&quot;>⛳</span>'">
     </button>
-    <button class="gamebtn nineg" onclick="${fn}('nines')">
+    <button class="gamebtn nineg${gdCls('nines')}"${gdTag('nines')} onclick="${fn}('nines')">
       <div style="flex:1;min-width:0"><span class="gname">9&rsquo;s</span>
         <div class="tiny">Every hole splits 9 points — 5 · 3 · 1</div></div>
       <img src="${art('/nine.png')}" alt="" onerror="this.outerHTML='<span class=&quot;nine-ph&quot;>9</span>'">
     </button>
-    <button class="gamebtn bbg" onclick="${fn}('bestball')">
+    <button class="gamebtn bbg${gdCls('bestball')}"${gdTag('bestball')} onclick="${fn}('bestball')">
       <div style="flex:1;min-width:0"><span class="gname">Best Ball</span>
         <div class="tiny">2 v 2 match play — your team's best score counts</div></div>
       <img src="${art('/bestball.png')}" alt="" style="height:92px;margin:4px 8px 4px 0;filter:drop-shadow(0 0 6px rgba(42,167,160,.55))" onerror="this.outerHTML='<span class=&quot;bb-ph&quot;>🏆</span>'">
     </button>
-    <button class="gamebtn scrg" onclick="${fn}('scramble')">
+    <button class="gamebtn scrg${gdCls('scramble')}"${gdTag('scramble')} onclick="${fn}('scramble')">
       <div style="flex:1;min-width:0"><span class="gname">Scramble</span>
         <div class="tiny">One Ball Per Team</div></div>
       <img src="${art('/scramble.png')}" alt="" style="height:92px;margin:4px 8px 4px 0;filter:drop-shadow(0 0 6px rgba(142,92,217,.55))" onerror="this.outerHTML='<span class=&quot;scr-ph&quot;>🤝</span>'">
     </button>
-    <button class="gamebtn sixg" onclick="${fn}('sixes')">
+    <button class="gamebtn sixg${gdCls('sixes')}"${gdTag('sixes')} onclick="${fn}('sixes')">
       <div style="flex:1;min-width:0"><span class="gname">Sixes</span>
         <div class="tiny">Partners rotate every six — everyone teams with everyone</div></div>
       <img src="${art('/sixes.png')}" alt="" style="height:92px;margin:4px 8px 4px 0;filter:drop-shadow(0 0 6px rgba(158,196,37,.5))" onerror="this.outerHTML='<span class=&quot;six-ph&quot;>6</span>'">
     </button>
-    <button class="gamebtn umbg" onclick="${fn}('umbrella')">
+    <button class="gamebtn umbg${gdCls('umbrella')}"${gdTag('umbrella')} onclick="${fn}('umbrella')">
       <div style="flex:1;min-width:0"><span class="gname">Umbrella</span>
         <div class="tiny">Six points a hole — sweep them all for twelve</div></div>
       <img src="${art('/umbrella.png')}" alt="" style="height:92px;margin:4px 8px 4px 0;filter:drop-shadow(0 0 6px rgba(143,163,192,.55))" onerror="this.outerHTML='<span class=&quot;umb-ph&quot;>☂</span>'">
     </button>
-    <button class="gamebtn quotag" onclick="${fn}('quota')">
+    <button class="gamebtn quotag${gdCls('quota')}"${gdTag('quota')} onclick="${fn}('quota')">
       <div style="flex:1;min-width:0"><span class="gname">Quota</span>
         <div class="tiny">Race your own number — fairest game for mixed handicaps</div></div>
       <img src="${art('/quota.png')}" alt="" style="height:92px;margin:4px 8px 4px 0;filter:drop-shadow(0 0 6px rgba(90,208,224,.5))" onerror="this.outerHTML='<span class=&quot;quota-ph&quot;>36</span>'">
     </button>
-    <button class="gamebtn stblg" onclick="${fn}('stableford')">
+    <button class="gamebtn stblg${gdCls('stableford')}"${gdTag('stableford')} onclick="${fn}('stableford')">
       <div style="flex:1;min-width:0"><span class="gname">Stableford</span>
         <div class="tiny">Points for your score vs par — highest wins</div></div>
       <img src="${art('/stableford.png')}" alt="" style="height:92px;margin:4px 8px 4px 0;filter:drop-shadow(0 0 6px rgba(201,79,124,.55))" onerror="this.outerHTML='<span class=&quot;stbl-ph&quot;>🎯</span>'">
     </button>
-    <button class="gamebtn bbbg" onclick="${fn}('bbb')">
+    <button class="gamebtn bbbg${gdCls('bbb')}"${gdTag('bbb')} onclick="${fn}('bbb')">
       <div style="flex:1;min-width:0"><span class="gname">Bingo Bango Bongo</span>
         <div class="tiny">Three taps a hole — the great equalizer</div></div>
       <img src="${art('/bbb.png')}" alt="" style="height:92px;margin:4px 8px 4px 0;filter:drop-shadow(0 0 6px rgba(210,75,184,.5))" onerror="this.outerHTML='<span class=&quot;bbb-ph&quot;>🥁</span>'">
     </button>
-    <button class="gamebtn nasg" onclick="${fn}('nassau')">
+    <button class="gamebtn nasg${gdCls('nassau')}"${gdTag('nassau')} onclick="${fn}('nassau')">
       <div style="flex:1;min-width:0"><span class="gname">Nassau</span>
         <div class="tiny">The classic — front nine, back nine, overall. Press when you're down</div></div>
       <img src="${art('/nassau.png')}" alt="" style="height:92px;margin:4px 8px 4px 0;filter:drop-shadow(0 0 6px rgba(70,99,217,.55))" onerror="this.outerHTML='<span class=&quot;nas-ph&quot;>🏅</span>'">
@@ -7188,6 +7284,11 @@ function setStView(v){
 }
 function makeMainGame(g){
   if(g==='match')return;                       // lens only — no hole-screen engine
+  // Wolf, Scramble and Bingo Bango Bongo drive the hole screen with taps no
+  // other game carries — the partner pick, the one team ball, who was on first.
+  // Hand the screen to something else mid-round and the rest of their holes
+  // can never be scored, so they are a one-way door: what-if views only.
+  if(START_ONLY.includes(mainGameNow()))return;
   set(()=>{S.round.game=g;});
   setStView(null);                             // the main view now IS this game
 }
@@ -7327,11 +7428,14 @@ function vStandings(){
   const cols=['gross','net'].filter(L=>activeLenses().includes(L));
   const prim=primaryLens();
   const lbl=L=>L==='net'?'Net (hcp)':'Gross';
-  const vtabs=views.length<2?'':`<div class="vtabs">${views.map(([k,l])=>
-    `<button class="ghost ${view===k?'sel':''}" onclick="setStView(${k===g?'null':`'${k}'`})">${k===g?'⛳ ':''}${l}</button>`).join('')}</div>`;
-  const whatIf=view!==g&&!stackHas(view)?`<div class="tiny mb">What-if view from the same scores — settlement still pays by the round's games.</div>`:'';
-  const mainBtn=view!==g&&view!=='match'
-    ?`<button class="ghost mb" style="width:100%" onclick="makeMainGame('${view}')">★ Make Main Game — lead with ${gameName(view)} on my score screen</button>`:'';
+  // Every game in the stack now gets its own card, so the tab strip is purely
+  // the what-if bench: the games you are NOT playing, re-scored off this card.
+  const stackOrder=[g].concat(gamesOn().filter(x=>x!==g));
+  const wviews=views.filter(([k])=>!stackOrder.includes(k));
+  const vtabs=!wviews.length?'':`<div class="card"><h2>What if we'd played…</h2>
+    <div class="vtabs">${[['','None']].concat(wviews).map(([k,l])=>
+      `<button class="ghost ${(stView||'')===k?'sel':''}" onclick="setStView(${k?`'${k}'`:'null'})">${l}</button>`).join('')}</div>
+    <div class="tiny mt">Same scores, scored a different way. Nothing here changes what you owe — pick ★ Make Main Game to actually switch.</div></div>`;
   const genericCard=(title,led,fmt,asc,note)=>{
     const order=actIdx().slice().sort((a,b)=>asc?led[prim][a]-led[prim][b]:led[prim][b]-led[prim][a]);
     return `<div class="card"><h2>${title} · thru ${thru}</h2>${whatIf}
@@ -7351,12 +7455,26 @@ function vStandings(){
         <td class="r num" style="font-size:34px;font-weight:700;color:${col}">${d>0?'+':''}${d}</td></tr>`;}).join('')}
       </table><div class="tiny mt">Beat your own number — most over quota wins. Points from gross scores${(()=>{const P=quotaPts();return `: par ${P.par} · birdie ${P.birdie} · eagle ${P.eagle} · bogey ${P.bogey}`;})()}.</div></div>`;
   };
-  let all=null,tables='';
-  if(view==='quota'&&stackHas('quota')){
+  let all=null;
+  // One card per game. Was a single if/else over one `view`; now the same chain
+  // runs once per stacked game plus (optionally) once for the what-if on the
+  // bench. `all` stays outer on purpose — the hole-history card below reads the
+  // main game's per-hole detail, and only the view===g branch fills it in.
+  // whatIf/mainBtn are outer too because genericCard (declared above) closes
+  // over whatIf; cardFor re-points them at the view it is about to draw.
+  let whatIf='',mainBtn='';
+  const cardFor=(view)=>{
+   whatIf=view!==g&&!stackHas(view)?`<div class="tiny mb">What-if view from the same scores — settlement still pays by the round's games.</div>`:'';
+   mainBtn=(view===g||view==='match')?''
+     :(START_ONLY.includes(g)
+       ?`<div class="tiny mt" style="opacity:.75">${gameName(g)} runs your score screen for the rest of the round — this card is a view only.</div>`
+       :`<button class="ghost mt" style="width:100%" onclick="makeMainGame('${view}')">★ Make ${gameName(view)} my main game</button>`);
+   let tables='';
+   if(view==='quota'&&stackHas('quota')){
     tables=quotaCard('Quota');
   }else if(view==='quota'){
     tables=quotaCard('Quota');
-  }else if(view===g&&g==='scramble'){
+  }else if(view==='scramble'){
     const sc=computeScramble();const T=scrambleTeams();
     const rows=T.slice().sort((a,b)=>sc.ledgers[prim][a[0]]-sc.ledgers[prim][b[0]]);
     tables=`<div class="card"><h2>Scramble · thru ${thru}</h2>
@@ -7440,7 +7558,8 @@ function vStandings(){
       return `${b.press?'↳':''}${b.seg[0].toUpperCase()+b.seg.slice(1)}${b.press?' h'+(b.from+1):''} ${nassauUpTxt(b.up,b.thru,fin)}`;
     }).join(' · ')}</div>`).join('');
     tables=genericCard('Nassau',na.ledgers,v=>String(v),false,
-      `<div class="tiny mt">${tn(0)} <b>vs</b> ${tn(1)} — + favors ${tn(0)}. Table counts bets currently won.</div>${betLines}`);
+      `<div class="tiny mt">${tn(0)} <b>vs</b> ${tn(1)} — + favors ${tn(0)}. Table counts bets currently won.</div>${betLines}`
+      +(NP()===4?teamPickerRow('nassau'):''));
   }else if(view==='vegas'){
     // Vegas is 2v2, so the card shows TWO TEAMS with ONE score each: the points
     // that team has won. 45 v 54 pays the low side 9; next hole 55 v 56 pays it
@@ -7464,7 +7583,8 @@ function vStandings(){
   }else if(view===g){
     all=computeGame();
     const carryNote=cols.map(L=>all.carries[L]>0?`<div class="banner carry mt">${lbl(L)}: ${all.carries[L]} hole${all.carries[L]>1?'s':''} carried — next decided hole pays ×${all.carries[L]+1}</div>`:'').join('');
-    tables=genericCard('Standings',all.ledgers,v=>ptsTxt(v),false,
+    // Named after the game, not "Standings" — it now sits in a stack of cards
+    tables=genericCard(gameName(view),all.ledgers,v=>ptsTxt(v),false,
       (cols.length>1?`<div class="tiny mt">Sorted by ${lbl(prim).toLowerCase()} points.</div>`:'')+carryNote);
   }else if(view==='stroke'){
     const st=computeStroke();
@@ -7490,7 +7610,26 @@ function vStandings(){
     }).join('');
     tables=`<div class="card"><h2>Match play · best ball · thru ${thru}</h2>${whatIf}${blocks}${teamPickerRow('bestball')}
       <div class="tiny mt">Better ball of each team wins the hole; most holes up wins the match.</div></div>`;
-  }
+   }
+   // Wolf had no branch of its own — it only ever drew through the view===g
+   // catch-all, so the moment another game became the main one Wolf's card
+   // silently vanished from the stack. Anything without a bespoke card lands
+   // here and gets the standard points table.
+   if(!tables){
+     const r=computeFor(view);
+     const carry=cols.map(L=>(r.carries&&r.carries[L]>0)?`<div class="banner carry mt">${lbl(L)}: ${r.carries[L]} hole${r.carries[L]>1?'s':''} carried — next decided hole pays ×${r.carries[L]+1}</div>`:'').join('');
+     tables=genericCard(gameName(view),r.ledgers,v=>ptsTxt(v),false,carry);
+   }
+   // The button belongs INSIDE its own card — hung underneath, it read as the
+   // header of the next game's card instead.
+   if(mainBtn){
+     const inside=tables.replace(/<\/div>(\s*)$/,mainBtn+'</div>$1');
+     tables=inside===tables?tables+mainBtn:inside;
+   }
+   return tables;
+  };
+  const tables=gamePickCardHTML()+stackOrder.map(x=>cardFor(x)).join('')
+    +vtabs+((stView&&!stackOrder.includes(stView))?cardFor(stView):'');
   const hist=(all==null||!all.perHole)?'':S.round.holes.map((r,h)=>{
     if(!r.confirmed)return '';
     const info=all.perHole[h];
@@ -7532,7 +7671,7 @@ function vStandings(){
   const extra=(thru>0?`
     <div class="card" onclick="openFullCard()" style="cursor:pointer"><h2>Scorecard · gross strokes <span class="tiny" style="font-weight:400">— tap for all 18</span></h2>${scorecardHTML()}
       <div class="tiny mt">Green = under par · amber = bogey · red = double or worse. Swipe the card sideways.</div></div>`:'')+statsCard;
-  return topbar('Standings',esc(S.course.name),'','','')+`<main>${vtabs}${mainBtn}${paceLine()}${tables}${extra}
+  return topbar('Standings',esc(S.course.name),'','','')+`<main>${paceLine()}${tables}${extra}
     ${(all!=null&&all.perHole)?`<div class="card"><h2>Hole history (tap to edit)</h2>${hist||'<div class="muted">No holes confirmed yet.</div>'}</div>`:''}
     ${settleSectionHTML()}
   </main>`+tabs('standings');
