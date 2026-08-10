@@ -346,7 +346,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786346993';
+const BUILD='1786347335';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -4093,7 +4093,7 @@ function vHome(){
     <div class="muted mb">${gameName()} · ${esc(S.course.name)} · thru ${S.round.holes.filter(r=>r.confirmed).length} holes</div>
     <button class="big" onclick="go('hole')">Continue round</button>
     <button class="ghost mt" style="width:100%" onclick="openRoundOpts()">⚙️ Adjust round settings</button>
-    <button class="big danger mt" onclick="endRoundConfirm()">${armEndRound?'⚠️ Tap again to confirm':'End round now'}</button>
+    <button class="big danger mt" onclick="askEndRound()">End round now</button>
     ${S.share.on&&!S.share.bf?`<div class="row mt" style="border-top:1px solid var(--line)">
         <span class="tiny">Live sync · <b class="num" style="font-size:16px;letter-spacing:2px">${esc(S.share.code)}</b> ${sockOpen?'<span style="color:var(--elec)">● connected</span>':'<span style="color:var(--red)">○ reconnecting…</span>'}</span>
         <button class="ghost danger" onclick="leaveShare()">Leave</button></div>`
@@ -6702,15 +6702,28 @@ function askEndRound(){
   if(S.round._finished||isReview()||endAsk)return;
   endAsk=true;render();
 }
-function endAskYes(){endAsk=null;finishMyRound();render();}
+function endAskYes(){
+  endAsk=null;
+  // walking in early: settle on what was actually played, then finish the same
+  // way the last hole does — one ending, one code path
+  if(S.round.started&&!isReview())S.screen='settle';
+  finishMyRound();
+  render();
+}
 function endAskNo(){endAsk=null;render();}   // stay in the round; settlement is already on screen
 function endAskSheetHTML(){
   if(!endAsk)return '';
   const thru=S.round.holes.filter(r=>r.confirmed).length;
+  const total=playOrder().length;
+  // Same prompt whether you finished the card or are walking in early — only the
+  // first line differs, because "that was your last hole" would be a lie at thru 6.
+  const lead=thru>=total
+    ? `That was your last hole — all ${thru} confirmed.`
+    : `You've played ${thru} of ${total} holes. The rest stay blank.`;
   return `<div class="vfWrap" role="dialog" aria-modal="true" aria-labelledby="erTitle">
     <div class="vfCard">
       <h2 id="erTitle" class="vfTitle">Confirm round is over?</h2>
-      <div class="tiny mb">That was your last hole — all ${thru} confirmed. Ending stops your clock,
+      <div class="tiny mb">${lead} Ending stops your clock,
         saves the round to your history and unlinks you from the group. Everyone else keeps playing.</div>
       <button class="big mt" onclick="endAskYes()">⚔️ &nbsp;Yes — my round is over</button>
       <button class="ghost mt" style="width:100%" onclick="endAskNo()">Not yet — keep me in</button>
