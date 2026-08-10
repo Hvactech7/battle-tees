@@ -346,7 +346,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786319703';
+const BUILD='1786339217';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -2417,7 +2417,33 @@ function centroidOf(poly){
   let la=0,lo=0;poly.forEach(p=>{la+=p[0];lo+=p[1];});
   return [la/poly.length,lo/poly.length];
 }
+// Roughly a third of national greens were never traced — the map pipeline drops
+// in a generated ~512 m2 circle when it has no real outline. Its centre is real
+// (it sits on the hole line), but its EDGES are invented, so front and back
+// yardages off it would be a canned radius dressed up as a measurement.
+// Detect it the way it detects trivially: a traced green's centre-to-edge
+// distance varies 17-24%, a generated circle's by under 1%.
+function isGeneratedGreen(poly){
+  if(!poly||poly.length<3)return false;
+  let la=0,lo=0;
+  poly.forEach(p=>{la+=p[0];lo+=p[1];});
+  la/=poly.length;lo/=poly.length;
+  const mLat=111320,mLon=111320*Math.cos(la*Math.PI/180);
+  const rs=poly.map(p=>Math.hypot((p[1]-lo)*mLon,(p[0]-la)*mLat));
+  const mu=rs.reduce((a,b)=>a+b,0)/rs.length;
+  if(!mu)return false;
+  const sd=Math.sqrt(rs.reduce((a,r)=>a+(r-mu)*(r-mu),0)/rs.length);
+  return sd/mu<0.06;
+}
+const EST_GREEN_HALF_M=16*0.9144;   // ±16 yd — a 32-yd green, Nathan's call
 function fmbFrom(pos,poly,center){
+  // A generated green's edges are a canned radius, so reading F/B off the polygon
+  // just reports the placeholder's size (±14 yd) as if it were measured. Use one
+  // deliberate estimate instead, off the centre — which IS real.
+  if(isGeneratedGreen(poly)){
+    const m=mDist(pos,centroidOf(poly));
+    return {f:Math.max(0,m-EST_GREEN_HALF_M),m,b:m+EST_GREEN_HALF_M};
+  }
   if(!poly||poly.length<3)return {f:null,m:mDist(pos,center),b:null};
   const c=centroidOf(poly);
   const mLat=111320,mLon=111320*Math.cos(pos[0]*Math.PI/180);
