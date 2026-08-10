@@ -348,7 +348,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786349170';
+const BUILD='1786349805';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -6225,7 +6225,9 @@ function openGroupEditor(id){
 }
 function renderGroupEditor(){
   const t=grpEditTarget;
-  const ex=document.getElementById('grpeditor');if(ex)ex.remove();
+  const ex=document.getElementById('grpeditor');
+  const keepTop=ex?(ex.querySelector('.card')||{}).scrollTop||0:0;   // hold the place across a rebuild
+  if(ex)ex.remove();
   if(!t)return;
   const g2=t.id?(S.groupLib||[]).find(x=>x.id===t.id):null;
   const cand=[...(S.playerLib||[])];
@@ -6239,11 +6241,11 @@ function renderGroupEditor(){
     <h2>${t.id?'✎ Edit group':'＋ New group'}</h2>
     <div class="tiny">Group name</div>
     <input type="text" id="grpEdName" value="${esc(t.name)}">
-    <div class="tiny mt mb">Who's in — check 2 to 4 <b>(${t.sel.size} picked)</b></div>
+    <div class="tiny mt mb">Who's in — check 2 to 4 <b>(<span data-grpcount>${t.sel.size}</span> picked)</b></div>
     ${cand.map(e=>{
       const on=t.sel.has(e.name.trim().toLowerCase());
       const dis=!on&&full;
-      return `<div class="row" style="cursor:pointer;${dis?'opacity:.4':''}" onclick="grpEdToggle('${esc(e.name.trim().toLowerCase())}')">
+      return `<div class="row" data-nm="${esc(e.name.trim().toLowerCase())}" style="cursor:pointer;${dis?'opacity:.4':''}" onclick="grpEdToggle('${esc(e.name.trim().toLowerCase())}')">
         <div><b>${esc(e.name)}</b><div class="tiny">Index ${e.index}</div></div>
         <input type="checkbox" style="width:24px;height:24px;accent-color:var(--elec);pointer-events:none" ${on?'checked':''}>
       </div>`;}).join('')}
@@ -6254,18 +6256,32 @@ function renderGroupEditor(){
       <button class="ghost" style="flex:none" onclick="grpEdAddNew()">Add</button>
     </div>
     <div style="display:flex;gap:8px;margin-top:12px">
-      <button class="big" style="flex:1;margin:0" ${ok?'':'disabled'} onclick="saveGroupEdit()">Save group</button>
+      <button class="big" data-grpsave style="flex:1;margin:0" ${ok?'':'disabled'} onclick="saveGroupEdit()">Save group</button>
       <button class="ghost" onclick="closeGroupEditor()">Cancel</button>
     </div>
   </div>`;
   document.body.appendChild(d);
+  if(keepTop){const c=d.querySelector('.card');if(c)c.scrollTop=keepTop;}
 }
 function grpEdToggle(nameLow){
   const t=grpEditTarget;if(!t)return;
   const nmEl=document.getElementById('grpEdName');if(nmEl)t.name=nmEl.value;
   if(t.sel.has(nameLow))t.sel.delete(nameLow);
   else if(t.sel.size<4)t.sel.add(nameLow);
-  renderGroupEditor();
+  // Patch the existing rows. renderGroupEditor() removes and re-appends the whole
+  // overlay, which destroys the scroll box — on a long player list every tick
+  // threw you back to the top and you had to find your place again.
+  const d=document.getElementById('grpeditor');
+  if(!d)return renderGroupEditor();
+  const full=t.sel.size>=4, ok=t.sel.size>=2&&t.sel.size<=4;
+  d.querySelectorAll('[data-nm]').forEach(row=>{
+    const on=t.sel.has(row.getAttribute('data-nm'));
+    const box=row.querySelector('input[type=checkbox]');
+    if(box)box.checked=on;
+    row.style.opacity=(!on&&full)?'.4':'';
+  });
+  const c=d.querySelector('[data-grpcount]');if(c)c.textContent=t.sel.size;
+  const sv=d.querySelector('[data-grpsave]');if(sv)sv.disabled=!ok;
 }
 function saveGroupEdit(){
   const t=grpEditTarget;if(!t)return;
