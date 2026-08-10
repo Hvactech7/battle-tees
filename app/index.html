@@ -346,7 +346,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786339217';
+const BUILD='1786344123';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -7282,6 +7282,26 @@ function vStandings(){
     }).join(' · ')}</div>`).join('');
     tables=genericCard('Nassau',na.ledgers,v=>String(v),false,
       `<div class="tiny mt">${tn(0)} <b>vs</b> ${tn(1)} — + favors ${tn(0)}. Table counts bets currently won.</div>${betLines}`);
+  }else if(view==='vegas'){
+    // Vegas is 2v2, so the card shows TWO TEAMS with ONE score each: the points
+    // that team has won. 45 v 54 pays the low side 9; next hole 55 v 56 pays it
+    // 1 more; the card reads 10 and 0.
+    // Sits BEFORE the view===g catch-all so it applies whether Vegas is the
+    // round's game or a what-if — the generic card got it wrong either way,
+    // printing one team total across four player rows under "Gross"/"Net"
+    // headers, which reads as stroke totals.
+    const vg=computeVegas(), VT=vegasTeamsFor(S.round.cur);
+    const won=(L,k)=>vg.ledgers[L][VT[k][0]];
+    const order=(won(prim,0)-won(prim,1))>=0?[0,1]:[1,0];
+    tables=`<div class="card"><h2>Vegas · thru ${thru}</h2>${whatIf}
+      <table class="st"><tr><th>Team</th>${cols.map(L=>`<th class="r">${lbl(L)}</th>`).join('')}</tr>
+      ${order.map((k,ri)=>`<tr><td>${VT[k].map(i=>esc(S.players[i].name)).join(' &amp; ')}</td>${cols.map(L=>{
+        const lead=won(L,k)>=won(L,1-k);
+        return `<td class="r num" style="font-size:34px;color:${lead?'#7fd49a':'var(--ink2)'}">${thru?won(L,k):'–'}</td>`;
+        }).join('')}</tr>`).join('')}
+      </table>${teamPickerRow('vegas')}
+      <div class="tiny mt">Points won as a team. Team digits pair low-first; the low number
+        takes the difference. Birdies flip.</div></div>`;
   }else if(view===g){
     all=computeGame();
     const carryNote=cols.map(L=>all.carries[L]>0?`<div class="banner carry mt">${lbl(L)}: ${all.carries[L]} hole${all.carries[L]>1?'s':''} carried — next decided hole pays ×${all.carries[L]+1}</div>`:'').join('');
@@ -7298,9 +7318,6 @@ function vStandings(){
   }else if(view==='nines'){
     tables=genericCard('9’s',computeNines().ledgers,v=>fmtPts(v),false,
       `<div class="tiny mt">Every hole splits 9 points — 5 · 3 · 1${NP()===4?' · 0':''}. Ties pool and split.</div>`);
-  }else if(view==='vegas'){
-    tables=genericCard('Vegas',computeVegas().ledgers,v=>String(v),false,teamPickerRow('vegas')+
-      `<div class="tiny mt">Team digits pair low-first; low number takes the difference. Birdies flip.</div>`);
   }else if(view==='match'){
     const blocks=cols.map(L=>{
       const m=computeMatch(L);
@@ -7365,6 +7382,22 @@ function jumpAndGo(h){set(()=>{S.round.cur=h;S.screen='hole';});}
 
 // ----- settlement -----
 const PAIRS_GAMES=['wolf','vegas','bestball','scramble','sixes','umbrella','nassau','skins'];
+// A FIXED 2v2 settles as one side: the margin is between the two teams, and each
+// losing player pays half of it. Settling player-against-player instead bills the
+// same round four times, because it charges you against your own partner too.
+// SIXES IS DELIBERATELY EXCLUDED — its partners rotate every six holes, so by the
+// end everyone has partnered everyone and the points really are individual.
+// The same reasoning excludes Vegas when its rotation option is switched on.
+function fixedTeamsFor(g){
+  if(actIdx().length!==4)return null;
+  let T=null;
+  if(g==='vegas')T=(S.config.vegas&&S.config.vegas.rotate==='six')?null:vegasTeamsFor(S.round.cur);
+  else if(g==='bestball'||g==='umbrella')T=matchTeams(g);
+  else if(g==='nassau')T=nassauSides();
+  else if(g==='scramble')T=scrambleTeams();
+  if(!T||T.length!==2||T.some(t=>!t||t.length!==2))return null;
+  return T;
+}
 function settleRate(g){if(g==='skins')return 1;return +((S.round.rates||{})[g])||0;}
 function setRate(g,v){set(()=>{S.round.rates=S.round.rates||{};S.round.rates[g]=Math.max(0,+v||0);});}
 function vSettleStack(G){
@@ -7380,6 +7413,22 @@ function vSettleStack(G){
     const unit=UNIT[g]||'pt';
     const rate=settleRate(g);
     const conv=v=>g==='nines'?v/12:v;
+    // Fixed 2v2 settles TEAM v TEAM — see fixedTeamsFor().
+    const FT=fixedTeamsFor(g);
+    if(FT){
+      const diff=(led[FT[0][0]]-led[FT[1][0]])*inv;
+      const marg=Math.abs(diff), half=marg*rate/2, winT=diff>=0?0:1;
+      act.forEach((i,ai)=>{net[ai]+=(FT[winT].includes(i)?half:-half);});
+      const ord=[winT,1-winT];
+      return `<div class="card"><h2>${gameName(g)} · thru ${thru}</h2>
+        <table class="st"><tr><th>Team</th><th class="r">${unit==='stroke'?'Strokes':unit==='hole'?'Holes':unit==='bet'?'Bets':'Pts'}</th></tr>
+        ${ord.map(k=>`<tr><td>${FT[k].map(i=>esc(S.players[i].name)).join(' &amp; ')}</td>
+          <td class="r num" style="font-size:18px">${ptsTxt(led[FT[k][0]])}</td></tr>`).join('')}</table>
+        <div class="row mt"><span class="muted">$ per ${unit}</span>
+          <input type="number" step="0.25" min="0" value="${(S.round.rates||{})[g]||''}" placeholder="0" style="width:90px" onchange="setRate('${g}',this.value)"></div>
+        <div class="tiny mt">${ptsTxt(marg)} ${unit} margin${rate?` × ${fmtMoney(rate)} = ${fmtMoney(marg*rate)} from the losing team — ${fmtMoney(half)} each`:''}.</div>
+      </div>`;
+    }
     act.forEach((i,ai)=>{let u=0;act.forEach(j=>{if(j!==i)u+=conv((led[i]-led[j])*inv);});net[ai]+=(g==='skins'?u:u*rate);});
     const order=act.slice().sort((a,b)=>(led[b]-led[a])*inv);
     const fmt=v=>g==='skins'?fmtMoney(v):g==='nines'?fmtPts(v):String(v);
@@ -7465,6 +7514,27 @@ function vSettle(){
   const blocks=activeLenses().map(LL=>{
     const led=all.ledgers[LL];
     const gg=gameOn();
+    // Fixed 2v2 settles TEAM v TEAM — see fixedTeamsFor().
+    const FT=fixedTeamsFor(gg);
+    if(FT){
+      const tinv=(gg==='stroke'||gg==='scramble')?-1:1;
+      const un=gg==='scramble'?'stroke':gg==='bestball'?'hole':gg==='nassau'?'bet':'pt';
+      const diff=(led[FT[0][0]]-led[FT[1][0]])*tinv;
+      const marg=Math.abs(diff), winT=diff>=0?0:1, loseT=1-winT;
+      const each=marg*v/2;
+      const nm=k=>FT[k].map(i=>esc(S.players[i].name)).join(' &amp; ');
+      const lines=marg===0?'<div class="muted">All square.</div>'
+        :FT[loseT].map((li,x)=>`<div class="row">${esc(S.players[li].name)} → ${esc(S.players[FT[winT][x]].name)}: `+
+           `<b class="num">${ptsTxt(marg/2)} ${un}${marg/2===1?'':'s'}</b>${v?` <span class="muted">(${fmtMoney(each)})</span>`:''}</div>`).join('');
+      return `<div class="card"><h2>${LL==='net'?'Net':'Gross'} settlement · thru ${thru}</h2>
+        <div class="center mb"><span class="bigscore num">${marg===0?'—':`+${ptsTxt(marg)}`}</span>
+          <div class="muted">${marg===0?'All square':`${nm(winT)} ${thru===18?'win':'lead'} by ${ptsTxt(marg)}`}</div></div>
+        <table class="st"><tr><th>Team</th><th class="r">${un==='stroke'?'Strokes':un==='hole'?'Holes':un==='bet'?'Bets':'Pts'}</th></tr>
+        ${[winT,loseT].map(k=>`<tr><td>${nm(k)}</td><td class="r num" style="font-size:18px">${ptsTxt(led[FT[k][0]])}</td></tr>`).join('')}</table>
+        <div class="mt"><h2>Team settlement</h2>${lines}</div>
+        ${marg&&v?`<div class="tiny mt">${ptsTxt(marg)} ${un} margin × ${fmtMoney(v)} = <b>${fmtMoney(marg*v)}</b> from the losing team — ${fmtMoney(each)} each.</div>`:''}
+      </div>`;
+    }
     const inv=(gg==='stroke'||gg==='scramble')?-1:1, unit=(gg==='stroke'||gg==='scramble')?'stroke':gg==='bestball'?'hole':gg==='nassau'?'bet':gg==='skins'?'$':'pt';
     const pairs=[];
     for(let a=0;a<act.length;a++)for(let b=a+1;b<act.length;b++){
