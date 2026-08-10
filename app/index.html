@@ -348,7 +348,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786348112';
+const BUILD='1786349170';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -2527,6 +2527,7 @@ function updateTrackBtn(){
   b.style.color=armed?'var(--amber-bd)':'var(--green-mid)';
 }
 function trackShotTap(){
+  hideUndoTrack();                 // same slot as the ✕ — never show both
   const p=shotPos();
   if(!p){shotToast('Waiting for GPS — without a fix that distance would be a guess.');return;}
   if(!trackShot||trackShot.hole!==mapHole){
@@ -2564,13 +2565,69 @@ function flashYardage(yds,club){
   document.body.appendChild(d);
   setTimeout(()=>{try{d.remove();}catch(e){}},1600);
 }
+// ---- undo the shot you just logged ----
+// Sits in the slot the ✕ vacates (same row as Track It), so it never covers the
+// yardage flash, the shot line or the dots. Three seconds, then it gets out of
+// the way. Undoing re-arms the ORIGINAL start point, so you can Mark again
+// straight away — or hit ✕ to drop the whole thing.
+// Driven from state, not injected into the DOM — the renderer patches the live
+// tree and would strip an element that isn't in the markup it expects.
+let undoShot=null,undoTimer=null;
+function undoTrackHTML(){
+  if(!undoShot)return '';
+  return `<button id="trackundobtn" onclick="undoTrackShot()"
+    style="position:fixed;left:max(138px,calc(50vw - 102px));bottom:calc(112px + env(safe-area-inset-bottom));
+    z-index:7;height:46px;padding:0 15px;background:var(--card);border:2px solid var(--amber-bd,#c9922e);
+    border-radius:12px;color:var(--amber-bd,#c9922e);font-family:Rajdhani,Inter,sans-serif;font-weight:700;
+    font-size:17px;letter-spacing:.4px;white-space:nowrap;box-shadow:2px 2px 0 rgba(0,0,0,.35)">↩ Undo Track It</button>`;
+}
+// Touch the DOM directly rather than calling render(): on the map screen a
+// render schedules initHoleMap(), which tears the Leaflet map down and rebuilds
+// it — that destroyed this button the instant it appeared. The markup still
+// carries undoTrackHTML() so a render for any OTHER reason keeps it.
+function showUndoTrack(entry){
+  clearTimeout(undoTimer);
+  undoShot=entry;
+  if(!document.getElementById('trackundobtn')){
+    const t=document.getElementById('trackbtn');
+    if(t)t.insertAdjacentHTML('afterend',undoTrackHTML());
+  }
+  undoTimer=setTimeout(hideUndoTrack,3000);
+}
+function hideUndoTrack(){
+  clearTimeout(undoTimer);
+  undoShot=null;
+  const b=document.getElementById('trackundobtn');if(b)b.remove();
+}
+function undoTrackShot(){
+  const s=undoShot;hideUndoTrack();
+  if(!s)return;
+  const key='s'+(S.round.startedAt||0);
+  const log=(S.shotLog&&S.shotLog[key])||[];
+  for(let i=log.length-1;i>=0;i--){if(log[i].at===s.at){log.splice(i,1);break;}}
+  const cid=S.course&&S.course.id;
+  const mem=cid&&S.shotLast&&S.shotLast[cid]&&S.shotLast[cid][s.h];
+  if(mem&&mem.shots){
+    for(let i=mem.shots.length-1;i>=0;i--){
+      const x=mem.shots[i];
+      if(x.yds===s.yds&&x.club===s.club){mem.shots.splice(i,1);break;}
+    }
+    if(!mem.shots.length)delete S.shotLast[cid][s.h];
+  }
+  trackShot={hole:s.h,a:s.a};        // back to armed, ready to re-Mark
+  pendingShot=null;
+  save();
+  if(LMAP){drawShotLines();drawTrackPin();}
+  updateTrackBtn();
+}
 function saveShot(club){
   if(!pendingShot)return;
   flashYardage(pendingShot.yds,club);
   const key='s'+(S.round.startedAt||0);
   if(!S.shotLog)S.shotLog={};
   if(!S.shotLog[key])S.shotLog[key]=[];
-  S.shotLog[key].push({h:pendingShot.hole,a:pendingShot.a,b:pendingShot.b,yds:pendingShot.yds,club,at:Date.now()});
+  const entry={h:pendingShot.hole,a:pendingShot.a,b:pendingShot.b,yds:pendingShot.yds,club,at:Date.now()};
+  S.shotLog[key].push(entry);
   // course memory: first shot on a hole this round REPLACES the remembered set
   // (so next time out, the ghost is last time's lines, not an accumulation);
   // later shots the same round append to it
@@ -2588,6 +2645,7 @@ function saveShot(club){
   if(trackPin){try{LMAP.removeLayer(trackPin);}catch(e){}trackPin=null;}
   if(LMAP)drawShotLines();           // the residual line lands the moment it's logged
   closeClubSheet();updateTrackBtn();
+  showUndoTrack(entry);              // 3s to take it back
 }
 // X on the club sheet: cancel just the endpoint/mark — the start point stays
 // armed, so the next Mark press re-opens the club sheet. (Nathan's field ask.)
@@ -2711,6 +2769,7 @@ function vMap(){
   ${mapStatChipsHTML(hole)}
   <button id="trackbtn" onclick="trackShotTap()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(112px + env(safe-area-inset-bottom));z-index:6;width:120px;height:46px;background:var(--card);border:2px solid ${trackShot&&trackShot.hole===mapHole?'var(--amber-bd)':'var(--green)'};border-radius:12px;color:${trackShot&&trackShot.hole===mapHole?'var(--amber-bd)':'var(--green-mid)'};font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:19px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">${trackShot&&trackShot.hole===mapHole?'Mark It':'Track It'}</button>
   ${trackShot&&trackShot.hole===mapHole?`<button id="trackxbtn" onclick="clearTrackStart()" style="position:fixed;left:max(138px,calc(50vw - 102px));bottom:calc(112px + env(safe-area-inset-bottom));z-index:6;width:46px;height:46px;background:var(--card);border:2px solid var(--red,#c0392b);border-radius:12px;color:var(--red,#c0392b);font-size:22px;font-weight:800;box-shadow:2px 2px 0 rgba(0,0,0,.35)">✕</button>`:''}
+  ${undoTrackHTML()}
   ${(()=>{try{
       const g=S.course.geo&&S.course.geo.holes&&S.course.geo.holes[physHole(mapHole)+1];
       const mapped=!!(g&&g.green&&g.green.length>2);
