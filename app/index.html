@@ -346,7 +346,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786344123';
+const BUILD='1786346066';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -7072,11 +7072,22 @@ function stViews(){
   if(!has('stroke'))v.push(['stroke','Stroke']);
   if(!has('stableford'))v.push(['stableford','Stableford']);
   if(!has('quota'))v.push(['quota','Quota']);
+  // Best Ball as a what-if: "how would this round have gone as best ball, and
+  // with which partners?" The card carries the pairing picker, so it answers
+  // both. It used to be offered only when Best Ball was already stacked.
+  if(four&&!has('bestball'))v.push(['bestball','Best Ball']);
   if(four&&!has('bestball')&&!has('match'))v.push(['match','Match']);
   if(!has('nines')&&NP()>=3)v.push(['nines','9’s']);
   if(!has('vegas')&&four)v.push(['vegas','Vegas']);
+  if(!has('umbrella')&&four)v.push(['umbrella','Umbrella']);
+  if(!has('sixes')&&four)v.push(['sixes','Sixes']);
   if(!has('nassau')&&(four||NP()===2))v.push(['nassau','Nassau']);
   if(!has('skins')&&NP()>=2)v.push(['skins','Skins']);
+  // WOLF and BINGO BANGO BONGO are deliberately absent as what-ifs. Both need
+  // decisions made while playing that a scorecard cannot reconstruct — Wolf the
+  // tee order and each hole's partner pick, BBB who was on first, closest and
+  // first in. Pick either at the start and it still appears here (via gamesOn),
+  // and you can still simulate everything else from inside that round.
   return v;
 }
 function lensScore(rec,i,h,L){const g=rec.gross[i];return g==null?null:(L==='net'?g-dotsOn(i,h):g);}
@@ -7226,7 +7237,7 @@ function vStandings(){
         return `<td class="r num" style="font-size:34px">${thru?`${vv} <span style="font-size:17px">${d===0?'E':(d>0?'+':'')+d}</span>`:'–'}</td>`;}).join('')}</tr>`).join('')}
       </table>${T.length===1?'':teamPickerRow('scramble')}
       <div class="tiny mt">${T.length===1?'Tournament tracker — one ball, whole group. Net plays off the 25/20/15/10% four-player allowance ('+scrambleStrokes()[0]+' strokes).':'One ball per team — lowest total wins. Net gives the higher-handicap team strokes via the 35%/15% scramble allowance.'}</div></div>`;
-  }else if(view==='bestball'&&stackHas('bestball')){
+  }else if(view==='bestball'){
     const bb=computeBestBall();
     const blocks=cols.map(L=>{
       const m=computeMatch(L);
@@ -7238,26 +7249,45 @@ function vStandings(){
       else status=`${tn(m.up>0?0:1)} ${Math.abs(m.up)} UP thru ${m.thru}${Math.abs(m.up)===m.count-m.thru?' — dormie':''}`;
       return `<div class="center mb">${cols.length>1?`<div class="tiny">${lbl(L)}</div>`:''}<span class="bigscore num" style="font-size:24px">${status}</span></div>`;
     }).join('');
+    // 2v2 — one row per TEAM. Four player rows printed the same team's holes
+    // twice, the same way the Vegas card used to.
+    const BT=matchTeams('bestball');
+    const bord=bb.ledgers[prim][BT[0][0]]>=bb.ledgers[prim][BT[1][0]]?[0,1]:[1,0];
     tables=`<div class="card"><h2>Best Ball · thru ${thru}</h2>${blocks}
-      <table class="st"><tr><th>Player</th>${cols.map(L=>`<th class="r">${lbl(L)} holes</th>`).join('')}</tr>
-      ${actIdx().slice().sort((a,b)=>bb.ledgers[prim][b]-bb.ledgers[prim][a]).map(i=>`<tr><td>${esc(S.players[i].name)}</td>${cols.map(L=>`<td class="r num" style="font-size:34px">${bb.ledgers[L][i]}</td>`).join('')}</tr>`).join('')}
+      <table class="st"><tr><th>Team</th>${cols.map(L=>`<th class="r">${lbl(L)} holes</th>`).join('')}</tr>
+      ${bord.map(k=>`<tr><td>${BT[k].map(i=>esc(S.players[i].name)).join(' &amp; ')}</td>${cols.map(L=>{
+        const lead=bb.ledgers[L][BT[k][0]]>=bb.ledgers[L][BT[1-k][0]];
+        return `<td class="r num" style="font-size:34px;color:${lead?'#7fd49a':'var(--ink2)'}">${bb.ledgers[L][BT[k][0]]}</td>`;
+        }).join('')}</tr>`).join('')}
       </table>${teamPickerRow('bestball')}
       <div class="tiny mt">Better ball of each team wins the hole.${hammerLive('bestball')?' <b>🔨 Hammer live</b> — totals include doubled and folded holes.':''}</div></div>`;
   }else if(view==='stableford'&&stackHas('stableford')){
     const P=stblPts();
     tables=genericCard('Stableford',computeStableford().ledgers,v=>String(v),false,
       `<div class="tiny mt">Birdie ${P.birdie} · par ${P.par} · bogey ${P.bogey} · double+ ${P.dbl} · eagle ${P.eagle} · albatross ${P.alba}. Highest wins.</div>`);
-  }else if(view==='sixes'&&stackHas('sixes')){
+  }else if(view==='sixes'){
     const seg=playOrder().length===9?3:6;
     const T=sixesTeamsFor(S.round.cur);
+    // Sixes keeps PLAYER rows on purpose — partners rotate every few holes, so
+    // by the end the points are individual. The picker sets which pairing it
+    // STARTS on, which is what changes the whole shape of the round.
     tables=genericCard('Sixes',computeSixes().ledgers,v=>String(v),false,
+      teamPickerRow('sixes')+
       `<div class="tiny mt">Best ball wins the hole, 1 pt each — ties go to both balls, then push.${hammerLive('sixes')?' <b>🔨 Hammer live</b> — totals include doubled and folded holes.':''}
-      Partners swap every ${seg} holes. Current: <b>${teamLbl(T[0])}</b> v <b>${teamLbl(T[1])}</b></div>`);
-  }else if(view==='umbrella'&&stackHas('umbrella')){
+      Partners swap every ${seg} holes — the buttons set the opening pair. Current: <b>${teamLbl(T[0])}</b> v <b>${teamLbl(T[1])}</b></div>`);
+  }else if(view==='umbrella'){
     const u=computeUmbrella();
-    tables=genericCard('Umbrella',u.ledgers,v=>String(v),false,
-      `<div class="tiny mt">Six points a hole: 2 low ball · 2 low team total · 1 closest to pin · 1 gross birdie.
-      Sweep all six and it doubles to <b>12</b>${u.sweeps[prim]?` — ☂ ${u.sweeps[prim]} umbrella${u.sweeps[prim]>1?'s':''} opened!`:''}.</div>`);
+    const UT=matchTeams('umbrella');
+    const uord=u.ledgers[prim][UT[0][0]]>=u.ledgers[prim][UT[1][0]]?[0,1]:[1,0];
+    tables=`<div class="card"><h2>Umbrella · thru ${thru}</h2>${whatIf}
+      <table class="st"><tr><th>Team</th>${cols.map(L=>`<th class="r">${lbl(L)}</th>`).join('')}</tr>
+      ${uord.map(k=>`<tr><td>${UT[k].map(i=>esc(S.players[i].name)).join(' &amp; ')}</td>${cols.map(L=>{
+        const lead=u.ledgers[L][UT[k][0]]>=u.ledgers[L][UT[1-k][0]];
+        return `<td class="r num" style="font-size:34px;color:${lead?'#7fd49a':'var(--ink2)'}">${u.ledgers[L][UT[k][0]]}</td>`;
+        }).join('')}</tr>`).join('')}
+      </table>${teamPickerRow('umbrella')}
+      <div class="tiny mt">Six points a hole: 2 low ball · 2 low team total · 1 closest to pin · 1 gross birdie.
+      Sweep all six and it doubles to <b>12</b>${u.sweeps[prim]?` — ☂ ${u.sweeps[prim]} umbrella${u.sweeps[prim]>1?'s':''} opened!`:''}.</div></div>`;
   }else if(view==='bbb'&&stackHas('bbb')){
     tables=genericCard('Bingo Bango Bongo',computeBBB().ledgers,v=>String(v),false,
       `<div class="tiny mt">Three points a hole: \u{1F7E2} first on the green · \u{1F4CD} closest once all on · \u26F3 first in the cup. Most taps wins.</div>`);
