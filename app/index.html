@@ -346,7 +346,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786346066';
+const BUILD='1786346993';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -3844,7 +3844,7 @@ function render(){
   const pageY=window.scrollY;
   const sameScreen=window.__lastScr===scr;
   window.__lastScr=scr;
-  const full=magBanner()+html+holeSplash()+verifySheetHTML()+teeAskSheetHTML();
+  const full=magBanner()+html+holeSplash()+verifySheetHTML()+teeAskSheetHTML()+endAskSheetHTML();
   // Four phones syncing means render() fires constantly. Blowing away innerHTML
   // each time repainted the whole screen — that was the flicker on the course.
   // Identical output is a no-op; otherwise patch only the nodes that differ.
@@ -4684,7 +4684,7 @@ function vHistory(){
       <div class="tiny">${(e.players||[]).map(esc).join(' · ')}</div>
       <div style="display:flex;gap:8px;margin-top:10px">
         <button class="ghost" style="flex:1.35;margin:0;white-space:nowrap" onclick="resumeRound('${e.id}')">▶ Continue Playing</button>
-        <button class="ghost sel" style="flex:1;margin:0;white-space:nowrap" onclick="reopenRound('${e.id}')">Edit Round</button>
+        <button class="ghost sel" style="flex:1;margin:0;white-space:nowrap" onclick="reopenRound('${e.id}')">Review</button>
         <button class="ghost danger" style="flex:none;width:46px;margin:0" onclick="delHist('${e.id}')">${armDelHist===e.id?'Del?':'✕'}</button>
       </div>
     </div>`;}).join('')
@@ -6691,6 +6691,44 @@ function hammerCardHTML(){
   return `<div class="card hamcard"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><h2 style="margin-bottom:0">🔨 Hammer</h2><img src="${art('/hammer.png')}" style="height:52px;flex:none" onerror="this.style.display='none'"></div><div style="height:8px"></div>${inner}</div>`;
 }
 function chStat(k,i,d){reviewTouch();set(()=>{const rec=S.round.holes[S.round.cur];const a=statArr(rec,k);a[i]=Math.max(0,a[i]+d);stampStat(rec,i);});}
+// Confirming your LAST hole IS the end of your round — no trip back to the menu
+// to press "End round" or "Leave". Stops your clock, files the round, tells the
+// Battlefield and unlinks you from the group, then shows the settlement.
+// Each player finishes at their own moment, so everyone's elapsed time differs.
+// Ending is irreversible-ish — it stops your clock and drops you out of the
+// group — so the last hole asks before it does any of that.
+let endAsk=null;
+function askEndRound(){
+  if(S.round._finished||isReview()||endAsk)return;
+  endAsk=true;render();
+}
+function endAskYes(){endAsk=null;finishMyRound();render();}
+function endAskNo(){endAsk=null;render();}   // stay in the round; settlement is already on screen
+function endAskSheetHTML(){
+  if(!endAsk)return '';
+  const thru=S.round.holes.filter(r=>r.confirmed).length;
+  return `<div class="vfWrap" role="dialog" aria-modal="true" aria-labelledby="erTitle">
+    <div class="vfCard">
+      <h2 id="erTitle" class="vfTitle">Confirm round is over?</h2>
+      <div class="tiny mb">That was your last hole — all ${thru} confirmed. Ending stops your clock,
+        saves the round to your history and unlinks you from the group. Everyone else keeps playing.</div>
+      <button class="big mt" onclick="endAskYes()">⚔️ &nbsp;Yes — my round is over</button>
+      <button class="ghost mt" style="width:100%" onclick="endAskNo()">Not yet — keep me in</button>
+    </div></div>`;
+}
+function finishMyRound(){
+  if(S.round._finished||isReview())return;
+  S.round._finished=true;
+  if(!S.round.myEndedAt)S.round.myEndedAt=Date.now();   // clock stops HERE
+  // Side effects run after this set() commits — leaveShare() saves and renders,
+  // and bfBroadcastEnd() must go out before the socket it uses is closed.
+  setTimeout(()=>{
+    try{archiveRound();}catch(e){}
+    bfBroadcastEnd();
+    if(S.share&&S.share.on)leaveShare();else{save();render();}
+    if(!emailVerified())setTimeout(()=>openVerify('roundEnd'),450);
+  },0);
+}
 function advanceToNext(){
   const o=playOrder();
   const cur=Math.max(0,o.indexOf(S.round.cur));
@@ -6698,6 +6736,7 @@ function advanceToNext(){
   for(let k=1;k<=o.length;k++){const cand=o[(cur+k)%o.length];if(!S.round.holes[cand].confirmed){next=cand;break;}}
   if(next===-1){
     S.screen='settle';
+    askEndRound();
     if(!S.round._statFin){S.round._statFin=true;
       stat('round_finish',{game:S.round.game,thru:S.round.holes.filter(r=>r.confirmed).length,
         mins:S.round.startedAt?Math.round((Date.now()-S.round.startedAt)/60000):null,
