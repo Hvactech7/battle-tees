@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786481755';
+const BUILD='1786485591';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -2874,6 +2874,7 @@ function vMap(){
       <div class="center" style="flex:1">
         <div class="num" id="fmb" style="font-size:29px;white-space:nowrap">—</div>
         <div class="tiny" id="fmbsub" style="max-height:2.7em;overflow:hidden">loading…</div>
+        ${amnesiaOn(S.course.id)?`<div class="tiny" style="color:var(--amber-bd,#e0a53a);margin-top:2px">🧠 amnesia on — this phone is ignoring the saved map. <a href="?amnesia=off" style="color:inherit;text-decoration:underline">turn off</a></div>`:''}
       </div>
       <button class="ghost" onclick="mapNext()">▶</button>
     </div>
@@ -2965,7 +2966,55 @@ function healEmptyGeo(){
   (S.courses||[]).forEach(drop); drop(S.course);
   return n;
 }
+// ---------- amnesia: play a mapped course as if it had never been mapped ----------
+// Field-test switch. ?amnesia=<courseId> (or ?amnesia=1 for whatever course is
+// open) makes the app ignore BOTH the hosted map and any geo already cached on
+// this phone for that course, so the map screen takes the UNMAPPED path —
+// card ring, Manual mode, tap the green, greenmark back to the relay. It is how
+// you test the learn-the-course flow on a course you have already traced,
+// without touching the traced file, which stays shipped for everybody else.
+// ?amnesia=off clears it. Per-phone, opt-in, and it forgets nothing permanently.
+function amnesiaSet(v){try{if(v)localStorage.setItem('btAmnesia',v);else localStorage.removeItem('btAmnesia');}catch(e){}}
+function amnesiaGet(){try{return localStorage.getItem('btAmnesia')||'';}catch(e){return '';}}
+function amnesiaOn(id){
+  const a=amnesiaGet();
+  if(!a)return false;
+  return a==='1'||a===id;
+}
+(function(){
+  try{
+    const m=/[?&]amnesia=([^&]*)/.exec(location.search);
+    if(!m)return;
+    const v=decodeURIComponent(m[1]||'');
+    if(v==='off'||v==='0'){amnesiaSet(null);}
+    else amnesiaSet(v||'1');
+  }catch(e){}
+})();
 async function ensureCourseGeo(){
+  if(amnesiaOn(S.course.id)){
+    // wipe what this phone already knows, then fall through to the live-OSM
+    // lookup exactly as a first-timer on an unmapped course would
+    try{set(()=>{delete S.course.geo;delete S.course.geoUrl;});}catch(e){}
+    const pos0=await new Promise(res=>{
+      if(!navigator.geolocation)return res(null);
+      navigator.geolocation.getCurrentPosition(p=>res([p.coords.latitude,p.coords.longitude]),
+        ()=>res(null),{timeout:8000,maximumAge:120000});
+    });
+    const c0=pos0||myCoords;
+    if(!c0)throw new Error('Turn on location to download the course map.');
+    const q0=`[out:json][timeout:25];(way["golf"="hole"](around:2500,${c0[0]},${c0[1]});way["golf"="green"](around:2500,${c0[0]},${c0[1]}););out geom;`;
+    let found0=0;const holes0={};
+    try{
+      const js0=await overpassQuery(q0);
+      (js0.elements||[]).forEach(e=>{
+        const g=(e.geometry||[]).map(p=>[+p.lat.toFixed(6),+p.lon.toFixed(6)]);
+        if(e.tags&&e.tags.golf==='hole'){const n=parseInt(e.tags.ref);
+          if(n>0&&g.length>1){holes0[n]=Object.assign(holes0[n]||{},{path:g});found0++;}}
+      });
+    }catch(e){}
+    set(()=>{S.course.geo={ts:Date.now(),holes:holes0,empty:found0===0,amn:1};});
+    return;
+  }
   let hostedUrl=S.course.geoUrl||HOSTED_GEO[S.course.id];
   // national records store a root-relative path ('geo/nat/ca/1348.json'). The
   // app runs from /app/, where that resolves to /app/geo/... and 404s — so the
@@ -3427,6 +3476,11 @@ async function initHoleMap(){
   // "found nothing" is an answer about WHERE YOU WERE, not about the course —
   // adding a course at home caches an empty map that used to stick forever.
   // Retry it (throttled) so standing on the 1st tee heals the record.
+  // amnesia: any geo this phone already holds is the very map we are pretending
+  // not to have, so discard it once and let ensureCourseGeo take the blind path
+  if(amnesiaOn(S.course.id)&&S.course.geo&&!S.course.geo.amn){
+    try{set(()=>{delete S.course.geo;delete S.course.geoUrl;});}catch(e){}
+  }
   if(!S.course.geo||(S.course.geo.empty&&Date.now()-(S.course.geo.ts||0)>GEO_RETRY_MS)){
     const s2=sub();if(s2)s2.textContent='Downloading course map…';
     try{
