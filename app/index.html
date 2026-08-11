@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786479193';
+const BUILD='1786481175';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -2433,6 +2433,7 @@ function computeGame(){const g=gameOn();
 // ---------- hole map: satellite view + GPS distances (Phase 1) ----------
 let mapHole=0,LMAP=null,mapWatch=null,mapMarks={},leafletP=null;
 let lSpine=null,gmSpine=null,showSpine=false;   // spines retired — always off
+let lTee=null;   // draggable tee marker (mapMarks is reassigned mid-init, so it cannot live there)
 let lShots=[],gmShots=[],showShots=(localStorage.btShots!=='off');
 function shotsForHole(h){
   const log=(S.shotLog&&S.shotLog['s'+(S.round.startedAt||0)])||[];
@@ -2574,7 +2575,7 @@ function mapNext(){mapHole=(mapHole+1)%18;render();}
 function teardownMap(){
   if(mapWatch!=null&&navigator.geolocation){navigator.geolocation.clearWatch(mapWatch);mapWatch=null;}
   if(LMAP){try{LMAP.remove();}catch(e){}LMAP=null;}
-  mapMarks={};lSpine=null;gmSpine=null;lShots=[];gmShots=[];
+  mapMarks={};lSpine=null;gmSpine=null;lTee=null;lShots=[];gmShots=[];
 }
 // whose phone is this? self-claimed slot first, then profile-name match, else slot 0
 // ---------- shot tracker ----------
@@ -3291,6 +3292,34 @@ function greensPickTarget(fromPos){
 function greensConsumeTarget(){
   const st=greensState;if(!st||st.target==null)return;
   if(!st.used.includes(st.target))st.used.push(st.target);
+  // A greens-tier course ships an UNNUMBERED pool: OSM has the green shapes but
+  // nobody tagged which hole each one belongs to, and that missing number — not
+  // the geometry — is the only reason these courses had no map at all.
+  // Confirming a hole supplies it: the scorecard says which hole was just
+  // played, GPS says which green it was played to. Report the pairing so
+  // agreement across devices can number the pool and promote the course.
+  //
+  // Deliberately NOT reporting st.target. Targeting is sticky — after a confirm
+  // it guesses the nearest remaining green from where you stand and holds that
+  // guess until you tap a different dot, so at confirm time the target is often
+  // the app's guess for the NEXT hole. The trustworthy signal is the player's
+  // own position: whoever is closing out a hole is standing on its green. So
+  // pair the hole with the green nearest to them, and only when they are close
+  // enough for that to mean something — a confirm typed in the car park must
+  // never number a green.
+  try{
+    const pts=greensPts(),me=mapMarks.mePos;
+    if(me&&pts.length){
+      let bi=null,bd=1e12;
+      pts.forEach((g,i)=>{const d=mDist(me,g);if(d<bd){bd=d;bi=i;}});
+      const ydsOff=Math.round(bd*1.09361);
+      if(bi!=null&&ydsOff<=60)
+        stat('greennum',{course:S.course.id,courseName:S.course.name,
+          hole:physHole(mapHole)+1,gi:bi,lat:pts[bi][0],lon:pts[bi][1],
+          of:pts.length,holes:(S.course.holes||[]).length,
+          fromDist:ydsOff,wasTarget:st.target===bi});
+    }
+  }catch(e){}
   st.target=null;greensSave();
   if(window.greensRepaint)greensRepaint();
 }
@@ -3344,6 +3373,36 @@ function initGreensMap(el){
   }};
   paint();updateDist();startMapGps();
 }
+// ---------- tee corrections ----------
+// The tee is the weakest number we ship. On courses whose geometry we
+// synthesized from a green polygon and a tee box, the GREEN lands a median 2
+// yds from the real one — it IS real OSM data — while the tee is inferred, and
+// the resulting hole line runs 1-11% short of the card. A player standing on
+// the tee knows better than any inference we can make, so let them move it.
+// The fix sticks for that course on this phone (per-course, like S.shotLast)
+// and is reported so agreement across devices can correct the shipped map.
+// Never synced: one player's map correction must not rewrite another's round.
+function teeFixFor(h){
+  try{const c=S.teeFix&&S.teeFix[S.course.id];return (c&&c[h])||null;}catch(e){return null;}
+}
+function teeFixSet(h,p){
+  if(!S.teeFix)S.teeFix={};
+  if(!S.teeFix[S.course.id])S.teeFix[S.course.id]={};
+  S.teeFix[S.course.id][h]=p;save();
+}
+function teeFixClear(h){
+  try{const c=S.teeFix&&S.teeFix[S.course.id];if(c&&c[h]){delete c[h];save();}}catch(e){}
+}
+// Returns geo with the corrected tee substituted, WITHOUT touching S.course.geo
+// — every downstream consumer (the yardage label, F/M/B, updateFMB, the Google
+// fallback) reads path[0], so fixing it here fixes all of them at once.
+function withTeeFix(geo,h){
+  if(!geo||!geo.path||geo.path.length<2)return geo;
+  const f=teeFixFor(h);
+  if(!f)return geo;
+  const p=geo.path.slice();p[0]=f.slice();
+  return Object.assign({},geo,{path:p});
+}
 async function initHoleMap(){
   const el=document.getElementById('holemap');
   if(!el)return;
@@ -3363,7 +3422,7 @@ async function initHoleMap(){
     }catch(e){geoErr=e.message;}
     if(S.screen!=='map')return;
   }
-  const geo=S.course.geo&&S.course.geo.holes?S.course.geo.holes[physHole(mapHole)+1]:null;
+  const geo=withTeeFix(S.course.geo&&S.course.geo.holes?S.course.geo.holes[physHole(mapHole)+1]:null,physHole(mapHole));
   // Leaflet (with rotation) is the primary hole-map renderer — green-up orientation
   // needs true map rotation, which Google's raster satellite can't do. Google
   // remains the fallback if the Leaflet CDN is unreachable.
@@ -3401,6 +3460,54 @@ async function initHoleMap(){
       lSpine=[L.polyline(smooth,{color:'#0a1220',weight:5.5,opacity:.45}),L.polyline(smooth,{color:'#ffffff',weight:2.5,opacity:.95,dashArray:'7 7'})];
       // spines retired — built for geometry (pathEnd) but never drawn
       pathEnd=geo.path[geo.path.length-1];
+      // DRAGGABLE TEE. Shown wherever we have a hole line, because a tee moves
+      // in real life — forward on a wet day, back for a tournament — and no map
+      // refresh keeps up with that. Dragging redraws the line live, so the
+      // yardage the player is judging against updates under their thumb.
+      // Tap the marker to put it back where the map had it.
+      const teeMk=L.marker(geo.path[0],{draggable:true,icon:L.divIcon({className:'',
+        html:'<div class="teedot" style="width:13px;height:13px;border-radius:3px;background:#7fe3a1;border:2.5px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.6)"></div>',
+        iconSize:[13,13],iconAnchor:[7,7]})}).addTo(LMAP);
+      const teeSay=()=>{
+        const t=teeMk.getLatLng(),g=mapMarks.greenC||pathEnd;
+        return g?yd(mDist([t.lat,t.lng],g))+'y tee':'tee';
+      };
+      teeMk.bindTooltip('tee',{permanent:false,direction:'bottom',offset:[0,8],className:'maplbl'});
+      const teeRedraw=()=>{
+        const t=teeMk.getLatLng(),p=geo.path.slice();p[0]=[t.lat,t.lng];
+        // lSpine is built but not drawn ("spines retired"), so keep its
+        // geometry honest without assuming it is on the map
+        const sm=splinePath(p);
+        if(lSpine)lSpine.forEach(l=>{try{l.setLatLngs(sm);}catch(e){}});
+        mapMarks.ref=[t.lat,t.lng];
+        try{updateFMB([t.lat,t.lng],'yards from the tee');}catch(e){}
+        try{teeMk.setTooltipContent(teeSay());}catch(e){}
+        if(lGreen)try{lGreen.setTooltipContent(yd(mDist([t.lat,t.lng],mapMarks.greenC||pathEnd))+'y');}catch(e){}
+      };
+      let teeDragged=false;
+      teeMk.on('drag',()=>{teeDragged=true;teeRedraw();});
+      teeMk.on('dragend',()=>{
+        const t=teeMk.getLatLng(),p=[+t.lat.toFixed(6),+t.lng.toFixed(6)];
+        const h=physHole(mapHole);
+        teeFixSet(h,p);
+        const shipped=(S.course.geo.holes[h+1]||{}).path;
+        stat('teemark',{course:S.course.id,courseName:S.course.name,hole:h+1,
+          lat:p[0],lon:p[1],geoSrc:S.course.geoSrc||null,
+          movedYds:shipped&&shipped[0]?Math.round(mDist(shipped[0],p)*1.09361):null,
+          fromDist:mapMarks.mePos?Math.round(mDist(mapMarks.mePos,p)*1.09361):null});
+        try{teeMk.openTooltip();}catch(e){}
+        setTimeout(()=>{try{teeMk.closeTooltip();}catch(e){}},2200);
+      });
+      teeMk.on('click',()=>{
+        if(teeDragged&&!teeFixFor(physHole(mapHole)))return;
+        const h=physHole(mapHole);
+        if(!teeFixFor(h)){try{teeMk.openTooltip();}catch(e){}
+          setTimeout(()=>{try{teeMk.closeTooltip();}catch(e){}},1800);return;}
+        teeFixClear(h);
+        const orig=(S.course.geo.holes[h+1]||{}).path;
+        if(orig&&orig[0]){teeMk.setLatLng(orig[0]);teeRedraw();}
+      });
+      lTee=teeMk;
     }
     drawShotLines();
     // no hazard/green overlays — the satellite imagery shows them natively
