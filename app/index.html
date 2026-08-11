@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786485591';
+const BUILD='1786485852';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -2981,6 +2981,17 @@ function amnesiaOn(id){
   if(!a)return false;
   return a==='1'||a===id;
 }
+// Settings toggle. Turning it ON drops the geo this phone is holding for the
+// open course so the change takes effect on the next map open rather than after
+// a reload — an installed PWA is not a browser tab you can just refresh.
+function amnesiaToggle(){
+  const on=!!amnesiaGet();
+  amnesiaSet(on?null:'1');
+  try{
+    if(!on&&S.course&&S.course.geo)set(()=>{delete S.course.geo;delete S.course.geoUrl;});
+    else render();
+  }catch(e){render();}
+}
 (function(){
   try{
     const m=/[?&]amnesia=([^&]*)/.exec(location.search);
@@ -4652,6 +4663,12 @@ function vSettings(){
     <div class="tiny mt">Announcements go out once per round, from Battle Tees — never from a personal address.</div>
   </div>
   ${trackCardHTML()}
+  <div class="card"><h2>🧠 Course Amnesia</h2>
+    <div class="row"><div style="flex:1;min-width:0"><b>Ignore saved course maps</b>
+      <div class="tiny">Play a course you have already mapped as if it were your first time — no hole line, no green, no yardages. The map screen falls back to Manual, so you can test learning a course from scratch. <b>Nothing is deleted</b>; switch it off and every map comes straight back.</div></div>
+    <button class="ghost ${amnesiaGet()?'sel':''}" onclick="amnesiaToggle()">${amnesiaGet()?'On':'Off'}</button></div>
+    ${amnesiaGet()?`<div class="tiny mt" style="color:var(--amber-bd,#e0a53a)">On — this phone is ignoring saved maps on every course.</div>`:''}
+  </div>
   <div class="card"><h2>🧨 Start Over</h2>
     ${soUI===0?`
     <div class="tiny">Wipe this phone's Battle Tees library and begin again with a clean slate — new stats, new history. Your name, email and Battlefield archive are kept.</div>
