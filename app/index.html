@@ -261,6 +261,11 @@
   .gamebtn.gpick.gpmain::before{content:'\26F3';font-size:26px;color:var(--green)}
   .gamebtn.gpick.gpdis{opacity:.42;filter:grayscale(.7)}
   /* flex:none or the column flexbox shrinks the bar and clips the button */
+  .puttrow{display:flex;gap:8px;margin-top:6px}
+  .puttbtn{flex:1;padding:16px 0;font-size:22px;font-weight:700;font-family:inherit;
+    background:var(--card);color:var(--green);border:2px solid var(--green);border-radius:10px;
+    box-shadow:2px 2px 0 var(--green);cursor:pointer}
+  .puttbtn:active{transform:translate(2px,2px);box-shadow:0 0 0 var(--green)}
   .gpbar{flex:none;max-height:0;overflow:hidden;transition:max-height .2s ease-out}
   .gpbar.on{max-height:130px}
   .gamebtn .gname{font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:25px;letter-spacing:.5px}
@@ -362,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786428939';
+const BUILD='1786430673';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -518,7 +523,8 @@ function trackCardHTML(){
   if(!mine.length) return '';
   const LBL={putts:'Putts',bunker:'Bunker shots',chips:'Chips',pen:'Penalties'};
   const many=mine.length>1;
-  return `<div class="card"><h2>Track extras <span class="tiny" style="font-weight:400">&mdash; per hole</span></h2>
+  return `<div class="card"><h2>📊 Track extras <span class="tiny" style="font-weight:400">&mdash; per hole</span></h2>
+    <div class="tiny mb">With <b>Putts</b> on, a quick 0–4+ prompt pops up the moment you confirm a hole. Turn it off here to stop the prompt. The others add a stepper on the score and GPS screens.</div>
     ${mine.map(i=>{
       const T=trackOf(i);
       return `${many?`<div class="tiny mt" style="color:var(--gold)"><b>${esc(S.players[i].name)}</b></div>`:''}
@@ -538,7 +544,7 @@ const TRACK_DEFS=[['putts','Putts'],['bunker','Bunkers'],['chips','Chips'],['pen
 // scoring who has no phone; everyone else sets their own.
 function trackOf(i){
   const p=S.players[i]; if(!p) return {};
-  if(!p.track) p.track={putts:false,bunker:false,chips:false,pen:false};
+  if(!p.track) p.track={putts:true,bunker:false,chips:false,pen:false};
   return p.track;
 }
 function trackKeysFor(i){const T=trackOf(i);return TRACK_DEFS.filter(([k])=>T[k]);}
@@ -572,7 +578,7 @@ function extrasCardHTML(idxs, rec){
 }
 function defaultPlayers(){
   return [
-    {name:'Player 1',index:10.0,chOverride:null,tee:'tb-blu',track:{putts:false,bunker:false,chips:false,pen:false}},
+    {name:'Player 1',index:10.0,chOverride:null,tee:'tb-blu',track:{putts:true,bunker:false,chips:false,pen:false}},
     {name:'Player 2',index:10.0,chOverride:null,tee:'tb-blu'},
     {name:'Player 3',index:10.0,chOverride:null,tee:'tb-blu'},
     {name:'Player 4',index:10.0,chOverride:null,tee:'tb-blu'},
@@ -589,6 +595,16 @@ function stampStat(rec,i){if(!rec.sts)rec.sts=[0,0,0,0];rec.sts[i]=Date.now();}
 function blankRound(){return {started:false,holes:Array.from({length:HOLES},blankHole),cur:0,dollarPerPt:0,span:{count:18,start:0},startedAt:null,myStartedAt:null};}
 
 let S=load();
+// Putts tracking became ON by default when the auto prompt shipped. Existing
+// libraries were all written with putts:false, so flip them once — the toggle
+// in Settings is how anyone turns it back off.
+try{
+  if(!localStorage.getItem('btPuttsDefault')){
+    const on=p=>{if(p&&typeof p==='object'){p.track=p.track||{};p.track.putts=true;}};
+    (S.players||[]).forEach(on); (S.playerLib||[]).forEach(on);
+    localStorage.setItem('btPuttsDefault','1');
+  }
+}catch(e){}
 function load(){
   try{
     const raw=localStorage.getItem(LS_KEY);
@@ -2710,7 +2726,8 @@ function mapConfirm(){
     const at=Math.max(0,o.indexOf(h));
     for(let k=1;k<=o.length;k++){const cand=o[(at+k)%o.length];if(!S.round.holes[cand].confirmed){mapHole=cand;break;}}
   });
-  if(closed)showSplash(h);
+  if(closed)askPutts(h,()=>showSplash(h));
+  else askPutts(h,null);   // shared round: my rows are in, still ask me
 }
 function myPlayerIdx(){
   let i=S.players.findIndex(p=>p&&p.ownerDev===devId());
@@ -3568,6 +3585,80 @@ const $=s=>document.querySelector(s);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 // ---- hole splash: fires on every phone when a hole's scores are complete ----
 let splash=null,splashTimer=null;
+// ---- automatic putts prompt -------------------------------------------------
+// Fires the instant a hole is confirmed, BEFORE the hole splash, so the two
+// overlays never stack. Only asks for rows this phone actually scores, only
+// when that player has putts tracking on, and never twice for the same hole.
+let puttAsk=null;
+function puttsOn(i){return !!trackOf(i).putts;}
+function puttsDue(h){
+  if(!S.round.started||isReview())return [];
+  const rec=S.round.holes[h]; if(!rec)return [];
+  const done=(rec.stats&&rec.stats.putts)||[];
+  const skip=rec.puttSkip||[];
+  return myRows(h).filter(i=>puttsOn(i)&&rec.gross[i]!=null&&!(done[i]>0)&&!skip[i]);
+}
+// then() runs once the prompt is finished OR was never needed — that is how the
+// splash stays sequenced behind it.
+function askPutts(h,then){
+  const rows=puttsDue(h);
+  if(!rows.length){if(then)then();return false;}
+  puttAsk={h,rows,then:then||null};
+  paintPuttAsk();
+  return true;
+}
+function closePuttAsk(){
+  const then=puttAsk&&puttAsk.then;
+  puttAsk=null;
+  const el=document.getElementById('puttask');if(el)el.remove();
+  if(S.screen!=='map')render();
+  if(then)then();
+}
+function setPutts(i,v){
+  if(!puttAsk)return;
+  const h=puttAsk.h;
+  set(()=>{
+    const rec=S.round.holes[h];
+    statArr(rec,'putts')[i]=v;
+    stampStat(rec,i);                       // per-slot stamp so two phones merge
+  });
+  puttAsk.rows=puttAsk.rows.filter(x=>x!==i);
+  if(!puttAsk.rows.length)closePuttAsk();else paintPuttAsk();
+}
+function skipPutts(){
+  if(!puttAsk)return;
+  const h=puttAsk.h,rows=puttAsk.rows.slice();
+  set(()=>{const rec=S.round.holes[h];
+    if(!rec.puttSkip)rec.puttSkip=[0,0,0,0];
+    rows.forEach(i=>{rec.puttSkip[i]=1;});   // asked and declined: do not re-ask
+  });
+  closePuttAsk();
+}
+// The map screen gets the sheet appended directly — a render() there rebuilds
+// Leaflet mid-prompt (the trap the Undo Track It button hit).
+function paintPuttAsk(){
+  if(S.screen==='map'){
+    let el=document.getElementById('puttask');
+    if(!el){el=document.createElement('div');el.id='puttask';document.body.appendChild(el);}
+    el.innerHTML=puttAskSheetHTML(true);
+  }else render();
+}
+function puttAskSheetHTML(inner){
+  if(!puttAsk)return '';
+  const h=puttAsk.h;
+  const opts=[0,1,2,3,4];
+  const body=`<div class="vfCard" style="width:min(420px,100%)">
+      <h2 class="vfTitle">Putts</h2>
+      <div class="tiny mb">Hole ${h+1}${puttAsk.rows.length>1?'':''} — tap how many you had.</div>
+      ${puttAsk.rows.map(i=>`
+        ${puttAsk.rows.length>1?`<div class="tiny" style="color:var(--gold);font-weight:700;margin-top:8px">${esc((S.players[i]||{}).name||'')}</div>`:''}
+        <div class="puttrow">${opts.map(v=>
+          `<button class="puttbtn" onclick="setPutts(${i},${v})">${v===4?'4+':v}</button>`).join('')}</div>`).join('')}
+      <button class="ghost mt" style="width:100%" onclick="skipPutts()">Not this hole</button>
+    </div>`;
+  return inner?`<div class="vfWrap" role="dialog" aria-modal="true">${body}</div>`
+              :`<div class="vfWrap" role="dialog" aria-modal="true">${body}</div>`;
+}
 function showSplash(h){
   if(isReview()||!S.round.started)return;
   splash={h};
@@ -3919,7 +4010,7 @@ function render(){
   const pageY=window.scrollY;
   const sameScreen=window.__lastScr===scr;
   window.__lastScr=scr;
-  const full=magBanner()+html+holeSplash()+verifySheetHTML()+teeAskSheetHTML()+endAskSheetHTML()+gamePickSheetHTML();
+  const full=magBanner()+html+holeSplash()+verifySheetHTML()+teeAskSheetHTML()+endAskSheetHTML()+gamePickSheetHTML()+(S.screen!=='map'?puttAskSheetHTML():'');
   // Four phones syncing means render() fires constantly. Blowing away innerHTML
   // each time repainted the whole screen — that was the flicker on the course.
   // Identical output is a no-op; otherwise patch only the nodes that differ.
@@ -4316,6 +4407,7 @@ function vSettings(){
     ${row('Email me when friends play','Get the “Battlefield is set” email when someone who has you in their library tees off.','emails')}
     <div class="tiny mt">Announcements go out once per round, from Battle Tees — never from a personal address.</div>
   </div>
+  ${trackCardHTML()}
   <div class="card"><h2>🧨 Start Over</h2>
     ${soUI===0?`
     <div class="tiny">Wipe this phone's Battle Tees library and begin again with a clean slate — new stats, new history. Your name, email and Battlefield archive are kept.</div>
@@ -5801,7 +5893,6 @@ function vRoundOpts(){
       <div class="row mt"><span class="muted">Handicap allowance</span>
         <div class="stepper"><button onclick="chAllow(-5)">&#8722;</button><span class="val num" style="font-size:17px">${S.config.allowance}%</span><button onclick="chAllow(5)">+</button></div></div>
     </div>
-    ${trackCardHTML()}
     ${wolf?`<div class="card"><h2>Rules</h2>
       <div class="row"><span class="muted">Ties carry over</span>
         <button class="ghost ${S.config.carryTies?'sel':''}" onclick="set(()=>S.config.carryTies=!S.config.carryTies)">${S.config.carryTies?'On':'Off'}</button></div>
@@ -6018,7 +6109,6 @@ function vSetup(){
     <div class="row"><span class="muted">Last place is wolf on 17–18</span>
       <button class="ghost ${S.config.last2LastPlace?'sel':''}" onclick="set(()=>S.config.last2LastPlace=!S.config.last2LastPlace)">${S.config.last2LastPlace?'On':'Off'}</button></div>
   </div>`}
-  ${trackCardHTML()}
   <button class="big" onclick="startPick()">Next — pick the course →</button>
   </main>`;
 }
@@ -6938,7 +7028,7 @@ function advanceToNext(){
         sharedLater:!!(S.share.on&&!S.round._sharedAtStart)});}
   }else{S.round.cur=next;if(gameOn()!=='wolf')prefillNines(next);}
 }
-function confirmHole(){const h=S.round.cur;if(greensIsMode())greensConsumeTarget();set(()=>{S.round.holes[h].confirmed=true;if(!isReview())advanceToNext();});showSplash(h);}
+function confirmHole(){const h=S.round.cur;if(greensIsMode())greensConsumeTarget();set(()=>{S.round.holes[h].confirmed=true;if(!isReview())advanceToNext();});askPutts(h,()=>showSplash(h));}
 // ----- shared rounds: each phone confirms its own rows, then moves on -----
 function myRows(h){
   // A row is mine to confirm if nobody owns it, my phone owns it, OR I have
@@ -6961,7 +7051,8 @@ function confirmMine(){
     if(!rec.confirmed&&actIdx().every(i=>rec.cfts[i]>0)){rec.confirmed=true;closed=true;}
     if(!isReview())advanceToNext();
   });
-  if(closed)showSplash(h);
+  if(closed)askPutts(h,()=>showSplash(h));
+  else askPutts(h,null);   // shared round: my rows are in, still ask me
 }
 // FW/GIR chips on the scoring screen too — score entry is the moment every
 // player reliably visits every hole, so the stats survive whatever chaos
@@ -7426,24 +7517,19 @@ function teamPickerRow(g){
 })();
 function vStandings(){
   const g=S.round.game||S.config.game||'wolf';
-  const views=stViews();
-  if(stView&&!views.some(([k])=>k===stView))stView=null;
-  const view=stView||g;
+  stView=null;                 // no bench view any more; kept so resets stay valid
   const thru=S.round.holes.filter(r=>r.confirmed).length;
   const cols=['gross','net'].filter(L=>activeLenses().includes(L));
   const prim=primaryLens();
   const lbl=L=>L==='net'?'Net (hcp)':'Gross';
-  // Every game in the stack now gets its own card, so the tab strip is purely
-  // the what-if bench: the games you are NOT playing, re-scored off this card.
+  // The "What if we'd played…" bench used to sit here. It duplicated the
+  // Choose Game(s) picker — both answered "how would this card score as X" —
+  // so the picker is the single way in now. Adding a game there shows its card
+  // AND settles it; unchecking removes it again.
   const stackOrder=[g].concat(gamesOn().filter(x=>x!==g));
-  const wviews=views.filter(([k])=>!stackOrder.includes(k));
-  const vtabs=!wviews.length?'':`<div class="card"><h2>What if we'd played…</h2>
-    <div class="vtabs">${[['','None']].concat(wviews).map(([k,l])=>
-      `<button class="ghost ${(stView||'')===k?'sel':''}" onclick="setStView(${k?`'${k}'`:'null'})">${l}</button>`).join('')}</div>
-    <div class="tiny mt">Same scores, scored a different way. Nothing here changes what you owe — pick ★ Make Main Game to actually switch.</div></div>`;
   const genericCard=(title,led,fmt,asc,note)=>{
     const order=actIdx().slice().sort((a,b)=>asc?led[prim][a]-led[prim][b]:led[prim][b]-led[prim][a]);
-    return `<div class="card"><h2>${title} · thru ${thru}</h2>${whatIf}
+    return `<div class="card"><h2>${title} · thru ${thru}</h2>
       <table class="st"><tr><th>Player</th>${cols.map(L=>`<th class="r">${lbl(L)}</th>`).join('')}</tr>
       ${order.map(i=>`<tr><td>${esc(S.players[i].name)}</td>${cols.map(L=>`<td class="r num" style="font-size:34px">${fmt(led[L][i],L,i)}</td>`).join('')}</tr>`).join('')}
       </table>${note||''}</div>`;
@@ -7451,7 +7537,7 @@ function vStandings(){
   const quotaCard=title=>{
     const q=computeQuota();
     const rows=actIdx().slice().sort((a,b)=>(q.ledgers.gross[b]-q.targets[b])-(q.ledgers.gross[a]-q.targets[a]));
-    return `<div class="card"><h2>${title} · thru ${thru}</h2>${view!==g?whatIf:''}
+    return `<div class="card"><h2>${title} · thru ${thru}</h2>
       <table class="st"><tr><th>Player</th><th class="r">Pts</th><th class="r">Quota</th><th class="r">+/−</th></tr>
       ${rows.map(i=>{const d=q.ledgers.gross[i]-q.targets[i];
         const col=d>0?'#7fd49a':d<0?'var(--amber-bd)':'var(--ink2)';
@@ -7465,11 +7551,9 @@ function vStandings(){
   // runs once per stacked game plus (optionally) once for the what-if on the
   // bench. `all` stays outer on purpose — the hole-history card below reads the
   // main game's per-hole detail, and only the view===g branch fills it in.
-  // whatIf/mainBtn are outer too because genericCard (declared above) closes
-  // over whatIf; cardFor re-points them at the view it is about to draw.
-  let whatIf='',mainBtn='';
+  // mainBtn is outer because cardFor writes it per card.
+  let mainBtn='';
   const cardFor=(view)=>{
-   whatIf=view!==g&&!stackHas(view)?`<div class="tiny mb">What-if view from the same scores — settlement still pays by the round's games.</div>`:'';
    mainBtn=(view===g||view==='match')?''
      :(START_ONLY.includes(g)
        ?`<div class="tiny mt" style="opacity:.75">${gameName(g)} runs your score screen for the rest of the round — this card is a view only.</div>`
@@ -7531,7 +7615,7 @@ function vStandings(){
     const u=computeUmbrella();
     const UT=matchTeams('umbrella');
     const uord=u.ledgers[prim][UT[0][0]]>=u.ledgers[prim][UT[1][0]]?[0,1]:[1,0];
-    tables=`<div class="card"><h2>Umbrella · thru ${thru}</h2>${whatIf}
+    tables=`<div class="card"><h2>Umbrella · thru ${thru}</h2>
       <table class="st"><tr><th>Team</th>${cols.map(L=>`<th class="r">${lbl(L)}</th>`).join('')}</tr>
       ${uord.map(k=>`<tr><td>${UT[k].map(i=>esc(S.players[i].name)).join(' &amp; ')}</td>${cols.map(L=>{
         const lead=u.ledgers[L][UT[k][0]]>=u.ledgers[L][UT[1-k][0]];
@@ -7576,7 +7660,7 @@ function vStandings(){
     const vg=computeVegas(), VT=vegasTeamsFor(S.round.cur);
     const won=(L,k)=>vg.ledgers[L][VT[k][0]];
     const order=(won(prim,0)-won(prim,1))>=0?[0,1]:[1,0];
-    tables=`<div class="card"><h2>Vegas · thru ${thru}</h2>${whatIf}
+    tables=`<div class="card"><h2>Vegas · thru ${thru}</h2>
       <table class="st"><tr><th>Team</th>${cols.map(L=>`<th class="r">${lbl(L)}</th>`).join('')}</tr>
       ${order.map((k,ri)=>`<tr><td>${VT[k].map(i=>esc(S.players[i].name)).join(' &amp; ')}</td>${cols.map(L=>{
         const lead=won(L,k)>=won(L,1-k);
@@ -7613,7 +7697,7 @@ function vStandings(){
       else status=`${tn(m.up>0?0:1)} ${Math.abs(m.up)} UP thru ${m.thru}${Math.abs(m.up)===m.count-m.thru?' — dormie':''}`;
       return `<div class="center mb">${cols.length>1?`<div class="tiny">${lbl(L)}</div>`:''}<span class="bigscore num" style="font-size:24px">${status}</span></div>`;
     }).join('');
-    tables=`<div class="card"><h2>Match play · best ball · thru ${thru}</h2>${whatIf}${blocks}${teamPickerRow('bestball')}
+    tables=`<div class="card"><h2>Match play · best ball · thru ${thru}</h2>${blocks}${teamPickerRow('bestball')}
       <div class="tiny mt">Better ball of each team wins the hole; most holes up wins the match.</div></div>`;
    }
    // Wolf had no branch of its own — it only ever drew through the view===g
@@ -7633,8 +7717,7 @@ function vStandings(){
    }
    return tables;
   };
-  const tables=gamePickCardHTML()+stackOrder.map(x=>cardFor(x)).join('')
-    +vtabs+((stView&&!stackOrder.includes(stView))?cardFor(stView):'');
+  const tables=gamePickCardHTML()+stackOrder.map(x=>cardFor(x)).join('');
   const hist=(all==null||!all.perHole)?'':S.round.holes.map((r,h)=>{
     if(!r.confirmed)return '';
     const info=all.perHole[h];
@@ -7723,21 +7806,32 @@ function vSettleStack(G){
       const marg=Math.abs(diff), half=marg*rate/2, winT=diff>=0?0:1;
       act.forEach((i,ai)=>{net[ai]+=(FT[winT].includes(i)?half:-half);});
       const ord=[winT,1-winT];
+      const pot=marg*rate;
       return `<div class="card"><h2>${gameName(g)} · thru ${thru}</h2>
-        <table class="st"><tr><th>Team</th><th class="r">${unit==='stroke'?'Strokes':unit==='hole'?'Holes':unit==='bet'?'Bets':'Pts'}</th></tr>
+        <table class="st"><tr><th>Team</th><th class="r">${unit==='stroke'?'Strokes':unit==='hole'?'Holes':unit==='bet'?'Bets':'Pts'}</th><th class="r">This game</th></tr>
         ${ord.map(k=>`<tr><td>${FT[k].map(i=>esc(S.players[i].name)).join(' &amp; ')}</td>
-          <td class="r num" style="font-size:18px">${ptsTxt(led[FT[k][0]])}</td></tr>`).join('')}</table>
+          <td class="r num" style="font-size:18px">${ptsTxt(led[FT[k][0]])}</td>
+          <td class="r num" style="font-size:18px;color:${!rate?'var(--ink2)':k===winT?'#7fd49a':'var(--red)'}">${!rate?'—':(k===winT?'+':'')+fmtMoney(k===winT?pot:-pot).replace('$-','-$')}</td></tr>`).join('')}</table>
+        ${rate?`<div class="row mt" style="border-top:1px solid var(--line)"><span class="muted">Pot this game</span><b class="num" style="font-size:18px">${fmtMoney(pot)}</b></div>`:''}
         <div class="row mt"><span class="muted">$ per ${unit}</span>
           <input type="number" step="0.25" min="0" value="${(S.round.rates||{})[g]||''}" placeholder="0" style="width:90px" onchange="setRate('${g}',this.value)"></div>
         <div class="tiny mt">${ptsTxt(marg)} ${unit} margin${rate?` × ${fmtMoney(rate)} = ${fmtMoney(marg*rate)} from the losing team — ${fmtMoney(half)} each`:''}.</div>
       </div>`;
     }
-    act.forEach((i,ai)=>{let u=0;act.forEach(j=>{if(j!==i)u+=conv((led[i]-led[j])*inv);});net[ai]+=(g==='skins'?u:u*rate);});
+    // per-game dollars, kept so each game can show its own pot as well as
+    // feeding the combined pile
+    const gn={};
+    act.forEach((i,ai)=>{let u=0;act.forEach(j=>{if(j!==i)u+=conv((led[i]-led[j])*inv);});
+      const amt=(g==='skins'?u:u*rate); gn[i]=amt; net[ai]+=amt;});
+    const pot=act.reduce((a,i)=>a+Math.max(0,gn[i]),0);
+    const priced=(g==='skins')||rate>0;
     const order=act.slice().sort((a,b)=>(led[b]-led[a])*inv);
     const fmt=v=>g==='skins'?fmtMoney(v):g==='nines'?fmtPts(v):String(v);
     return `<div class="card"><h2>${gameName(g)} · thru ${thru}</h2>
-      <table class="st"><tr><th>Player</th><th class="r">${unit==='$'?'$ won':unit==='stroke'?'Strokes':unit==='hole'?'Holes':unit==='bet'?'Bets':'Pts'}</th></tr>
-      ${order.map(i=>`<tr><td>${esc(S.players[i].name)}</td><td class="r num" style="font-size:18px">${fmt(led[i])}</td></tr>`).join('')}</table>
+      <table class="st"><tr><th>Player</th><th class="r">${unit==='$'?'$ won':unit==='stroke'?'Strokes':unit==='hole'?'Holes':unit==='bet'?'Bets':'Pts'}</th><th class="r">This game</th></tr>
+      ${order.map(i=>`<tr><td>${esc(S.players[i].name)}</td><td class="r num" style="font-size:18px">${fmt(led[i])}</td>
+        <td class="r num" style="font-size:18px;color:${!priced?'var(--ink2)':gn[i]>0.004?'#7fd49a':gn[i]<-0.004?'var(--red)':'var(--ink2)'}">${!priced?'—':(gn[i]>0.004?'+':'')+fmtMoney(gn[i]).replace('$-','-$')}</td></tr>`).join('')}</table>
+      ${priced?`<div class="row mt" style="border-top:1px solid var(--line)"><span class="muted">Pot this game</span><b class="num" style="font-size:18px">${fmtMoney(pot)}</b></div>`:''}
       ${g==='skins'?'<div class="tiny mt">Already dollars — each skin collects from every other player.</div>'
         :`<div class="row mt"><span class="muted">$ per ${unit}</span>
           <input type="number" step="0.25" min="0" value="${(S.round.rates||{})[g]||''}" placeholder="0" style="width:90px" onchange="setRate('${g}',this.value)"></div>`}
