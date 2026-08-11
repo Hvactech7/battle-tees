@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786434558';
+const BUILD='1786435554';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -4144,6 +4144,17 @@ const START_ONLY=['wolf','scramble','bbb'];
 function mainGameNow(){return S.round.game||S.config.game||'wolf';}
 function gamePickWhy(g){
   if(stackHas(g))return '';                       // already scoring -- always removable
+  // SCRAMBLE PLAYS ALONE. One ball per team: computeScramble reads the team
+  // score out of the CAPTAIN's slot (rec.gross[capt]) and the other slots stay
+  // null by design. Every other game reads those same slots as individual
+  // scores, so stacking anything on a scramble card produces garbage -- stroke
+  // came out [12,0,15,0], skins handed every skin to the captain. The old stack
+  // card refused to render for scramble and never listed it as a guest; the
+  // picker that replaced it did neither, which is how this got through.
+  const picked=gamePick?Object.keys(gamePick.sel).filter(k=>gamePick.sel[k]):gamesOn();
+  const scrambleInPlay=picked.includes('scramble')||mainGameNow()==='scramble';
+  if(g==='scramble'&&picked.some(x=>x!=='scramble'))return 'plays alone';
+  if(g!=='scramble'&&scrambleInPlay)return 'not with scramble';
   const n=NP(),four=n===4;
   if(START_ONLY.includes(g))return S.round.started?'start only':'';
   if(!STACK_GUESTS.includes(g))return 'start only';
@@ -4210,6 +4221,8 @@ function gamePickSheetHTML(){
     </div></div>`;
 }
 function gamePickCardHTML(){
+  // nothing can join a scramble round -- see gamePickWhy
+  if(mainGameNow()==='scramble')return '';
   const n=gamesOn().length;
   return `<div class="card"><h2>⚔️ Wanna Play More Than One Game..?</h2>
     <div class="tiny">One scorecard, every game scored its own way — Settle nets the whole pile into a single payout.${n>1?` You're playing <b>${n}</b> right now.`:''}</div>
