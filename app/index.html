@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786481175';
+const BUILD='1786481755';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -3282,12 +3282,27 @@ function greensLoad(){
 }
 function greensSave(){try{localStorage.setItem('btGreensUsed',JSON.stringify(greensState));}catch(e){}}
 function greensPts(){return (S.course.geo&&S.course.geo.greens)||[];}
+// Re-acquires as you walk. This used to latch: the first green picked after a
+// confirm was held until the player tapped a different dot, so the target was
+// whatever happened to be nearest while they stood on the green they had just
+// finished — the wrong hole 14 times out of 18 walking Kennedy.
 function greensPickTarget(fromPos){
-  const st=greensState;if(!st)return;
-  if(st.target!=null&&!st.used.includes(st.target))return;   // sticky
+  const st=greensState;if(!st||!fromPos)return;
+  const pts=greensPts();
+  // A tapped green is the player's word and outranks proximity. Cleared on
+  // consume, so the next hole goes back to acquiring on its own.
+  if(st.manual&&st.target!=null&&!st.used.includes(st.target))return;
   let best=null,bd=1e12;
-  greensPts().forEach((g,i)=>{if(st.used.includes(i))return;const d=mDist(fromPos,g);if(d<bd){bd=d;best=i;}});
-  st.target=best;greensSave();
+  pts.forEach((g,i)=>{if(st.used.includes(i))return;const d=mDist(fromPos,g);if(d<bd){bd=d;best=i;}});
+  if(best==null)return;
+  // Hysteresis. Between two greens the nearest flips back and forth with GPS
+  // jitter, and the yardage would jump with it. A challenger has to be clearly
+  // closer — 20% — before it takes over.
+  if(st.target!=null&&st.target!==best&&!st.used.includes(st.target)){
+    const cur=mDist(fromPos,pts[st.target]);
+    if(bd>cur*0.8)return;
+  }
+  if(st.target!==best){st.target=best;greensSave();}
 }
 function greensConsumeTarget(){
   const st=greensState;if(!st||st.target==null)return;
@@ -3320,13 +3335,13 @@ function greensConsumeTarget(){
           fromDist:ydsOff,wasTarget:st.target===bi});
     }
   }catch(e){}
-  st.target=null;greensSave();
+  st.target=null;st.manual=false;greensSave();
   if(window.greensRepaint)greensRepaint();
 }
 function greensSetTarget(i){
   const st=greensState;if(!st)return;
   st.used=st.used.filter(x=>x!==i);   // tapping a grayed green revives it
-  st.target=i;greensSave();
+  st.target=i;st.manual=true;greensSave();   // an explicit tap outranks proximity
   if(window.greensRepaint)greensRepaint();
 }
 function initGreensMap(el){
@@ -3354,7 +3369,7 @@ function initGreensMap(el){
     const elF=document.getElementById('fmb'),sub=document.getElementById('fmbsub');
     let from=mapMarks.mePos;
     if(!from&&onCourse(myCoords))from=myCoords;
-    if(st.target==null&&from)greensPickTarget(from);
+    if(from)greensPickTarget(from);   // every fix re-acquires; was: only when unset
     paint();
     if(!elF)return;
     if(st.target!=null&&from){
