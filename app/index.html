@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786430673';
+const BUILD='1786431966';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1920,7 +1920,18 @@ function runningTotalsCard(){
   const sgnCol=v=>v>0?'#7fd49a':v<0?'#ff9b3d':'var(--ink)';
   const parCol=d=>d<0?'#7fd49a':d>0?'var(--amber-bd)':'var(--ink2)';
   let tiles='',foot='';
-  if(g==='scramble'||g==='stroke'){
+  // MYSTERY PARTNERS: show plain per-player strokes. Not just the team tiles --
+  // a team ledger gives BOTH partners the same number, so even a "per player"
+  // view of a team engine leaks the pairing by inference.
+  if(mysteryPending(g)){
+    const eng=computeStroke();
+    const rows=actIdx().map(i=>({label:first(i),v:eng.ledgers[L][i],d:eng.ledgers[L][i]-eng.par[L][i]}));
+    rows.sort((a,b)=>a.d-b.d);
+    const tied=rows.every(r=>r.d===rows[0].d);
+    const toPar=d=>d===0?'E':(d>0?'+':'')+d;
+    tiles=rows.map((r,ri)=>tile(r.label,toPar(r.d),tied?(thru?`${r.v} strokes`:'all square'):(ri===0?`${r.v} · leader`:`${r.v} strokes`),tied?3:ri,parCol(r.d))).join('');
+    foot='🎲 partners hidden — drawn at the end';
+  }else if(g==='scramble'||g==='stroke'){
     const eng=g==='scramble'?computeScramble():computeStroke();
     const units=g==='scramble'?scrambleTeams().map(t=>({id:t[0],label:teamLbl(t)}))
                               :actIdx().map(i=>({id:i,label:first(i)}));
@@ -2087,9 +2098,8 @@ function computeNines(){
 // opponent's number high-first (4&8 → 84) unless they birdied too. 10+ counts as 9.
 function vegasTeamsFor(h){
   const P=[[[0,1],[2,3]],[[0,2],[1,3]],[[0,3],[1,2]]];
-  let p=(S.config.vegas&&S.config.vegas.pairing)||0;
-  if(S.config.vegas&&S.config.vegas.rotate==='six'){const seg=playOrder().length===9?3:6;p=(p+Math.floor(Math.max(0,posOf(h))/seg))%3;}
-  return P[p];
+  if(S.config.vegas&&S.config.vegas.rotate==='six')return P[segPairings('vegas')[segOf(h)]%3];
+  return P[(S.config.vegas&&S.config.vegas.pairing)||0];
 }
 function vegasNum(sc,team,flip){
   const a=Math.min(9,sc[team[0]]),b=Math.min(9,sc[team[1]]);
@@ -2311,12 +2321,44 @@ function computeNassau(){
 }
 // Sixes: 2v2 best-ball hole wins, partners rotate every six holes (three for a
 // nine) so everyone partners everyone. Ties break on both balls, then push.
-function sixesTeamsFor(h){
-  const P=[[[0,1],[2,3]],[[0,2],[1,3]],[[0,3],[1,2]]];
-  const p0=(S.config.sixes&&S.config.sixes.pairing)||0;
-  const seg=playOrder().length===9?3:6;
-  return P[(p0+Math.floor(Math.max(0,posOf(h))/seg))%3];
+const PAIRINGS=[[[0,1],[2,3]],[[0,2],[1,3]],[[0,3],[1,2]]];
+function segLen(){return playOrder().length===9?3:6;}
+function segCount(){return Math.max(1,Math.ceil(playOrder().length/segLen()));}
+function segOf(h){return Math.floor(Math.max(0,posOf(h))/segLen());}
+// PER-SEGMENT PAIRINGS. One opening pairing used to drive every segment as
+// (p0+seg)%3 — that guarantees everyone partners everyone, but gives the group
+// no say over who they get WHEN. segs[] overrides it per segment; when absent
+// the old rotation is still the default, so rounds already in play are
+// unchanged and a group that never opens the picker sees no difference.
+function segCfg(k){
+  if(k==='vegas'){S.config.vegas=S.config.vegas||{};return S.config.vegas;}
+  S.config.sixes=S.config.sixes||{};return S.config.sixes;
 }
+function segPairings(k){
+  const c=segCfg(k), p0=c.pairing||0, n=segCount(), out=[];
+  for(let s=0;s<n;s++){const v=c.segs&&c.segs[s];out.push(v==null?(p0+s)%3:v);}
+  return out;
+}
+function setSegPairing(k,s,p){set(()=>{
+  const c=segCfg(k);
+  if(!c.segs)c.segs=segPairings(k).slice();   // materialise the rotation, then edit
+  c.segs[s]=p;
+});}
+function segPickerHTML(k){
+  if(NP()!==4)return '';
+  const nm=i=>esc(((S.players[i]||{}).name||'').split(' ')[0]);
+  const cur=segPairings(k), o=playOrder(), L=segLen();
+  const dup=new Set(cur).size!==cur.length;
+  return `<div class="mt">${cur.map((p,seg)=>{
+    const a=seg*L, b=Math.min(o.length,(seg+1)*L)-1;
+    if(a>=o.length)return '';
+    return `<div class="tiny" style="font-weight:700;margin-top:8px">Holes ${o[a]+1}\u2013${o[b]+1}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">${PAIRINGS.map((T,pi)=>
+        `<button class="ghost ${p===pi?'sel':''}" onclick="setSegPairing('${k}',${seg},${pi})">${nm(T[0][0])}+${nm(T[0][1])} v ${nm(T[1][0])}+${nm(T[1][1])}</button>`).join('')}</div>`;
+  }).join('')}
+  ${dup?`<div class="tiny mt" style="color:#d19a2f">A pairing repeats — with this set, two players never partner each other.</div>`:''}</div>`;
+}
+function sixesTeamsFor(h){return PAIRINGS[segPairings('sixes')[segOf(h)]%3];}
 function computeSixes(){
   const hm=hammerLive('sixes');
   const ledgers={net:[0,0,0,0],gross:[0,0,0,0]};
@@ -4739,13 +4781,6 @@ function soloRound(){primeGeo();set(()=>{
   S.config.game='stroke';S.config.games=['stroke'];S.config.stroke.n=1;
   ensureMeFirst();S.screen='setup';
 });}
-function toggleStackGame(g){set(()=>{
-  let a=S.config.games||[S.config.game];
-  if(!a.includes(S.config.game))a.unshift(S.config.game);
-  if(a.includes(g))a=a.filter(x=>x!==g);
-  else a.push(g);
-  S.config.games=a;
-});}
 // Gate nearby-group picker: tap the card, check up to 3 names, build the group.
 // The list is a snapshot refreshed every 15s so names don't flicker as
 // presence packets arrive; checked names survive a presence blink.
@@ -5854,28 +5889,6 @@ function addTee(){set(()=>{S.course.teeSets.push({id:'t'+Date.now(),name:'New',r
 function delTee(i){if(S.course.teeSets.length<=1)return;set(()=>{S.course.teeSets.splice(i,1);});}
 
 // ----- round setup -----
-function stackCardHTML(){
-  if(!(STACKABLE.includes(S.config.game)||S.config.game==='wolf'||S.config.game==='vegas')) return '';
-
-    const four=NP()===4;
-    const cur=S.config.games||[S.config.game];
-    const NEED4=['bestball','sixes','umbrella','vegas'];
-    // solo round: only the games one player can actually play — hide the rest
-    const SOLO_OK=['stroke','stableford','quota'];
-    const opts=STACK_GUESTS.filter(g=>g!==S.config.game&&(NP()>1||SOLO_OK.includes(g))).map(g=>{
-      const on=cur.includes(g);
-      let dis='',why='';
-      if(NEED4.includes(g)&&!four){dis='disabled';why='needs 4';}
-      if(g==='nines'&&NP()<3){dis='disabled';why='needs 3+';}
-      if(g==='nassau'&&!(four||NP()===2)){dis='disabled';why='1v1 or 2v2';}
-      if((g==='bestball'&&cur.includes('sixes'))||(g==='sixes'&&cur.includes('bestball'))){if(!on){dis='disabled';why='pick one';}}
-      return `<button class="ghost ${on?'sel':''}" ${dis} style="margin:0 6px 6px 0" onclick="toggleStackGame('${g}')">${on?'✓ ':''}${gameName(g)}${why?` <span class="tiny">(${why})</span>`:''}</button>`;
-    }).join('');
-    return `<div class="card"><h2>⚔️ Stack more games <span class="tiny" style="font-weight:400">— same scores, all settled together</span></h2>
-      <div class="flexwrap" style="margin-top:8px">${opts}</div>
-      <div class="tiny mt">Everyone plays one scorecard — every stacked game scores it its own way, and Settle nets the whole pile into one payout. One person can tap closest-to-pin, hammers or presses for the group; it feeds every game that uses them.</div>
-    </div>`;
-}
 
 // Mid-round settings. Deliberately a SUBSET of setup: the course, the golfers,
 // team pairings and the hole span are all locked once scoring has begun,
@@ -5885,7 +5898,7 @@ function openRoundOpts(){ roundOptsBack=(S.screen==='roundopts'?'hole':S.screen)
 function vRoundOpts(){
   const wolf=S.config.game==='wolf';
   return topbar('Round options',S.course?S.course.name:'','','','')+`<main>
-    ${stackCardHTML()}
+    ${gamePickCardHTML()}
     <div class="card"><h2>Scoring options</h2>
       <div class="seg">
         ${['gross','net','both'].map(L=>`<button class="ghost ${S.config.lens===L?'sel':''}" onclick="set(()=>S.config.lens='${L}')">${L[0].toUpperCase()+L.slice(1)}</button>`).join('')}
@@ -5956,7 +5969,7 @@ function vSetup(){
     <div class="tiny mt">${S.config.ctpAll
       ? 'Every par 3 offers a CTP pick and it lands on your scorecard. Games that score CTP still do.'
       : 'CTP only appears in games that score it — Wolf, Nines, Vegas, Umbrella.'}</div></div>
-  ${stackCardHTML()}
+  ${gamePickCardHTML()}
   ${sixes?`<div class="card"><h2>Starting partners</h2>
     ${[[[0,1],[2,3]],[[0,2],[1,3]],[[0,3],[1,2]]].map((T,pi)=>`
       <button class="ghost ${S.config.sixes.pairing===pi?'sel':''}" style="width:100%;text-align:left;margin-bottom:8px" onclick="set(()=>S.config.sixes.pairing=${pi})">${pairLbl(T)}</button>`).join('')}
@@ -6922,6 +6935,11 @@ function nassauCardHTML(){
       <button class="ghost mt" style="width:100%" onclick="nassauPress(-1)">Undo press</button>`;
     else if(down!=null&&!rec.confirmed&&pos>0&&pos!==9)pressBtn=`<button class="ghost mt" style="width:100%;font-weight:700" onclick="nassauPress(${down})">⚡ ${tn(down)} press the ${nine} — new bet from here</button>`;
   }
+  if(mysteryPending('nassau')){
+    return `<div class="card"><h2>Nassau</h2>
+      <div class="tiny mb">🎲 Partners hidden — the bets settle once they're drawn at the end.</div>
+      ${rows}</div>`;
+  }
   return `<div class="card"><h2>Nassau — ${tn(0)} <span class="tiny" style="text-transform:none">vs</span> ${tn(1)}</h2>
     <div class="tiny mb">+ favors ${tn(0)} · ${L} scores</div>
     ${rows}${pressBtn}
@@ -7189,7 +7207,17 @@ function vHoleVegas(){
       </div>`}
     </div>`;
   };
-  const teamBoxes=T.map((t,k)=>{
+  // Mystery partners: the live team box is the loudest possible leak — it names
+  // both pairs and their running numbers on the scoring screen. While the draw
+  // is pending, drop to plain per-player rows.
+  const hideTeams=mysteryPending('vegas');
+  const teamBoxes=hideTeams
+    ? `<div class="teambox" style="border-color:var(--gold)">
+        <div class="row" style="border-top:none"><b>🎲 Mystery partners</b>
+          <span class="tiny">drawn at the end</span></div>
+        ${actIdx().map(scoreRow).join('')}
+      </div>`
+    : T.map((t,k)=>{
     const n=res?res.nums[k]:liveNum(t);
     const flipped=res&&res.flips[k];
     return `<div class="teambox ${flipped?'flipped':''}">
@@ -7447,6 +7475,61 @@ function teamPairing(g){
   if(c&&c.pairing!=null)return c.pairing;
   return (S.config.vegas&&S.config.vegas.pairing)||0;
 }
+// ---- Mystery Partners -------------------------------------------------------
+// Arm it and nobody learns their partner until the round is over. Safe because
+// every 2v2 engine derives its teams at COMPUTE time from the stored per-hole
+// gross scores — pick the pairing at the end and the whole round scores exactly
+// as if it had been set on the first tee.
+//
+// Not offered when the Hammer is live: hammer throws record a TEAM INDEX per
+// hole (st.own/pend/fold are slot 0 or 1), so re-pairing afterwards would hand
+// those throws to different players.
+const MYSTERY_GAMES=['vegas','bestball','umbrella','nassau'];
+function mysteryOk(g){
+  if(!MYSTERY_GAMES.includes(g)||NP()!==4)return false;
+  if(g==='vegas'&&S.config.vegas&&S.config.vegas.rotate==='six')return false;
+  if(hammerLive(g))return false;
+  return true;
+}
+function mysteryOn(g){const c=teamCfg(g);return !!(c&&c.mystery);}
+function mysteryPending(g){const c=teamCfg(g);return !!(c&&c.mystery&&!c.revealed);}
+function toggleMystery(g){set(()=>{const c=teamCfg(g);
+  if(c.mystery){delete c.mystery;delete c.revealed;}
+  else{c.mystery=true;delete c.revealed;}
+});}
+function roundComplete(){
+  const o=playOrder();
+  return o.length>0&&o.every(h=>S.round.holes[h]&&S.round.holes[h].confirmed);
+}
+function revealPartners(g){
+  if(!mysteryPending(g))return;
+  set(()=>{const c=teamCfg(g);
+    c.pairing=Math.floor(Math.random()*3);   // the draw — synced to every phone
+    c.revealed=true;
+  });
+}
+// Locked panel shown in place of the game's table while partners are hidden.
+function mysteryCardHTML(g){
+  const done=roundComplete(), thru=S.round.holes.filter(r=>r.confirmed).length;
+  return `<div class="card"><h2>${gameName(g)} · thru ${thru}</h2>
+    <div class="center" style="padding:14px 0">
+      <div style="font-size:44px;line-height:1">🎲</div>
+      <div style="font-weight:700;font-size:18px;color:var(--gold);margin-top:6px">Mystery partners</div>
+      <div class="tiny mt">Nobody knows who they're with. Everyone plays their own ball —
+        the draw happens when the round is done and scores the whole card retroactively.</div>
+    </div>
+    ${done?`<button class="big" onclick="revealPartners('${g}')">🎲 &nbsp;Reveal partners</button>`
+          :`<div class="tiny center" style="opacity:.75">Reveal unlocks after the last hole — ${thru}/${playOrder().length} in.</div>`}
+    <button class="ghost mt" style="width:100%" onclick="toggleMystery('${g}')">Cancel mystery — pick partners now</button>
+  </div>`;
+}
+// Offered alongside the normal pairing buttons.
+function mysteryRowHTML(g){
+  if(!mysteryOk(g))return '';
+  const c=teamCfg(g);
+  if(c.revealed)return `<div class="tiny mt" style="color:var(--gold)">🎲 Drawn at the end — partners were random.</div>`;
+  return `<button class="ghost mt" style="width:100%" onclick="toggleMystery('${g}')">🎲 Mystery partners — draw at the end</button>`;
+}
 function setTeamPairing(g,pi){set(()=>{teamCfg(g).pairing=pi;});}
 // Saved 2-man team names: keyed by the duo (name-pair, order-blind) so a name
 // sticks to the same two golfers across rounds, rosters and pairings
@@ -7559,6 +7642,9 @@ function vStandings(){
        ?`<div class="tiny mt" style="opacity:.75">${gameName(g)} runs your score screen for the rest of the round — this card is a view only.</div>`
        :`<button class="ghost mt" style="width:100%" onclick="makeMainGame('${view}')">★ Make ${gameName(view)} my main game</button>`);
    let tables='';
+   if(mysteryPending(view)){          // partners hidden -> no team table can show
+     return mysteryCardHTML(view)+mainBtn;
+   }
    if(view==='quota'&&stackHas('quota')){
     tables=quotaCard('Quota');
   }else if(view==='quota'){
@@ -7595,7 +7681,7 @@ function vStandings(){
         const lead=bb.ledgers[L][BT[k][0]]>=bb.ledgers[L][BT[1-k][0]];
         return `<td class="r num" style="font-size:34px;color:${lead?'#7fd49a':'var(--ink2)'}">${bb.ledgers[L][BT[k][0]]}</td>`;
         }).join('')}</tr>`).join('')}
-      </table>${teamPickerRow('bestball')}
+      </table>${teamPickerRow('bestball')+mysteryRowHTML('bestball')}
       <div class="tiny mt">Better ball of each team wins the hole.${hammerLive('bestball')?' <b>🔨 Hammer live</b> — totals include doubled and folded holes.':''}</div></div>`;
   }else if(view==='stableford'&&stackHas('stableford')){
     const P=stblPts();
@@ -7608,9 +7694,9 @@ function vStandings(){
     // by the end the points are individual. The picker sets which pairing it
     // STARTS on, which is what changes the whole shape of the round.
     tables=genericCard('Sixes',computeSixes().ledgers,v=>String(v),false,
-      teamPickerRow('sixes')+
+      segPickerHTML('sixes')+
       `<div class="tiny mt">Best ball wins the hole, 1 pt each — ties go to both balls, then push.${hammerLive('sixes')?' <b>🔨 Hammer live</b> — totals include doubled and folded holes.':''}
-      Partners swap every ${seg} holes — the buttons set the opening pair. Current: <b>${teamLbl(T[0])}</b> v <b>${teamLbl(T[1])}</b></div>`);
+      Partners swap every ${seg} holes — pick each set above. Right now: <b>${teamLbl(T[0])}</b> v <b>${teamLbl(T[1])}</b></div>`);
   }else if(view==='umbrella'){
     const u=computeUmbrella();
     const UT=matchTeams('umbrella');
@@ -7621,7 +7707,7 @@ function vStandings(){
         const lead=u.ledgers[L][UT[k][0]]>=u.ledgers[L][UT[1-k][0]];
         return `<td class="r num" style="font-size:34px;color:${lead?'#7fd49a':'var(--ink2)'}">${u.ledgers[L][UT[k][0]]}</td>`;
         }).join('')}</tr>`).join('')}
-      </table>${teamPickerRow('umbrella')}
+      </table>${teamPickerRow('umbrella')+mysteryRowHTML('umbrella')}
       <div class="tiny mt">Six points a hole: 2 low ball · 2 low team total · 1 closest to pin · 1 gross birdie.
       Sweep all six and it doubles to <b>12</b>${u.sweeps[prim]?` — ☂ ${u.sweeps[prim]} umbrella${u.sweeps[prim]>1?'s':''} opened!`:''}.</div></div>`;
   }else if(view==='bbb'&&stackHas('bbb')){
@@ -7648,7 +7734,7 @@ function vStandings(){
     }).join(' · ')}</div>`).join('');
     tables=genericCard('Nassau',na.ledgers,v=>String(v),false,
       `<div class="tiny mt">${tn(0)} <b>vs</b> ${tn(1)} — + favors ${tn(0)}. Table counts bets currently won.</div>${betLines}`
-      +(NP()===4?teamPickerRow('nassau'):''));
+      +(NP()===4?teamPickerRow('nassau')+mysteryRowHTML('nassau'):''));
   }else if(view==='vegas'){
     // Vegas is 2v2, so the card shows TWO TEAMS with ONE score each: the points
     // that team has won. 45 v 54 pays the low side 9; next hole 55 v 56 pays it
@@ -7666,7 +7752,7 @@ function vStandings(){
         const lead=won(L,k)>=won(L,1-k);
         return `<td class="r num" style="font-size:34px;color:${lead?'#7fd49a':'var(--ink2)'}">${thru?won(L,k):'–'}</td>`;
         }).join('')}</tr>`).join('')}
-      </table>${teamPickerRow('vegas')}
+      </table>${(S.config.vegas&&S.config.vegas.rotate==='six')?segPickerHTML('vegas'):teamPickerRow('vegas')+mysteryRowHTML('vegas')}
       <div class="tiny mt">Points won as a team. Team digits pair low-first; the low number
         takes the difference. Birdies flip.</div></div>`;
   }else if(view===g){
@@ -7697,7 +7783,7 @@ function vStandings(){
       else status=`${tn(m.up>0?0:1)} ${Math.abs(m.up)} UP thru ${m.thru}${Math.abs(m.up)===m.count-m.thru?' — dormie':''}`;
       return `<div class="center mb">${cols.length>1?`<div class="tiny">${lbl(L)}</div>`:''}<span class="bigscore num" style="font-size:24px">${status}</span></div>`;
     }).join('');
-    tables=`<div class="card"><h2>Match play · best ball · thru ${thru}</h2>${blocks}${teamPickerRow('bestball')}
+    tables=`<div class="card"><h2>Match play · best ball · thru ${thru}</h2>${blocks}${teamPickerRow('bestball')+mysteryRowHTML('bestball')}
       <div class="tiny mt">Better ball of each team wins the hole; most holes up wins the match.</div></div>`;
    }
    // Wolf had no branch of its own — it only ever drew through the view===g
@@ -7800,6 +7886,10 @@ function vSettleStack(G){
     const rate=settleRate(g);
     const conv=v=>g==='nines'?v/12:v;
     // Fixed 2v2 settles TEAM v TEAM — see fixedTeamsFor().
+    if(mysteryPending(g)){
+      return `<div class="card"><h2>${gameName(g)} · thru ${thru}</h2>
+        <div class="tiny">🎲 Partners not drawn yet — reveal them in Standings and this settles itself.</div></div>`;
+    }
     const FT=fixedTeamsFor(g);
     if(FT){
       const diff=(led[FT[0][0]]-led[FT[1][0]])*inv;
@@ -7875,6 +7965,18 @@ function settleSectionHTML(){
 }
 function vSettle(){
   if(gamesOn().length>1)return vSettleStack(gamesOn());
+  // Mystery partners: this is the SINGLE-game settlement path, separate from
+  // vSettleStack. Guarding only the stack left the pairing on show here — the
+  // same two-path trap the Vegas team-settlement fix hit.
+  if(mysteryPending(gameOn())){
+    const g=gameOn(), thru=S.round.holes.filter(r=>r.confirmed).length;
+    return topbar('Settlement','','')+`<main>
+      <div class="card"><h2>${gameName(g)} · thru ${thru}</h2>
+        <div class="center" style="padding:14px 0"><div style="font-size:44px;line-height:1">🎲</div>
+        <div style="font-weight:700;font-size:18px;color:var(--gold);margin-top:6px">Partners not drawn yet</div>
+        <div class="tiny mt">Reveal them in Standings and this settles itself.</div></div>
+      </div></main>`;
+  }
   if(gameOn()==='quota'){
     const q=computeQuota();
     const thru=S.round.holes.filter(r=>r.confirmed).length;
