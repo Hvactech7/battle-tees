@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786565041';
+const BUILD='1786565552';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -2519,19 +2519,21 @@ function loadLeaflet(){
   })().catch(e=>{leafletP=null;throw e;});
   return leafletP;
 }
-// Frame the satellite view at a KNOWN scale: `yds` from the centre to the nearer
-// screen edge. A raw zoom level is a lie on a phone — the same number covers a
-// different amount of ground on every screen size and every latitude, so
-// setView(c,16) meant roughly 200 yards on Nathan's phone and something else on
-// anyone else's. Amnesia leans on this: with the map blacked out, the one thing
-// that has to be predictable is how far out you are looking.
-const FRAME_YDS=300;   // matches manualModeTap's (cardY||300) fallback
-function frameAround(center,yds,el){
+// Frame the satellite view at a KNOWN scale. `spanYds` is the ground covered
+// ACROSS the screen's narrower dimension — so 300 means the view is 300 yards
+// wide, putting your dot 150 yards from the nearer edge. A raw zoom level is a
+// lie on a phone: the same number covers a different amount of ground on every
+// screen size and every latitude, so setView(c,16) meant ~800 yards across on
+// Nathan's phone and something else on anyone else's. Amnesia leans on this —
+// with the map blacked out, the one thing that must be predictable is how far
+// out you are looking.
+const FRAME_YDS=300;   // Nathan's call: yards across the screen, HARD, never widened
+function frameAround(center,spanYds,el){
   try{
     if(!LMAP||!center)return false;
     const w=(el&&el.clientWidth)||360,h=(el&&el.clientHeight)||600;
-    const half=Math.max(60,Math.min(w,h)/2);                       // nearer edge, px
-    const mpp=(yds*0.9144)/half;                                   // metres per pixel needed
+    const span=Math.max(120,Math.min(w,h));                        // narrower dimension, px
+    const mpp=(spanYds*0.9144)/span;                               // metres per pixel needed
     const z=Math.log2(156543.03392*Math.cos(center[0]*Math.PI/180)/mpp);
     if(!isFinite(z))return false;
     LMAP.setView(center,Math.max(3,Math.min(20,z)),{animate:false});
@@ -3188,7 +3190,7 @@ function manualModeTap(){
     if(mapMarks._ring){try{LMAP.removeLayer(mapMarks._ring);}catch(e){}}
     mapMarks._ring=L.circle(me,{radius:(cardY||FRAME_YDS)*0.9144,color:'#ffd75e',weight:2.5,opacity:.85,fill:false,dashArray:'10 8'}).addTo(LMAP);
     // same framing rule as the map-open path — one scale, however you got here
-    if(!frameAround(me,Math.max(FRAME_YDS,(cardY||0)*1.12),document.getElementById('holemap'))){
+    if(!frameAround(me,FRAME_YDS,document.getElementById('holemap'))){
       try{LMAP.fitBounds(mapMarks._ring.getBounds().pad(0.10));}catch(e){}
     }
   }
@@ -3829,9 +3831,9 @@ async function initHoleMap(){
     // twist is the only way to get the green to the top — it must not be gated
     // behind the Manual button.
     if(canRotate){try{LMAP.setBearing(0);LMAP.touchRotate&&LMAP.touchRotate.enable();}catch(e){}}
-    // ~300 yards from your dot to the nearer edge. Amnesia is the usual way to
-    // land here and it must show exactly what a first-timer on a genuinely
-    // unmapped hole sees, so both paths get the identical framing.
+    // 300 yards across the screen, every hole, no exceptions. Amnesia is the
+    // usual way to land here and it must show exactly what a first-timer on a
+    // genuinely unmapped hole sees, so both paths get the identical framing.
     if(!(myCoords&&frameAround(c,FRAME_YDS,el)))LMAP.setView(c,16);
     mapMarks={greenC:null,greenPoly:null,ref:c,mePos:null,aimC:null,_synthRef:synthRef};
     // CARD RING: unmapped hole + known card yardage = the green MUST sit on a
@@ -3843,16 +3845,20 @@ async function initHoleMap(){
     const cardY=tset&&tset.yds&&tset.yds[physHole(mapHole)];
     if(cardY){
       mapMarks._ring=L.circle(c,{radius:cardY*0.9144,color:'#ffd75e',weight:2.5,opacity:.85,fill:false,dashArray:'10 8'}).addTo(LMAP);
-      // Hold the 300-yard baseline, but never so tight the ring runs off screen:
-      // a 150-yard par 3 used to open zoomed so far in you could not see where
-      // you were standing, and a 480-yard par 5 pushed the ring past the edge.
-      if(!frameAround(c,Math.max(FRAME_YDS,cardY*1.12),el)){
+      // HARD 300 — the card ring does NOT get to widen the view. Nathan's call:
+      // one scale on every hole beats a ring that is always fully visible. On a
+      // hole longer than ~150y the ring sits off screen and you pinch out to
+      // walk it, which is a deliberate trade for a predictable frame.
+      if(!frameAround(c,FRAME_YDS,el)){
         try{LMAP.fitBounds(mapMarks._ring.getBounds().pad(0.12));}catch(e){}
       }
       mapMarks._ringMode=true;mapMarks._cardY=cardY;
       const mg=(S.round.manualGreens||{})[physHole(mapHole)];
       if(mg){mapMarks._restoring=true;try{mapTapAt(mg.slice());}catch(e){}mapMarks._restoring=false;}
-      const s2=sub();if(s2)s2.textContent=`no map here — card says ${cardY}y (${esc(tset.name)}). The green sits ON the gold ring: two-finger rotate to look, tap it when you spot it.`;
+      // the frame is a hard 300 yards across, so on anything but a short hole
+      // the ring starts outside it — say so rather than pointing at a circle
+      // that isn't on screen
+      const s2=sub();if(s2)s2.textContent=`no map here — card says ${cardY}y (${esc(tset.name)}). The green sits ON the gold ring: two-finger rotate to look${cardY>FRAME_YDS/2?', pinch out to reach the ring':''}, tap it when you spot it.`;
     }else{
       const s2=sub();if(s2)s2.textContent=geoErr||'Hole lines not mapped here — rangefinder still works.';
     }
