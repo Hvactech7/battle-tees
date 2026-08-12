@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786495896';
+const BUILD='1786502444';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -8295,7 +8295,17 @@ function vSettleStack(G){
 }
 // Settle now lives INSIDE Standings (Nathan's nav redesign 7/25): reuse the
 // full settle builders and lift their <main> content into a section.
+// Playing alone there is nobody to settle with, so Standings carries no money
+// section at all — no per-game cards, no pot, no CTP.
+//
+// Deliberately computed from the LIVE roster on every render rather than a flag
+// stamped at round start: start solo, join a group at the turn, and settlement
+// comes back the moment their players land in the roster. The reverse holds too.
+function soloRound(){
+  try{return actIdx().length<2;}catch(e){return false;}
+}
 function settleSectionHTML(){
+  if(soloRound())return '';
   try{
     const raw=vSettle();
     const a=raw.indexOf('<main>'),b=raw.lastIndexOf('</main>');
