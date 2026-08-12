@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786485852';
+const BUILD='1786494458';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -2988,8 +2988,8 @@ function amnesiaToggle(){
   const on=!!amnesiaGet();
   amnesiaSet(on?null:'1');
   try{
-    if(!on&&S.course&&S.course.geo)set(()=>{delete S.course.geo;delete S.course.geoUrl;});
-    else render();
+    if(!on&&S.course&&S.course.geo){delete S.course.geo;save();}
+    render();
   }catch(e){render();}
 }
 (function(){
@@ -3003,9 +3003,13 @@ function amnesiaToggle(){
 })();
 async function ensureCourseGeo(){
   if(amnesiaOn(S.course.id)){
-    // wipe what this phone already knows, then fall through to the live-OSM
-    // lookup exactly as a first-timer on an unmapped course would
-    try{set(()=>{delete S.course.geo;delete S.course.geoUrl;});}catch(e){}
+    // Wipe what this phone already knows, then fall through to the live-OSM
+    // lookup exactly as a first-timer on an unmapped course would.
+    // MUST NOT use set() here: set() calls render(), render() calls
+    // initHoleMap(), and initHoleMap() calls this function — so a set() on this
+    // path re-enters forever and pegs the main thread. In the field that looked
+    // like every button in the app going dead, including Back and End Round.
+    try{delete S.course.geo;save();}catch(e){}   // keep geoUrl — it is how the real map comes back
     const pos0=await new Promise(res=>{
       if(!navigator.geolocation)return res(null);
       navigator.geolocation.getCurrentPosition(p=>res([p.coords.latitude,p.coords.longitude]),
@@ -3116,6 +3120,8 @@ function manualModeTap(){
     mapMarks._ringMode=false;mapMarks._manual=false;
     if(b){b.style.borderColor='var(--elec,#2b86ec)';b.style.color='var(--elec,#2b86ec)';b.textContent='🔄 Manual';}
     const g=document.getElementById('mgbtn');if(g)g.remove();
+    const tb=document.getElementById('mtbtn');if(tb)tb.remove();
+    mapMarks._teeMode=false;
     if(sb)sb.textContent='';
     return;
   }
@@ -3133,6 +3139,13 @@ function manualModeTap(){
     try{LMAP.fitBounds(mapMarks._ring.getBounds().pad(0.10));}catch(e){}
   }
   if(b){b.style.borderColor='var(--amber-bd)';b.style.color='var(--amber-bd)';b.textContent='🔄 Manual ON';}
+  if(!document.getElementById('mtbtn')&&b){
+    // Nathan's field ask: on an unmapped hole you need to place BOTH ends. The
+    // green alone gives a distance with no hole to hang it on, and the tee is
+    // the half we could never infer — the drag added earlier only exists on
+    // holes that already carry a line, which is exactly the case Manual is not.
+    b.insertAdjacentHTML('afterend',`<button id="mtbtn" onclick="armSetTee()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(326px + env(safe-area-inset-bottom));z-index:6;height:46px;padding:0 14px;background:var(--card);border:2px solid var(--red);border-radius:12px;color:#ff8a7a;font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:17px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">⛳ Set Tee</button>`);
+  }
   if(!document.getElementById('mgbtn')&&b){
     b.insertAdjacentHTML('afterend',`<button id="mgbtn" onclick="armSetGreen()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(274px + env(safe-area-inset-bottom));z-index:6;height:46px;padding:0 14px;background:var(--card);border:2px solid var(--green);border-radius:12px;color:var(--green-mid);font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:17px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">📍 Set Green</button>`);
   }
@@ -3149,7 +3162,48 @@ function armSetGreen(){
   if(g){g.style.borderColor='var(--amber-bd)';g.style.color='var(--amber-bd)';g.textContent='📍 Tap the green';}
   if(sb)sb.textContent='now tap the middle of the green — drag the pin to fine-tune, tap it again to clear.';
 }
+function armSetTee(){
+  const sb=document.getElementById('fmbsub');
+  mapMarks._teeMode=true;mapMarks._ringMode=false;
+  const t=document.getElementById('mtbtn');
+  if(t){t.style.borderColor='var(--amber-bd)';t.style.color='var(--amber-bd)';t.textContent='⛳ Tap the tee';}
+  const g=document.getElementById('mgbtn');
+  if(g){g.style.borderColor='var(--green)';g.style.color='var(--green-mid)';g.textContent='📍 Set Green';}
+  if(sb)sb.textContent='now tap the tee box you played from — drag the pin to fine-tune.';
+}
+// Placing the tee on an unmapped hole. Stored per-course on this phone exactly
+// like a dragged tee, and reported as the same teemark event, so one ingest path
+// handles both "corrected an existing tee" and "there was never a tee here".
+function placeManualTee(t){
+  mapMarks._teeMode=false;
+  const h=physHole(mapHole);
+  if(mapMarks._manTee){try{LMAP.removeLayer(mapMarks._manTee);}catch(e){}}
+  const mk=L.marker(t,{draggable:true,icon:L.divIcon({className:'',
+    html:'<div style="width:14px;height:14px;border-radius:3px;background:#e8604f;border:2.5px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.65)"></div>',
+    iconSize:[14,14],iconAnchor:[7,7]})}).addTo(LMAP);
+  mk.bindTooltip('Tee',{permanent:true,direction:'bottom',offset:[0,8],className:'maplbl'});
+  mapMarks._manTee=mk;
+  const report=()=>{
+    const p=mk.getLatLng(),q=[+p.lat.toFixed(6),+p.lng.toFixed(6)];
+    teeFixSet(h,q);
+    mapMarks.ref=q;
+    const gc=mapMarks.greenC;
+    if(gc){try{updateFMB(q,'yards from the tee');}catch(e){}}
+    stat('teemark',{course:S.course.id,courseName:S.course.name,hole:h+1,
+      lat:q[0],lon:q[1],geoSrc:'manual',movedYds:null,
+      yardsToGreen:gc?Math.round(mDist(q,gc)*1.09361):null,
+      fromDist:mapMarks.mePos?Math.round(mDist(mapMarks.mePos,q)*1.09361):null});
+  };
+  report();
+  mk.on('dragend',report);
+  const tb=document.getElementById('mtbtn');
+  if(tb){tb.style.borderColor='var(--red)';tb.style.color='#ff8a7a';tb.textContent='⛳ Tee set';}
+  const sb=document.getElementById('fmbsub');
+  if(sb)sb.textContent=mapMarks.greenC?'tee and green both set — drag either pin to adjust.'
+                                      :'tee set. Now tap “Set Green”, then tap the green.';
+}
 function mapTapAt(t){
+  if(mapMarks._teeMode){placeManualTee(t.slice());return;}
   if(mapMarks._ringMode&&!mapMarks.greenC){
     // ring mode: this tap IS the green. Live target + crowdsourced capture.
     mapMarks.greenC=t.slice();
@@ -3490,7 +3544,7 @@ async function initHoleMap(){
   // amnesia: any geo this phone already holds is the very map we are pretending
   // not to have, so discard it once and let ensureCourseGeo take the blind path
   if(amnesiaOn(S.course.id)&&S.course.geo&&!S.course.geo.amn){
-    try{set(()=>{delete S.course.geo;delete S.course.geoUrl;});}catch(e){}
+    try{delete S.course.geo;save();}catch(e){}   // keep geoUrl — it is how the real map comes back   // never set() — see ensureCourseGeo
   }
   if(!S.course.geo||(S.course.geo.empty&&Date.now()-(S.course.geo.ts||0)>GEO_RETRY_MS)){
     const s2=sub();if(s2)s2.textContent='Downloading course map…';
