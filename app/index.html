@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786566507';
+const BUILD='1786567199';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -845,7 +845,21 @@ function flatShots(shots){
   return Object.keys(shots).reduce((a,k)=>a.concat((shots[k]||[]).map(s=>Object.assign({pk:k},s))),[]);
 }
 function lastShotAt(a){return (a&&a.length)?Math.max(...a.map(s=>s.at||0)):0;}
-function shareMeta(){return {course:S.course,players:S.players,config:S.config,started:S.round.started,dollarPerPt:S.round.dollarPerPt,span:S.round.span,startedAt:S.round.startedAt,games:S.round.games||null,rates:S.round.rates||null,
+// AMNESIA IS ONE PHONE'S BUSINESS. shareMeta ships the whole course object and
+// applyOp assigns it wholesale, so a blacked-out geo would have blanked every
+// other phone in the group the moment anything changed — and their next push
+// would have un-blacked mine. Send the map the group actually has (the parked
+// real one), never the blackout. Content-identical to the non-amnesia payload,
+// so flipping the switch mid-round pushes nothing.
+function courseForShare(){
+  const c=S.course;
+  if(!c||!(c.geo&&c.geo.amn))return c;
+  const out=Object.assign({},c);
+  delete out.geoReal;
+  if(c.geoReal)out.geo=c.geoReal;else delete out.geo;
+  return out;
+}
+function shareMeta(){return {course:courseForShare(),players:S.players,config:S.config,started:S.round.started,dollarPerPt:S.round.dollarPerPt,span:S.round.span,startedAt:S.round.startedAt,games:S.round.games||null,rates:S.round.rates||null,
   shots:shotsForShare(),
   _ts:S.shareMetaTs||0};}
 function contentKey(k){
@@ -891,7 +905,12 @@ function applyOp(k,v,defer){
         S.round.sharedShots=cur;
       }
       if((v._ts||0)>=(S.shareMetaTs||0)){
+        // ...and the mirror: their real map must not end MY amnesia. Keep the
+        // blackout, park what they sent so it is there the instant I switch off.
+        const wasBlack=S.course&&S.course.geo&&S.course.geo.amn&&amnesiaOn((v.course||{}).id);
+        const blackout=wasBlack?S.course.geo:null, parked=wasBlack?((v.course&&v.course.geo)||S.course.geoReal):null;
         S.course=v.course;S.players=v.players;S.config=v.config;
+        if(wasBlack){S.course.geo=blackout;if(parked)S.course.geoReal=parked;}
         S.round.started=v.started;S.round.dollarPerPt=v.dollarPerPt;
         if(v.games)S.round.games=v.games;
         if(v.rates)S.round.rates=v.rates;
@@ -2910,7 +2929,13 @@ function vMap(){
   ${trackShot&&trackShot.hole===mapHole?`<button id="trackxbtn" onclick="clearTrackStart()" style="position:fixed;left:max(138px,calc(50vw - 102px));bottom:calc(112px + env(safe-area-inset-bottom));z-index:6;width:46px;height:46px;background:var(--card);border:2px solid var(--red,#c0392b);border-radius:12px;color:var(--red,#c0392b);font-size:22px;font-weight:800;box-shadow:2px 2px 0 rgba(0,0,0,.35)">✕</button>`:''}
   ${undoTrackHTML()}
   ${(()=>{try{
-      const g=S.course.geo&&S.course.geo.holes&&S.course.geo.holes[physHole(mapHole)+1];
+      // Under amnesia the hole is unmapped BY DEFINITION. This runs during
+      // render, BEFORE initHoleMap parks the real map — so reading geo here hid
+      // the Manual button on the first open of a mapped course, which is exactly
+      // the course amnesia exists to rehearse. You got a blacked-out satellite
+      // and no way to mark anything until some other change forced a re-render.
+      const g=amnesiaOn(S.course.id)?null
+        :(S.course.geo&&S.course.geo.holes&&S.course.geo.holes[physHole(mapHole)+1]);
       const mapped=!!(g&&g.green&&g.green.length>2);
       if(mapped)return '';
       return `<button id="manualbtn" onclick="manualModeTap()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(220px + env(safe-area-inset-bottom));z-index:6;height:46px;padding:0 14px;background:var(--card);border:2px solid var(--elec,#2b86ec);border-radius:12px;color:var(--elec,#2b86ec);font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:17px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">🔄 Manual</button>`;
@@ -3213,16 +3238,76 @@ function manualModeTap(){
     // green alone gives a distance with no hole to hang it on, and the tee is
     // the half we could never infer — the drag added earlier only exists on
     // holes that already carry a line, which is exactly the case Manual is not.
-    b.insertAdjacentHTML('afterend',`<button id="mtbtn" onclick="armSetTee()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(326px + env(safe-area-inset-bottom));z-index:6;height:46px;padding:0 14px;background:var(--card);border:2px solid var(--red);border-radius:12px;color:#ff8a7a;font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:17px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">⛳ Set Tee</button>`);
+    b.insertAdjacentHTML('afterend',`<button id="mtbtn" onclick="teeBtnTap()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(326px + env(safe-area-inset-bottom));z-index:6;height:46px;padding:0 14px;background:var(--card);border:2px solid var(--red);border-radius:12px;color:#ff8a7a;font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:17px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">⛳ Set Tee</button>`);
   }
   if(!document.getElementById('mgbtn')&&b){
-    b.insertAdjacentHTML('afterend',`<button id="mgbtn" onclick="armSetGreen()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(274px + env(safe-area-inset-bottom));z-index:6;height:46px;padding:0 14px;background:var(--card);border:2px solid var(--green);border-radius:12px;color:var(--green-mid);font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:17px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">📍 Set Green</button>`);
+    b.insertAdjacentHTML('afterend',`<button id="mgbtn" onclick="greenBtnTap()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(274px + env(safe-area-inset-bottom));z-index:6;height:46px;padding:0 14px;background:var(--card);border:2px solid var(--green);border-radius:12px;color:var(--green-mid);font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:17px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">📍 Set Green</button>`);
   }
   if(sb)sb.textContent=me
     ? (cardY?`manual mode — twist to rotate, pinch to zoom. Card says ${cardY}y, so the green sits near the gold ring. Found it? Tap “Set Green”.`
             :`manual mode — twist to rotate, pinch to zoom. Find the green, then tap “Set Green”.`)
     : 'manual mode — waiting for GPS to size the view. Rotation is unlocked.';
 }
+// RESETTING A BAD MARK. A mis-tap used to be close to permanent: the green pin
+// cleared only by tapping the pin itself — undiscoverable, and it reported
+// NOTHING, so the wrong point stayed in the Pi data we build course maps from —
+// and a manually placed tee had no clear at all. Both buttons are now two-state
+// (arm when nothing is set, clear when something is), and a clear is reported so
+// the ingest can drop the observation it supersedes.
+function markState(){
+  const h=physHole(mapHole);
+  return {h,green:!!(mapMarks&&mapMarks.greenC),tee:!!((mapMarks&&mapMarks._manTee)||teeFixFor(h))};
+}
+function markBtns(){
+  try{
+    const st=markState();
+    const g=document.getElementById('mgbtn');
+    // ARMED is (_ringMode && no green yet) — _ringMode stays true after the tap
+    // lands and is disarmed by greenC, so testing _ringMode alone left the
+    // button stuck on "Tap the green" once the green was already down.
+    if(g&&!(mapMarks._ringMode&&!mapMarks.greenC)){
+      g.textContent=st.green?'📍 Green ✕':'📍 Set Green';
+      g.style.borderColor=st.green?'var(--amber-bd)':'var(--green)';
+      g.style.color=st.green?'var(--amber-bd)':'var(--green-mid)';
+    }
+    const t=document.getElementById('mtbtn');
+    if(t&&!mapMarks._teeMode){
+      t.textContent=st.tee?'⛳ Tee ✕':'⛳ Set Tee';
+      t.style.borderColor=st.tee?'var(--amber-bd)':'var(--red)';
+      t.style.color=st.tee?'var(--amber-bd)':'#ff8a7a';
+    }
+  }catch(e){}
+}
+function clearGreenMark(quiet){
+  const h=physHole(mapHole);
+  const had=mapMarks.greenC?mapMarks.greenC.slice():null;
+  if(mapMarks._ringGreen){try{LMAP.removeLayer(mapMarks._ringGreen);}catch(e){}}
+  mapMarks._ringGreen=null;mapMarks.greenC=null;mapMarks.aimC=null;
+  try{if(S.round.manualGreens)delete S.round.manualGreens[h];save();}catch(e){}
+  if(mapMarks.refreshTapLine)mapMarks.refreshTapLine();
+  const el=document.getElementById('fmb');if(el)el.textContent='—';
+  if(had&&!quiet)stat('markclear',{course:S.course.id,courseName:S.course.name,hole:h+1,
+    what:'green',lat:had[0],lon:had[1],amn:amnStamp()});
+  markBtns();
+  const sb=document.getElementById('fmbsub');
+  if(sb&&!quiet)sb.textContent='green mark cleared — tap “Set Green” to place it again.';
+}
+function clearTeeMark(){
+  const h=physHole(mapHole);
+  const had=teeFixFor(h);
+  if(mapMarks._manTee){try{LMAP.removeLayer(mapMarks._manTee);}catch(e){}mapMarks._manTee=null;}
+  teeFixClear(h);
+  mapMarks._teeMode=false;
+  if(myCoords)mapMarks.ref=myCoords.slice();        // yardages run off you again
+  try{updateFMB(mapMarks.mePos||mapMarks.ref,'');}catch(e){}
+  if(had)stat('markclear',{course:S.course.id,courseName:S.course.name,hole:h+1,
+    what:'tee',lat:had[0],lon:had[1],amn:amnStamp()});
+  markBtns();
+  const sb=document.getElementById('fmbsub');
+  if(sb)sb.textContent='tee mark cleared — tap “Set Tee” to place it again.';
+}
+function greenBtnTap(){if(markState().green)clearGreenMark();else armSetGreen();}
+function teeBtnTap(){if(markState().tee)clearTeeMark();else armSetTee();}
 function armSetGreen(){
   const sb=document.getElementById('fmbsub');
   if(mapMarks._ringGreen){try{LMAP.removeLayer(mapMarks._ringGreen);}catch(e){}mapMarks._ringGreen=null;}
@@ -3264,12 +3349,15 @@ function placeManualTee(t){
       fromDist:mapMarks.mePos?Math.round(mDist(mapMarks.mePos,q)*1.09361):null});
   };
   report();
-  mk.on('dragend',report);
-  const tb=document.getElementById('mtbtn');
-  if(tb){tb.style.borderColor='var(--red)';tb.style.color='#ff8a7a';tb.textContent='⛳ Tee set';}
+  let jd=false;
+  mk.on('dragend',()=>{jd=true;setTimeout(()=>{jd=false;},300);report();});
+  // tap the pin to clear it, exactly like the green pin — a tee dropped on the
+  // wrong box had no way back at all before this
+  mk.on('click',()=>{if(!jd)clearTeeMark();});
+  markBtns();
   const sb=document.getElementById('fmbsub');
-  if(sb)sb.textContent=mapMarks.greenC?'tee and green both set — drag either pin to adjust.'
-                                      :'tee set. Now find the green and tap “Set Green”.';
+  if(sb)sb.textContent=mapMarks.greenC?'tee and green both set — drag either pin to adjust, tap a pin to clear it.'
+                                      :'tee set — tap the pin to clear it. Now find the green and tap “Set Green”.';
 }
 function mapTapAt(t){
   if(mapMarks._teeMode){placeManualTee(t.slice());return;}
@@ -3309,19 +3397,14 @@ function mapTapAt(t){
         amn:amnStamp(),lat:+p.lat.toFixed(6),lon:+p.lng.toFixed(6),cardY:mapMarks._cardY||null,
         manual:!!mapMarks._manual,
         fromDist:mapMarks.mePos?Math.round(mDist(mapMarks.mePos,[p.lat,p.lng])*1.09361):null});};
-    report();
+    report();markBtns();
     let jd=false;
     mk.on('drag',()=>{const p=mk.getLatLng();mapMarks.greenC=[p.lat,p.lng];
       if(mapMarks.refreshTapLine)mapMarks.refreshTapLine();
       updateFMB(mapMarks.mePos||mapMarks.ref,'');});
     mk.on('dragend',()=>{jd=true;setTimeout(()=>{jd=false;},300);report();});
-    mk.on('click',()=>{if(jd)return;
-      // re-tap clears — back to searching the ring
-      try{LMAP.removeLayer(mk);}catch(e){}
-      mapMarks._ringGreen=null;mapMarks.greenC=null;
-      try{if(S.round.manualGreens)delete S.round.manualGreens[physHole(mapHole)];save();}catch(e){}
-      if(mapMarks.refreshTapLine)mapMarks.refreshTapLine();
-      const el=document.getElementById('fmb');if(el)el.textContent='—';});
+    // re-tap clears — same path as the button, so it reports the retraction
+    mk.on('click',()=>{if(jd)return;clearGreenMark();});
     if(mapMarks.refreshTapLine)mapMarks.refreshTapLine();
     updateFMB(mapMarks.mePos||mapMarks.ref,'');
     return;
