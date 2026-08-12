@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786495438';
+const BUILD='1786495896';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -5792,7 +5792,11 @@ function healUnfinishedRound(){
     if(!S.round||!S.round.started||!S.round._finished)return false;
     if(typeof isReview==='function'&&isReview())return false;
     if(!S.round.myEndedAt)S.round.myEndedAt=Date.now();
-    try{archiveRound();}catch(e){}
+    try{archiveRound();}
+    catch(e){                       // could not save it — leave the round alone
+      try{stat('archive_fail',{msg:String((e&&e.message)||e),where:'heal'});}catch(_){}
+      S.round._finished=false;save();return false;
+    }
     try{bfBroadcastEnd();}catch(e){}
     const wasShared=S.share&&S.share.on;
     S.round=blankRound();S.screen='home';stView=null;
@@ -7332,7 +7336,24 @@ function finishMyRound(){
   // Side effects run after this set() commits — leaveShare() saves and renders,
   // and bfBroadcastEnd() must go out before the socket it uses is closed.
   setTimeout(()=>{
-    try{archiveRound();}catch(e){}
+    // If the archive fails the round is NOT saved — so nothing downstream may
+    // run. Announcing the end and leaving the room would cut the sync and
+    // strand the card, which is how a full round became a 69-second entry with
+    // no scores on the Battlefield. Put it back in play instead, so it can be
+    // ended again, and report the failure rather than swallowing it.
+    let saved=true;
+    try{archiveRound();}
+    catch(e){
+      saved=false;
+      try{stat('archive_fail',{msg:String((e&&e.message)||e),
+        thru:(S.round.holes||[]).filter(r=>r&&r.confirmed).length,
+        players:(S.players||[]).length});}catch(_){}
+    }
+    if(!saved){
+      S.round._finished=false;      // never leave it un-endable
+      save();render();
+      return;
+    }
     bfBroadcastEnd();
     if(S.share&&S.share.on)leaveShare();else{save();render();}
     if(!emailVerified())setTimeout(()=>openVerify('roundEnd'),450);
