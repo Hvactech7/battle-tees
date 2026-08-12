@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786494892';
+const BUILD='1786495065';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -3144,14 +3144,14 @@ function manualModeTap(){
     // green alone gives a distance with no hole to hang it on, and the tee is
     // the half we could never infer — the drag added earlier only exists on
     // holes that already carry a line, which is exactly the case Manual is not.
-    b.insertAdjacentHTML('afterend',`<button id="mtbtn" onclick="armSetTee()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(326px + env(safe-area-inset-bottom));z-index:6;height:46px;padding:0 14px;background:var(--card);border:2px solid var(--red);border-radius:12px;color:#ff8a7a;font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:17px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">⛳ Tee <span style="opacity:.7;font-size:13px">(optional)</span></button>`);
+    b.insertAdjacentHTML('afterend',`<button id="mtbtn" onclick="armSetTee()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(326px + env(safe-area-inset-bottom));z-index:6;height:46px;padding:0 14px;background:var(--card);border:2px solid var(--red);border-radius:12px;color:#ff8a7a;font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:17px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">⛳ Set Tee</button>`);
   }
   if(!document.getElementById('mgbtn')&&b){
     b.insertAdjacentHTML('afterend',`<button id="mgbtn" onclick="armSetGreen()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(274px + env(safe-area-inset-bottom));z-index:6;height:46px;padding:0 14px;background:var(--card);border:2px solid var(--green);border-radius:12px;color:var(--green-mid);font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:17px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">📍 Set Green</button>`);
   }
   if(sb)sb.textContent=me
-    ? (cardY?`manual mode — twist to rotate, pinch to zoom. Card says ${cardY}y, so the green sits near the gold ring. Found it? Tap “Set Green”. Tee is optional.`
-            :`manual mode — twist to rotate, pinch to zoom. Find the green, then tap “Set Green”. Tee is optional.`)
+    ? (cardY?`manual mode — twist to rotate, pinch to zoom. Card says ${cardY}y, so the green sits near the gold ring. Found it? Tap “Set Green”.`
+            :`manual mode — twist to rotate, pinch to zoom. Find the green, then tap “Set Green”.`)
     : 'manual mode — waiting for GPS to size the view. Rotation is unlocked.';
 }
 function armSetGreen(){
