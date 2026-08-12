@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786567199';
+const BUILD='1786568185';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -2570,6 +2570,34 @@ function frameAround(center,spanYds,el){
     return true;
   }catch(e){return false;}
 }
+// GREEN UP. Rotate so `from` (the tee, or you) sits at the bottom of the screen
+// and the green at the top, then set the camera so everything between them
+// fills it. Three callers wanted this identically — the mapped hole, the
+// green-only hole that re-frames as you walk, and amnesia the moment both marks
+// are down — so the projection maths lives in exactly one place now.
+// A hand twist always wins: the framing still follows you, the bearing does not.
+function orientGreenUp(from,greenC,greenPoly,pts,el){
+  try{
+    if(!LMAP||!from||!greenC||!L.Map.prototype.setBearing)return false;
+    const rad=Math.PI/180, lat0=from[0]*rad;
+    const M=pt=>[(pt[1]-from[1])*111320*Math.cos(lat0),(pt[0]-from[0])*110540];  // metres [east,north]
+    const g=M(greenC); const len=Math.hypot(g[0],g[1])||1;
+    const u=[g[0]/len,g[1]/len], v=[-u[1],u[0]];
+    let a0=1e9,a1=-1e9,c0=1e9,c1=-1e9;
+    ((pts&&pts.length?pts:[from]).concat(greenPoly||[greenC])).forEach(pt=>{const m=M(pt);
+      const a=m[0]*u[0]+m[1]*u[1], c=m[0]*v[0]+m[1]*v[1];
+      if(a<a0)a0=a;if(a>a1)a1=a;if(c<c0)c0=c;if(c>c1)c1=c;});
+    const vh=(el&&el.clientHeight)||600, vw=(el&&el.clientWidth)||360;
+    const mpp=Math.max((a1-a0)*1.18/Math.max(1,vh-110),(c1-c0)*1.35/Math.max(1,vw-30),0.05);
+    const zoom=Math.min(20,Math.log2(156543.03392*Math.cos(lat0)/mpp));
+    const midA=(a0+a1)/2, midC=(c0+c1)/2;
+    const cx=u[0]*midA+v[0]*midC, cy=u[1]*midA+v[1]*midC;
+    const center=[from[0]+cy/110540, from[1]+cx/(111320*Math.cos(lat0))];
+    if(!LMAP._btUserRot)autoBearing(-((Math.atan2(g[0],g[1])/rad+360)%360));
+    LMAP.setView(center,zoom,{animate:false});
+    return true;
+  }catch(e){return false;}
+}
 function mDist(a,b){return kmBetween(a[0],a[1],b[0],b[1])*1000;}
 function yd(m){return Math.round(m*1.09361);}
 function centroidOf(poly){
@@ -2826,15 +2854,34 @@ function mapMySc(){
   if(!rec||!rec.gross||rec.gross[mi]==null)return null;
   return (rec.confirmed||(rec.cfts&&rec.cfts[mi]>0))?rec.gross[mi]:null;
 }
-function showMapConfirm(){const b=document.getElementById('mapconfirm');if(b)b.style.display='block';}
-function hideMapConfirm(){const b=document.getElementById('mapconfirm');if(b)b.style.display='none';}
+// The confirm button is ALWAYS on screen now — it used to appear only once you
+// touched the score, so on a hole you were happy to card at par there was
+// nothing to press and no hint that confirming was a thing. It reads "Score"
+// until you touch the input, then "✓ Confirm". Armed state is held per hole, so
+// walking to the next hole starts unarmed again.
+let mapScoreHole=-1;
+function mapScoreArmed(){return mapScoreHole===mapHole;}
+function paintMapConfirm(){
+  const b=document.getElementById('mapconfirm');if(!b)return;
+  const on=mapScoreArmed();
+  b.textContent=on?'✓ Confirm':'Score';
+  b.style.background=on?'#2b86ec':'rgba(15,21,34,.82)';
+  b.style.borderColor=on?'var(--elec-dk,#1c5eb0)':'var(--line)';
+  b.style.color=on?'#eef6ff':'var(--ink3)';
+}
+function showMapConfirm(){mapScoreHole=mapHole;paintMapConfirm();}
+function hideMapConfirm(){mapScoreHole=-1;paintMapConfirm();}
 // Confirm from the map: locks in MY score on the viewed hole, mirrors the
 // scoring screen's confirm (per-player in shared rounds, full confirm when
 // everyone's scored otherwise), then the map walks to the next open hole.
 function mapConfirm(){
+  // "Score" is a prompt, not a trigger: the first press only arms it, so a
+  // stray tap can never card a hole you had not looked at.
+  if(!mapScoreArmed()){showMapConfirm();return;}
   const h=mapHole;
   let closed=false;
   if(greensIsMode())greensConsumeTarget();
+  markLockIn(h);
   set(()=>{
     const rec=S.round.holes[h];if(!rec)return;
     const mi=myPlayerIdx(),par=(S.course.holes[h]||{par:4}).par;
@@ -2941,7 +2988,7 @@ function vMap(){
       return `<button id="manualbtn" onclick="manualModeTap()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(220px + env(safe-area-inset-bottom));z-index:6;height:46px;padding:0 14px;background:var(--card);border:2px solid var(--elec,#2b86ec);border-radius:12px;color:var(--elec,#2b86ec);font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:17px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">🔄 Manual</button>`;
     }catch(e){return '';}})()}
   <button onclick="go('hole')" style="position:fixed;right:max(10px,calc(50vw - 230px));top:calc(100px + env(safe-area-inset-top));z-index:6;background:rgba(15,21,34,.82);border:1.5px solid var(--line);border-radius:12px;color:#fff;padding:10px 17px;font-size:17px;font-weight:600;font-family:inherit">Back</button>
-  <button id="mapconfirm" onclick="mapConfirm()" style="display:none;position:fixed;right:max(10px,calc(50vw - 230px));bottom:calc(166px + env(safe-area-inset-bottom));z-index:6;width:126px;height:46px;background:var(--elec,#2b86ec);background:#2b86ec;border:2px solid var(--elec-dk,#1c5eb0);border-radius:12px;color:#eef6ff;font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:19px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">✓ Confirm</button>
+  <button id="mapconfirm" onclick="mapConfirm()" style="position:fixed;right:max(10px,calc(50vw - 230px));bottom:calc(166px + env(safe-area-inset-bottom));z-index:6;width:126px;height:46px;background:${mapScoreArmed()?'#2b86ec':'rgba(15,21,34,.82)'};border:2px solid ${mapScoreArmed()?'var(--elec-dk,#1c5eb0)':'var(--line)'};border-radius:12px;color:${mapScoreArmed()?'#eef6ff':'var(--ink3)'};font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:19px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">${mapScoreArmed()?'✓ Confirm':'Score'}</button>
   <div style="position:fixed;right:max(10px,calc(50vw - 230px));bottom:calc(112px + env(safe-area-inset-bottom));z-index:6;display:flex;align-items:center;background:var(--card);border:2px solid var(--green);border-radius:12px;overflow:hidden;box-shadow:2px 2px 0 rgba(0,0,0,.35)">
     <button onclick="mapChScore(-1)" style="width:42px;height:46px;background:none;border:none;color:var(--elec);font-size:24px;font-weight:800">−</button>
     <div id="mapsc" class="num" onclick="showMapConfirm()" style="min-width:36px;text-align:center;font-size:26px;cursor:pointer">${(S.round.holes[mapHole]&&S.round.holes[mapHole].gross&&S.round.holes[mapHole].gross[myPlayerIdx()]!=null)?S.round.holes[mapHole].gross[myPlayerIdx()]:hole.par}</div>
@@ -3201,6 +3248,13 @@ function manualModeTap(){
   const sb=document.getElementById('fmbsub');
   if(!LMAP){if(sb)sb.textContent='Map still loading…';return;}
   const b=document.getElementById('manualbtn');
+  // Marks already down? Pressing Manual scraps them and restarts this hole
+  // rather than leaving the mode — that is the redo Nathan wants, and leaving
+  // manual mode with a wrong tee still on file was the useless outcome.
+  if(manualOn&&manualResetPicks()){
+    if(sb)sb.textContent='picks cleared — set the tee and the green again.';
+    return;
+  }
   manualOn=!manualOn;
   if(!manualOn){
     // back to north-up, but the twist STAYS available — rotation is no longer
@@ -3223,25 +3277,17 @@ function manualModeTap(){
   const tset=ts.find(t=>t.id===myTee&&t.yds)||ts.find(t=>t.yds);
   const cardY=tset&&tset.yds&&tset.yds[physHole(mapHole)];
   mapMarks._cardY=cardY||null;mapMarks._manual=true;
-  if(me){
-    if(mapMarks._ring){try{LMAP.removeLayer(mapMarks._ring);}catch(e){}}
-    mapMarks._ring=L.circle(me,{radius:(cardY||300)*0.9144,color:'#ffd75e',weight:2.5,opacity:.85,fill:false,dashArray:'10 8'}).addTo(LMAP);
-    // same rule as the map-open path: the fixed frame is amnesia's, normal play
-    // fits the ring the way it always has
-    if(!(amnesiaOn(S.course.id)&&frameAround(me,FRAME_YDS,document.getElementById('holemap')))){
-      try{LMAP.fitBounds(mapMarks._ring.getBounds().pad(0.10));}catch(e){}
-    }
-  }
+  manualSearchView();
   if(b){b.style.borderColor='var(--amber-bd)';b.style.color='var(--amber-bd)';b.textContent='🔄 Manual ON';}
   if(!document.getElementById('mtbtn')&&b){
     // Nathan's field ask: on an unmapped hole you need to place BOTH ends. The
     // green alone gives a distance with no hole to hang it on, and the tee is
     // the half we could never infer — the drag added earlier only exists on
     // holes that already carry a line, which is exactly the case Manual is not.
-    b.insertAdjacentHTML('afterend',`<button id="mtbtn" onclick="teeBtnTap()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(326px + env(safe-area-inset-bottom));z-index:6;height:46px;padding:0 14px;background:var(--card);border:2px solid var(--red);border-radius:12px;color:#ff8a7a;font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:17px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">⛳ Set Tee</button>`);
+    b.insertAdjacentHTML('afterend',`<button id="mtbtn" onclick="teeBtnTap()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(326px + env(safe-area-inset-bottom));z-index:6;height:46px;padding:0 14px;background:var(--card);border:2px solid var(--red);border-radius:12px;color:#ff8a7a;font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:17px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">📍 Set Tee</button>`);
   }
   if(!document.getElementById('mgbtn')&&b){
-    b.insertAdjacentHTML('afterend',`<button id="mgbtn" onclick="greenBtnTap()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(274px + env(safe-area-inset-bottom));z-index:6;height:46px;padding:0 14px;background:var(--card);border:2px solid var(--green);border-radius:12px;color:var(--green-mid);font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:17px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">📍 Set Green</button>`);
+    b.insertAdjacentHTML('afterend',`<button id="mgbtn" onclick="greenBtnTap()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(274px + env(safe-area-inset-bottom));z-index:6;height:46px;padding:0 14px;background:var(--card);border:2px solid var(--green);border-radius:12px;color:var(--green-mid);font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:17px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">⛳ Set Green</button>`);
   }
   if(sb)sb.textContent=me
     ? (cardY?`manual mode — twist to rotate, pinch to zoom. Card says ${cardY}y, so the green sits near the gold ring. Found it? Tap “Set Green”.`
@@ -3266,13 +3312,13 @@ function markBtns(){
     // lands and is disarmed by greenC, so testing _ringMode alone left the
     // button stuck on "Tap the green" once the green was already down.
     if(g&&!(mapMarks._ringMode&&!mapMarks.greenC)){
-      g.textContent=st.green?'📍 Green ✕':'📍 Set Green';
+      g.textContent=st.green?'⛳ Green ✕':'⛳ Set Green';
       g.style.borderColor=st.green?'var(--amber-bd)':'var(--green)';
       g.style.color=st.green?'var(--amber-bd)':'var(--green-mid)';
     }
     const t=document.getElementById('mtbtn');
     if(t&&!mapMarks._teeMode){
-      t.textContent=st.tee?'⛳ Tee ✕':'⛳ Set Tee';
+      t.textContent=st.tee?'📍 Tee ✕':'📍 Set Tee';
       t.style.borderColor=st.tee?'var(--amber-bd)':'var(--red)';
       t.style.color=st.tee?'var(--amber-bd)':'#ff8a7a';
     }
@@ -3286,7 +3332,9 @@ function clearGreenMark(quiet){
   try{if(S.round.manualGreens)delete S.round.manualGreens[h];save();}catch(e){}
   if(mapMarks.refreshTapLine)mapMarks.refreshTapLine();
   const el=document.getElementById('fmb');if(el)el.textContent='—';
-  if(had&&!quiet)stat('markclear',{course:S.course.id,courseName:S.course.name,hole:h+1,
+  // ALWAYS retract, even on a bulk reset — `quiet` hushes the on-screen note,
+  // never the Pi. Suppressing it here silently left mis-taps in the map data.
+  if(had)stat('markclear',{course:S.course.id,courseName:S.course.name,hole:h+1,
     what:'green',lat:had[0],lon:had[1],amn:amnStamp()});
   markBtns();
   const sb=document.getElementById('fmbsub');
@@ -3306,23 +3354,93 @@ function clearTeeMark(){
   const sb=document.getElementById('fmbsub');
   if(sb)sb.textContent='tee mark cleared — tap “Set Tee” to place it again.';
 }
+// LOCKING IN. Confirming the hole is the moment you say "those marks are
+// right" — distinct from the drags and re-taps that came before it. The relay
+// gets one marklock carrying the final pair, so the ingest can weigh a settled
+// answer above the fidgeting that led to it.
+function markLockIn(h){
+  try{
+    if(!amnesiaOn(S.course.id))return;
+    const ph=physHole(h);
+    const tee=teeFixFor(ph), grn=(S.round.manualGreens||{})[ph];
+    if(!tee&&!grn)return;
+    stat('marklock',{course:S.course.id,courseName:S.course.name,hole:ph+1,amn:1,
+      teeLat:tee?tee[0]:null,teeLon:tee?tee[1]:null,
+      greenLat:grn?grn[0]:null,greenLon:grn?grn[1]:null,
+      yards:(tee&&grn)?Math.round(mDist(tee,grn)*1.09361):null,
+      cardY:(mapMarks&&mapMarks._cardY)||null});
+  }catch(e){}
+}
 function greenBtnTap(){if(markState().green)clearGreenMark();else armSetGreen();}
 function teeBtnTap(){if(markState().tee)clearTeeMark();else armSetTee();}
+// Both marks down → the hole is no longer unknown, so stop showing it like it
+// is. Drop the search ring and frame it exactly as normal play would: green at
+// the top, tee at the bottom, your GPS line running up to the flag.
+// The SEARCH view: card ring around you, north up, framed. Entering Manual mode
+// builds it, and resetting the picks has to put it back — otherwise a redo left
+// you staring at the green-up frame of the marks you had just thrown away.
+function manualSearchView(){
+  try{
+    if(!LMAP)return false;
+    const me=mapMarks.mePos||myCoords;
+    if(!me)return false;
+    const cardY=mapMarks._cardY;
+    if(mapMarks._ring){try{LMAP.removeLayer(mapMarks._ring);}catch(e){}}
+    mapMarks._ring=L.circle(me,{radius:(cardY||300)*0.9144,color:'#ffd75e',weight:2.5,opacity:.85,fill:false,dashArray:'10 8'}).addTo(LMAP);
+    // same rule as the map-open path: the fixed frame is amnesia's, normal play
+    // fits the ring the way it always has
+    if(!(amnesiaOn(S.course.id)&&frameAround(me,FRAME_YDS,document.getElementById('holemap')))){
+      try{LMAP.fitBounds(mapMarks._ring.getBounds().pad(0.10));}catch(e){}
+    }
+    return true;
+  }catch(e){return false;}
+}
+function manualSnapIfReady(){
+  try{
+    if(!amnesiaOn(S.course.id)||!LMAP)return false;
+    const h=physHole(mapHole);
+    const tee=teeFixFor(h), grn=mapMarks.greenC;
+    if(!tee||!grn)return false;
+    if(mapMarks._ring){try{LMAP.removeLayer(mapMarks._ring);}catch(e){}mapMarks._ring=null;}
+    mapMarks._ringMode=false;mapMarks._teeMode=false;
+    mapMarks.ref=tee.slice();
+    orientGreenUp(tee,grn,null,[tee],document.getElementById('holemap'));
+    if(mapMarks.refreshTapLine)mapMarks.refreshTapLine();     // your dot → the green
+    try{updateFMB(mapMarks.mePos||tee,mapMarks.mePos?'yards from you':'yards from the tee');}catch(e){}
+    markBtns();
+    const sb=document.getElementById('fmbsub');
+    if(sb)sb.textContent='tee and green set — hole framed green-up. Tap 🔄 Manual to redo them.';
+    return true;
+  }catch(e){return false;}
+}
+// Pressing Manual again with marks down means "scrap those and start over" —
+// not "leave manual mode". Only an empty hole toggles the mode off.
+function manualResetPicks(){
+  const had=markState();
+  if(had.green)clearGreenMark(true);
+  if(had.tee)clearTeeMark();
+  mapMarks._manual=true;mapMarks._ringMode=true;mapMarks._teeMode=false;
+  mapMarks.greenC=null;mapMarks.aimC=null;
+  autoBearing(0);try{LMAP._btUserRot=false;}catch(e){}   // out of the green-up frame
+  manualSearchView();                                     // ...and back to the ring
+  markBtns();
+  return had.green||had.tee;
+}
 function armSetGreen(){
   const sb=document.getElementById('fmbsub');
   if(mapMarks._ringGreen){try{LMAP.removeLayer(mapMarks._ringGreen);}catch(e){}mapMarks._ringGreen=null;}
   mapMarks.greenC=null;mapMarks.aimC=null;mapMarks._ringMode=true;
   const g=document.getElementById('mgbtn');
-  if(g){g.style.borderColor='var(--amber-bd)';g.style.color='var(--amber-bd)';g.textContent='📍 Tap the green';}
+  if(g){g.style.borderColor='var(--amber-bd)';g.style.color='var(--amber-bd)';g.textContent='⛳ Tap the green';}
   if(sb)sb.textContent='now tap the middle of the green — drag the pin to fine-tune, tap it again to clear.';
 }
 function armSetTee(){
   const sb=document.getElementById('fmbsub');
   mapMarks._teeMode=true;mapMarks._ringMode=false;
   const t=document.getElementById('mtbtn');
-  if(t){t.style.borderColor='var(--amber-bd)';t.style.color='var(--amber-bd)';t.textContent='⛳ Tap the tee';}
+  if(t){t.style.borderColor='var(--amber-bd)';t.style.color='var(--amber-bd)';t.textContent='📍 Tap the tee';}
   const g=document.getElementById('mgbtn');
-  if(g&&!mapMarks.greenC){g.style.borderColor='var(--green)';g.style.color='var(--green-mid)';g.textContent='📍 Set Green';}
+  if(g&&!mapMarks.greenC){g.style.borderColor='var(--green)';g.style.color='var(--green-mid)';g.textContent='⛳ Set Green';}
   if(sb)sb.textContent='now tap the tee box you played from — drag the pin to fine-tune.';
 }
 // Placing the tee on an unmapped hole. Stored per-course on this phone exactly
@@ -3355,9 +3473,9 @@ function placeManualTee(t){
   // wrong box had no way back at all before this
   mk.on('click',()=>{if(!jd)clearTeeMark();});
   markBtns();
+  if(manualSnapIfReady())return;                       // both down — hole is framed, message already set
   const sb=document.getElementById('fmbsub');
-  if(sb)sb.textContent=mapMarks.greenC?'tee and green both set — drag either pin to adjust, tap a pin to clear it.'
-                                      :'tee set — tap the pin to clear it. Now find the green and tap “Set Green”.';
+  if(sb)sb.textContent='tee set — tap the pin to clear it. Now find the green and tap “⛳ Set Green”.';
 }
 function mapTapAt(t){
   if(mapMarks._teeMode){placeManualTee(t.slice());return;}
@@ -3397,7 +3515,7 @@ function mapTapAt(t){
         amn:amnStamp(),lat:+p.lat.toFixed(6),lon:+p.lng.toFixed(6),cardY:mapMarks._cardY||null,
         manual:!!mapMarks._manual,
         fromDist:mapMarks.mePos?Math.round(mDist(mapMarks.mePos,[p.lat,p.lng])*1.09361):null});};
-    report();markBtns();
+    report();markBtns();manualSnapIfReady();
     let jd=false;
     mk.on('drag',()=>{const p=mk.getLatLng();mapMarks.greenC=[p.lat,p.lng];
       if(mapMarks.refreshTapLine)mapMarks.refreshTapLine();
@@ -3875,25 +3993,7 @@ async function initHoleMap(){
     // Green-up: rotate so the tee sits at the bottom, green at the top, and set
     // the camera so the whole hole fills the screen. (Needs a tee — green-only
     // holes stay north-up.)
-    if(hasPath&&canRotate){try{
-      const tee=geo.path[0], rad=Math.PI/180, lat0=tee[0]*rad;
-      const M=pt=>[(pt[1]-tee[1])*111320*Math.cos(lat0),(pt[0]-tee[0])*110540]; // meters [east,north]
-      const g=M(greenC); const len=Math.hypot(g[0],g[1])||1;
-      const u=[g[0]/len,g[1]/len], v=[-u[1],u[0]];
-      let a0=1e9,a1=-1e9,c0=1e9,c1=-1e9;
-      geo.path.concat(greenPoly||[]).forEach(pt=>{const m=M(pt);
-        const a=m[0]*u[0]+m[1]*u[1], c=m[0]*v[0]+m[1]*v[1];
-        if(a<a0)a0=a;if(a>a1)a1=a;if(c<c0)c0=c;if(c>c1)c1=c;});
-      const vh=el.clientHeight||600, vw=el.clientWidth||360;
-      const mpp=Math.max((a1-a0)*1.18/Math.max(1,vh-110),(c1-c0)*1.35/Math.max(1,vw-30),0.05);
-      const zoom=Math.min(20,Math.log2(156543.03392*Math.cos(lat0)/mpp));
-      const midA=(a0+a1)/2, midC=(c0+c1)/2;
-      const cx=u[0]*midA+v[0]*midC, cy=u[1]*midA+v[1]*midC;
-      const center=[tee[0]+cy/110540, tee[1]+cx/(111320*Math.cos(lat0))];
-      const bearing=(Math.atan2(g[0],g[1])/rad+360)%360;
-      autoBearing(-bearing);
-      LMAP.setView(center,zoom,{animate:false});
-    }catch(e){}}
+    if(hasPath&&canRotate)orientGreenUp(geo.path[0],greenC,greenPoly,geo.path,el);
     mapMarks={greenC,greenPoly,ref:hasPath?geo.path[0]:greenC,mePos:null,aimC:null};
     if(hasPath)updateFMB(geo.path[0],'yards from the tee');
     else{
@@ -3905,26 +4005,7 @@ async function initHoleMap(){
         if(!from||!canRotate)return;
         if(lastOrient&&mDist(from,lastOrient)<5)return;   // ignore GPS jitter
         lastOrient=from.slice();
-        try{
-          const rad=Math.PI/180, lat0=from[0]*rad;
-          const M=pt=>[(pt[1]-from[1])*111320*Math.cos(lat0),(pt[0]-from[0])*110540];
-          const g=M(greenC); const len=Math.hypot(g[0],g[1])||1;
-          const u=[g[0]/len,g[1]/len], v=[-u[1],u[0]];
-          let a0=1e9,a1=-1e9,c0=1e9,c1=-1e9;
-          [from].concat(greenPoly||[greenC]).forEach(pt=>{const m=M(pt);
-            const a=m[0]*u[0]+m[1]*u[1], c=m[0]*v[0]+m[1]*v[1];
-            if(a<a0)a0=a;if(a>a1)a1=a;if(c<c0)c0=c;if(c>c1)c1=c;});
-          const vh=el.clientHeight||600, vw=el.clientWidth||360;
-          const mpp=Math.max((a1-a0)*1.18/Math.max(1,vh-110),(c1-c0)*1.35/Math.max(1,vw-30),0.05);
-          const zoom=Math.min(20,Math.log2(156543.03392*Math.cos(lat0)/mpp));
-          const midA=(a0+a1)/2, midC=(c0+c1)/2;
-          const cx=u[0]*midA+v[0]*midC, cy=u[1]*midA+v[1]*midC;
-          const center=[from[0]+cy/110540, from[1]+cx/(111320*Math.cos(lat0))];
-          const bearing=(Math.atan2(g[0],g[1])/rad+360)%360;
-          // keep following you as you walk, but never overrule a hand twist
-          if(!LMAP._btUserRot)autoBearing(-bearing);
-          LMAP.setView(center,zoom,{animate:false});
-        }catch(e){}
+        orientGreenUp(from,greenC,greenPoly,[from],el);
       };
       if(myCoords){updateFMB(myCoords,'yards from you');mapMarks.orientFromMe(myCoords);}
       const s3=sub();if(s3)s3.textContent='green mapped here (tee line not mapped) — yardages run off your GPS.';
