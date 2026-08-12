@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786512578';
+const BUILD='1786565041';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1866,6 +1866,7 @@ function NP(){
   if(g==='quota'&&S.config.quota)return Math.min(4,Math.max(1,S.config.quota.n||4));
   if(g==='bbb'&&S.config.bbb)return Math.min(4,Math.max(2,S.config.bbb.n||4));
   if(g==='nassau'&&S.config.nassau)return S.config.nassau.n===2?2:4;
+  if(g==='scramble'&&S.config.scramble)return S.config.scramble.teams==='duo'?2:4;
   if(g==='skins'&&S.config.skins)return Math.min(4,Math.max(2,S.config.skins.n||4));
   return 4;
 }
@@ -2170,17 +2171,27 @@ function computeBestBall(){
   }
   return {ledgers,perHole:null,carries:{net:0,gross:0},lenses:['net','gross']};
 }
-// Scramble (2v2): one ball per team. Net uses the USGA two-player scramble
-// allowance — 35% of the low course handicap + 15% of the high.
+// Scramble: one ball per team, in three shapes --
+//   '2v2'  four players, two teams          '2 v 2'
+//   'solo' four players, one team           tournament card
+//   'duo'  TWO players, one team            a pair out on their own
+// Net uses the USGA scramble allowance: 35/15 for a two-man team, 25/20/15/10
+// for a four-man one.
 function scrambleTeams(){
-  return (S.config.scramble&&S.config.scramble.teams==='solo')?[[0,1,2,3]]:matchTeams('scramble');
+  const t=S.config.scramble&&S.config.scramble.teams;
+  if(t==='duo')return [[0,1]];
+  if(t==='solo')return [[0,1,2,3]];
+  return matchTeams('scramble');
 }
 function scrambleStrokes(){
   const T=scrambleTeams(),ch=courseHandicaps();
   if(T.length===1){
-    // one team of four: USGA 25/20/15/10% of the sorted course handicaps, absolute
+    // one team, nobody to play off: allowance applies to the sorted course
+    // handicaps and the result is absolute. Keyed off team SIZE, not the count
+    // of teams -- a two-man team here takes the same 35/15 it takes in 2v2.
     const c=T[0].map(i=>ch[i]).sort((a,b)=>a-b);
-    return [Math.max(0,Math.round((0.25*c[0]+0.20*c[1]+0.15*c[2]+0.10*c[3])*S.config.allowance/100))];
+    const pct=c.length===2?[0.35,0.15]:[0.25,0.20,0.15,0.10];
+    return [Math.max(0,Math.round(c.reduce((s,v,i)=>s+v*(pct[i]||0),0)*S.config.allowance/100))];
   }
   const tch=T.map(t=>{const a=ch[t[0]],b=ch[t[1]];return Math.round((0.35*Math.min(a,b)+0.15*Math.max(a,b))*S.config.allowance/100);});
   const m=Math.min(...tch);
@@ -2481,18 +2492,51 @@ function loadLeaflet(){
     sc.onload=res;sc.onerror=()=>rej(new Error('map library failed to load'));
     document.head.appendChild(sc);
   });
+  // VENDORED, not CDN. These used to load from unpkg on every cold start, which
+  // meant the map library was a network dependency on a golf course — and the
+  // service worker could not precache them, so the very first map open without
+  // signal came up with no map and no rotation. They now ship with the app and
+  // sit in the SW's CORE list. unpkg stays as a fallback for the one case the
+  // local copy can fail: an old install whose cached shell predates the vendor
+  // folder.
+  const CDN={css:'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
+             js:'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
+             rot:'https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate.js'};
   leafletP=(async()=>{
     if(!window.L){
       const c=document.createElement('link');c.rel='stylesheet';
-      c.href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';document.head.appendChild(c);
-      await script('https://unpkg.com/leaflet@1.9.4/dist/leaflet.js');
+      c.href='vendor/leaflet.css';
+      c.onerror=()=>{const f=document.createElement('link');f.rel='stylesheet';f.href=CDN.css;document.head.appendChild(f);};
+      document.head.appendChild(c);
+      try{await script('vendor/leaflet.js');}catch(e){await script(CDN.js);}
     }
-    // rotation plugin — enables green-up hole orientation (raster satellite can't rotate on its own)
+    // rotation plugin — green-up orientation and the two-finger twist on an
+    // unmapped hole. Raster satellite cannot rotate on its own.
     if(!L.Map.prototype.setBearing){
-      try{await script('https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate.js');}catch(e){}
+      try{await script('vendor/leaflet-rotate.js');}
+      catch(e){try{await script(CDN.rot);}catch(e2){}}
     }
   })().catch(e=>{leafletP=null;throw e;});
   return leafletP;
+}
+// Frame the satellite view at a KNOWN scale: `yds` from the centre to the nearer
+// screen edge. A raw zoom level is a lie on a phone — the same number covers a
+// different amount of ground on every screen size and every latitude, so
+// setView(c,16) meant roughly 200 yards on Nathan's phone and something else on
+// anyone else's. Amnesia leans on this: with the map blacked out, the one thing
+// that has to be predictable is how far out you are looking.
+const FRAME_YDS=300;   // matches manualModeTap's (cardY||300) fallback
+function frameAround(center,yds,el){
+  try{
+    if(!LMAP||!center)return false;
+    const w=(el&&el.clientWidth)||360,h=(el&&el.clientHeight)||600;
+    const half=Math.max(60,Math.min(w,h)/2);                       // nearer edge, px
+    const mpp=(yds*0.9144)/half;                                   // metres per pixel needed
+    const z=Math.log2(156543.03392*Math.cos(center[0]*Math.PI/180)/mpp);
+    if(!isFinite(z))return false;
+    LMAP.setView(center,Math.max(3,Math.min(20,z)),{animate:false});
+    return true;
+  }catch(e){return false;}
 }
 function mDist(a,b){return kmBetween(a[0],a[1],b[0],b[1])*1000;}
 function yd(m){return Math.round(m*1.09361);}
@@ -2981,16 +3025,42 @@ function amnesiaOn(id){
   if(!a)return false;
   return a==='1'||a===id;
 }
-// Settings toggle. Turning it ON drops the geo this phone is holding for the
-// open course so the change takes effect on the next map open rather than after
-// a reload — an installed PWA is not a browser tab you can just refresh.
-function amnesiaToggle(){
-  const on=!!amnesiaGet();
-  amnesiaSet(on?null:'1');
+// PARK AND RESTORE — never delete. Entering amnesia moves the real map aside
+// into geoReal and drops a deliberately blank one in its place. Leaving puts the
+// original back byte for byte: no refetch, no signal needed, nothing lost. That
+// is what makes the switch safe to flip back and forth in the middle of a round
+// on a course with no cell service.
+// MUST NOT use set() on either path: set() renders, render() calls initHoleMap(),
+// and initHoleMap() calls these — that loop is what killed every button in the
+// field. Direct mutate + save(), and let the caller render.
+// Provenance for the relay. Everything observed under amnesia still goes to the
+// Pi under the REAL course id — that is the whole point of collecting it — but
+// it is stamped so the pipeline knows it was gathered blind, with no map on
+// screen to anchor the eye. Nothing here touches the shipped map; the ingest
+// decides, later and off-phone, what the observations are worth.
+function amnStamp(){try{return amnesiaOn(S.course.id)?1:0;}catch(e){return 0;}}
+function amnesiaPark(){
   try{
-    if(!on&&S.course&&S.course.geo){delete S.course.geo;save();}
-    render();
-  }catch(e){render();}
+    if(!S.course)return;
+    if(S.course.geo&&!S.course.geo.amn)S.course.geoReal=S.course.geo;   // keep the real one
+    S.course.geo={ts:Date.now(),holes:{},empty:true,amn:1};
+    save();
+  }catch(e){}
+}
+function amnesiaRestore(){
+  try{
+    if(!S.course)return;
+    if(S.course.geoReal){S.course.geo=S.course.geoReal;delete S.course.geoReal;}
+    else if(S.course.geo&&S.course.geo.amn)delete S.course.geo;  // nothing parked — refetch normally
+    save();
+  }catch(e){}
+}
+// Settings toggle. Takes effect on the next map open rather than after a reload —
+// an installed PWA is not a browser tab you can just refresh.
+function amnesiaToggle(){
+  const turningOn=!amnesiaGet();
+  amnesiaSet(turningOn?'1':null);
+  try{turningOn?amnesiaPark():amnesiaRestore();render();}catch(e){render();}
 }
 (function(){
   try{
@@ -3003,31 +3073,12 @@ function amnesiaToggle(){
 })();
 async function ensureCourseGeo(){
   if(amnesiaOn(S.course.id)){
-    // Wipe what this phone already knows, then fall through to the live-OSM
-    // lookup exactly as a first-timer on an unmapped course would.
-    // MUST NOT use set() here: set() calls render(), render() calls
-    // initHoleMap(), and initHoleMap() calls this function — so a set() on this
-    // path re-enters forever and pegs the main thread. In the field that looked
-    // like every button in the app going dead, including Back and End Round.
-    try{delete S.course.geo;save();}catch(e){}   // keep geoUrl — it is how the real map comes back
-    const pos0=await new Promise(res=>{
-      if(!navigator.geolocation)return res(null);
-      navigator.geolocation.getCurrentPosition(p=>res([p.coords.latitude,p.coords.longitude]),
-        ()=>res(null),{timeout:8000,maximumAge:120000});
-    });
-    const c0=pos0||myCoords;
-    if(!c0)throw new Error('Turn on location to download the course map.');
-    const q0=`[out:json][timeout:25];(way["golf"="hole"](around:2500,${c0[0]},${c0[1]});way["golf"="green"](around:2500,${c0[0]},${c0[1]}););out geom;`;
-    let found0=0;const holes0={};
-    try{
-      const js0=await overpassQuery(q0);
-      (js0.elements||[]).forEach(e=>{
-        const g=(e.geometry||[]).map(p=>[+p.lat.toFixed(6),+p.lon.toFixed(6)]);
-        if(e.tags&&e.tags.golf==='hole'){const n=parseInt(e.tags.ref);
-          if(n>0&&g.length>1){holes0[n]=Object.assign(holes0[n]||{},{path:g});found0++;}}
-      });
-    }catch(e){}
-    set(()=>{S.course.geo={ts:Date.now(),holes:holes0,empty:found0===0,amn:1};});
+    // TRUE BLACKOUT. This used to re-query Overpass, which meant a course OSM
+    // has tagged — 6,699 of our 7,185 baked maps — handed its holes straight
+    // back and you never saw the unmapped flow at all. No network call, no GPS
+    // fix, no hosted file: park the real map and stand on a blank one, so the
+    // learn-the-course path is reachable at ANY course, mapped or not.
+    amnesiaPark();
     return;
   }
   let hostedUrl=S.course.geoUrl||HOSTED_GEO[S.course.id];
@@ -3135,8 +3186,11 @@ function manualModeTap(){
   mapMarks._cardY=cardY||null;mapMarks._manual=true;
   if(me){
     if(mapMarks._ring){try{LMAP.removeLayer(mapMarks._ring);}catch(e){}}
-    mapMarks._ring=L.circle(me,{radius:(cardY||300)*0.9144,color:'#ffd75e',weight:2.5,opacity:.85,fill:false,dashArray:'10 8'}).addTo(LMAP);
-    try{LMAP.fitBounds(mapMarks._ring.getBounds().pad(0.10));}catch(e){}
+    mapMarks._ring=L.circle(me,{radius:(cardY||FRAME_YDS)*0.9144,color:'#ffd75e',weight:2.5,opacity:.85,fill:false,dashArray:'10 8'}).addTo(LMAP);
+    // same framing rule as the map-open path — one scale, however you got here
+    if(!frameAround(me,Math.max(FRAME_YDS,(cardY||0)*1.12),document.getElementById('holemap'))){
+      try{LMAP.fitBounds(mapMarks._ring.getBounds().pad(0.10));}catch(e){}
+    }
   }
   if(b){b.style.borderColor='var(--amber-bd)';b.style.color='var(--amber-bd)';b.textContent='🔄 Manual ON';}
   if(!document.getElementById('mtbtn')&&b){
@@ -3189,7 +3243,7 @@ function placeManualTee(t){
     mapMarks.ref=q;
     const gc=mapMarks.greenC;
     if(gc){try{updateFMB(q,'yards from the tee');}catch(e){}}
-    stat('teemark',{course:S.course.id,courseName:S.course.name,hole:h+1,
+    stat('teemark',{course:S.course.id,courseName:S.course.name,hole:h+1,amn:amnStamp(),
       lat:q[0],lon:q[1],geoSrc:'manual',movedYds:null,
       yardsToGreen:gc?Math.round(mDist(q,gc)*1.09361):null,
       fromDist:mapMarks.mePos?Math.round(mDist(mapMarks.mePos,q)*1.09361):null});
@@ -3237,7 +3291,7 @@ function mapTapAt(t){
         S.round.manualGreens[physHole(mapHole)]=[+p.lat.toFixed(6),+p.lng.toFixed(6)];save();}catch(e){}
       if(mapMarks._restoring)return;   // restoring a green we already reported
       stat('greenmark',{course:S.course.id,courseName:S.course.name,hole:physHole(mapHole)+1,
-        lat:+p.lat.toFixed(6),lon:+p.lng.toFixed(6),cardY:mapMarks._cardY||null,
+        amn:amnStamp(),lat:+p.lat.toFixed(6),lon:+p.lng.toFixed(6),cardY:mapMarks._cardY||null,
         manual:!!mapMarks._manual,
         fromDist:mapMarks.mePos?Math.round(mDist(mapMarks.mePos,[p.lat,p.lng])*1.09361):null});};
     report();
@@ -3443,7 +3497,7 @@ function greensConsumeTarget(){
       pts.forEach((g,i)=>{const d=mDist(me,g);if(d<bd){bd=d;bi=i;}});
       const ydsOff=Math.round(bd*1.09361);
       if(bi!=null&&ydsOff<=60)
-        stat('greennum',{course:S.course.id,courseName:S.course.name,
+        stat('greennum',{course:S.course.id,courseName:S.course.name,amn:amnStamp(),
           hole:physHole(mapHole)+1,gi:bi,lat:pts[bi][0],lon:pts[bi][1],
           of:pts.length,holes:(S.course.holes||[]).length,
           fromDist:ydsOff,wasTarget:st.target===bi});
@@ -3511,16 +3565,24 @@ function initGreensMap(el){
 // The fix sticks for that course on this phone (per-course, like S.shotLast)
 // and is reported so agreement across devices can correct the shipped map.
 // Never synced: one player's map correction must not rewrite another's round.
+// Tee corrections are the ONE thing a manual round writes that outlives the
+// round and feeds the real map (withTeeFix applies them everywhere). So amnesia
+// gets its own bucket: a tee set while pretending the course is unmapped must
+// not move the tee on the map you actually play off tomorrow. The relay still
+// receives every teemark under the REAL course id — the Pi is where amnesia work
+// is supposed to land.
+function teeFixKey(){return (amnesiaOn(S.course.id)?'amn:':'')+S.course.id;}
 function teeFixFor(h){
-  try{const c=S.teeFix&&S.teeFix[S.course.id];return (c&&c[h])||null;}catch(e){return null;}
+  try{const c=S.teeFix&&S.teeFix[teeFixKey()];return (c&&c[h])||null;}catch(e){return null;}
 }
 function teeFixSet(h,p){
   if(!S.teeFix)S.teeFix={};
-  if(!S.teeFix[S.course.id])S.teeFix[S.course.id]={};
-  S.teeFix[S.course.id][h]=p;save();
+  const k=teeFixKey();
+  if(!S.teeFix[k])S.teeFix[k]={};
+  S.teeFix[k][h]=p;save();
 }
 function teeFixClear(h){
-  try{const c=S.teeFix&&S.teeFix[S.course.id];if(c&&c[h]){delete c[h];save();}}catch(e){}
+  try{const c=S.teeFix&&S.teeFix[teeFixKey()];if(c&&c[h]){delete c[h];save();}}catch(e){}
 }
 // Returns geo with the corrected tee substituted, WITHOUT touching S.course.geo
 // — every downstream consumer (the yardage label, F/M/B, updateFMB, the Google
@@ -3543,9 +3605,12 @@ async function initHoleMap(){
   // Retry it (throttled) so standing on the 1st tee heals the record.
   // amnesia: any geo this phone already holds is the very map we are pretending
   // not to have, so discard it once and let ensureCourseGeo take the blind path
-  if(amnesiaOn(S.course.id)&&S.course.geo&&!S.course.geo.amn){
-    try{delete S.course.geo;save();}catch(e){}   // keep geoUrl — it is how the real map comes back   // never set() — see ensureCourseGeo
-  }
+  // Keep the cached map in step with the switch, BOTH ways. The off direction
+  // matters as much as the on: an amnesia map left behind is simply the wrong
+  // map once amnesia is over, and nothing downstream would ever have replaced
+  // it. Park/restore rather than delete — see amnesiaPark.
+  if(amnesiaOn(S.course.id)){if(!(S.course.geo&&S.course.geo.amn))amnesiaPark();}
+  else if(S.course.geo&&S.course.geo.amn)amnesiaRestore();
   if(!S.course.geo||(S.course.geo.empty&&Date.now()-(S.course.geo.ts||0)>GEO_RETRY_MS)){
     const s2=sub();if(s2)s2.textContent='Downloading course map…';
     try{
@@ -3577,8 +3642,23 @@ async function initHoleMap(){
   manualOn=false;   // every hole starts in normal (locked) mode
   const canRotate=!!L.Map.prototype.setBearing;
   LMAP=L.map(el,canRotate?{zoomControl:false,rotate:true,rotateControl:false,touchRotate:false,zoomSnap:0}:{zoomControl:false});
-  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+  const sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
     {maxZoom:20,maxNativeZoom:19,attribution:'Esri, Maxar | Course data © OpenStreetMap contributors'}).addTo(LMAP);
+  // ROTATED CORNERS. leaflet-rotate widens the tile bounds for the current
+  // bearing correctly (814x840 px for a 375x684 viewport at 42°), but nothing
+  // re-runs the tile pass when the bearing CHANGES — so a twisted map kept the
+  // 8 tiles it fetched while north-up and showed black wedges in the corners,
+  // which is exactly where you are looking once you have turned the green to
+  // the top. Nudge the grid layer on rotate, throttled so a continuous
+  // two-finger twist doesn't re-enter it every frame. (keepBuffer does NOT fix
+  // this — measured: it only retains tiles already fetched.)
+  if(canRotate){
+    let rotT=0;
+    LMAP.on('rotate',()=>{
+      if(rotT)return;
+      rotT=setTimeout(()=>{rotT=0;try{sat._update();}catch(e){}},120);
+    });
+  }
   let greenC=null,greenPoly=null;
   // A hole can arrive green-only (verified green, tee never mapped — the
   // crowdsourced gap-fills). Everything below that needs the tee is guarded:
@@ -3625,7 +3705,7 @@ async function initHoleMap(){
         const h=physHole(mapHole);
         teeFixSet(h,p);
         const shipped=(S.course.geo.holes[h+1]||{}).path;
-        stat('teemark',{course:S.course.id,courseName:S.course.name,hole:h+1,
+        stat('teemark',{course:S.course.id,courseName:S.course.name,hole:h+1,amn:amnStamp(),
           lat:p[0],lon:p[1],geoSrc:S.course.geoSrc||null,
           movedYds:shipped&&shipped[0]?Math.round(mDist(shipped[0],p)*1.09361):null,
           fromDist:mapMarks.mePos?Math.round(mDist(mapMarks.mePos,p)*1.09361):null});
@@ -3744,8 +3824,15 @@ async function initHoleMap(){
   }else{
     const c=myCoords||[38.6972,-121.6173];
     const synthRef=!myCoords;   // no GPS yet: this centre is a placeholder, not a location
+    // North up, two-finger rotation UNLOCKED from the moment the map opens.
+    // There is no green to auto-orient to on a hole with no geometry, so the
+    // twist is the only way to get the green to the top — it must not be gated
+    // behind the Manual button.
     if(canRotate){try{LMAP.setBearing(0);LMAP.touchRotate&&LMAP.touchRotate.enable();}catch(e){}}
-    LMAP.setView(c,16);
+    // ~300 yards from your dot to the nearer edge. Amnesia is the usual way to
+    // land here and it must show exactly what a first-timer on a genuinely
+    // unmapped hole sees, so both paths get the identical framing.
+    if(!(myCoords&&frameAround(c,FRAME_YDS,el)))LMAP.setView(c,16);
     mapMarks={greenC:null,greenPoly:null,ref:c,mePos:null,aimC:null,_synthRef:synthRef};
     // CARD RING: unmapped hole + known card yardage = the green MUST sit on a
     // ring of that radius around the tee. Eye walks the ring; tap the green
@@ -3756,7 +3843,12 @@ async function initHoleMap(){
     const cardY=tset&&tset.yds&&tset.yds[physHole(mapHole)];
     if(cardY){
       mapMarks._ring=L.circle(c,{radius:cardY*0.9144,color:'#ffd75e',weight:2.5,opacity:.85,fill:false,dashArray:'10 8'}).addTo(LMAP);
-      try{LMAP.fitBounds(mapMarks._ring.getBounds().pad(0.12));}catch(e){}
+      // Hold the 300-yard baseline, but never so tight the ring runs off screen:
+      // a 150-yard par 3 used to open zoomed so far in you could not see where
+      // you were standing, and a 480-yard par 5 pushed the ring past the edge.
+      if(!frameAround(c,Math.max(FRAME_YDS,cardY*1.12),el)){
+        try{LMAP.fitBounds(mapMarks._ring.getBounds().pad(0.12));}catch(e){}
+      }
       mapMarks._ringMode=true;mapMarks._cardY=cardY;
       const mg=(S.round.manualGreens||{})[physHole(mapHole)];
       if(mg){mapMarks._restoring=true;try{mapTapAt(mg.slice());}catch(e){}mapMarks._restoring=false;}
@@ -4578,7 +4670,17 @@ function showRules(g){
     if(el){const d=el.closest('details');d.open=true;d.scrollIntoView({block:'start'});}
   });
 }
-function chooseGame(g){set(()=>{S.config.game=g;S.config.games=[g];ensureMeFirst();S.screen='setup';});}
+function chooseGame(g){set(()=>{S.config.game=g;S.config.games=[g];ensureMeFirst();
+  // Scramble sizes its own roster, so the format has to agree with the crew you
+  // just built at the gate: a pair can only be a two-man team, and neither
+  // four-player shape can survive being handed two golfers. Still overridable
+  // by the buttons on the setup card -- this only picks the sane default.
+  if(g==='scramble'&&S.config.scramble){
+    const n=S.players.filter(isRealPl).length;
+    if(n<=2)S.config.scramble.teams='duo';
+    else if(S.config.scramble.teams==='duo')S.config.scramble.teams='2v2';
+  }
+  S.screen='setup';});}
 function vPickGame(){
   return topbar('Pick your game','What are you playing today?','gate')+`<main>
   <div class="card">${gameGridHTML('chooseGame')}</div>
@@ -5388,8 +5490,9 @@ function vRules(){
     'Settlement pays by <b>holes of difference</b>.']),'bestball')}
   ${ruleCard(img('/scramble.png',48),'Scramble','One ball per team',li([
     'Everyone tees off, the team picks the best shot, everyone plays from there — one score per team per hole.',
-    '<b>2 v 2:</b> the higher-handicap team gets net strokes via the <b>35% / 15%</b> two-player allowance.',
-    '<b>One team (all 4):</b> tournament mode — the app keeps the official card; net uses the <b>25/20/15/10%</b> allowance.',
+    '<b>Just us 2:</b> two players, one ball, one card — net off the <b>35% / 15%</b> two-man allowance.',
+    '<b>2 v 2:</b> the higher-handicap team gets net strokes via the same <b>35% / 15%</b> allowance.',
+    '<b>All 4:</b> tournament mode — the app keeps the official card; net uses the <b>25/20/15/10%</b> allowance.',
     'Lowest team total wins. In one-team mode there’s nothing to settle — hand the card to the committee.']),'scramble')}
   ${ruleCard(img('/sixes.png',48),'Sixes','Rotating partners — best ball match',li([
     '<b>Three matches in one round:</b> partners swap every six holes (every three on a nine), so by the 18th everyone has teamed with everyone.',
@@ -6169,7 +6272,7 @@ function vCourse(){
   <div class="card"><h2>Name</h2><input type="text" value="${esc(c.name)}" onchange="set(()=>S.course.name=this.value)" oninput="S.course.name=this.value;save()">
     ${c.geo?`<button class="ghost mt" id="tilebtn" onclick="preloadCourseTiles(true)">${tilePackFresh()?'✓ Offline maps ready — tap to refresh':'⬇ Download offline hole maps'}</button>
     <div class="tiny mt">Grab the satellite tiles on wifi and every hole opens instantly, even with no signal on the course.</div>
-    <button class="ghost mt" onclick="set(()=>delete S.course.geo)">Clear downloaded hole-map data</button>
+    <button class="ghost mt" onclick="set(()=>{delete S.course.geo;delete S.course.geoReal;})">Clear downloaded hole-map data</button>
     <div class="tiny mt">Use this if the satellite map shows the wrong course — it re-downloads at the course next time.</div>`:''}</div>
   <div class="card"><h2>Tee sets — name · rating · slope</h2>${tees}
     <button class="ghost mt" onclick="addTee()">Add tee set</button>
@@ -6254,7 +6357,8 @@ function vSetup(){
     <div class="stepper"><button onclick="chPt('${k}',-1)">−</button><span class="val num">${P[k]}</span><button onclick="chPt('${k}',1)">+</button></div></div>`;
   const V=S.config.vegas;
   const pairLbl=T=>`${esc(S.players[T[0][0]].name)} &amp; ${esc(S.players[T[0][1]].name)} <span class="muted">vs</span> ${esc(S.players[T[1][0]].name)} &amp; ${esc(S.players[T[1][1]].name)}`;
-  const SUBS={nines:'Every hole is worth 9 points: 5 · 3 · 1',vegas:'Low team number takes the difference',stroke:'Straight scoring — net, gross or both',stableford:'Points vs par — highest total wins',quota:'Beat your own number',sixes:'Partners rotate — best ball wins the hole',umbrella:'Six points a hole — sweep for twelve',bbb:'Three taps a hole — bingo, bango, bongo',nassau:'Front nine · back nine · overall — three bets',skins:'Win the hole outright — ties roll the pot',bestball:'2 v 2 — better ball wins the hole',scramble:'2 v 2 — one ball per team'};
+  const SUBS={nines:'Every hole is worth 9 points: 5 · 3 · 1',vegas:'Low team number takes the difference',stroke:'Straight scoring — net, gross or both',stableford:'Points vs par — highest total wins',quota:'Beat your own number',sixes:'Partners rotate — best ball wins the hole',umbrella:'Six points a hole — sweep for twelve',bbb:'Three taps a hole — bingo, bango, bongo',nassau:'Front nine · back nine · overall — three bets',skins:'Win the hole outright — ties roll the pot',bestball:'2 v 2 — better ball wins the hole',
+    scramble:S.config.scramble.teams==='duo'?'Two of you, one ball':S.config.scramble.teams==='solo'?'All four, one ball':'2 v 2 — one ball per team'};
   const stackN=(S.config.games||[]).length;
   return topbar(`Round setup — ${gameName(S.config.game)}${stackN>1?` +${stackN-1}`:''}`,SUBS[S.config.game]||'Order = tee order on hole 1 (wolf rotation)','gate')+`<main>
   <button class="ghost" style="width:100%;margin-bottom:12px" onclick="go('gate')">⚔️ Edit group — add or remove golfers</button>
@@ -6317,14 +6421,18 @@ function vSetup(){
     let out='';
     if(bestball)out+=mysteryPending('bestball')?mystBlock('bestball','🏆 Best Ball teams'):`<div class="card"><h2>🏆 Best Ball teams</h2>${pairBtns('bestball')}${teamNamesHTML('bestball')}
       <div class="tiny mt">Better ball of each team wins the hole.</div></div>`;
-    if(scramble)out+=`<div class="card"><h2>🤝 Scramble teams</h2>
+    if(scramble){const sf=S.config.scramble.teams;
+      out+=`<div class="card"><h2>🤝 Scramble teams</h2>
       <div class="row" style="border-top:none"><span class="muted">Format</span>
       <span class="seg" style="display:inline-flex;gap:6px">
-        <button class="ghost ${S.config.scramble.teams!=='solo'?'sel':''}" onclick="set(()=>S.config.scramble.teams='2v2')">2 v 2</button>
-        <button class="ghost ${S.config.scramble.teams==='solo'?'sel':''}" onclick="set(()=>S.config.scramble.teams='solo')">One team — all 4</button>
+        <button class="ghost ${sf==='duo'?'sel':''}" onclick="set(()=>S.config.scramble.teams='duo')">Just us 2</button>
+        <button class="ghost ${sf!=='solo'&&sf!=='duo'?'sel':''}" onclick="set(()=>S.config.scramble.teams='2v2')">2 v 2</button>
+        <button class="ghost ${sf==='solo'?'sel':''}" onclick="set(()=>S.config.scramble.teams='solo')">All 4</button>
       </span></div>
-      ${S.config.scramble.teams==='solo'?'':pairBtns('scramble')+teamNamesHTML('scramble')}
-      <div class="tiny mt">${S.config.scramble.teams==='solo'?'Tournament mode — the whole group plays one ball and the app keeps the card. Net uses the 25/20/15/10% four-player allowance.':'One ball per team — pick your partners. Net strokes use the 35%/15% scramble allowance.'}</div></div>`;
+      ${(sf==='solo'||sf==='duo')?'':pairBtns('scramble')+teamNamesHTML('scramble')}
+      <div class="tiny mt">${sf==='duo'?'Two of you, one ball, one card — nobody to play against. Net uses the 35%/15% two-man scramble allowance.'
+        :sf==='solo'?'Tournament mode — the whole group plays one ball and the app keeps the card. Net uses the 25/20/15/10% four-player allowance.'
+        :'One ball per team — pick your partners. Net strokes use the 35%/15% scramble allowance.'}</div></div>`;}
     if(umbrella)out+=mysteryPending('umbrella')?mystBlock('umbrella','☂ Umbrella teams'):`<div class="card"><h2>☂ Umbrella teams</h2>${pairBtns('umbrella')}${teamNamesHTML('umbrella')}
       <div class="tiny mt">Six points a hole — low ball 2, low team total 2, closest to pin 1, gross birdie 1. Sweep all six for 12.</div></div>`;
     if(nassau&&S.config.nassau.n!==2)out+=mysteryPending('nassau')?mystBlock('nassau','🏅 Nassau teams'):`<div class="card"><h2>🏅 Nassau teams</h2>${pairBtns('nassau')}${teamNamesHTML('nassau')}
@@ -7616,8 +7724,9 @@ function vHoleScramble(){
   return topbar(`Hole ${h+1} · Par ${hole.par}`,`Handicap ${hole.si}${S.share.on?` · ${esc(S.share.code)} ${sockOpen?'●':'○ will sync'}`:''}`,'','hero',`<div style="display:flex;align-items:center;margin-left:auto;gap:12px">${gameBadgeHTML()}</div>`)+`<main>
     ${reviewBanner()}${runningTotalsCard()}
     <div class="card">
-      <div class="tiny mb">${T.length===1?'One ball for the whole group — the official tournament card.':'One score per team — everyone plays from the best shot.'}</div>
-      ${capt.some(i=>rec.gross[i]==null)?`<button class="ghost mb" style="width:100%" onclick="set(()=>prefillNines(${h}))">Both teams to par ${hole.par} — adjust from there</button>`:''}
+      <div class="tiny mb">${T.length>1?'One score per team — everyone plays from the best shot.'
+        :T[0].length===2?'One ball between the two of you — best shot, then play it.':'One ball for the whole group — the official tournament card.'}</div>
+      ${capt.some(i=>rec.gross[i]==null)?`<button class="ghost mb" style="width:100%" onclick="set(()=>prefillNines(${h}))">${T.length>1?'Both teams':'Start'} at par ${hole.par} — adjust from there</button>`:''}
       ${rows}
     </div>
     ${rec.confirmed
@@ -7999,7 +8108,9 @@ function vStandings(){
         const vv=sc.ledgers[L][t[0]],d=vv-sc.par[L][t[0]];
         return `<td class="r num" style="font-size:34px">${thru?`${vv} <span style="font-size:17px">${d===0?'E':(d>0?'+':'')+d}</span>`:'–'}</td>`;}).join('')}</tr>`).join('')}
       </table>${T.length===1?'':teamPickerRow('scramble')}
-      <div class="tiny mt">${T.length===1?'Tournament tracker — one ball, whole group. Net plays off the 25/20/15/10% four-player allowance ('+scrambleStrokes()[0]+' strokes).':'One ball per team — lowest total wins. Net gives the higher-handicap team strokes via the 35%/15% scramble allowance.'}</div></div>`;
+      <div class="tiny mt">${T.length>1?'One ball per team — lowest total wins. Net gives the higher-handicap team strokes via the 35%/15% scramble allowance.'
+        :T[0].length===2?'Two-man team, one ball. Net plays off the 35%/15% scramble allowance ('+scrambleStrokes()[0]+' strokes).'
+        :'Tournament tracker — one ball, whole group. Net plays off the 25/20/15/10% four-player allowance ('+scrambleStrokes()[0]+' strokes).'}</div></div>`;
   }else if(view==='bestball'){
     const bb=computeBestBall();
     const blocks=cols.map(L=>{
@@ -8301,11 +8412,14 @@ function vSettleStack(G){
 // Deliberately computed from the LIVE roster on every render rather than a flag
 // stamped at round start: start solo, join a group at the turn, and settlement
 // comes back the moment their players land in the roster. The reverse holds too.
-function soloRound(){
+// NAME NOTE: this must never be called soloRound() -- that name already belongs
+// to the home-screen "Single Player Round" button handler, and a second
+// top-level declaration silently replaced it, leaving that button dead.
+function isSoloRound(){
   try{return actIdx().length<2;}catch(e){return false;}
 }
 function settleSectionHTML(){
-  if(soloRound())return '';
+  if(isSoloRound())return '';
   try{
     const raw=vSettle();
     const a=raw.indexOf('<main>'),b=raw.lastIndexOf('</main>');
@@ -8354,7 +8468,9 @@ function vSettle(){
         <div class="muted">${thru?(d===0?'even par':(d>0?'+':'')+d+' to par'):'no holes confirmed yet'}</div></div></div>`;
     }).join('');
     return topbar('Team card','','')+`<main>${blocks}
-      <div class="card tiny">Tournament tracker — one team, nothing to settle. Hand this card to the committee.</div>
+      <div class="card tiny">${scrambleTeams()[0].length===2
+        ? 'Just the two of you on one ball — no other team to settle against. This is your card.'
+        : 'Tournament tracker — one team, nothing to settle. Hand this card to the committee.'}</div>
     </main>`+tabs('settle');
   }
   const all=computeGame();

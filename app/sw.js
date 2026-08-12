@@ -1,11 +1,19 @@
 // Wolf service worker — offline cache + auto-update (stale-while-revalidate).
 // The app loads instantly from cache and refreshes in the background; a new
 // version appears the next time it's opened while online.
-const CACHE = 'battletees-1786512578';
+const CACHE = 'battletees-1786565041';
 // Offline course-map pack: satellite tiles cached cache-first, SURVIVES app
 // updates (excluded from the activate cleanup below).
 const TILES = 'bt-tiles';
 const CORE = ['./', 'index.html', 'manifest.json', '/icon-180.png', '/icon-512.png', '/banner.jpg', '/wolf.png', '/wolfwin.png', '/wolfcage.png', '/nine.png', '/vegas.png', '/quota.png', '/sixes.png', '/umbrella.png', '/hammer.png', '/bbb.png', '/stroke.png', '/stableford.png', '/bestball.png', '/scramble.png', '/nassau.png', '/skins.png'];
+// The map library, vendored. These used to come from unpkg at runtime, so the
+// hole map was a live network dependency ON A GOLF COURSE — and being
+// cross-origin, the catch-all handler below could not reliably cache them
+// either. Precached here they are guaranteed present offline, which is what
+// makes the satellite view and the two-finger rotation work with no signal.
+// SOFT: a vendor file that 404s must not abort the whole install (see below),
+// because an older shell falls back to the CDN and still works.
+const VENDOR = ['vendor/leaflet.js', 'vendor/leaflet.css', 'vendor/leaflet-rotate.js'];
 
 // Safari refuses to let a service worker answer a page load with a response
 // that arrived through a redirect ("Response served by service worker has
@@ -25,7 +33,12 @@ self.addEventListener('install', (e) => {
           if (r && r.status === 200) return c.put(u, r);
           throw new Error('core fetch failed: ' + u);
         })
-      ))
+      ).concat(VENDOR.map((u) =>
+        // soft: never let the map library take the whole install down with it
+        fetch(new Request(u, {cache: 'reload'})).then(clean).then((r) => {
+          if (r && r.status === 200) return c.put(u, r);
+        }).catch(() => {})
+      )))
     ).then(() => self.skipWaiting())
   );
 });
