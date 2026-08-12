@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786565552';
+const BUILD='1786565798';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -3188,9 +3188,10 @@ function manualModeTap(){
   mapMarks._cardY=cardY||null;mapMarks._manual=true;
   if(me){
     if(mapMarks._ring){try{LMAP.removeLayer(mapMarks._ring);}catch(e){}}
-    mapMarks._ring=L.circle(me,{radius:(cardY||FRAME_YDS)*0.9144,color:'#ffd75e',weight:2.5,opacity:.85,fill:false,dashArray:'10 8'}).addTo(LMAP);
-    // same framing rule as the map-open path — one scale, however you got here
-    if(!frameAround(me,FRAME_YDS,document.getElementById('holemap'))){
+    mapMarks._ring=L.circle(me,{radius:(cardY||300)*0.9144,color:'#ffd75e',weight:2.5,opacity:.85,fill:false,dashArray:'10 8'}).addTo(LMAP);
+    // same rule as the map-open path: the fixed frame is amnesia's, normal play
+    // fits the ring the way it always has
+    if(!(amnesiaOn(S.course.id)&&frameAround(me,FRAME_YDS,document.getElementById('holemap')))){
       try{LMAP.fitBounds(mapMarks._ring.getBounds().pad(0.10));}catch(e){}
     }
   }
@@ -3831,10 +3832,11 @@ async function initHoleMap(){
     // twist is the only way to get the green to the top — it must not be gated
     // behind the Manual button.
     if(canRotate){try{LMAP.setBearing(0);LMAP.touchRotate&&LMAP.touchRotate.enable();}catch(e){}}
-    // 300 yards across the screen, every hole, no exceptions. Amnesia is the
-    // usual way to land here and it must show exactly what a first-timer on a
-    // genuinely unmapped hole sees, so both paths get the identical framing.
-    if(!(myCoords&&frameAround(c,FRAME_YDS,el)))LMAP.setView(c,16);
+    // AMNESIA ONLY. Nathan's call: the fixed 300-yard frame is a rehearsal tool
+    // for learning a course blind, not a change to how normal play looks. A
+    // genuinely unmapped hole in a normal round keeps the framing it always had.
+    const amnFrame=amnesiaOn(S.course.id);
+    if(!(amnFrame&&myCoords&&frameAround(c,FRAME_YDS,el)))LMAP.setView(c,16);
     mapMarks={greenC:null,greenPoly:null,ref:c,mePos:null,aimC:null,_synthRef:synthRef};
     // CARD RING: unmapped hole + known card yardage = the green MUST sit on a
     // ring of that radius around the tee. Eye walks the ring; tap the green
@@ -3845,11 +3847,10 @@ async function initHoleMap(){
     const cardY=tset&&tset.yds&&tset.yds[physHole(mapHole)];
     if(cardY){
       mapMarks._ring=L.circle(c,{radius:cardY*0.9144,color:'#ffd75e',weight:2.5,opacity:.85,fill:false,dashArray:'10 8'}).addTo(LMAP);
-      // HARD 300 — the card ring does NOT get to widen the view. Nathan's call:
-      // one scale on every hole beats a ring that is always fully visible. On a
-      // hole longer than ~150y the ring sits off screen and you pinch out to
-      // walk it, which is a deliberate trade for a predictable frame.
-      if(!frameAround(c,FRAME_YDS,el)){
+      // Under amnesia: hard 300 across, ring off screen on anything long, pinch
+      // out to walk it — a predictable frame beats a visible ring. In normal
+      // play: unchanged, the view fits the ring exactly as it always did.
+      if(!(amnFrame&&frameAround(c,FRAME_YDS,el))){
         try{LMAP.fitBounds(mapMarks._ring.getBounds().pad(0.12));}catch(e){}
       }
       mapMarks._ringMode=true;mapMarks._cardY=cardY;
@@ -3858,7 +3859,7 @@ async function initHoleMap(){
       // the frame is a hard 300 yards across, so on anything but a short hole
       // the ring starts outside it — say so rather than pointing at a circle
       // that isn't on screen
-      const s2=sub();if(s2)s2.textContent=`no map here — card says ${cardY}y (${esc(tset.name)}). The green sits ON the gold ring: two-finger rotate to look${cardY>FRAME_YDS/2?', pinch out to reach the ring':''}, tap it when you spot it.`;
+      const s2=sub();if(s2)s2.textContent=`no map here — card says ${cardY}y (${esc(tset.name)}). The green sits ON the gold ring: two-finger rotate to look${(amnFrame&&cardY>FRAME_YDS/2)?', pinch out to reach the ring':''}, tap it when you spot it.`;
     }else{
       const s2=sub();if(s2)s2.textContent=geoErr||'Hole lines not mapped here — rangefinder still works.';
     }
