@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786565798';
+const BUILD='1786566507';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -2528,6 +2528,17 @@ function loadLeaflet(){
 // with the map blacked out, the one thing that must be predictable is how far
 // out you are looking.
 const FRAME_YDS=300;   // Nathan's call: yards across the screen, HARD, never widened
+// Rotate the map ourselves WITHOUT it counting as the player grabbing the wheel.
+// setBearing fires 'rotate' synchronously (measured), so the try/finally flag is
+// exact — the listener in initHoleMap reads it to tell the app's own green-up
+// from two fingers on the glass.
+function autoBearing(deg){
+  try{
+    if(!LMAP||!L.Map.prototype.setBearing)return;
+    LMAP._btAutoRot=true;
+    try{LMAP.setBearing(deg);}finally{LMAP._btAutoRot=false;}
+  }catch(e){}
+}
 function frameAround(center,spanYds,el){
   try{
     if(!LMAP||!center)return false;
@@ -3167,8 +3178,9 @@ function manualModeTap(){
   const b=document.getElementById('manualbtn');
   manualOn=!manualOn;
   if(!manualOn){
-    try{LMAP.touchRotate&&LMAP.touchRotate.disable();}catch(e){}
-    try{if(L.Map.prototype.setBearing)LMAP.setBearing(0);}catch(e){}
+    // back to north-up, but the twist STAYS available — rotation is no longer
+    // something Manual mode hands out and takes away
+    autoBearing(0);try{LMAP._btUserRot=false;}catch(e){}
     if(mapMarks._ring){try{LMAP.removeLayer(mapMarks._ring);}catch(e){}mapMarks._ring=null;}
     mapMarks._ringMode=false;mapMarks._manual=false;
     if(b){b.style.borderColor='var(--elec,#2b86ec)';b.style.color='var(--elec,#2b86ec)';b.textContent='🔄 Manual';}
@@ -3178,8 +3190,8 @@ function manualModeTap(){
     if(sb)sb.textContent='';
     return;
   }
-  // stage 1 ON: unlock rotation, size the view by the card yardage
-  try{if(L.Map.prototype.setBearing){LMAP.touchRotate&&LMAP.touchRotate.enable();}}catch(e){}
+  // stage 1 ON: size the view by the card yardage. Rotation needs no unlocking
+  // any more — it is enabled for every hole when the map is built.
   const me=mapMarks.mePos||myCoords;
   const ts=(S.course.teeSets||[]);
   const myTee=(S.players[myPlayerIdx()]||{}).tee;
@@ -3655,9 +3667,18 @@ async function initHoleMap(){
   // the top. Nudge the grid layer on rotate, throttled so a continuous
   // two-finger twist doesn't re-enter it every frame. (keepBuffer does NOT fix
   // this — measured: it only retains tiles already fetched.)
+  // TWO-FINGER ROTATION ON EVERY HOLE. It used to be reachable only where the
+  // hole had no geometry, and inside Manual mode — a mapped hole was locked to
+  // the automatic green-up with no way to turn it by hand. Nathan's call: the
+  // twist is available everywhere, in every mode.
   if(canRotate){
+    try{LMAP.touchRotate&&LMAP.touchRotate.enable();}catch(e){}
     let rotT=0;
     LMAP.on('rotate',()=>{
+      // Once YOU turn it, nothing may snap it back. orientFromMe re-fires on
+      // every GPS update for a green-only hole, so without this flag a hand
+      // twist was undone a second after you lifted your fingers.
+      if(!LMAP._btAutoRot)LMAP._btUserRot=true;
       if(rotT)return;
       rotT=setTimeout(()=>{rotT=0;try{sat._update();}catch(e){}},120);
     });
@@ -3787,7 +3808,7 @@ async function initHoleMap(){
       const cx=u[0]*midA+v[0]*midC, cy=u[1]*midA+v[1]*midC;
       const center=[tee[0]+cy/110540, tee[1]+cx/(111320*Math.cos(lat0))];
       const bearing=(Math.atan2(g[0],g[1])/rad+360)%360;
-      LMAP.setBearing(-bearing);
+      autoBearing(-bearing);
       LMAP.setView(center,zoom,{animate:false});
     }catch(e){}}
     mapMarks={greenC,greenPoly,ref:hasPath?geo.path[0]:greenC,mePos:null,aimC:null};
@@ -3817,7 +3838,8 @@ async function initHoleMap(){
           const cx=u[0]*midA+v[0]*midC, cy=u[1]*midA+v[1]*midC;
           const center=[from[0]+cy/110540, from[1]+cx/(111320*Math.cos(lat0))];
           const bearing=(Math.atan2(g[0],g[1])/rad+360)%360;
-          LMAP.setBearing(-bearing);
+          // keep following you as you walk, but never overrule a hand twist
+          if(!LMAP._btUserRot)autoBearing(-bearing);
           LMAP.setView(center,zoom,{animate:false});
         }catch(e){}
       };
@@ -3831,7 +3853,7 @@ async function initHoleMap(){
     // There is no green to auto-orient to on a hole with no geometry, so the
     // twist is the only way to get the green to the top — it must not be gated
     // behind the Manual button.
-    if(canRotate){try{LMAP.setBearing(0);LMAP.touchRotate&&LMAP.touchRotate.enable();}catch(e){}}
+    if(canRotate)autoBearing(0);   // north up to start; the twist is already unlocked
     // AMNESIA ONLY. Nathan's call: the fixed 300-yard frame is a rehearsal tool
     // for learning a course blind, not a change to how normal play looks. A
     // genuinely unmapped hole in a normal round keeps the framing it always had.
