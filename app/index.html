@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786568476';
+const BUILD='1786569174';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -2860,7 +2860,10 @@ function mapMySc(){
 // until you touch the input, then "✓ Confirm". Armed state is held per hole, so
 // walking to the next hole starts unarmed again.
 let mapScoreHole=-1;
-function mapScoreArmed(){return mapScoreHole===mapHole;}
+function mapScoreArmed(){
+  if(mapScoreHole===mapHole)return true;
+  try{return !!(S.round.holes[mapHole]||{}).confirmed;}catch(e){return false;}
+}
 function paintMapConfirm(){
   const b=document.getElementById('mapconfirm');if(!b)return;
   const on=mapScoreArmed();
@@ -3289,10 +3292,17 @@ function manualModeTap(){
   if(!document.getElementById('mgbtn')&&b){
     b.insertAdjacentHTML('afterend',`<button id="mgbtn" onclick="greenBtnTap()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(274px + env(safe-area-inset-bottom));z-index:6;height:46px;padding:0 14px;background:var(--card);border:2px solid var(--green);border-radius:12px;color:var(--green-mid);font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:17px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">⛳ Set Green</button>`);
   }
-  if(sb)sb.textContent=me
-    ? (cardY?`manual mode — twist to rotate, pinch to zoom. Card says ${cardY}y, so the green sits near the gold ring. Found it? Tap “Set Green”.`
-            :`manual mode — twist to rotate, pinch to zoom. Find the green, then tap “Set Green”.`)
-    : 'manual mode — waiting for GPS to size the view. Rotation is unlocked.';
+  // Coming back to a hole you already marked is a different job from marking a
+  // fresh one — say which job you are in, and both ways out of a bad mark.
+  const already=markState();
+  markBtns();   // the buttons above are inserted with hardcoded "Set ..." text
+
+  if(sb)sb.textContent=(already.tee||already.green)
+    ? 'hole already marked — drag a pin to nudge it, tap a pin or ✕ to clear one, or press 🔄 Manual again to wipe both and start over. Then Score → Confirm.'
+    : (me
+      ? (cardY?`manual mode — twist to rotate, pinch to zoom. Card says ${cardY}y, so the green sits near the gold ring. Found it? Tap “⛳ Set Green”.`
+              :`manual mode — twist to rotate, pinch to zoom. Find the green, then tap “⛳ Set Green”.`)
+      : 'manual mode — waiting for GPS to size the view. Rotation is unlocked.');
 }
 // RESETTING A BAD MARK. A mis-tap used to be close to permanent: the green pin
 // cleared only by tapping the pin itself — undiscoverable, and it reported
@@ -3461,6 +3471,7 @@ function placeManualTee(t){
     mapMarks.ref=q;
     const gc=mapMarks.greenC;
     if(gc){try{updateFMB(q,'yards from the tee');}catch(e){}}
+    if(mapMarks._restoring)return;   // replaying a tee we already reported
     stat('teemark',{course:S.course.id,courseName:S.course.name,hole:h+1,amn:amnStamp(),
       lat:q[0],lon:q[1],geoSrc:'manual',movedYds:null,
       yardsToGreen:gc?Math.round(mDist(q,gc)*1.09361):null,
@@ -4040,14 +4051,24 @@ async function initHoleMap(){
         try{LMAP.fitBounds(mapMarks._ring.getBounds().pad(0.12));}catch(e){}
       }
       mapMarks._ringMode=true;mapMarks._cardY=cardY;
-      const mg=(S.round.manualGreens||{})[physHole(mapHole)];
-      if(mg){mapMarks._restoring=true;try{mapTapAt(mg.slice());}catch(e){}mapMarks._restoring=false;}
       // the frame is a hard 300 yards across, so on anything but a short hole
       // the ring starts outside it — say so rather than pointing at a circle
       // that isn't on screen
       const s2=sub();if(s2)s2.textContent=`no map here — card says ${cardY}y (${esc(tset.name)}). The green sits ON the gold ring: two-finger rotate to look${(amnFrame&&cardY>FRAME_YDS/2)?', pinch out to reach the ring':''}, tap it when you spot it.`;
     }else{
       const s2=sub();if(s2)s2.textContent=geoErr||'Hole lines not mapped here — rangefinder still works.';
+    }
+    // RESTORE what you already marked on this hole. Walking back to fix a bad
+    // mark has to SHOW you the marks: the green used to be restored only when
+    // the card carried a yardage, and the tee was never restored at all —
+    // teeFixFor still held it, so the button read "Tee ✕" with no pin to see,
+    // drag or tap. Both replays run under _restoring so neither re-reports.
+    {
+      const ph=physHole(mapHole);
+      const mg=(S.round.manualGreens||{})[ph];
+      if(mg){mapMarks._restoring=true;try{mapTapAt(mg.slice());}catch(e){}mapMarks._restoring=false;}
+      const mt=teeFixFor(ph);
+      if(mt){mapMarks._restoring=true;try{placeManualTee(mt.slice());}catch(e){}mapMarks._restoring=false;}
     }
   }
   let lMe=null,lTaps=[],lTapLine=null,lTapCase=null;
