@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786495065';
+const BUILD='1786495438';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -5784,6 +5784,24 @@ function resetRoster(){
 // forgotten round can't post a 3,000-minute pace. Rounds with no confirmed holes
 // are dropped rather than archived — they were never played.
 const MAX_ROUND_MS=8*60*60*1000;
+// A round left half-finished — _finished set, archive never run — cannot be
+// ended from the UI and cannot be resumed. Complete it on the next boot rather
+// than making the player start over and lose the card.
+function healUnfinishedRound(){
+  try{
+    if(!S.round||!S.round.started||!S.round._finished)return false;
+    if(typeof isReview==='function'&&isReview())return false;
+    if(!S.round.myEndedAt)S.round.myEndedAt=Date.now();
+    try{archiveRound();}catch(e){}
+    try{bfBroadcastEnd();}catch(e){}
+    const wasShared=S.share&&S.share.on;
+    S.round=blankRound();S.screen='home';stView=null;
+    try{resetRoster();}catch(e){}
+    save();
+    if(wasShared){try{leaveShare();}catch(e){}}
+    return true;
+  }catch(e){return false;}
+}
 function autoEndStaleRound(){
   if(!S.round||!S.round.started)return false;
   const t0=S.round.myStartedAt||S.round.startedAt;
@@ -7271,7 +7289,13 @@ function chStat(k,i,d){reviewTouch();set(()=>{const rec=S.round.holes[S.round.cu
 // group — so the last hole asks before it does any of that.
 let endAsk=null;
 function askEndRound(){
-  if(S.round._finished||isReview()||endAsk)return;
+  if(isReview()||endAsk)return;
+  // _finished alone must NOT block this. finishMyRound() flips that flag
+  // synchronously and archives in a setTimeout(0); if the app reloads or the main
+  // thread stalls in between, the round stays started, never lands in history,
+  // and this button goes dead forever with no way back. Refuse only once the
+  // round is genuinely closed out.
+  if(S.round._finished&&!S.round.started)return;
   endAsk=true;render();
 }
 function endAskYes(){
@@ -8383,6 +8407,7 @@ function art(f){return ART[f]||f;}
 setInterval(()=>{if(S.round.started&&!S.round.myEndedAt&&S.round.startedAt&&(S.screen==='hole'||S.screen==='standings'))render();},60000);
 stat('open',{ua:(navigator.userAgent.match(/iPhone OS [0-9_]+|Android [0-9.]+/)||[''])[0]});
 applyTheme();
+healUnfinishedRound();   // rescue a round stranded between _finished and archive
 autoEndStaleRound();
 render();
 tryMagicLink();
