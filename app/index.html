@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786604229';
+const BUILD='1786606153';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -6075,6 +6075,11 @@ function vStats(){
     return `<div class="row"><span class="muted">${label} <span class="tiny">(${recd.length} round${recd.length===1?'':'s'} tracked)</span></span>
       <b class="num" style="font-size:22px">${Math.round(per18*10)/10}<span class="tiny" style="font-weight:400"> /18</span></b></div>`;
   }).filter(Boolean).join('');
+  // Closest-to-the-pin, read straight off the holes rather than the round
+  // summary, so rounds played before the summary existed still count.
+  const ctpN=rounds.reduce((s,r)=>s+r.holes.filter(x=>x.r.ctp===r.mi).length,0);
+  const extrasAll=extras+(ctpN?`<div class="row"><span class="muted">Closest to the pin <span class="tiny">(par 3s won)</span></span>
+      <b class="num" style="font-size:22px">${ctpN}</b></div>`:'');
   const shots=Object.values(S.shotLog||{}).reduce((a,b)=>a.concat(b),[]);
   const byClub={};
   shots.forEach(s2=>{const c=s2.club||'untagged';(byClub[c]=byClub[c]||[]).push(s2.yds);});
@@ -6116,12 +6121,30 @@ function vStats(){
       <div class="tiny mt">From the FW / GIR buttons on the hole map — ${recs.length} round${recs.length===1?'':'s'} tracked.</div>
     </div>`;
   })();
+  // WIN/LOSS, from the summary stamped when each round ended. Solo rounds are
+  // excluded — there is nobody to beat — so the record counts only rounds that
+  // had an opponent, and says so rather than quietly inflating the rate.
+  const wl=(()=>{
+    const played=(S.history||[]).map(e=>e.sum).filter(x=>x&&x.result);
+    if(!played.length)return '';
+    const w=played.filter(x=>x.result==='win').length;
+    const l=played.filter(x=>x.result==='loss').length;
+    const t=played.filter(x=>x.result==='tie').length;
+    const rate=Math.round(100*w/played.length);
+    return `<div class="card"><h2>⚔️ Record</h2>
+      <div class="row"><span class="muted">Won · lost${t?' · tied':''}</span>
+        <b class="num" style="font-size:24px">${w} · ${l}${t?` · ${t}`:''}</b></div>
+      <div class="row"><span class="muted">Win rate</span>
+        <b class="num" style="font-size:24px;color:${rate>=50?'#7fd49a':'var(--amber-bd)'}">${rate}%</b></div>
+      <div class="tiny mt">${played.length} round${played.length===1?'':'s'} with someone to play against — solo rounds are not counted either way.</div>
+    </div>`;})();
   return topbar('My stats',S.me.name?esc(S.me.name):'','home')+`<main>
+  ${wl}
   <div class="card"><h2>⛳ Scoring</h2>${scoring}
     ${rounds.length?'<div class="tiny mt">Confirmed holes from your past rounds. 9-hole rounds are normalized into the per-18 averages.</div>':''}</div>
   ${acc}
   <div class="card"><h2>🥌 Short game &amp; extras</h2>
-    ${extras||'<div class="tiny">Turn on tracking (putts, chips, bunker, penalties) in Round options — rounds where you track them feed these averages. Untracked rounds are ignored, never counted as zero.</div>'}
+    ${extrasAll||'<div class="tiny">Turn on tracking (putts, chips, bunker, penalties) in Round options — rounds where you track them feed these averages. Untracked rounds are ignored, never counted as zero.</div>'}
     ${extras?'<div class="tiny mt">Only rounds where each stat was recorded count toward its average.</div>':''}</div>
   <div class="card"><h2>🏌️ Club distances</h2>
     ${clubRows?`<table class="st"><tr><th>Club</th><th class="r">Shots</th><th class="r">Avg</th><th class="r">Longest</th></tr>${clubRows}</table>
@@ -6518,6 +6541,130 @@ function vPlayers(){
 }
 // Ending a round is per-phone: archive it locally, leave the shared room
 // (other phones keep playing), and return the start screen to its clean state.
+// ONE SUMMARY, COMPUTED WHILE THE ROUND IS STILL LIVE. The end-of-round splash
+// and the stats screen both want the same handful of numbers, and the only
+// moment they can be worked out reliably is here: S.round, S.config, S.players
+// and the handicaps are all still the round's own. Reconstructing a game result
+// from a history entry later means re-running an engine against swapped-in
+// globals, which is exactly the kind of thing that quietly returns the wrong
+// answer months from now.
+// ---- the round-end splash --------------------------------------------------
+// What the round actually was, the moment it ends. It stays up until Done is
+// pressed — a stopwatch decided when you were finished reading your own
+// scorecard, and four seconds is not long enough to take one in. Zero counts are
+// never announced: "0 birdies" is a small insult and tells you nothing you did
+// not already know.
+let roundSplash=null,roundSplashThen=null;
+function roundSplashHTML(){
+  if(!roundSplash)return '';
+  const x=roundSplash;
+  const toPar=x.toPar===0?'E':(x.toPar>0?'+':'')+x.toPar;
+  const bits=[];
+  if(x.eagles>0)bits.push(`<b>${x.eagles}</b> eagle${x.eagles===1?'':'s'}`);
+  if(x.birdies>0)bits.push(`<b>${x.birdies}</b> birdie${x.birdies===1?'':'s'}`);
+  if(x.pars>0)bits.push(`<b>${x.pars}</b> par${x.pars===1?'':'s'}`);
+  const acc=[];
+  // putts only when they were actually tracked; a round with tracking off must
+  // never read as zero putts
+  if(x.putts&&x.putts.n>0)acc.push(`<b>${x.putts.n}</b> putts${x.putts.holes<x.holes?` <span style="opacity:.7">(${x.putts.holes} hole${x.putts.holes===1?'':'s'})</span>`:''}`);
+  if(x.fw&&x.fw.of)acc.push(`<b>${Math.round(100*x.fw.hit/x.fw.of)}%</b> fairways`);
+  if(x.gir&&x.gir.of)acc.push(`<b>${Math.round(100*x.gir.hit/x.gir.of)}%</b> greens`);
+  const ctp=(x.ctp||[]).length
+    ? `<div class="tiny" style="font-size:14px;margin-top:6px">🎯 <b>${x.ctp.length}</b> closest to the pin <span style="opacity:.7">· ${x.ctp.map(h=>'h'+h).join(', ')}</span></div>`
+    : '';
+  const res=x.result==='win'?'<div class="pill wolf" style="font-size:15px">⚔️ WON</div>'
+    :x.result==='tie'?'<div class="pill gray" style="font-size:15px">TIED</div>':'';
+  // takes the taps: it is now dismissed only by Done, so nothing behind it
+  // should be reachable while it is up
+  return `<div class="vfWrap">
+    <div class="vfCard center" style="max-width:340px">
+      <div class="tiny" style="letter-spacing:1px;opacity:.8">ROUND COMPLETE · ${x.holes} HOLE${x.holes===1?'':'S'}</div>
+      <h2 class="vfTitle" style="margin:6px 0 2px">${esc(x.courseName||'')}</h2>
+      ${res}
+      <div style="display:flex;gap:18px;justify-content:center;margin:12px 0 6px">
+        <div><div class="num" style="font-size:44px;line-height:1">${x.gross}</div>
+          <div class="tiny">GROSS · ${toPar}</div></div>
+        <div><div class="num" style="font-size:44px;line-height:1;color:var(--green-mid)">${x.net}</div>
+          <div class="tiny">NET</div></div>
+      </div>
+      ${bits.length?`<div class="tiny" style="font-size:14px;margin-top:6px">${bits.join(' · ')}</div>`:''}
+      ${acc.length?`<div class="tiny" style="font-size:14px;margin-top:4px;color:var(--ink3)">${acc.join(' · ')}</div>`:''}
+      ${ctp}
+      <button class="ghost mt" style="width:100%" onclick="dismissRoundSplash()">Done</button>
+    </div></div>`;
+}
+function showRoundSplash(sum,courseName,then){
+  if(!sum){if(then)then();return;}
+  roundSplash=Object.assign({courseName},sum);
+  roundSplashThen=then||null;
+  // injected rather than rendered: this fires during the teardown, and a render
+  // here would race the screen change that follows it
+  const old=document.getElementById('roundsplash');if(old)old.remove();
+  const d=document.createElement('div');
+  d.id='roundsplash';d.innerHTML=roundSplashHTML();
+  document.body.appendChild(d.firstElementChild||d);
+}
+function dismissRoundSplash(){
+  roundSplash=null;
+  document.querySelectorAll('.vfWrap').forEach(w=>{
+    if(w.querySelector('.vfTitle')&&/ROUND COMPLETE/.test(w.textContent))try{w.remove();}catch(e){}
+  });
+  // whatever was waiting on the splash goes now, not on a guessed delay
+  const t=roundSplashThen;roundSplashThen=null;
+  if(t)try{t();}catch(e){}
+}
+function roundSummary(){
+  try{
+    const mi=myPlayerIdx(), act=actIdx();
+    const holes=playOrder().filter(h=>{const r=S.round.holes[h];return r&&r.confirmed&&r.gross&&r.gross[mi]!=null;});
+    if(!holes.length)return null;
+    let gross=0,par=0,eagles=0,birdies=0,pars=0;
+    let fwHit=0,fwN=0,girHit=0,girN=0,tracked=false;
+    let putts=0,puttHoles=0;const ctps=[];
+    holes.forEach(h=>{
+      const r=S.round.holes[h], p=(S.course.holes[h]||{par:4}).par, g=r.gross[mi];
+      gross+=g;par+=p;
+      const d=g-p;
+      if(d<=-2)eagles++;else if(d===-1)birdies++;else if(d===0)pars++;
+      const st=r.stats||{};
+      const fv=st.fw?st.fw[mi]:0, gv=st.gir?st.gir[mi]:0;
+      if(fv>0||gv>0)tracked=true;
+      if(p>=4){fwN++;if(fv>0)fwHit++;}
+      girN++;if(gv>0)girHit++;
+      const pv=st.putts?st.putts[mi]:0;
+      if(pv>0){putts+=pv;puttHoles++;}
+      if(r.ctp===mi)ctps.push(h+1);        // -1 means nobody was on, never a person
+    });
+    // net off the same strokes the round played with
+    let net=gross;
+    try{
+      const dots=h=>{const st=playingStrokes()[mi],si=(S.course.holes[h]||{si:18}).si;
+        return (st>=si?1:0)+((st-18)>=si?1:0);};
+      net=holes.reduce((t,h)=>t+S.round.holes[h].gross[mi]-dots(h),0);
+    }catch(e){}
+    // WIN/LOSS is only meaningful against somebody. A solo round records neither.
+    let result=null;
+    if(act.length>1){
+      try{
+        const g=gameOn(), eng=computeFor(g), L=primaryLens();
+        const led=eng&&eng.ledgers&&eng.ledgers[L];
+        if(led){
+          const lower=['stroke','stableford'].includes(g)?true:false;
+          const mine=led[mi];
+          const others=act.filter(i=>i!==mi).map(i=>led[i]);
+          const best=lower?Math.min(...others):Math.max(...others);
+          result=(mine===best)?'tie':((lower?mine<best:mine>best)?'win':'loss');
+        }
+      }catch(e){}
+    }
+    return {gross,net,par,toPar:gross-par,holes:holes.length,
+      eagles,birdies,pars,
+      fw:tracked&&fwN?{hit:fwHit,of:fwN}:null,
+      gir:tracked&&girN?{hit:girHit,of:girN}:null,
+      putts:puttHoles?{n:putts,holes:puttHoles}:null, ctp:ctps,
+      players:act.length,game:gameOn(),result};
+  }catch(e){return null;}
+}
 function archiveRound(){
   if(!S.round.started)return;
   if(!S.round._histId)S.round._histId='r'+Date.now()+Math.floor(Math.random()*1e4);
@@ -6535,6 +6682,7 @@ function archiveRound(){
     code:S.share.on?S.share.code:null,thru,
     mins:t0?Math.round(((S.round.myEndedAt||Date.now())-t0)/60000):null,
     players:actIdx().map(i=>S.players[i].name),
+    sum:roundSummary(),
     round:clone(S.round),config:clone(S.config),playersSnap:clone(S.players)
   };
   S.history=(S.history||[]).filter(e=>e.id!==entry.id);
@@ -8213,6 +8361,8 @@ function finishMyRound(){
       save();render();
       return;
     }
+    // the round is safely in history now; show what it was
+    try{const _h=(S.history||[])[0];if(_h&&_h.sum)showRoundSplash(_h.sum,_h.courseName);}catch(e){}
     // TELL THE GROUP FIRST. Walking in early leaves your rows locked to a phone
     // that will never write again — indistinguishable from a player who simply
     // has not scored yet, so the group could sit waiting on hole 6 for a score
@@ -8238,7 +8388,13 @@ function finishMyRound(){
     try{resetRoster();}catch(e){}
     save();
     if(wasShared)leaveShare();else render();
-    if(!emailVerified())setTimeout(()=>openVerify('roundEnd'),450);
+    // ...and only once the splash has been dismissed. Firing at +450ms put the
+    // "Save this round?" sheet straight over the top of it, so the one moment the
+    // round gets summarised was covered by an email prompt.
+    if(!emailVerified()){
+      const ask=()=>setTimeout(()=>openVerify('roundEnd'),450);
+      if(roundSplash)roundSplashThen=ask;else ask();
+    }
   },0);
 }
 function advanceToNext(){
