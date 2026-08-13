@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786589889';
+const BUILD='1786591284';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -3431,11 +3431,14 @@ function clearTeeMark(){
 // answer above the fidgeting that led to it.
 function markLockIn(h){
   try{
-    if(!amnesiaOn(S.course.id))return;
+    // NOT amnesia-only. Amnesia is the rehearsal harness; the people this is FOR
+    // are strangers standing on a course nobody has mapped, and they were the
+    // ones whose marks arrived as loose taps with no settled answer — so the
+    // ingest's "a locked pair replaces the fidgeting" rule never applied to them.
     const ph=physHole(h);
     const tee=teeFixFor(ph), grn=(S.round.manualGreens||{})[ph];
     if(!tee&&!grn)return;
-    stat('marklock',{course:S.course.id,courseName:S.course.name,hole:ph+1,amn:1,
+    stat('marklock',{course:S.course.id,courseName:S.course.name,hole:ph+1,amn:amnStamp(),
       teeLat:tee?tee[0]:null,teeLon:tee?tee[1]:null,
       greenLat:grn?grn[0]:null,greenLon:grn?grn[1]:null,
       yards:(tee&&grn)?Math.round(mDist(tee,grn)*1.09361):null,
@@ -3468,7 +3471,10 @@ function manualSearchView(){
 }
 function manualSnapIfReady(){
   try{
-    if(!amnesiaOn(S.course.id)||!LMAP)return false;
+    // NOT amnesia-only either: the snap is the moment the hole stops being
+    // unknown, and it is worth most to someone who has never seen this hole
+    // drawn. Rehearsal must not be the only mode that pays off.
+    if(!LMAP)return false;
     const h=physHole(mapHole);
     const tee=teeFixFor(h), grn=mapMarks.greenC;
     if(!tee||!grn)return false;
