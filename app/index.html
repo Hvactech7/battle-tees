@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786587696';
+const BUILD='1786588563';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1027,7 +1027,25 @@ function scheduleReconnect(){
 // NOW instead of waiting out the backoff timer.
 function kickSync(){if(S.share&&S.share.on&&!sock){retryMs=1000;syncConnect();}}
 window.addEventListener('online',kickSync);
-document.addEventListener('visibilitychange',()=>{if(!document.hidden){autoEndStaleRound();kickSync();}});
+// KEEP THE SCREEN ON while the app is in front. iOS blanking the display mid-
+// round tore the Leaflet map down and rebuilt it on wake — which, with the
+// restore bug above, is how a green pin disappeared while you were reading the
+// yardage. The OS releases a wake lock every time the page hides, so it has to
+// be re-requested on every return to the foreground; there is no "set once"
+// form of this. Silently unavailable on browsers without the API.
+let wakeLock=null;
+async function wakeOn(){
+  try{
+    if(!('wakeLock' in navigator)||document.hidden||wakeLock)return;
+    wakeLock=await navigator.wakeLock.request('screen');
+    wakeLock.addEventListener('release',()=>{wakeLock=null;});
+  }catch(e){wakeLock=null;}   // denied (low battery, no permission) — not fatal
+}
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden){wakeLock=null;return;}   // the OS already released it
+  wakeOn();autoEndStaleRound();kickSync();statFlush();
+});
+wakeOn();
 // In a shared round, each phone claims the player slot matching its profile
 // name. Claimed rows are score-locked on OTHER phones (tap ✎ to override).
 function claimMySlot(steal){
@@ -1164,8 +1182,14 @@ function stat(ev,extra){
   const e=Object.assign({t:'stat',ev,dev:devId(),who:(S.me&&S.me.name)||'',build:BUILD,at:Date.now()},extra||{});
   try{
     if(lobbySock&&lobbySock.readyState===1){lobbySock.send(JSON.stringify(e));return;}
+    // CAP WAS 50, and it silently ate real field data. Cypress Lakes 8/12: no
+    // signal across the front nine while re-marking greens repeatedly overflowed
+    // the queue, and slice(-50) discards the OLDEST — so holes 2-7 were pushed
+    // out and never reached the Pi. These are irreplaceable one-shot
+    // observations of a course nobody has mapped; a few hundred KB of
+    // localStorage is nothing against losing them.
     const q=JSON.parse(localStorage.getItem('btStatQ')||'[]');
-    q.push(e);localStorage.setItem('btStatQ',JSON.stringify(q.slice(-50)));
+    q.push(e);localStorage.setItem('btStatQ',JSON.stringify(q.slice(-2000)));
   }catch(x){}
 }
 function statFlush(){
@@ -4066,7 +4090,21 @@ async function initHoleMap(){
     {
       const ph=physHole(mapHole);
       const mg=(S.round.manualGreens||{})[ph];
-      if(mg){mapMarks._restoring=true;try{mapTapAt(mg.slice());}catch(e){}mapMarks._restoring=false;}
+      if(mg){
+        // ARM IT FIRST. mapTapAt only drops a green when _ringMode is set, and
+        // _ringMode is only set inside the card-yardage branch above — so on a
+        // course with no yardages on file (Cypress Lakes: cardY null on all 20
+        // marks) the restore silently did nothing and the green vanished on
+        // every map rebuild: backgrounding, screen sleep, or a trip to
+        // Standings and back. The tee came back because placeManualTee has no
+        // such gate, which is exactly the asymmetry Nathan reported.
+        mapMarks._restoring=true;
+        const wasRing=mapMarks._ringMode;
+        mapMarks._ringMode=true;mapMarks.greenC=null;
+        try{mapTapAt(mg.slice());}catch(e){}
+        mapMarks._ringMode=wasRing;
+        mapMarks._restoring=false;
+      }
       const mt=teeFixFor(ph);
       if(mt){mapMarks._restoring=true;try{placeManualTee(mt.slice());}catch(e){}mapMarks._restoring=false;}
     }
