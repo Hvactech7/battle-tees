@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786602363';
+const BUILD='1786602883';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -3468,6 +3468,66 @@ function clearTeeMark(){
 // right" — distinct from the drags and re-taps that came before it. The relay
 // gets one marklock carrying the final pair, so the ingest can weigh a settled
 // answer above the fidgeting that led to it.
+// ---- catching a mis-tap while the player is still standing there ----------
+// The ingest has caught "two holes claiming one green" since Cypress hole 16
+// landed 0.8 yards from hole 15's — but only hours later, off-phone, with no way
+// to tell the player. The phone holds every green marked this round and the
+// shipped geometry for a mapped course, so it can say it at the moment of the
+// tap, while the flag they are looking at is still in front of them.
+// It WARNS, it does not refuse: two holes genuinely can share a green.
+const SAME_GREEN_YDS=50;
+function greenConflict(ph,pt){
+  try{
+    const mg=S.round.manualGreens||{};
+    for(const k in mg){
+      const h=+k;
+      if(h===ph||!mg[k])continue;
+      const d=mDist(pt,mg[k])*1.09361;
+      if(d<SAME_GREEN_YDS)return {hole:h,yds:Math.round(d),src:'marked'};
+    }
+    // ...and against the course's own geometry, where there is any
+    const gh=(S.course.geo&&S.course.geo.holes)||{};
+    for(const k in gh){
+      const h=(+k)-1;
+      if(h===ph)continue;
+      const g=gh[k]&&gh[k].green;
+      const c=(g&&g.length>2)?centroidOf(g):null;
+      if(!c)continue;
+      const d=mDist(pt,c)*1.09361;
+      if(d<SAME_GREEN_YDS)return {hole:h,yds:Math.round(d),src:'map'};
+    }
+  }catch(e){}
+  return null;
+}
+let greenClash=null;      // {ph, hole, yds, src}
+function greenClashHTML(){
+  if(!greenClash)return '';
+  const c=greenClash;
+  return `<div class="vfWrap" role="dialog" aria-modal="true" aria-labelledby="gcT">
+    <div class="vfCard">
+      <h2 id="gcT" class="vfTitle" style="color:var(--amber-bd,#e0a53a)">That looks like hole ${c.hole+1}'s green</h2>
+      <div class="tiny mb">You marked it <b>${c.yds} yard${c.yds===1?'':'s'}</b> from
+        ${c.src==='map'?`where the map has hole ${c.hole+1}'s green`:`the green you marked for hole ${c.hole+1}`}.
+        Two holes can share a green, but this is usually a mis-tap — check the flag you are aiming at.</div>
+      <button class="big mt" onclick="greenClashClear()">↺ &nbsp;Clear it and try again</button>
+      <button class="ghost mt" style="width:100%" onclick="greenClashKeep()">They really do share a green — keep it</button>
+    </div></div>`;
+}
+function showGreenClash(ph,c){
+  greenClash=Object.assign({ph},c);
+  if(document.getElementById('greenclash'))return;
+  const d=document.createElement('div');
+  d.id='greenclash';d.innerHTML=greenClashHTML();
+  document.body.appendChild(d.firstElementChild||d);
+}
+function closeGreenClash(){
+  greenClash=null;
+  document.querySelectorAll('.vfWrap').forEach(w=>{if(w.querySelector('#gcT'))try{w.remove();}catch(e){}});
+}
+// Keeping it is a decision, so NOW it locks — the lock was held back until the
+// player resolved this rather than reporting a settled answer nobody settled.
+function greenClashKeep(){const ph=greenClash&&greenClash.ph;closeGreenClash();if(ph!=null)markLockIn(mapHole);}
+function greenClashClear(){closeGreenClash();clearGreenMark();}
 function markLockIn(h){
   try{
     // NOT amnesia-only. Amnesia is the rehearsal harness; the people this is FOR
@@ -3734,6 +3794,10 @@ function mapTapAt(t){
       // on drag-END, never mid-drag, so this fires only on a settled position.
       // Re-locking is safe and intended: the ingest keeps the LAST lock per
       // course+hole, so a nudge or a later tee simply supersedes the earlier one.
+      // ...unless it lands on another hole's green, in which case the lock waits
+      // for the player to say which it is.
+      const _ph=physHole(mapHole), _c=greenConflict(_ph,[p.lat,p.lng]);
+      if(_c){showGreenClash(_ph,_c);return;}
       markLockIn(mapHole);};
     report();markBtns();
     if(!manualSnapIfReady()&&!mapMarks._restoring)
@@ -4838,7 +4902,7 @@ function render(){
   const pageY=window.scrollY;
   const sameScreen=window.__lastScr===scr;
   window.__lastScr=scr;
-  const full=magBanner()+html+holeSplash()+verifySheetHTML()+teeAskSheetHTML()+endAskSheetHTML()+mapInviteHTML()+gamePickSheetHTML()+(S.screen!=='map'?puttAskSheetHTML():'');
+  const full=magBanner()+html+holeSplash()+verifySheetHTML()+teeAskSheetHTML()+endAskSheetHTML()+mapInviteHTML()+greenClashHTML()+gamePickSheetHTML()+(S.screen!=='map'?puttAskSheetHTML():'');
   // Four phones syncing means render() fires constantly. Blowing away innerHTML
   // each time repainted the whole screen — that was the flicker on the course.
   // Identical output is a no-op; otherwise patch only the nodes that differ.
