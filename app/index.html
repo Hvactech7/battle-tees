@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786598651';
+const BUILD='1786601194';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1110,6 +1110,7 @@ function rowLock(h,i){
   const dev=p&&(p.ownerDev||p.scorer);
   if(!dev)return '';
   if(dev===devId())return 'mine';
+  if(p&&p.ended)return 'ended';        // gone home — editable, and say so
   return unlockedRows[h+'-'+i]?'open':'locked';
 }
 // From the mid-round group editor: share, then land on home, where the join
@@ -3382,7 +3383,7 @@ function manualModeTap(){
     // green alone gives a distance with no hole to hang it on, and the tee is
     // the half we could never infer — the drag added earlier only exists on
     // holes that already carry a line, which is exactly the case Manual is not.
-    b.insertAdjacentHTML('afterend',`<button id="mtbtn" onclick="teeBtnTap()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(326px + env(safe-area-inset-bottom));z-index:6;height:46px;padding:0 14px;background:var(--card);border:2px solid var(--red);border-radius:12px;color:#ff8a7a;font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:17px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">📍 Set Tee</button>`);
+    b.insertAdjacentHTML('afterend',`<button id="mtbtn" onclick="teeBtnTap()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(326px + env(safe-area-inset-bottom));z-index:6;height:46px;padding:0 14px;background:var(--card);border:2px solid var(--green);border-radius:12px;color:var(--green-mid);font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:17px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">📍 Set Tee</button>`);
   }
   if(!document.getElementById('mgbtn')&&b){
     b.insertAdjacentHTML('afterend',`<button id="mgbtn" onclick="greenBtnTap()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(274px + env(safe-area-inset-bottom));z-index:6;height:46px;padding:0 14px;background:var(--card);border:2px solid var(--green);border-radius:12px;color:var(--green-mid);font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:17px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">⛳ Set Green</button>`);
@@ -3424,8 +3425,10 @@ function markBtns(){
     const t=document.getElementById('mtbtn');
     if(t&&!mapMarks._teeMode){
       t.textContent=st.tee?'📍 Tee ✕':'📍 Set Tee';
-      t.style.borderColor=st.tee?'var(--amber-bd)':'var(--red)';
-      t.style.color=st.tee?'var(--amber-bd)':'#ff8a7a';
+      // same green as Set Green — the two are a pair. The map PIN stays red;
+      // that is what tells a tee from a green on the imagery.
+      t.style.borderColor=st.tee?'var(--amber-bd)':'var(--green)';
+      t.style.color=st.tee?'var(--amber-bd)':'var(--green-mid)';
     }
   }catch(e){}
 }
@@ -7693,7 +7696,7 @@ function vHole(){
       const lk=rowLock(h,i);
       return `<div class="scorebar ${lk==='mine'?'rowmine':lk==='locked'?'rowlocked':''}">
         <div style="min-width:118px"><b>${esc(p.name)}</b> ${side==='wolf'?'<span class="pill wolf">wolf side</span>':''}
-          <div class="tiny" style="font-size:15.5px">${dots(i)>0?`<span class="dots">${'●'.repeat(dots(i))}</span>`:''} ${g!=null&&S.config.lens!=='gross'?`net ${net} · `:''}hcp ${p.index}</div></div>
+          <div class="tiny" style="font-size:15.5px">${dots(i)>0?`<span class="dots">${'●'.repeat(dots(i))}</span>`:''} ${g!=null&&S.config.lens!=='gross'?`net ${net} · `:''}hcp ${p.index}${(p.ended)?' · <span style="color:var(--amber-bd,#e0a53a)">ended their round — score them here</span>':''}</div></div>
         ${lk==='locked'
           ?`<div style="display:flex;align-items:center;gap:12px"><span class="val num" style="font-size:24px">${g==null?'–':g}</span><button class="ghost" onclick="unlockRow(${h},${i})">✎</button></div>`
           :`<div class="stepper">
@@ -8083,6 +8086,20 @@ function finishMyRound(){
       save();render();
       return;
     }
+    // TELL THE GROUP FIRST. Walking in early leaves your rows locked to a phone
+    // that will never write again — indistinguishable from a player who simply
+    // has not scored yet, so the group could sit waiting on hole 6 for a score
+    // that is never coming. Stamp it and push it while the roster still exists:
+    // the teardown below blanks the round and resets the roster, and leaveShare
+    // closes the socket, so this is the last moment it can be said.
+    if(S.share&&S.share.on){
+      try{
+        const mi=myPlayerIdx();
+        if(S.players[mi])S.players[mi].ended=Date.now();
+        S.shareMetaTs=Date.now();
+        syncPush();
+      }catch(e){}
+    }
     bfBroadcastEnd();
     // TEAR THE ROUND DOWN. Archiving is only half of ending it. Without this the
     // round stayed started:true — so the app went on showing a live round that
@@ -8146,7 +8163,10 @@ function myRows(h){
   // never end. Unlocking now carries the right to ratify what you typed.
   const hh = (h==null ? S.round.cur : h);
   return actIdx().filter(i=>{const p=S.players[i];const dev=p&&(p.ownerDev||p.scorer);
-    return !dev||dev===devId()||!!unlockedRows[hh+'-'+i];});
+    // p.ended: they have finished and left. The lock existed to stop you
+    // overwriting a phone that was still playing; there is no such phone now,
+    // so the group can score them without ceremony.
+    return !dev||dev===devId()||!!(p&&p.ended)||!!unlockedRows[hh+'-'+i];});
 }
 function cfOn(rec,i){return !!(rec&&rec.cfts&&rec.cfts[i]>0);}
 function confirmMine(){
@@ -8219,7 +8239,7 @@ function vHoleNines(){
     const lk=rowLock(h,i);
     return `<div class="scorebar ${lk==='mine'?'rowmine':lk==='locked'?'rowlocked':''}">
       <div style="min-width:118px"><b>${esc(p.name)}</b>
-        <div class="tiny" style="font-size:15.5px">${dots(i)>0?`<span class="dots">${'●'.repeat(dots(i))}</span>`:''} ${g!=null&&S.config.lens!=='gross'?`net ${net} · `:''}hcp ${p.index}</div></div>
+        <div class="tiny" style="font-size:15.5px">${dots(i)>0?`<span class="dots">${'●'.repeat(dots(i))}</span>`:''} ${g!=null&&S.config.lens!=='gross'?`net ${net} · `:''}hcp ${p.index}${(p.ended)?' · <span style="color:var(--amber-bd,#e0a53a)">ended their round — score them here</span>':''}</div></div>
       ${lk==='locked'
         ?`<div style="display:flex;align-items:center;gap:12px"><span class="val num" style="font-size:24px">${g==null?'–':g}</span><button class="ghost" onclick="unlockRow(${h},${i})">✎</button></div>`
         :`<div class="stepper">
@@ -8288,7 +8308,7 @@ function vHoleVegas(){
     const lk=rowLock(h,i);
     return `<div class="scorebar ${lk==='mine'?'rowmine':lk==='locked'?'rowlocked':''}">
       <div style="min-width:112px"><b>${esc(p.name)}</b>
-        <div class="tiny" style="font-size:15.5px">${dots(i)>0?`<span class="dots">${'●'.repeat(dots(i))}</span>`:''} ${g!=null&&S.config.lens!=='gross'?`net ${net} · `:''}hcp ${p.index}</div></div>
+        <div class="tiny" style="font-size:15.5px">${dots(i)>0?`<span class="dots">${'●'.repeat(dots(i))}</span>`:''} ${g!=null&&S.config.lens!=='gross'?`net ${net} · `:''}hcp ${p.index}${(p.ended)?' · <span style="color:var(--amber-bd,#e0a53a)">ended their round — score them here</span>':''}</div></div>
       ${lk==='locked'
         ?`<div style="display:flex;align-items:center;gap:12px"><span class="val num" style="font-size:24px">${g==null?'–':g}</span><button class="ghost" onclick="unlockRow(${h},${i})">✎</button></div>`
         :`<div class="stepper">
