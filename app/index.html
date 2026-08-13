@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786591284';
+const BUILD='1786591801';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -2620,6 +2620,24 @@ function frameAround(center,spanYds,el){
 // green-only hole that re-frames as you walk, and amnesia the moment both marks
 // are down — so the projection maths lives in exactly one place now.
 // A hand twist always wins: the framing still follows you, the bearing does not.
+// Auto-orient stops once the green is this close: inside 100 yards the hole is
+// simply in front of you, and re-framing on every GPS fix would swing the zoom
+// wildly while you are trying to read a chip. It stays parked until the next
+// hole, which re-creates this closure.
+const AUTO_ORIENT_STOP_YDS=100;
+function makeOrientFromMe(greenC,greenPoly,el){
+  let last=null, parked=false;
+  return (from)=>{
+    try{
+      if(!from||!greenC||!L.Map.prototype.setBearing)return;
+      if(parked)return;
+      if(mDist(from,greenC)*1.09361<AUTO_ORIENT_STOP_YDS){parked=true;return;}
+      if(last&&mDist(from,last)<5)return;              // ignore GPS jitter
+      last=from.slice();
+      orientGreenUp(from,greenC,greenPoly,[from],el);
+    }catch(e){}
+  };
+}
 function orientGreenUp(from,greenC,greenPoly,pts,el){
   try{
     if(!LMAP||!from||!greenC||!L.Map.prototype.setBearing)return false;
@@ -3481,7 +3499,16 @@ function manualSnapIfReady(){
     if(mapMarks._ring){try{LMAP.removeLayer(mapMarks._ring);}catch(e){}mapMarks._ring=null;}
     mapMarks._ringMode=false;mapMarks._teeMode=false;
     mapMarks.ref=tee.slice();
-    orientGreenUp(tee,grn,null,[tee],document.getElementById('holemap'));
+    // CLEAR THE SEARCH TWIST. The subtitle tells you to two-finger rotate to
+    // find the green, so everyone does — and that set _btUserRot, which made
+    // orientGreenUp skip the rotation. The view recentred and never turned, on
+    // every hole at Cypress Lakes. Placing both marks is a fresh, deliberate
+    // instruction: it ends the search, so it ends the search rotation with it.
+    try{LMAP._btUserRot=false;}catch(e){}
+    const el0=document.getElementById('holemap');
+    orientGreenUp(tee,grn,null,[tee],el0);
+    // ...and from here the hole behaves like any other: it follows you in.
+    mapMarks.orientFromMe=makeOrientFromMe(grn,null,el0);
     if(mapMarks.refreshTapLine)mapMarks.refreshTapLine();     // your dot → the green
     try{updateFMB(mapMarks.mePos||tee,mapMarks.mePos?'yards from you':'yards from the tee');}catch(e){}
     markBtns();
@@ -4073,18 +4100,15 @@ async function initHoleMap(){
     // holes stay north-up.)
     if(hasPath&&canRotate)orientGreenUp(geo.path[0],greenC,greenPoly,geo.path,el);
     mapMarks={greenC,greenPoly,ref:hasPath?geo.path[0]:greenC,mePos:null,aimC:null};
+    // EVERY hole re-frames as you walk now, not just the green-only ones: your
+    // dot stays at the bottom, the green at the top, until you are inside 100
+    // yards. A mapped hole used to frame once off the tee and then sit still,
+    // so by the second shot you were looking at a picture of where you had been.
+    mapMarks.orientFromMe=makeOrientFromMe(greenC,greenPoly,el);
     if(hasPath)updateFMB(geo.path[0],'yards from the tee');
     else{
-      // Green-only hole: no mapped tee, so the player's live GPS plays that
-      // role — green pinned to the top of the screen, player at the bottom,
-      // re-orienting as they walk up the hole.
-      let lastOrient=null;
-      mapMarks.orientFromMe=(from)=>{
-        if(!from||!canRotate)return;
-        if(lastOrient&&mDist(from,lastOrient)<5)return;   // ignore GPS jitter
-        lastOrient=from.slice();
-        orientGreenUp(from,greenC,greenPoly,[from],el);
-      };
+      // Green-only hole: no mapped tee, so the player's live GPS plays that role
+      // from the very first fix.
       if(myCoords){updateFMB(myCoords,'yards from you');mapMarks.orientFromMe(myCoords);}
       const s3=sub();if(s3)s3.textContent='green mapped here (tee line not mapped) — yardages run off your GPS.';
     }
