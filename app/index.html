@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786601194';
+const BUILD='1786602363';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -2973,7 +2973,9 @@ function mapConfirm(){
   const h=mapHole;
   let closed=false;
   if(greensIsMode())greensConsumeTarget();
-  markLockIn(h);
+  // The lock no longer waits for this. Placing the green IS the confirmation —
+  // see the green's report() below. Confirming a score and settling a hole's
+  // geometry are different acts and were only ever bundled here by accident.
   set(()=>{
     const rec=S.round.holes[h];if(!rec)return;
     const mi=myPlayerIdx(),par=(S.course.holes[h]||{par:4}).par;
@@ -3611,11 +3613,11 @@ function manualSnapIfReady(){
     // what they get back, and it is the whole reason they opened the map.
     const from=mapMarks.mePos||tee;
     const y=Math.round(mDist(from,grn)*1.09361);
-    markToast(`✓ Hole ${physHole(mapHole)+1} mapped — ${y}y to the green`,
+    markToast(`✓ Hole ${physHole(mapHole)+1} locked in — ${y}y to the green`,
               'thanks — the next person here finds it already on the map');
     // Stash it: the green-placement path ends with updateFMB(...,'') which blanks
     // the subtitle a moment after this runs, so the line has to be re-applied.
-    mapMarks._snapSub=`hole ${physHole(mapHole)+1} mapped · ${y}y to the green — it follows you in from here. Tap 🔄 Manual to redo it.`;
+    mapMarks._snapSub=`hole ${physHole(mapHole)+1} locked in · ${y}y to the green — it follows you in from here. Tap 🔄 Manual to redo it.`;
     const sb=document.getElementById('fmbsub');
     if(sb)sb.textContent=mapMarks._snapSub;
     return true;
@@ -3674,6 +3676,9 @@ function placeManualTee(t){
       lat:q[0],lon:q[1],geoSrc:'manual',movedYds:null,
       yardsToGreen:gc?Math.round(mDist(q,gc)*1.09361):null,
       fromDist:mapMarks.mePos?Math.round(mDist(mapMarks.mePos,q)*1.09361):null});
+    // A tee placed after the green supersedes the green-only lock, so the
+    // settled answer always carries both ends when both are known.
+    if(gc)markLockIn(mapHole);
   };
   report();
   let jd=false;
@@ -3724,10 +3729,15 @@ function mapTapAt(t){
       stat('greenmark',{course:S.course.id,courseName:S.course.name,hole:physHole(mapHole)+1,
         amn:amnStamp(),lat:+p.lat.toFixed(6),lon:+p.lng.toFixed(6),cardY:mapMarks._cardY||null,
         manual:!!mapMarks._manual,
-        fromDist:mapMarks.mePos?Math.round(mDist(mapMarks.mePos,[p.lat,p.lng])*1.09361):null});};
+        fromDist:mapMarks.mePos?Math.round(mDist(mapMarks.mePos,[p.lat,p.lng])*1.09361):null});
+      // THE GREEN GOING DOWN IS THE LOCK-IN. report() runs on the first tap and
+      // on drag-END, never mid-drag, so this fires only on a settled position.
+      // Re-locking is safe and intended: the ingest keeps the LAST lock per
+      // course+hole, so a nudge or a later tee simply supersedes the earlier one.
+      markLockIn(mapHole);};
     report();markBtns();
     if(!manualSnapIfReady()&&!mapMarks._restoring)
-      markToast('✓ Green marked','now the tee — tap “📍 Set Tee” and we can measure it');
+      markToast('✓ Green locked in','now the tee — tap “📍 Set Tee” and we can measure it');
     let jd=false;
     mk.on('drag',()=>{const p=mk.getLatLng();mapMarks.greenC=[p.lat,p.lng];
       if(mapMarks.refreshTapLine)mapMarks.refreshTapLine();
