@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786596673';
+const BUILD='1786597331';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -2991,6 +2991,7 @@ function mapConfirm(){
     const at=Math.max(0,o.indexOf(h));
     for(let k=1;k<=o.length;k++){const cand=o[(at+k)%o.length];if(!S.round.holes[cand].confirmed){mapHole=cand;break;}}
   });
+  maybeBroadcastRound();
   if(closed)askPutts(h,()=>showSplash(h));
   else askPutts(h,null);   // shared round: my rows are in, still ask me
 }
@@ -7578,7 +7579,13 @@ function startRound(){
   saveGroupFromRoster();  // a named group is remembered for next time
   libSaveRoster();  // starting a round remembers everyone in it
   setTimeout(()=>preloadCourseTiles(false),1500);  // quiet tile-pack top-up while signal is good
-  setTimeout(bfBroadcastStart,2500);               // tell the Battlefield (opt-out in Settings)
+  // The Battlefield used to hear about a round 2.5s after you tapped start, so
+  // tapping into setup and backing out left a permanent room, notified people,
+  // and counted as a round played. Justin did exactly that twice on 8/12: two
+  // rooms, placeholder rosters, zero scores, one lasting 23 seconds — and a text
+  // went out for a round nobody played. The announcement now waits for the first
+  // CONFIRMED hole, so a round has to be real before anyone hears about it.
+  // (See maybeBroadcastRound, called from every confirm path.)
   set(()=>{S.round=blankRound();S.round.started=true;S.round.game=S.config.game;
     S.round.games=(S.config.games&&S.config.games.length?S.config.games.slice():[S.config.game]).filter((g,i,a)=>a.indexOf(g)===i);
     S.round.rates=S.round.rates||{};
@@ -8059,7 +8066,17 @@ function advanceToNext(){
         sharedLater:!!(S.share.on&&!S.round._sharedAtStart)});}
   }else{S.round.cur=next;if(gameOn()!=='wolf')prefillNines(next);}
 }
-function confirmHole(){const h=S.round.cur;if(greensIsMode())greensConsumeTarget();set(()=>{S.round.holes[h].confirmed=true;if(!isReview())advanceToNext();});askPutts(h,()=>showSplash(h));}
+// Announce the round the first time a hole is genuinely confirmed — once, from
+// whichever of the three confirm paths gets there first.
+function maybeBroadcastRound(){
+  try{
+    if(!S.round.started||S.round._bfSent||isReview())return;
+    if(!S.round.holes.some(r=>r&&r.confirmed))return;
+    S.round._bfSent=true;
+    setTimeout(bfBroadcastStart,300);
+  }catch(e){}
+}
+function confirmHole(){const h=S.round.cur;if(greensIsMode())greensConsumeTarget();set(()=>{S.round.holes[h].confirmed=true;if(!isReview())advanceToNext();});maybeBroadcastRound();askPutts(h,()=>showSplash(h));}
 // ----- shared rounds: each phone confirms its own rows, then moves on -----
 function myRows(h){
   // A row is mine to confirm if nobody owns it, my phone owns it, OR I have
@@ -8082,6 +8099,7 @@ function confirmMine(){
     if(!rec.confirmed&&actIdx().every(i=>rec.cfts[i]>0)){rec.confirmed=true;closed=true;}
     if(!isReview())advanceToNext();
   });
+  maybeBroadcastRound();
   if(closed)askPutts(h,()=>showSplash(h));
   else askPutts(h,null);   // shared round: my rows are in, still ask me
 }
