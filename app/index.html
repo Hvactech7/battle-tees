@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786595229';
+const BUILD='1786596673';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1241,6 +1241,7 @@ function saveMe(){
     return;
   }
   if(em)try{localStorage.setItem('wolfBackupEmail',em);}catch(x2){}
+  setTimeout(registerProfile,0);          // the pid exists now — tell the Pi
   set(()=>{
     S.me={name,index:+((x&&x.value)||10)||10,pid:(S.me&&S.me.pid)||('u'+Date.now().toString(36)+Math.random().toString(36).slice(2,8))};
     upsertLib({name,index:S.me.index,tee:S.players[0]?S.players[0].tee:undefined,libId:null});
@@ -1812,7 +1813,7 @@ function addManualPlayer(){
 function lobbyConnect(){
   if((S.share&&S.share.on)||lobbySock)return;
   try{lobbySock=new WebSocket(RELAY);}catch(e){lobbySock=null;setTimeout(lobbyConnect,10000);return;}
-  lobbySock.onopen=()=>{try{lobbySock.send('{"t":"lobby"}');}catch(e){}sendHello();statFlush();};
+  lobbySock.onopen=()=>{try{lobbySock.send('{"t":"lobby"}');}catch(e){}sendHello();statFlush();registerProfile();};
   lobbySock.onmessage=ev=>{
     let m;try{m=JSON.parse(ev.data);}catch(e){return;}
     if(m.t==='invites'){invites=m.list||[];render();}
@@ -5284,6 +5285,25 @@ function bfStorePut(code,entry,doc){
 // automatically and permanently. They are the only people who see your rounds
 // on the Battlefield, and the only ones emailed when you start one.
 function myPid(){return (S.me&&S.me.pid)||'';}
+// EVERY PROFILE REGISTERS ITS PID, from the moment it exists. The only route to
+// the Pi used to be the library backup, which requires a VERIFIED email — so a
+// new profile was invisible until it verified: unfriendable, unreachable, absent
+// from every pid-keyed list. Identity and deliverability are separate things.
+// This is identity, and it carries no promise of an address; the relay still
+// refuses to mail anyone unverified.
+// The handful of hand-made entries are the grandfathered exception, not the rule.
+let pidSent='';
+function registerProfile(force){
+  try{
+    const pid=myPid(), nm=(S.me&&S.me.name||'').trim();
+    if(!pid||!nm)return;
+    const em=(localStorage.getItem('wolfBackupEmail')||'').trim();
+    const sig=pid+'|'+nm+'|'+em;
+    if(!force&&pidSent===sig)return;      // nothing changed since the last one
+    pidSent=sig;
+    relayBattle({op:'profile',pid,name:nm,email:em||undefined}).catch(()=>{pidSent='';});
+  }catch(e){}
+}
 let friendMap=null;           // {pid:{name,friend}} for names in MY library
 function loadFriends(force){
   if(!myPid()||(friendMap&&!force))return;
@@ -5313,14 +5333,21 @@ function normName(x){return (x||'').trim().toLowerCase().replace(/\s+/g,' ');}
 // matching, so it fell through to "no account yet".
 function friendEntryFor(who){
   if(!friendMap)return null;
-  if(who&&typeof who==='object'&&who.pid&&friendMap[who.pid])
-    return Object.assign({pid:who.pid,match:'pid'},friendMap[who.pid]);
-  const n=normName(who&&typeof who==='object'?who.name:who);
-  if(!n)return null;
-  for(const pid in friendMap){
-    if(normName(friendMap[pid].name)===n)return Object.assign({pid,match:'exact'},friendMap[pid]);
+  const isObj=who&&typeof who==='object';
+  const n=normName(isObj?who.name:who);
+  const byPid=(isObj&&who.pid&&friendMap[who.pid])?Object.assign({pid:who.pid,match:'pid'},friendMap[who.pid]):null;
+  let byName=null;
+  if(n)for(const pid in friendMap){
+    if(normName(friendMap[pid].name)===n){byName=Object.assign({pid,match:'exact'},friendMap[pid]);break;}
   }
-  return null;
+  // A CONNECTED match wins. One person can hold two registry entries — Justin
+  // Sparrow has a hand-made placeholder tied to his email AND would mint a real
+  // pid the day he installs the app. Resolving strictly pid-first would then
+  // report a long-connected friend as "no account yet", because the NEW pid is
+  // not the one the friend link was made against.
+  if(byPid&&byPid.friend)return byPid;
+  if(byName&&byName.friend)return byName;
+  return byPid||byName;
 }
 // Candidates for a library row that has no exact match: same first name, or one
 // name a prefix of the other. Returned for CONFIRMATION, never auto-applied —
@@ -7216,6 +7243,13 @@ function upsertLib(p){
     e.teeByCourse=e.teeByCourse||{};
     e.teeByCourse[S.course.id]=_t.id;
   }
+  // The live roster is authoritative for who this player IS right now, so this
+  // is last-write-wins on purpose: a reinstall that mints a new pid self-heals
+  // on the next shared round. A hand-confirmed merge can be overwritten that
+  // way, which is survivable — friendEntryFor prefers whichever entry actually
+  // holds the friend link, so the row still reads "connected" and re-merging is
+  // one tap. (I briefly added a !e.pid guard above this line, having read the
+  // top of the function and not the bottom. It was redundant and unreachable.)
   if(p.pid)e.pid=p.pid;
 }
 function loadPlayer(i,libId){
