@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786597649';
+const BUILD='1786598651';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -5895,7 +5895,6 @@ function vHistory(){
       <div class="tiny">${when} · thru ${e.thru} · ${e.mins!=null?e.mins+' min':''}${e.code?' · shared '+esc(e.code):''}</div>
       <div class="tiny">${(e.players||[]).map(esc).join(' · ')}</div>
       <div style="display:flex;gap:8px;margin-top:10px">
-        <button class="ghost" style="flex:1.35;margin:0;white-space:nowrap" onclick="resumeRound('${e.id}')">▶ Continue Playing</button>
         <button class="ghost sel" style="flex:1;margin:0;white-space:nowrap" onclick="reopenRound('${e.id}')">Review</button>
         <button class="ghost danger" style="flex:none;width:46px;margin:0" onclick="delHist('${e.id}')">${armDelHist===e.id?'Del?':'✕'}</button>
       </div>
@@ -6521,19 +6520,11 @@ function endRound(){
 }
 // Resume a past round for real: fully live (not review), with the clock
 // continuing from where it stopped — the break doesn't count against pace.
-function resumeRound(id){
-  const e=(S.history||[]).find(x=>x.id===id);if(!e)return;
-  S.round=clone(e.round);S.round.started=true;delete S.round.reopened;
-  S.config=clone(e.config);
-  if(e.playersSnap)S.players=clone(e.playersSnap);
-  const c=S.courses.find(x=>x.id===e.courseId);if(c)S.course=clone(c);
-  const elapsed=(S.round.myEndedAt&&S.round.myStartedAt)?(S.round.myEndedAt-S.round.myStartedAt):(e.mins!=null?e.mins*60000:0);
-  S.round.myStartedAt=Date.now()-elapsed;
-  delete S.round.myEndedAt;
-  S.screen='hole';stView=null;
-  if(e.code){S.share={on:true,code:e.code,creator:false};S.shareMetaTs=0;S.round.holes.forEach(r=>{r._ts=r._ts||0;});primeCaches(false);save();syncConnect();render();}
-  else{S.share={on:false,code:null};save();render();}
-}
+// RESUMING A FINISHED ROUND IS GONE. Turning a closed round back into a live one
+// meant reviving state that had already been torn down, and every bug it caused
+// came from that. The real need behind it — "I ended the round with holes
+// unscored" — is handled at the other end now: ending checks the card first and
+// offers to go back and finish it. Review stays view-and-fix only.
 function reopenRound(id){
   const e=(S.history||[]).find(x=>x.id===id);if(!e)return;
   S.round=clone(e.round);S.round.started=true;S.round.reopened=true;
@@ -7988,6 +7979,22 @@ function chStat(k,i,d){reviewTouch();set(()=>{const rec=S.round.holes[S.round.cu
 // Ending is irreversible-ish — it stops your clock and drops you out of the
 // group — so the last hole asks before it does any of that.
 let endAsk=null;
+// Which holes of the round you are actually playing have no confirmed score.
+function unscoredHoles(){
+  try{return playOrder().filter(h=>!(S.round.holes[h]||{}).confirmed);}catch(e){return [];}
+}
+// TWO STAGES. Ending went straight to "confirm round is over", so walking in with
+// holes unscored was a single tap and the blanks were mentioned only in passing.
+// The card is checked FIRST now: if anything is unscored you are told which holes
+// and offered the way back, and the confirmation appears only after you choose.
+// A complete card skips the check entirely, so finishing 18 is unchanged.
+function endAskScore(){
+  const u=unscoredHoles();
+  endAsk=null;
+  if(u.length)set(()=>{S.round.cur=u[0];S.screen='hole';});
+  else render();
+}
+function endAskAnyway(){endAsk='confirm';render();}
 function askEndRound(){
   if(isReview()||endAsk)return;
   // _finished alone must NOT block this. finishMyRound() flips that flag
@@ -7996,7 +8003,8 @@ function askEndRound(){
   // and this button goes dead forever with no way back. Refuse only once the
   // round is genuinely closed out.
   if(S.round._finished&&!S.round.started)return;
-  endAsk=true;render();
+  endAsk=unscoredHoles().length?'scan':'confirm';
+  render();
 }
 function endAskYes(){
   endAsk=null;
@@ -8011,6 +8019,20 @@ function endAskSheetHTML(){
   if(!endAsk)return '';
   const thru=S.round.holes.filter(r=>r.confirmed).length;
   const total=playOrder().length;
+  if(endAsk==='scan'){
+    const u=unscoredHoles().map(h=>h+1);
+    const list=u.length>6 ? `${u.slice(0,6).join(', ')} and ${u.length-6} more`
+      : u.length>1 ? `${u.slice(0,-1).join(', ')} and ${u[u.length-1]}` : `${u[0]}`;
+    return `<div class="vfWrap" role="dialog" aria-modal="true" aria-labelledby="esTitle">
+      <div class="vfCard">
+        <h2 id="esTitle" class="vfTitle">${u.length} hole${u.length===1?'':'s'} with no score</h2>
+        <div class="tiny mb">You have scored <b>${thru} of ${total}</b>. Still blank: <b>${list}</b>.
+          Blank holes stay blank — they are left out of your totals and your stats.</div>
+        <button class="big mt" onclick="endAskScore()">✎ &nbsp;Let me finish scoring</button>
+        <button class="ghost mt" style="width:100%" onclick="endAskAnyway()">End the round anyway</button>
+        <button class="ghost mt" style="width:100%" onclick="endAskNo()">Cancel — keep playing</button>
+      </div></div>`;
+  }
   // Same prompt whether you finished the card or are walking in early — only the
   // first line differs, because "that was your last hole" would be a lie at thru 6.
   const lead=thru>=total
