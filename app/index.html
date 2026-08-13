@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786603596';
+const BUILD='1786604229';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -620,6 +620,7 @@ function load(){
       if(!s.me)s.me={name:'',index:10};
       if(!s.theme)s.theme='dark';
       if(s.autoBackup==null)s.autoBackup=true;
+      if(s.units!=='m')s.units='yd';        // yards is the default, always
       if(!s.config.game)s.config.game='wolf';
       if(s.config.ctpAll===undefined)s.config.ctpAll=true;
       if(!s.config.ctpMoney)s.config.ctpMoney={amt:0,carry:false};
@@ -724,7 +725,7 @@ function load(){
       return s;
     }}
   }catch(e){}
-  return {screen:'home',course:defaultCourse(),courses:builtinCourses(),playerLib:[],groupLib:[],teamLib:[],config:defaultConfig(),players:defaultPlayers(),round:blankRound(),share:{on:false,code:null},me:{name:'',index:10},theme:'dark',history:[],autoBackup:true};
+  return {screen:'home',course:defaultCourse(),courses:builtinCourses(),playerLib:[],groupLib:[],teamLib:[],config:defaultConfig(),players:defaultPlayers(),round:blankRound(),share:{on:false,code:null},me:{name:'',index:10},theme:'dark',history:[],autoBackup:true,units:'yd'};
 }
 function syncLib(){
   if(!S.courses)return;
@@ -2672,7 +2673,16 @@ function orientGreenUp(from,greenC,greenPoly,pts,el){
   }catch(e){return false;}
 }
 function mDist(a,b){return kmBetween(a[0],a[1],b[0],b[1])*1000;}
-function yd(m){return Math.round(m*1.09361);}
+// DISTANCE UNITS. Yards is the default and always has been — this only changes
+// what is DISPLAYED. Everything is measured and stored in metres internally
+// (mDist) or in scorecard yards (teeSets[].yds), and neither is touched, so the
+// switch is reversible and cannot corrupt a card or a mark.
+function distUnit(){try{return S.units==='m'?'m':'yd';}catch(e){return 'yd';}}
+function uLbl(){return distUnit()==='m'?'m':'y';}
+function yd(m){return distUnit()==='m'?Math.round(m):Math.round(m*1.09361);}
+// scorecard yardages are stored in YARDS, so they convert from yards, not metres
+function ydDisp(y){const n=+y;if(!isFinite(n))return y;return distUnit()==='m'?Math.round(n*0.9144):Math.round(n);}
+function toggleUnits(){set(()=>{S.units=distUnit()==='m'?'yd':'m';});}
 function centroidOf(poly){
   let la=0,lo=0;poly.forEach(p=>{la+=p[0];lo+=p[1];});
   return [la/poly.length,lo/poly.length];
@@ -2801,7 +2811,7 @@ function openClubSheet(yds){
   const d=document.createElement('div');d.id='clubsheet';
   d.style.cssText='position:fixed;left:50%;transform:translateX(-50%);bottom:calc(172px + env(safe-area-inset-bottom));z-index:80;width:min(440px,94vw);background:var(--card);border:2px solid var(--green);border-radius:14px;padding:12px;box-shadow:4px 4px 0 rgba(0,0,0,.4)';
   d.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-      <b class="num" style="font-size:24px">${yds}y</b><span class="tiny">what club was that?</span>
+      <b class="num" style="font-size:24px">${ydDisp(yds)}${uLbl()}</b><span class="tiny">what club was that?</span>
       <button class="ghost danger" onclick="cancelMark()">✕</button></div>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">${CLUBS.map(c=>`<button class="ghost" style="padding:10px 0" onclick="saveShot('${c}')">${c}</button>`).join('')}</div>
     <button class="ghost mt" style="width:100%" onclick="saveShot(null)">Skip — just log the distance</button>`;
@@ -2819,7 +2829,7 @@ function shotToast(msg){
 function flashYardage(yds,club){
   const d=document.createElement('div');
   d.style.cssText='position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;pointer-events:none';
-  d.innerHTML=`<div class="ydflash"><span class="num">${yds}</span><span style="font-size:.36em">yds${club?` · ${esc(club)}`:''}</span></div>`;
+  d.innerHTML=`<div class="ydflash"><span class="num">${ydDisp(yds)}</span><span style="font-size:.36em">${distUnit()==='m'?'m':'yds'}${club?` · ${esc(club)}`:''}</span></div>`;
   document.body.appendChild(d);
   setTimeout(()=>{try{d.remove();}catch(e){}},1600);
 }
@@ -3398,7 +3408,7 @@ function manualModeTap(){
   if(sb)sb.textContent=(already.tee||already.green)
     ? 'hole already marked — drag a pin to nudge it, tap a pin or ✕ to clear one, or press 🔄 Manual again to wipe both and start over. Then Score → Confirm.'
     : (me
-      ? (cardY?`manual mode — twist to rotate, pinch to zoom. Card says ${cardY}y, so the green sits near the gold ring. Found it? Tap “⛳ Set Green”.`
+      ? (cardY?`manual mode — twist to rotate, pinch to zoom. Card says ${ydDisp(cardY)}${uLbl()}, so the green sits near the gold ring. Found it? Tap “⛳ Set Green”.`
               :`manual mode — twist to rotate, pinch to zoom. Find the green, then tap “⛳ Set Green”.`)
       : 'manual mode — waiting for GPS to size the view. Rotation is unlocked.');
 }
@@ -3506,7 +3516,7 @@ function greenClashHTML(){
   return `<div class="vfWrap" role="dialog" aria-modal="true" aria-labelledby="gcT">
     <div class="vfCard">
       <h2 id="gcT" class="vfTitle" style="color:var(--amber-bd,#e0a53a)">That looks like hole ${c.hole+1}'s green</h2>
-      <div class="tiny mb">You marked it <b>${c.yds} yard${c.yds===1?'':'s'}</b> from
+      <div class="tiny mb">You marked it <b>${ydDisp(c.yds)} ${distUnit()==='m'?'metre':'yard'}${ydDisp(c.yds)===1?'':'s'}</b> from
         ${c.src==='map'?`where the map has hole ${c.hole+1}'s green`:`the green you marked for hole ${c.hole+1}`}.
         Two holes can share a green, but this is usually a mis-tap — check the flag you are aiming at.</div>
       <button class="big mt" onclick="greenClashClear()">↺ &nbsp;Clear it and try again</button>
@@ -3673,11 +3683,11 @@ function manualSnapIfReady(){
     // what they get back, and it is the whole reason they opened the map.
     const from=mapMarks.mePos||tee;
     const y=Math.round(mDist(from,grn)*1.09361);
-    markToast(`✓ Hole ${physHole(mapHole)+1} locked in — ${y}y to the green`,
+    markToast(`✓ Hole ${physHole(mapHole)+1} locked in — ${y}${uLbl()} to the green`,
               'thanks — the next person here finds it already on the map');
     // Stash it: the green-placement path ends with updateFMB(...,'') which blanks
     // the subtitle a moment after this runs, so the line has to be re-applied.
-    mapMarks._snapSub=`hole ${physHole(mapHole)+1} locked in · ${y}y to the green — it follows you in from here. Tap 🔄 Manual to redo it.`;
+    mapMarks._snapSub=`hole ${physHole(mapHole)+1} locked in · ${y}${uLbl()} to the green — it follows you in from here. Tap 🔄 Manual to redo it.`;
     const sb=document.getElementById('fmbsub');
     if(sb)sb.textContent=mapMarks._snapSub;
     return true;
@@ -3887,7 +3897,7 @@ function initGoogleHoleMap(el,geo,geoErr){
       greenPoly=geo.green;greenC=centroidOf(geo.green);
     }else greenC=pathEnd;
     var gmGreen=dot(greenC,'#ffd75e');
-    gmGreen.setLabel(lbl(yd(mDist(geo.path[0],greenC))+'y'));
+    gmGreen.setLabel(lbl(yd(mDist(geo.path[0],greenC))+uLbl()));
     const b=new gm.LatLngBounds();
     geo.path.concat(greenPoly||[]).forEach(pt=>b.extend(P(pt)));
     GMAP.fitBounds(b,{top:36,bottom:36,left:36,right:36});
@@ -3935,8 +3945,8 @@ function initGoogleHoleMap(el,geo,geoErr){
     const pts=[from,t,mapMarks.greenC].filter(Boolean).map(P);
     if(gmTapLine)gmTapLine.setPath(pts);
     else{gmTapLine=new gm.Polyline({path:pts,strokeColor:'#ffb454',strokeWeight:1.75,strokeOpacity:.95,clickable:false,map:GMAP});gmOverlays.push(gmTapLine);}
-    if(from)gmTap.setLabel(lbl(yd(mDist(from,t))+'y'));
-    if(mapMarks.greenC&&typeof gmGreen!=='undefined'&&gmGreen)gmGreen.setLabel(lbl(yd(mDist(t,mapMarks.greenC))+'y'));
+    if(from)gmTap.setLabel(lbl(yd(mDist(from,t))+uLbl()));
+    if(mapMarks.greenC&&typeof gmGreen!=='undefined'&&gmGreen)gmGreen.setLabel(lbl(yd(mDist(t,mapMarks.greenC))+uLbl()));
   };
   startMapGps();
 }
@@ -4044,7 +4054,7 @@ function initGreensMap(el){
     paint();
     if(!elF)return;
     if(st.target!=null&&from){
-      elF.textContent=Math.round(mDist(from,pts[st.target])*1.09361)+'y';
+      elF.textContent=yd(mDist(from,pts[st.target]))+uLbl();
       if(sub)sub.textContent=`to the green · tap a dot to switch · ${pts.length-st.used.length} of ${pts.length} left`;
     }else if(st.target!=null){elF.textContent='—';if(sub)sub.textContent='waiting for GPS · tap a green to range';}
     else if(st.used.length>=pts.length){elF.textContent='🏁';if(sub)sub.textContent='every green played — tap one to range again';}
@@ -4196,7 +4206,7 @@ async function initHoleMap(){
         iconSize:[13,13],iconAnchor:[7,7]})}).addTo(LMAP);
       const teeSay=()=>{
         const t=teeMk.getLatLng(),g=mapMarks.greenC||pathEnd;
-        return g?yd(mDist([t.lat,t.lng],g))+'y tee':'tee';
+        return g?yd(mDist([t.lat,t.lng],g))+uLbl()+' tee':'tee';
       };
       teeMk.bindTooltip('tee',{permanent:false,direction:'bottom',offset:[0,8],className:'maplbl'});
       const teeRedraw=()=>{
@@ -4208,7 +4218,7 @@ async function initHoleMap(){
         mapMarks.ref=[t.lat,t.lng];
         try{updateFMB([t.lat,t.lng],'yards from the tee');}catch(e){}
         try{teeMk.setTooltipContent(teeSay());}catch(e){}
-        if(lGreen)try{lGreen.setTooltipContent(yd(mDist([t.lat,t.lng],mapMarks.greenC||pathEnd))+'y');}catch(e){}
+        if(lGreen)try{lGreen.setTooltipContent(yd(mDist([t.lat,t.lng],mapMarks.greenC||pathEnd))+uLbl());}catch(e){}
       };
       let teeDragged=false;
       teeMk.on('drag',()=>{teeDragged=true;teeRedraw();});
@@ -4248,7 +4258,7 @@ async function initHoleMap(){
     var lGreen=L.marker(greenC,{draggable:true,icon:L.divIcon({className:'',
       html:'<div class="aimdot" style="width:15px;height:15px;border-radius:50%;background:#ffd75e;border:2.5px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.65)"></div>',
       iconSize:[15,15],iconAnchor:[8,8]})}).addTo(LMAP);
-    lGreen.bindTooltip(hasPath?yd(mDist(geo.path[0],greenC))+'y':'green',{permanent:true,direction:'top',offset:[0,-10],className:'maplbl'});
+    lGreen.bindTooltip(hasPath?yd(mDist(geo.path[0],greenC))+uLbl():'green',{permanent:true,direction:'top',offset:[0,-10],className:'maplbl'});
     const aimHome=greenC.slice();
     let aimJustDragged=false;
     const aimPaint=()=>{
@@ -4327,7 +4337,7 @@ async function initHoleMap(){
       // the frame is a hard 300 yards across, so on anything but a short hole
       // the ring starts outside it — say so rather than pointing at a circle
       // that isn't on screen
-      const s2=sub();if(s2)s2.textContent=`no map here — card says ${cardY}y (${esc(tset.name)}). The green sits ON the gold ring: two-finger rotate to look${(amnFrame&&cardY>FRAME_YDS/2)?', pinch out to reach the ring':''}, tap it when you spot it.`;
+      const s2=sub();if(s2)s2.textContent=`no map here — card says ${ydDisp(cardY)}${uLbl()} (${esc(tset.name)}). The green sits ON the gold ring: two-finger rotate to look${(amnFrame&&cardY>FRAME_YDS/2)?', pinch out to reach the ring':''}, tap it when you spot it.`;
     }else{
       const s2=sub();if(s2)s2.textContent=geoErr||'Hole lines not mapped here — rangefinder still works.';
     }
@@ -4367,7 +4377,7 @@ async function initHoleMap(){
     [lTapLine,lTapCase].forEach(o=>{if(o)LMAP.removeLayer(o);});
     lTapLine=lTapCase=null;
     if((mapMarks.aimC||mapMarks.greenC)&&typeof lGreen!=='undefined'&&lGreen&&mapMarks.ref)
-      lGreen.setTooltipContent(yd(mDist(mapMarks.ref,mapMarks.aimC||mapMarks.greenC))+'y'+(mapMarks.aimC?' 🎯':''));
+      lGreen.setTooltipContent(yd(mDist(mapMarks.ref,mapMarks.aimC||mapMarks.greenC))+uLbl()+(mapMarks.aimC?' 🎯':''));
   };
   // the line is live whenever GPS has a fix (me → green) — taps just add waypoints
   const refreshTapLine=()=>{
@@ -4387,8 +4397,8 @@ async function initHoleMap(){
     }
     // each dot prices its arriving leg
     let prev=from;
-    lTaps.forEach((m,i)=>{m.setTooltipContent(yd(mDist(prev,ts[i]))+'y');prev=ts[i];});
-    if(endC&&typeof lGreen!=='undefined'&&lGreen)lGreen.setTooltipContent(yd(mDist(prev,endC))+'y'+(mapMarks.aimC?' 🎯':''));
+    lTaps.forEach((m,i)=>{m.setTooltipContent(yd(mDist(prev,ts[i]))+uLbl());prev=ts[i];});
+    if(endC&&typeof lGreen!=='undefined'&&lGreen)lGreen.setTooltipContent(yd(mDist(prev,endC))+uLbl()+(mapMarks.aimC?' 🎯':''));
   };
   const clearTap=m=>{
     if(m){LMAP.removeLayer(m);lTaps=lTaps.filter(x=>x!==m);}
@@ -4463,7 +4473,7 @@ function updateFMB(pos,label){
   const r=fmbFrom(pos,mapMarks.greenPoly,mapMarks.greenC);
   el.innerHTML=r.f!=null
     ?`<span style="color:var(--ink2);font-size:16px">F</span> ${yd(r.f)} <span style="color:var(--ink2);font-size:16px">M</span> ${yd(r.m)} <span style="color:var(--ink2);font-size:16px">B</span> ${yd(r.b)}`
-    :`${yd(r.m)}y to green`;
+    :`${yd(r.m)}${uLbl()} to green`;
   if(s2)s2.textContent='';  // label dropped by design — F/M/B speaks for itself
 }
 
@@ -5324,6 +5334,14 @@ function vSettings(){
     <div class="tiny mt">Announcements go out once per round, from Battle Tees — never from a personal address.</div>
   </div>
   ${trackCardHTML()}
+  <div class="card"><h2>📏 Distances</h2>
+    <div class="row"><div style="flex:1;min-width:0"><b>Yards or metres</b>
+      <div class="tiny">Changes what you SEE — every distance on the map, the scorecard and your tracked shots. Nothing is converted or re-saved: measurements stay exactly as they were, so you can switch back any time.</div></div>
+      <span class="seg" style="display:inline-flex;gap:6px">
+        <button class="ghost ${distUnit()==='yd'?'sel':''}" onclick="if(distUnit()!=='yd')toggleUnits()">Yards</button>
+        <button class="ghost ${distUnit()==='m'?'sel':''}" onclick="if(distUnit()!=='m')toggleUnits()">Metres</button>
+      </span></div>
+  </div>
   <div class="card"><h2>🧠 Course Amnesia</h2>
     <div class="row"><div style="flex:1;min-width:0"><b>Ignore saved course maps</b>
       <div class="tiny">Play a course you have already mapped as if it were your first time — no hole line, no green, no yardages. The map screen falls back to Manual, so you can test learning a course from scratch. <b>Nothing is deleted</b>; switch it off and every map comes straight back.</div></div>
@@ -5705,7 +5723,7 @@ function vBfWatch(){
         <span class="num">${sc}</span>
         <span class="tiny" style="flex:none">${hs.length?`📍${hs.length}`:''}</span></div>
       ${bfHole===h&&hs.length?`<div style="background:var(--bg);border-radius:10px;padding:8px 10px;margin:4px 0">
-        ${hs.map(x=>`<div class="tiny">${esc(x.club||'shot')} — ${x.yds}y</div>`).join('')}
+        ${hs.map(x=>`<div class="tiny">${esc(x.club||'shot')} — ${ydDisp(x.yds)}${uLbl()}</div>`).join('')}
         <div id="bfmap" style="height:210px;border-radius:8px;margin-top:6px"></div></div>`:''}`;
     }).join('');
     setTimeout(bfMiniMap,80);
@@ -6066,7 +6084,7 @@ function vStats(){
   const fmtDay=t=>{if(!t)return '';const d=new Date(t);return (d.getMonth()+1)+'/'+d.getDate();};
   const recentRows=recent.map(s2=>`<div class="row" style="padding:7px 0">
       <b style="min-width:52px">${s2.club?esc(s2.club):'<span class="muted">—</span>'}</b>
-      <span class="num" style="font-size:20px;font-weight:700">${s2.yds}y</span>
+      <span class="num" style="font-size:20px;font-weight:700">${ydDisp(s2.yds)}${uLbl()}</span>
       <span class="tiny" style="color:var(--ink3)">h${(s2.h||0)+1} · ${fmtDay(s2.at)}</span>
     </div>`).join('');
   const clubRows=clubOrder.filter(c=>byClub[c]).map(c=>{
