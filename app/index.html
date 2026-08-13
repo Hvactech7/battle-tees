@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786593101';
+const BUILD='1786595229';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1311,10 +1311,15 @@ function bfBroadcastStart(){
       S.round.holes.forEach(r=>{if(!r._ts)r._ts=Date.now();});
       save();syncConnect();
     }
-    const pids=[...new Set((S.playerLib||[]).map(p=>p.pid).filter(Boolean))];
+    // THE ROUND'S roster, not the whole library. Sending the library made the
+    // relay treat every saved player as "on the tee with you" — so they were
+    // skipped by the round-start email (Cypress 8/12: a SOLO round emailed only
+    // 2 of 5 friends), recorded as players and holders of a round they never
+    // played, and permanently friend-linked to each other by _friend_link.
+    const pids=[...new Set(actIdx().map(i=>S.players[i]).filter(p=>p&&p.pid).map(p=>p.pid))];
     // names ride along for friends whose library row never picked up a pid —
     // the relay matches them to verified profile names privately
-    const names=[...new Set((S.playerLib||[]).map(p=>(p.name||'').trim()).filter(Boolean))];
+    const names=[...new Set(actIdx().map(i=>S.players[i]).filter(p=>p&&p.name).map(p=>p.name.trim()))];
     relayBattle({op:'start',code:S.share.code,
       starter:(S.me&&S.me.name)||'A Friend',starterPid:(S.me&&S.me.pid)||'',
       course:S.course.name,game:gameName(S.round.game),pids,names}).catch(()=>{});
@@ -1689,8 +1694,12 @@ function applyLibrary(d){
       (d.playerLib||[]).forEach(e=>{
         if(!e||!e.name)return;
         const ex=S.playerLib.find(x=>x.name.trim().toLowerCase()===String(e.name).trim().toLowerCase());
-        if(ex){ex.index=e.index;if(e.teeName)ex.teeName=e.teeName;updated++;}
-        else{S.playerLib.push({id:e.id||('pl'+Date.now()+Math.floor(Math.random()*1e4)),name:e.name,index:e.index,teeName:e.teeName});added++;}
+        // CARRY THE PID. It was dropped here, so every match the player had
+        // confirmed by hand ("Doug Payne is Doug") was undone by the next
+        // restore and the duplicate came straight back. Never overwrite a pid
+        // this phone already holds — the local one was confirmed on this device.
+        if(ex){ex.index=e.index;if(e.teeName)ex.teeName=e.teeName;if(e.pid&&!ex.pid)ex.pid=e.pid;updated++;}
+        else{S.playerLib.push({id:e.id||('pl'+Date.now()+Math.floor(Math.random()*1e4)),name:e.name,index:e.index,teeName:e.teeName,pid:e.pid||undefined});added++;}
       });
       if(!S.me.name&&d.me&&d.me.name)S.me=d.me;
       let cAdded=0;
@@ -5283,13 +5292,77 @@ function loadFriends(force){
     if(r&&r.ok){friendMap=r.friends||{};render();}
   }).catch(()=>{});
 }
-function friendEntryFor(name){
+// ONE LIST. Your player library is the list of people you have played with —
+// it is the only one that reflects reality. friends.json, the account registry
+// and the Battlefield holders are all keyed on pid, and NINE of Nathan's
+// thirteen regulars have no pid, so they were invisible to every one of them.
+// Patrick Kanoran has been in the library the whole time and could never be a
+// friend, get a watch link, or show up when asked "who is on my list".
+//
+// This resolves a library row to one of three honest states:
+//   linked     — connected to their account, gets watch links
+//   suggested  — an account that looks like them; YOU confirm, never automatic
+//   none       — no account yet; invite them
+// Exact match is not enough: "Doug Payne" in the library is "Doug" in the
+// registry, and matching only on the full string is why he never connected.
+function normName(x){return (x||'').trim().toLowerCase().replace(/\s+/g,' ');}
+// Accepts a library ENTRY or a bare name. The pid comes first: once you have
+// confirmed "Doug Payne is Doug", the row carries his pid and the names never
+// need to agree again. Resolving by name alone meant confirming the match made
+// the row WORSE — pid stamped, suggestion suppressed, and the name still not
+// matching, so it fell through to "no account yet".
+function friendEntryFor(who){
   if(!friendMap)return null;
-  const n=(name||'').trim().toLowerCase();
+  if(who&&typeof who==='object'&&who.pid&&friendMap[who.pid])
+    return Object.assign({pid:who.pid,match:'pid'},friendMap[who.pid]);
+  const n=normName(who&&typeof who==='object'?who.name:who);
+  if(!n)return null;
   for(const pid in friendMap){
-    if(((friendMap[pid].name||'').trim().toLowerCase())===n)return Object.assign({pid},friendMap[pid]);
+    if(normName(friendMap[pid].name)===n)return Object.assign({pid,match:'exact'},friendMap[pid]);
   }
   return null;
+}
+// Candidates for a library row that has no exact match: same first name, or one
+// name a prefix of the other. Returned for CONFIRMATION, never auto-applied —
+// there are three Justins in this library and guessing would link the wrong one.
+function friendSuggestions(name){
+  if(!friendMap)return [];
+  const n=normName(name);if(!n)return [];
+  const first=n.split(' ')[0];
+  const out=[];
+  // Exclude only accounts ALREADY CLAIMED by another library row. Skipping every
+  // account with friend===true was wrong: Doug is linked in friends.json but
+  // matches no library row, so "Doug Payne" showed as "no account yet" while
+  // Doug sat in the friend list — the exact duplicate Nathan called out.
+  const claimed=new Set();
+  (S.playerLib||[]).forEach(le=>{
+    const ln=normName(le.name);
+    for(const pid in friendMap)if(normName(friendMap[pid].name)===ln)claimed.add(pid);
+    if(le.pid)claimed.add(le.pid);
+  });
+  for(const pid in friendMap){
+    const rn=normName(friendMap[pid].name);
+    if(!rn||rn===n)continue;
+    if(claimed.has(pid))continue;
+    const rf=rn.split(' ')[0];
+    if(rf===first||rn.startsWith(n)||n.startsWith(rn))out.push(Object.assign({pid,match:'likely'},friendMap[pid]));
+  }
+  return out;
+}
+// Confirming a match does two things: links the accounts on the relay, and
+// stamps the pid onto the library row so this phone stops treating them as two
+// different people.
+function confirmFriend(libId,pid){
+  set(()=>{const e=(S.playerLib||[]).find(x=>x.id===libId);if(e)e.pid=pid;});
+  setFriend(pid,true);
+}
+function inviteToBattle(name){
+  const msg=`${(S.me&&S.me.name)||'A friend'} wants you on the Battlefield — Battle Tees keeps the card and lets you watch rounds live.\n\nhttps://battletees.app/`;
+  try{
+    if(navigator.share){navigator.share({title:'Battle Tees',text:msg}).catch(()=>{});return;}
+    navigator.clipboard.writeText(msg);
+    alert(`Invite copied — send it to ${name}.`);
+  }catch(e){alert(msg);}
 }
 function setFriend(pid,on){
   if(!myPid()||!pid)return;
@@ -6198,6 +6271,10 @@ function vPlayers(){
       </div>`
     :`<button class="ghost mt" onclick="toggleAddPlayer()">Add player</button>`}
     ${(()=>{const lib=S.playerLib.filter(e=>!S.me.name||e.name.trim().toLowerCase()!==S.me.name.trim().toLowerCase());
+    if(!lib.length)return '';
+    const on=lib.filter(e=>{const f=friendEntryFor(e);return f&&f.friend;}).length;
+    return `<div class="tiny mt" style="opacity:.85">Everyone you have played with — <b>${lib.length}</b> golfer${lib.length===1?'':'s'}, <b>${on}</b> connected. Only connected golfers see your rounds or get a watch link.</div>`;})()}
+    ${(()=>{const lib=S.playerLib.filter(e=>!S.me.name||e.name.trim().toLowerCase()!==S.me.name.trim().toLowerCase());
     return lib.length?lib.map(e=>editingPlayer===e.id?`
       <div class="row" style="background:var(--green-lt);border-radius:10px;padding:9px 12px;border-top:none;margin:2px 0">
         <div class="grid2" style="flex:1">
@@ -6217,12 +6294,35 @@ function vPlayers(){
         <button class="ghost sel" style="flex:1" onclick="saveEditPlayer()">Save</button>
         <button class="ghost" onclick="cancelEditPlayer()">Cancel</button>
       </div>`
-    :`<div class="row">
-      <div><b>${(()=>{const f=friendEntryFor(e.name);return f&&f.friend?'<span title="Battle friend">⚔️</span> ':'';})()}${esc(e.name)}</b><div class="tiny">Index ${e.index}${(e.stdTee||e.teeName)?` · ${esc(e.stdTee||e.teeName)} tees`:''}</div></div>
-      <span style="display:flex;gap:6px">
+    :(()=>{
+      // STATUS ON EVERY ROW. It used to be buried inside the edit panel, so the
+      // only way to learn that nine of your thirteen regulars were unreachable
+      // was to open each one in turn. This IS the list now.
+      const f=friendEntryFor(e), linked=!!(f&&f.friend);
+      const sug=linked?[]:friendSuggestions(e.name);
+      const status=linked
+        ? `<div class="tiny" style="color:var(--green-mid)">⚔️ connected — sees your rounds and gets your round-start email</div>`
+        : sug.length
+          // A candidate may ALREADY be connected (Doug is in friends.json, just
+          // never matched to a library row) — say which, so "Yes" reads as
+          // "merge these two records" rather than "link a stranger".
+          ? `<div class="tiny" style="color:var(--amber-bd,#e0a53a)">${sug.map(x=>
+              esc(x.name)+(x.friend?' (already connected)':'')).join(' or ')} — same person?</div>`
+          : `<div class="tiny" style="opacity:.75">no account yet — they can't see your rounds or get a watch link</div>`;
+      const action=linked
+        ? `<button class="ghost sel" style="flex:none" onclick="setFriend('${esc(f.pid)}',false)">On</button>`
+        : sug.length
+          ? sug.map(x=>`<button class="ghost" style="flex:none" onclick="confirmFriend('${e.id}','${esc(x.pid)}')">Yes — ${esc((x.name||'').split(' ')[0])}</button>`).join('')
+          : `<button class="ghost" style="flex:none" onclick="inviteToBattle('${esc(e.name)}')">Invite</button>`;
+      return `<div class="row">
+      <div style="flex:1;min-width:0"><b>${linked?'<span title="Battle friend">⚔️</span> ':''}${esc(e.name)}</b>
+        <div class="tiny">Index ${e.index}${(e.stdTee||e.teeName)?` · ${esc(e.stdTee||e.teeName)} tees`:''}</div>
+        ${status}</div>
+      <span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+        ${action}
         <button class="ghost" onclick="startEditPlayer('${e.id}')">Edit</button>
         <button class="ghost danger" onclick="delPlayer('${e.id}')">✕</button>
-      </span></div>`).join('')
+      </span></div>`;})()).join('')
     :'<div class="tiny">Golfers you set up in a round are saved here automatically.</div>';})()}
     ${backupBlockHTML()}
   </div>
