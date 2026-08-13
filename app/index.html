@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786606153';
+const BUILD='1786646471';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1189,11 +1189,33 @@ let lobbySock=null,invites=[],nearby=[],nbShown=[];
 let myCoords=(()=>{try{const v=JSON.parse(localStorage.getItem('wolfLastCoords'));return (v&&v.c)||null;}catch(e){return null;}})();
 function cacheCoords(c){myCoords=c;try{localStorage.setItem('wolfLastCoords',JSON.stringify({c,ts:Date.now()}));}catch(e){}}
 // Usage telemetry: tiny fire-and-forget events to the relay (buffered offline).
+// Installed to the home screen, or still a browser tab? The single most useful
+// beta signal there is: a golfer who never installed it will not have it with
+// him on the course, so a "bounce" from a web-mode device means something very
+// different from a bounce from an installed one.
+function btMode(){
+  try{
+    if(window.matchMedia&&matchMedia('(display-mode: standalone)').matches)return 'app';
+    if(navigator.standalone)return 'app';                 // iOS home-screen launch
+  }catch(e){}
+  return 'web';
+}
+// Amnesia rehearsals wipe localStorage, which mints a fresh device id AND a blank
+// profile — making a deliberate test indistinguishable from a stranger who
+// opened the app once and left. 209 of 242 devices currently look like that.
+// Open the app with ?reh=1 for a rehearsal and every event from that browser
+// session is tagged. sessionStorage deliberately: a localStorage wipe won't clear it.
+let btReh=false;
+try{
+  if(/[?&]reh=1/.test(location.search))sessionStorage.setItem('btReh','1');
+  btReh=sessionStorage.getItem('btReh')==='1';
+}catch(e){}
 function stat(ev,extra){
   // A local preview build shares the live relay, so testing here used to post real
   // rounds into production stats. Anything served from localhost stays local.
   if(/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname))return;
-  const e=Object.assign({t:'stat',ev,dev:devId(),who:(S.me&&S.me.name)||'',build:BUILD,at:Date.now()},extra||{});
+  const e=Object.assign({t:'stat',ev,dev:devId(),who:(S.me&&S.me.name)||'',build:BUILD,
+    mode:btMode(),reh:btReh,at:Date.now()},extra||{});
   try{
     if(lobbySock&&lobbySock.readyState===1){lobbySock.send(JSON.stringify(e));return;}
     // CAP WAS 50, and it silently ate real field data. Cypress Lakes 8/12: no
@@ -2754,6 +2776,11 @@ function mapGeoNote(){
 }
 function openMap(){
   primeGeo();                       // fires the iOS prompt on this tap
+  // GPS is the headline feature and its usage was entirely unmeasured — once per
+  // round is enough to answer "do people actually open the map?"
+  try{const k='btMapStat'+(S.round.startedAt||0);
+    if(S.round.started&&!sessionStorage.getItem(k)){sessionStorage.setItem(k,'1');
+      stat('map_open',{course:S.course.name,hole:(S.round.cur||0)+1});}}catch(e){}
   mapHole=S.round.cur||0;S.screen='map';render();
 }
 function closeMap(){S.screen='hole';render();}
@@ -5235,7 +5262,14 @@ function vHome(){
   const inRound=S.round.started;
   // First run = no profile and never onboarded. Nothing here tries to protect an
   // existing library: a wipe should show onboarding, and Restore brings everything back.
-  if(!S.me.name && !localStorage.getItem('btOnboarded')) return vWelcome();
+  if(!S.me.name && !localStorage.getItem('btOnboarded')){
+    // First-run funnel: welcome_seen fires once per device, 'profile' fires when
+    // they finish. The gap between the two counts is how many people the front
+    // door is losing — currently unmeasurable.
+    try{if(!sessionStorage.getItem('btWelcomeStat')){sessionStorage.setItem('btWelcomeStat','1');
+      stat('welcome_seen',{});}}catch(e){}
+    return vWelcome();
+  }
   return `<main>
   ${markNotesHTML()}
   <div class="center" style="margin:10px 0 18px"><img src="${art('/banner.jpg')}" alt="Battle Tees" style="width:100%;aspect-ratio:1200/509;display:block;border-radius:14px;border:2px solid var(--green);box-shadow:4px 4px 0 var(--green)" onerror="this.outerHTML='<h1 style=&quot;color:var(--green);font-size:20px&quot;>Battle Tees</h1>'"></div>
@@ -5618,6 +5652,8 @@ function vBattlefield(){
 function openBfWatch(code){
   const st=bfStore()[code];
   bfWatch={code,doc:(st&&st.doc)||null,entry:(st&&st.entry)||null,err:null};bfHole=null;bfCardFull=false;
+  // Spectating is the growth loop — worth knowing whether anyone actually watches.
+  try{stat('bf_watch',{code,cached:!!(st&&st.doc)});}catch(e){}
   S.screen='bfwatch';render();
   bfPoll();
   clearInterval(bfTimer);bfTimer=setInterval(bfPoll,20000);
@@ -9507,7 +9543,37 @@ const ART={};
 });
 function art(f){return ART[f]||f;}
 setInterval(()=>{if(S.round.started&&!S.round.myEndedAt&&S.round.startedAt&&(S.screen==='hole'||S.screen==='standings'))render();},60000);
-stat('open',{ua:(navigator.userAgent.match(/iPhone OS [0-9_]+|Android [0-9.]+/)||[''])[0]});
+// Retention, without needing to cross-reference the whole event log: how many
+// days since this device first opened the app, and how many separate days it has
+// been opened on. A beta lives or dies on whether people come BACK.
+(function(){
+  let first=0,days=0;
+  try{
+    first=+localStorage.getItem('btFirstSeen')||0;
+    if(!first){first=Date.now();localStorage.setItem('btFirstSeen',String(first));}
+    const today=new Date().toISOString().slice(0,10);
+    let seen=[];try{seen=JSON.parse(localStorage.getItem('btSeenDays')||'[]');}catch(e){}
+    if(seen[seen.length-1]!==today){seen.push(today);localStorage.setItem('btSeenDays',JSON.stringify(seen.slice(-60)));}
+    days=seen.length;
+  }catch(e){}
+  stat('open',{ua:(navigator.userAgent.match(/iPhone OS [0-9_]+|Android [0-9.]+/)||[''])[0],
+    ageDays:first?Math.floor((Date.now()-first)/86400000):0, activeDays:days,
+    installed:btMode()==='app'});
+})();
+// A JS error mid-round is invisible today: the round just stops and the device
+// looks like it wandered off. Report each distinct message once per session so a
+// render loop cannot flood the relay.
+(function(){
+  const seen={};
+  function report(msg,src,line){
+    const k=String(msg||'').slice(0,140);
+    if(!k||seen[k])return;seen[k]=1;
+    try{stat('js_error',{msg:k,src:String(src||'').split('/').pop().slice(0,40),line:line||0,
+      screen:(typeof S!=='undefined'&&S.screen)||'',hole:(typeof S!=='undefined'&&S.round&&S.round.cur!=null)?S.round.cur+1:0});}catch(e){}
+  }
+  window.addEventListener('error',e=>report(e.message,e.filename,e.lineno));
+  window.addEventListener('unhandledrejection',e=>report('unhandled: '+((e.reason&&e.reason.message)||e.reason),'',0));
+})();
 applyTheme();
 healUnfinishedRound();   // rescue a round stranded between _finished and archive
 autoEndStaleRound();
