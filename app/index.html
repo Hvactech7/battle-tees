@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786569174';
+const BUILD='1786587696';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -7652,7 +7652,18 @@ function endAskSheetHTML(){
     </div></div>`;
 }
 function finishMyRound(){
-  if(S.round._finished||isReview())return;
+  if(isReview())return;
+  // ALREADY finished but the round is still live? Then a previous run archived
+  // it and stopped short of the teardown, so the app is still showing a round
+  // that is already in the books. Early-returning here is what made the End
+  // Round button dead: tap → sheet → Yes → nothing, forever, with only an app
+  // restart (which runs the same heal at boot) to clear it. Finish the job.
+  // Cypress Lakes 8/12: archived 18:26:32, still on screen at the car park.
+  if(S.round._finished){
+    if(S.round.started)healUnfinishedRound();
+    render();
+    return;
+  }
   S.round._finished=true;
   if(!S.round.myEndedAt)S.round.myEndedAt=Date.now();   // clock stops HERE
   // Side effects run after this set() commits — leaveShare() saves and renders,
@@ -7677,7 +7688,16 @@ function finishMyRound(){
       return;
     }
     bfBroadcastEnd();
-    if(S.share&&S.share.on)leaveShare();else{save();render();}
+    // TEAR THE ROUND DOWN. Archiving is only half of ending it. Without this the
+    // round stayed started:true — so the app went on showing a live round that
+    // was already sitting in history, and the _finished guard above turned every
+    // retry into a no-op. endRound() and healUnfinishedRound() have always done
+    // this; this path never did, and that is the entire bug.
+    const wasShared=S.share&&S.share.on;
+    S.round=blankRound();S.screen='home';stView=null;
+    try{resetRoster();}catch(e){}
+    save();
+    if(wasShared)leaveShare();else render();
     if(!emailVerified())setTimeout(()=>openVerify('roundEnd'),450);
   },0);
 }
