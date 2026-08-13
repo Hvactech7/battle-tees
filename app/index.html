@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786591801';
+const BUILD='1786593101';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -3067,7 +3067,12 @@ function vMap(){
         :(S.course.geo&&S.course.geo.holes&&S.course.geo.holes[physHole(mapHole)+1]);
       const mapped=!!(g&&g.green&&g.green.length>2);
       if(mapped)return '';
-      return `<button id="manualbtn" onclick="manualModeTap()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(220px + env(safe-area-inset-bottom));z-index:6;height:46px;padding:0 14px;background:var(--card);border:2px solid var(--elec,#2b86ec);border-radius:12px;color:var(--elec,#2b86ec);font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:17px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">🔄 Manual</button>`;
+      // "Manual" tells a stranger nothing. On a hole with nothing marked yet the
+      // button says what it is FOR; once they are in it, the short label is fine.
+      const started=!!(S.teeFix&&(S.teeFix[(amnesiaOn(S.course.id)?'amn:':'')+S.course.id]||{})[physHole(mapHole)])
+        ||!!((S.round.manualGreens||{})[physHole(mapHole)]);
+      const lbl=(manualOn||started)?'🔄 Manual':'📍 Map this hole';
+      return `<button id="manualbtn" onclick="manualModeTap()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(220px + env(safe-area-inset-bottom));z-index:6;height:46px;padding:0 14px;background:var(--card);border:2px solid var(--elec,#2b86ec);border-radius:12px;color:var(--elec,#2b86ec);font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:17px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">${lbl}</button>`;
     }catch(e){return '';}})()}
   <button onclick="go('hole')" style="position:fixed;right:max(10px,calc(50vw - 230px));top:calc(100px + env(safe-area-inset-top));z-index:6;background:rgba(15,21,34,.82);border:1.5px solid var(--line);border-radius:12px;color:#fff;padding:10px 17px;font-size:17px;font-weight:600;font-family:inherit">Back</button>
   <button id="mapconfirm" onclick="mapConfirm()" style="position:fixed;right:max(10px,calc(50vw - 230px));bottom:calc(166px + env(safe-area-inset-bottom));z-index:6;width:126px;height:46px;background:${mapScoreState()==='in'?'var(--green-lt)':mapScoreState()==='armed'?'#2b86ec':'rgba(15,21,34,.82)'};border:2px solid ${mapScoreState()==='in'?'var(--green)':mapScoreState()==='armed'?'var(--elec-dk,#1c5eb0)':'var(--line)'};border-radius:12px;color:${mapScoreState()==='in'?'var(--green)':mapScoreState()==='armed'?'#eef6ff':'var(--ink3)'};font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:${mapScoreState()==='in'?'15px':'19px'};box-shadow:2px 2px 0 rgba(0,0,0,.35)">${mapConfirmLabel()}</button>
@@ -3487,6 +3492,82 @@ function manualSearchView(){
     return true;
   }catch(e){return false;}
 }
+// ============ ASKING A STRANGER FOR HELP, AND PAYING THEM BACK ==============
+// A course with no map is the one place the app cannot do its job — and it is
+// also the only place a player can fix that. The ask has to be honest about the
+// trade: they are doing US the favour, and the distance they came for is what
+// they get in return. Once per round, never nagged hole after hole.
+let mapInvite=false;
+function mapInviteHTML(){
+  if(!mapInvite)return '';
+  return `<div class="vfWrap" role="dialog" aria-modal="true" aria-labelledby="miT">
+    <div class="vfCard">
+      <h2 id="miT" class="vfTitle">Could you help us out?</h2>
+      <div class="tiny mb">We have no map for <b>${esc(S.course.name||'this course')}</b> hole
+        <b>${mapHole+1}</b> — no tee, no green. That is why there is no yardage on screen:
+        there is nothing to measure from.</div>
+      <div class="tiny mb"><b>Point out the tee and the green</b> and we will take it from there.
+        You get live distance to the green for the rest of the hole — and this hole goes on
+        the map for everyone who plays it after you. Takes about ten seconds.</div>
+      <button class="big mt" onclick="acceptMapInvite()">📍 &nbsp;Sure — I'll point them out</button>
+      <button class="ghost mt" style="width:100%" onclick="declineMapInvite()">Not right now</button>
+      <div class="tiny mt" style="opacity:.7">You can start any time from the
+        <b>📍 Map this hole</b> button.</div>
+    </div></div>`;
+}
+function showMapInvite(){
+  // Injected rather than rendered: a render on the map screen tears Leaflet down
+  // and rebuilds it (see showUndoTrack). The markup still rides in the render
+  // chain so a render for any other reason keeps the sheet on screen.
+  if(mapInvite||document.getElementById('mapinvite'))return;
+  mapInvite=true;
+  const d=document.createElement('div');
+  d.id='mapinvite';d.innerHTML=mapInviteHTML();
+  document.body.appendChild(d.firstElementChild||d);
+}
+function closeMapInvite(){
+  mapInvite=false;
+  document.querySelectorAll('.vfWrap').forEach(w=>{
+    if(w.querySelector('#miT'))try{w.remove();}catch(e){}
+  });
+}
+function acceptMapInvite(){
+  closeMapInvite();
+  try{if(!manualOn)manualModeTap();armSetTee();}catch(e){}
+}
+function declineMapInvite(){closeMapInvite();}
+function maybeInviteMapping(){
+  try{
+    if(S.round._mapInviteSeen||!S.round.started||isReview())return;
+    if(markState().tee||markState().green)return;   // they are already at it
+    S.round._mapInviteSeen=true;try{save();}catch(e){}
+    setTimeout(showMapInvite,900);   // let the imagery paint first
+  }catch(e){}
+}
+// ---- the receipt -----------------------------------------------------------
+// A mark that vanishes into the app with no acknowledgement is indistinguishable
+// from one that failed. Say it landed, and say plainly whether it has reached us
+// yet — on a course with no bars it is queued, not lost, and that is worth
+// saying rather than implying failure by silence.
+let markToastTimer=null;
+function markToast(main,sub){
+  const el=document.getElementById('marktoast');if(el)el.remove();
+  clearTimeout(markToastTimer);
+  const queued=!(typeof lobbySock!=='undefined'&&lobbySock&&lobbySock.readyState===1);
+  const d=document.createElement('div');
+  d.id='marktoast';
+  d.style.cssText='position:fixed;left:50%;transform:translateX(-50%);'+
+    // clear of the Back button, which lives at top:100px
+    'top:calc(158px + env(safe-area-inset-top));z-index:12;max-width:min(420px,92vw);'+
+    'background:rgba(15,21,34,.94);border:2px solid var(--green);border-radius:12px;'+
+    'padding:9px 14px;color:var(--green-mid);font-family:Rajdhani,Inter,sans-serif;'+
+    'font-weight:700;font-size:16px;text-align:center;box-shadow:2px 3px 0 rgba(0,0,0,.4)';
+  d.innerHTML=`${main}${sub?`<div style="font-family:Inter,sans-serif;font-weight:400;font-size:12.5px;color:var(--ink3);margin-top:2px">${sub}</div>`:''}`+
+    `<div style="font-family:Inter,sans-serif;font-weight:400;font-size:11.5px;color:var(--ink3);margin-top:3px;opacity:.85">`+
+    (queued?'saved on your phone — it will upload when you have signal':'sent — thank you')+'</div>';
+  document.body.appendChild(d);
+  markToastTimer=setTimeout(()=>{try{d.remove();}catch(e){}},3400);
+}
 function manualSnapIfReady(){
   try{
     // NOT amnesia-only either: the snap is the moment the hole stops being
@@ -3512,8 +3593,17 @@ function manualSnapIfReady(){
     if(mapMarks.refreshTapLine)mapMarks.refreshTapLine();     // your dot → the green
     try{updateFMB(mapMarks.mePos||tee,mapMarks.mePos?'yards from you':'yards from the tee');}catch(e){}
     markBtns();
+    // THE TRADE, HONOURED. They pointed out two dots for us; the distance is
+    // what they get back, and it is the whole reason they opened the map.
+    const from=mapMarks.mePos||tee;
+    const y=Math.round(mDist(from,grn)*1.09361);
+    markToast(`✓ Hole ${physHole(mapHole)+1} mapped — ${y}y to the green`,
+              'thanks — the next person here finds it already on the map');
+    // Stash it: the green-placement path ends with updateFMB(...,'') which blanks
+    // the subtitle a moment after this runs, so the line has to be re-applied.
+    mapMarks._snapSub=`hole ${physHole(mapHole)+1} mapped · ${y}y to the green — it follows you in from here. Tap 🔄 Manual to redo it.`;
     const sb=document.getElementById('fmbsub');
-    if(sb)sb.textContent='tee and green set — hole framed green-up. Tap 🔄 Manual to redo them.';
+    if(sb)sb.textContent=mapMarks._snapSub;
     return true;
   }catch(e){return false;}
 }
@@ -3579,6 +3669,7 @@ function placeManualTee(t){
   mk.on('click',()=>{if(!jd)clearTeeMark();});
   markBtns();
   if(manualSnapIfReady())return;                       // both down — hole is framed, message already set
+  if(!mapMarks._restoring)markToast('✓ Tee marked','now the green — tap “⛳ Set Green”');
   const sb=document.getElementById('fmbsub');
   if(sb)sb.textContent='tee set — tap the pin to clear it. Now find the green and tap “⛳ Set Green”.';
 }
@@ -3620,7 +3711,9 @@ function mapTapAt(t){
         amn:amnStamp(),lat:+p.lat.toFixed(6),lon:+p.lng.toFixed(6),cardY:mapMarks._cardY||null,
         manual:!!mapMarks._manual,
         fromDist:mapMarks.mePos?Math.round(mDist(mapMarks.mePos,[p.lat,p.lng])*1.09361):null});};
-    report();markBtns();manualSnapIfReady();
+    report();markBtns();
+    if(!manualSnapIfReady()&&!mapMarks._restoring)
+      markToast('✓ Green marked','now the tee — tap “📍 Set Tee” and we can measure it');
     let jd=false;
     mk.on('drag',()=>{const p=mk.getLatLng();mapMarks.greenC=[p.lat,p.lng];
       if(mapMarks.refreshTapLine)mapMarks.refreshTapLine();
@@ -3630,6 +3723,7 @@ function mapTapAt(t){
     mk.on('click',()=>{if(jd)return;clearGreenMark();});
     if(mapMarks.refreshTapLine)mapMarks.refreshTapLine();
     updateFMB(mapMarks.mePos||mapMarks.ref,'');
+    if(mapMarks._snapSub){const sb2=document.getElementById('fmbsub');if(sb2)sb2.textContent=mapMarks._snapSub;}
     return;
   }
   // the yardage pills on the map carry the leg distances — nothing else to show
@@ -4149,6 +4243,9 @@ async function initHoleMap(){
     }else{
       const s2=sub();if(s2)s2.textContent=geoErr||'Hole lines not mapped here — rangefinder still works.';
     }
+    // No geometry here at all — this is the one place a player can fix the map,
+    // so ask them. Once per round.
+    maybeInviteMapping();
     // RESTORE what you already marked on this hole. Walking back to fix a bad
     // mark has to SHOW you the marks: the green used to be restored only when
     // the card carried a yardage, and the tee was never restored at all —
@@ -4717,7 +4814,7 @@ function render(){
   const pageY=window.scrollY;
   const sameScreen=window.__lastScr===scr;
   window.__lastScr=scr;
-  const full=magBanner()+html+holeSplash()+verifySheetHTML()+teeAskSheetHTML()+endAskSheetHTML()+gamePickSheetHTML()+(S.screen!=='map'?puttAskSheetHTML():'');
+  const full=magBanner()+html+holeSplash()+verifySheetHTML()+teeAskSheetHTML()+endAskSheetHTML()+mapInviteHTML()+gamePickSheetHTML()+(S.screen!=='map'?puttAskSheetHTML():'');
   // Four phones syncing means render() fires constantly. Blowing away innerHTML
   // each time repainted the whole screen — that was the flicker on the course.
   // Identical output is a no-op; otherwise patch only the nodes that differ.
