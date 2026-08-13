@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786588893';
+const BUILD='1786589889';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -2908,13 +2908,29 @@ function mapScoreArmed(){
   if(mapScoreHole===mapHole)return true;
   try{return !!(S.round.holes[mapHole]||{}).confirmed;}catch(e){return false;}
 }
+// THREE states, and the third one is why hole 16 was lost at Cypress Lakes.
+// With only "Score" and "✓ Confirm", one press armed the button and it then read
+// "✓ Confirm" — which any reasonable person reads as "this hole IS confirmed".
+// It was not: the hole stayed open, the map never walked on, and the marks meant
+// for the NEXT hole were recorded against this one. Hole 16's green landed on
+// hole 17's green, then on hole 15's. A carded hole has to look like a STATE,
+// never like a button waiting to be pressed.
+function mapScoreState(){
+  try{if((S.round.holes[mapHole]||{}).confirmed)return 'in';}catch(e){}
+  return mapScoreHole===mapHole?'armed':'idle';
+}
+function mapConfirmLabel(){
+  const st=mapScoreState();
+  return st==='in'?('✓ Hole '+(mapHole+1)+' in'):st==='armed'?'✓ Confirm':'Score';
+}
 function paintMapConfirm(){
   const b=document.getElementById('mapconfirm');if(!b)return;
-  const on=mapScoreArmed();
-  b.textContent=on?'✓ Confirm':'Score';
-  b.style.background=on?'#2b86ec':'rgba(15,21,34,.82)';
-  b.style.borderColor=on?'var(--elec-dk,#1c5eb0)':'var(--line)';
-  b.style.color=on?'#eef6ff':'var(--ink3)';
+  const st=mapScoreState();
+  b.textContent=mapConfirmLabel();
+  b.style.background=st==='in'?'var(--green-lt)':st==='armed'?'#2b86ec':'rgba(15,21,34,.82)';
+  b.style.borderColor=st==='in'?'var(--green)':st==='armed'?'var(--elec-dk,#1c5eb0)':'var(--line)';
+  b.style.color=st==='in'?'var(--green)':st==='armed'?'#eef6ff':'var(--ink3)';
+  b.style.fontSize=st==='in'?'15px':'19px';
 }
 function showMapConfirm(){mapScoreHole=mapHole;paintMapConfirm();}
 function hideMapConfirm(){mapScoreHole=-1;paintMapConfirm();}
@@ -3015,7 +3031,8 @@ function vMap(){
   const myScore=myPar>0?`<div style="text-align:center;flex:none;margin:0 14px 0 10px">
     <div class="num" style="font-size:38px;line-height:1;font-weight:700;color:${d<0?'#7fd49a':d>0?'var(--amber-bd)':'var(--ink)'};text-shadow:0 0 10px rgba(0,0,0,.5)">${d===0?'E':(d>0?'+':'')+d}</div>
     <div class="tiny" style="color:var(--ink2);white-space:nowrap;font-size:12px">${myTot} strokes</div></div>`:'';
-  return topbar(`Hole ${mapHole+1} · Par ${hole.par}`,`Handicap ${hole.si}`,'','hero maphero',
+  return topbar(`Hole ${mapHole+1} · Par ${hole.par}${(S.round.holes[mapHole]||{}).confirmed?' ✓':''}`,
+    `Handicap ${hole.si}${(S.round.holes[mapHole]||{}).confirmed?' · scored':' · NOT scored yet'}`,'','hero maphero',
     `<div style="display:flex;align-items:center;margin-left:auto">${myScore}${gameBadgeHTML()}</div>`)+`
   <div id="holemap"></div>
   ${mapStatChipsHTML(hole)}
@@ -3035,7 +3052,7 @@ function vMap(){
       return `<button id="manualbtn" onclick="manualModeTap()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(220px + env(safe-area-inset-bottom));z-index:6;height:46px;padding:0 14px;background:var(--card);border:2px solid var(--elec,#2b86ec);border-radius:12px;color:var(--elec,#2b86ec);font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:17px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">🔄 Manual</button>`;
     }catch(e){return '';}})()}
   <button onclick="go('hole')" style="position:fixed;right:max(10px,calc(50vw - 230px));top:calc(100px + env(safe-area-inset-top));z-index:6;background:rgba(15,21,34,.82);border:1.5px solid var(--line);border-radius:12px;color:#fff;padding:10px 17px;font-size:17px;font-weight:600;font-family:inherit">Back</button>
-  <button id="mapconfirm" onclick="mapConfirm()" style="position:fixed;right:max(10px,calc(50vw - 230px));bottom:calc(166px + env(safe-area-inset-bottom));z-index:6;width:126px;height:46px;background:${mapScoreArmed()?'#2b86ec':'rgba(15,21,34,.82)'};border:2px solid ${mapScoreArmed()?'var(--elec-dk,#1c5eb0)':'var(--line)'};border-radius:12px;color:${mapScoreArmed()?'#eef6ff':'var(--ink3)'};font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:19px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">${mapScoreArmed()?'✓ Confirm':'Score'}</button>
+  <button id="mapconfirm" onclick="mapConfirm()" style="position:fixed;right:max(10px,calc(50vw - 230px));bottom:calc(166px + env(safe-area-inset-bottom));z-index:6;width:126px;height:46px;background:${mapScoreState()==='in'?'var(--green-lt)':mapScoreState()==='armed'?'#2b86ec':'rgba(15,21,34,.82)'};border:2px solid ${mapScoreState()==='in'?'var(--green)':mapScoreState()==='armed'?'var(--elec-dk,#1c5eb0)':'var(--line)'};border-radius:12px;color:${mapScoreState()==='in'?'var(--green)':mapScoreState()==='armed'?'#eef6ff':'var(--ink3)'};font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:${mapScoreState()==='in'?'15px':'19px'};box-shadow:2px 2px 0 rgba(0,0,0,.35)">${mapConfirmLabel()}</button>
   <div style="position:fixed;right:max(10px,calc(50vw - 230px));bottom:calc(112px + env(safe-area-inset-bottom));z-index:6;display:flex;align-items:center;background:var(--card);border:2px solid var(--green);border-radius:12px;overflow:hidden;box-shadow:2px 2px 0 rgba(0,0,0,.35)">
     <button onclick="mapChScore(-1)" style="width:42px;height:46px;background:none;border:none;color:var(--elec);font-size:24px;font-weight:800">−</button>
     <div id="mapsc" class="num" onclick="showMapConfirm()" style="min-width:36px;text-align:center;font-size:26px;cursor:pointer">${(S.round.holes[mapHole]&&S.round.holes[mapHole].gross&&S.round.holes[mapHole].gross[myPlayerIdx()]!=null)?S.round.holes[mapHole].gross[myPlayerIdx()]:hole.par}</div>
@@ -7772,7 +7789,11 @@ function advanceToNext(){
         mins:S.round.startedAt?Math.round((Date.now()-S.round.startedAt)/60000):null,
         // shared state AT THE END — round_start's flag is captured before anyone
         // joins, so a round shared later used to log shared:false forever (PV 7/31)
-        shared:!!S.share.on, role:S.share.on?(S.share.creator?'host':'joiner'):'solo',
+        // bf-only rooms are opened BY bfBroadcastStart 2.5s after ANY solo round
+        // starts, so they logged shared:true / sharedLater:true and read as
+        // "someone joined mid-round". They are spectator docs, not a group.
+        shared:!!(S.share.on&&!S.share.bf), broadcastOnly:!!(S.share.on&&S.share.bf),
+        role:S.share.on?(S.share.bf?'solo-broadcast':(S.share.creator?'host':'joiner')):'solo',
         players:NP(), sharedAtStart:!!S.round._sharedAtStart,
         sharedLater:!!(S.share.on&&!S.round._sharedAtStart)});}
   }else{S.round.cur=next;if(gameOn()!=='wolf')prefillNines(next);}
