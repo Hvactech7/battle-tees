@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786602883';
+const BUILD='1786603596';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1814,7 +1814,7 @@ function addManualPlayer(){
 function lobbyConnect(){
   if((S.share&&S.share.on)||lobbySock)return;
   try{lobbySock=new WebSocket(RELAY);}catch(e){lobbySock=null;setTimeout(lobbyConnect,10000);return;}
-  lobbySock.onopen=()=>{try{lobbySock.send('{"t":"lobby"}');}catch(e){}sendHello();statFlush();registerProfile();};
+  lobbySock.onopen=()=>{try{lobbySock.send('{"t":"lobby"}');}catch(e){}sendHello();statFlush();registerProfile();loadMarkNotes();};
   lobbySock.onmessage=ev=>{
     let m;try{m=JSON.parse(ev.data);}catch(e){return;}
     if(m.t==='invites'){invites=m.list||[];render();}
@@ -5227,6 +5227,7 @@ function vHome(){
   // existing library: a wipe should show onboarding, and Restore brings everything back.
   if(!S.me.name && !localStorage.getItem('btOnboarded')) return vWelcome();
   return `<main>
+  ${markNotesHTML()}
   <div class="center" style="margin:10px 0 18px"><img src="${art('/banner.jpg')}" alt="Battle Tees" style="width:100%;aspect-ratio:1200/509;display:block;border-radius:14px;border:2px solid var(--green);box-shadow:4px 4px 0 var(--green)" onerror="this.outerHTML='<h1 style=&quot;color:var(--green);font-size:20px&quot;>Battle Tees</h1>'"></div>
   ${!inRound?`
   <button class="big hb" onclick="goGroup()">⚔️ Multi-Player Round</button>
@@ -5371,6 +5372,40 @@ function myPid(){return (S.me&&S.me.pid)||'';}
 // refuses to mail anyone unverified.
 // The handful of hand-made entries are the grandfathered exception, not the rule.
 let pidSent='';
+// WHAT THE INGEST THREW OUT, AND WHY. The validators only ever rejected: a hole
+// that failed was dropped off-phone, hours later, and the one person who could
+// have fixed it never heard. Nobody learns from silence, and a stranger who is
+// never told simply makes the same mistake next round — which is exactly what a
+// crowd-sourced map cannot afford. Notes are held on the relay until this phone
+// acknowledges them, so being offline at the time loses nothing.
+let markNotes=[];
+function loadMarkNotes(){
+  try{
+    relayBattle({op:'marks',dev:devId()}).then(r=>{
+      if(r&&r.ok&&(r.marks||[]).length){markNotes=r.marks;render();}
+    }).catch(()=>{});
+  }catch(e){}
+}
+function dismissMarkNotes(){
+  const ids=markNotes.map(n=>n.id).filter(Boolean);
+  markNotes=[];render();
+  try{relayBattle({op:'marks',dev:devId(),seen:ids}).catch(()=>{});}catch(e){}
+}
+function markNotesHTML(){
+  if(!markNotes.length)return '';
+  const one=markNotes.length===1;
+  return `<div class="card" style="border-color:var(--amber-bd,#e0a53a)">
+    <h2 style="color:var(--amber-bd,#e0a53a)">⚠️ ${one?'A hole you mapped did not make it':`${markNotes.length} holes you mapped did not make it`}</h2>
+    <div class="tiny mb">${one?'It':'They'} did not pass the checks, so ${one?'it was':'they were'} left off the map rather than
+      put a wrong distance in front of the next person. Mark ${one?'it':'them'} again next time you are there
+      and ${one?'it':'they'} will go straight in.</div>
+    ${markNotes.slice(0,6).map(n=>`<div class="row">
+      <div style="flex:1;min-width:0"><b>${esc(n.courseName||n.course||'')} · hole ${n.hole}</b>
+        <div class="tiny">${(n.why||[]).map(esc).join(' · ')||'failed validation'}</div></div>
+    </div>`).join('')}
+    <button class="ghost mt" style="width:100%" onclick="dismissMarkNotes()">Got it</button>
+  </div>`;
+}
 function registerProfile(force){
   try{
     const pid=myPid(), nm=(S.me&&S.me.name||'').trim();
