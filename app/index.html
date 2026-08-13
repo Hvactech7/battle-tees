@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786597331';
+const BUILD='1786597649';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -5398,12 +5398,43 @@ function setFriend(pid,on){
   render();
   relayBattle({op:'friends',pid:myPid(),set:{[pid]:on}}).then(()=>loadFriends(true)).catch(()=>loadFriends(true));
 }
+// The local archive is a per-phone record that deliberately outlives the relay's
+// sweep — so deleting a room server-side never removed it from the phone that
+// had already seen it. Phantoms therefore lingered on Nathan's Battlefield after
+// the relay was cleaned. A row carrying fewer than BF_MIN_HOLES scored holes is
+// a phantom by the same definition the broadcast gate uses; anything with real
+// scores is left alone, because this archive is the only copy of some rounds.
+function bfDocScored(doc){
+  try{
+    let n=0;
+    for(const k in doc){
+      if(k[0]!=='h')continue;
+      const v=doc[k];
+      if(v&&typeof v==='object'&&(v.gross||[]).some(x=>x!=null))n++;
+    }
+    return n;
+  }catch(e){return 0;}
+}
+function bfPrunePhantoms(){
+  try{
+    const st=bfStore();let gone=0;
+    for(const code in st){
+      const row=st[code]||{};
+      if(row.doc==null)continue;                       // never judged a row we cannot see
+      if(bfDocScored(row.doc)>=BF_MIN_HOLES)continue;  // a real round stays, always
+      delete st[code];gone++;
+    }
+    if(gone)localStorage.setItem('btBattles',JSON.stringify(st));
+    return gone;
+  }catch(e){return 0;}
+}
 function bfForget(code){
   const st=bfStore();delete st[code];
   try{localStorage.setItem('btBattles',JSON.stringify(st));}catch(e){}
   openBattlefield();
 }
 function openBattlefield(){
+  bfPrunePhantoms();
   bfList=null;S.screen='bfield';render();
   // the feed is friend-scoped now — the relay needs to know who is asking
   relayBattle({op:'list',pid:myPid()}).then(r=>{
@@ -8068,10 +8099,17 @@ function advanceToNext(){
 }
 // Announce the round the first time a hole is genuinely confirmed — once, from
 // whichever of the three confirm paths gets there first.
+// TWO holes, not one. One was still too easy to reach by accident: Doug's 8/12
+// room carries exactly one scored hole and should never have been announced.
+// Two confirmed holes is a round somebody is actually playing.
+const BF_MIN_HOLES=2;
+function bfScoredHoles(){
+  try{return (S.round.holes||[]).filter(r=>r&&r.confirmed).length;}catch(e){return 0;}
+}
 function maybeBroadcastRound(){
   try{
     if(!S.round.started||S.round._bfSent||isReview())return;
-    if(!S.round.holes.some(r=>r&&r.confirmed))return;
+    if(bfScoredHoles()<BF_MIN_HOLES)return;
     S.round._bfSent=true;
     setTimeout(bfBroadcastStart,300);
   }catch(e){}
