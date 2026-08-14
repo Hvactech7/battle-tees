@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786685592';
+const BUILD='1786686555';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -6715,6 +6715,10 @@ function roundSplashHTML(){
   const ctp=(x.ctp||[]).length
     ? `<div class="tiny" style="font-size:14px;margin-top:6px">🎯 <b>${x.ctp.length}</b> closest to the pin <span style="opacity:.7">· ${x.ctp.map(h=>'h'+h).join(', ')}</span></div>`
     : '';
+  // no shots tracked -> no line; a round is not scolded for skipping Track It
+  const ls=x.longShot
+    ? `<div class="tiny" style="font-size:14px;margin-top:6px">💥 Longest shot <b>${ydDisp(x.longShot.yds)}${uLbl()}</b> <span style="opacity:.7">${x.longShot.club?'· '+esc(x.longShot.club)+' ':''}· h${x.longShot.hole}</span></div>`
+    : '';
   const res=x.result==='win'?'<div class="pill wolf" style="font-size:15px">⚔️ WON</div>'
     :x.result==='tie'?'<div class="pill gray" style="font-size:15px">TIED</div>':'';
   // takes the taps: it is now dismissed only by Done, so nothing behind it
@@ -6732,7 +6736,7 @@ function roundSplashHTML(){
       </div>
       ${bits.length?`<div class="tiny" style="font-size:14px;margin-top:6px">${bits.join(' · ')}</div>`:''}
       ${acc.length?`<div class="tiny" style="font-size:14px;margin-top:4px;color:var(--ink3)">${acc.join(' · ')}</div>`:''}
-      ${ctp}
+      ${ls}${ctp}
       <button class="ghost mt" style="width:100%" onclick="dismissRoundSplash()">Done</button>
     </div></div>`;
 }
@@ -6778,6 +6782,11 @@ function roundSummary(){
       if(pv>0){putts+=pv;puttHoles++;}
       if(r.ctp===mi)ctps.push(h+1);        // -1 means nobody was on, never a person
     });
+    // the longest Track It of the round — whatever survived any undos
+    let longShot=null;
+    try{myShots().forEach(s2=>{
+      if(s2&&s2.yds>0&&(!longShot||s2.yds>longShot.yds))
+        longShot={yds:s2.yds,club:s2.club||null,hole:(s2.h||0)+1};});}catch(e){}
     // net off the same strokes the round played with
     let net=gross;
     try{
@@ -6804,7 +6813,7 @@ function roundSummary(){
       eagles,birdies,pars,
       fw:tracked&&fwN?{hit:fwHit,of:fwN}:null,
       gir:tracked&&girN?{hit:girHit,of:girN}:null,
-      putts:puttHoles?{n:putts,holes:puttHoles}:null, ctp:ctps,
+      putts:puttHoles?{n:putts,holes:puttHoles}:null, ctp:ctps, longShot,
       players:act.length,game:gameOn(),result};
   }catch(e){return null;}
 }
