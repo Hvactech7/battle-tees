@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786682920';
+const BUILD='1786683804';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1280,12 +1280,23 @@ try{
   if(/[?&]reh=1/.test(location.search))sessionStorage.setItem('btReh','1');
   btReh=sessionStorage.getItem('btReh')==='1';
 }catch(e){}
+// Where this install came from. ?src=sticker on the QR, ?src=<whatever> anywhere
+// else. FIRST TOUCH WINS and it lives in localStorage, not sessionStorage: the
+// question is "did the stickers bring anyone who stayed", so a scan has to stay
+// attributed on the visits that come days later. Without this the answer would
+// only ever cover the first 30 seconds of a person's life in the app.
+let btSrc='';
+try{
+  const m=/[?&]src=([A-Za-z0-9_.-]{1,24})/.exec(location.search||'');
+  if(m&&!localStorage.getItem('btSrc'))localStorage.setItem('btSrc',m[1]);
+  btSrc=localStorage.getItem('btSrc')||'';
+}catch(e){}
 function stat(ev,extra){
   // A local preview build shares the live relay, so testing here used to post real
   // rounds into production stats. Anything served from localhost stays local.
   if(/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname))return;
   const e=Object.assign({t:'stat',ev,dev:devId(),who:(S.me&&S.me.name)||'',build:BUILD,
-    mode:btMode(),reh:btReh,at:Date.now()},extra||{});
+    mode:btMode(),reh:btReh,src:btSrc,at:Date.now()},extra||{});
   try{
     if(lobbySock&&lobbySock.readyState===1){lobbySock.send(JSON.stringify(e));return;}
     // CAP WAS 50, and it silently ate real field data. Cypress Lakes 8/12: no
