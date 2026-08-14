@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786646471';
+const BUILD='1786673006';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1054,8 +1054,17 @@ async function wakeOn(){
     wakeLock.addEventListener('release',()=>{wakeLock=null;});
   }catch(e){wakeLock=null;}   // denied (low battery, no permission) — not fatal
 }
+// A tap that arrives in the instant the app returns to the foreground was not
+// aimed at anything. iOS dispatches a click begun before backgrounding when the
+// page comes back, and on the map it landed on "Mark It": hole 4 on 8/13 was
+// measured and carded without a press, after a trip out to Pandora. Only taps
+// that COMMIT are held off — arming, navigating and opening a sheet still work,
+// so the guard costs nothing when it is wrong.
+let cameBackAt=0;
+function justResumed(){return Date.now()-cameBackAt<800;}
 document.addEventListener('visibilitychange',()=>{
   if(document.hidden){wakeLock=null;return;}   // the OS already released it
+  cameBackAt=Date.now();
   wakeOn();autoEndStaleRound();kickSync();statFlush();
 });
 wakeOn();
@@ -2829,6 +2838,10 @@ function trackShotTap(){
     trackShot={hole:mapHole,a:p};
     drawTrackPin();updateTrackBtn();
   }else{
+    // Arming again is harmless; MARKING is the one that measures a shot and puts
+    // a club sheet in your face, so it is the one a returning app must not do
+    // for you. Say why, or it reads as the button being broken.
+    if(justResumed()){shotToast('Back in the app — tap Mark It when you are at the ball.');return;}
     pendingShot={hole:trackShot.hole,a:trackShot.a,b:p,yds:Math.round(mDist(trackShot.a,p)*1.09361)};
     openClubSheet(pendingShot.yds);
   }
@@ -3047,6 +3060,7 @@ function myPlayerIdx(){
 // Same no-render pattern as mapChScore: mutate, stamp, save, push, patch DOM.
 function mapStatToggle(k){reviewTouch();
   if(!S.round.started)return;
+  if(justResumed())return;   // a click replayed on return, not a tap at a chip
   const rec=S.round.holes[mapHole];if(!rec)return;
   const i=myPlayerIdx();
   const a=statArr(rec,k);
