@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786690581';
+const BUILD='1786691013';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -5879,9 +5879,9 @@ function vBfWatch(){
     let scCard='';
     if(confirmed>0){
       const is9=(S.round.span&&S.round.span.count===9);
-      const sc=scorecardHTML().replace('class="sc-wrap"','class="sc-wrap" id="bfsc" data-keepscroll');
+      const sc=scorecardHTML(L).replace('class="sc-wrap"','class="sc-wrap" id="bfsc" data-keepscroll');
       scCard=`<div class="card">
-        <h2>Scorecard · gross${is9?'':' <span class="tiny" style="font-weight:400">— swipe for the back nine</span>'}</h2>
+        <h2>Scorecard · ${L==='net'?'net':'gross'}${is9?'':' <span class="tiny" style="font-weight:400">— swipe for the back nine</span>'}</h2>
         ${sc}</div>`;
     }
     return topbar(esc(e.starter||'Battle'),`${esc(course.name)} · ${games.map(g=>gameName(g)).join(' + ')}`,'bfield')+`<main>
@@ -8899,10 +8899,11 @@ function openFullCard(){
   document.body.appendChild(d);
 }
 function closeFullCard(){const d=document.getElementById('fullcard');if(d)d.remove();}
-function scorecardHTML(){
+function scorecardHTML(lens){
   const hs=S.course.holes;
   const sp=roundSpan();
-  if(sp.count===9)return scorecard9HTML(sp.start<9?0:9);
+  if(sp.count===9)return scorecard9HTML(sp.start<9?0:9,lens);
+  const net=lens==='net';
   const idx=[...Array(18).keys()];
   const cell=(g,par)=>{
     if(g==null)return '<td class="e">·</td>';
@@ -8918,7 +8919,9 @@ function scorecardHTML(){
     +`<td>${parOut}</td>`+hs.slice(9).map(h=>`<td>${h.par}</td>`).join('')+`<td>${parIn}</td><td>${parOut+parIn}</td></tr>`;
   const rowDefs=gameOn()==='scramble'?scrambleTeams().map(t=>({name:teamNameFor(t)||t.map(i=>S.players[i].name).join(' & '),pi:t[0]})):S.players.slice(0,NP()).map((p,pi)=>({name:p.name,pi}));
   rowDefs.forEach(({name:rowName,pi})=>{
-    const g=i=>S.round.holes[i].confirmed?S.round.holes[i].gross[pi]:null;
+    const g=i=>{if(!S.round.holes[i].confirmed)return null;
+      const raw=S.round.holes[i].gross[pi];if(raw==null)return null;
+      return net?raw-fullDotsOn(pi,i%hs.length):raw;};
     const sum=(a,b)=>{let s=0,n=0;for(let i=a;i<b;i++){const v=g(i);if(v!=null){s+=v;n++;}}return n?s:null;};
     const out=sum(0,9),inn=sum(9,18);
     const played=idx.filter(i=>g(i)!=null);
@@ -8931,8 +8934,9 @@ function scorecardHTML(){
   });
   return html+'</table></div>';
 }
-function scorecard9HTML(base){
+function scorecard9HTML(base,lens){
   const hs=S.course.holes;
+  const net=lens==='net';
   const idx=Array.from({length:9},(_,k)=>base+k);
   const cell=(g,par)=>{
     if(g==null)return '<td class="e">·</td>';
@@ -8946,7 +8950,9 @@ function scorecard9HTML(base){
   html+='<tr class="parrow"><td class="nm">Par</td>'+idx.map(i=>`<td>${hs[i].par}</td>`).join('')+`<td>${parTot}</td></tr>`;
   const rowDefs=gameOn()==='scramble'?scrambleTeams().map(t=>({name:teamNameFor(t)||t.map(i=>S.players[i].name).join(' & '),pi:t[0]})):S.players.slice(0,NP()).map((p,pi)=>({name:p.name,pi}));
   rowDefs.forEach(({name:rowName,pi})=>{
-    const g=i=>S.round.holes[i].confirmed?S.round.holes[i].gross[pi]:null;
+    const g=i=>{if(!S.round.holes[i].confirmed)return null;
+      const raw=S.round.holes[i].gross[pi];if(raw==null)return null;
+      return net?raw-fullDotsOn(pi,i%hs.length):raw;};
     const played=idx.filter(i=>g(i)!=null);
     const tot=played.reduce((sm,i)=>sm+g(i),0);
     const diff=tot-played.reduce((sm,i)=>sm+hs[i].par,0);
