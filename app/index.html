@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786683804';
+const BUILD='1786685592';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -8043,7 +8043,12 @@ function startRound(){
       if(g==='nassau')S.config.nassau.n=nn>=4?S.config.nassau.n:2;
     });
     S.round.span=clone(S.config.span||{count:18,start:0});S.round.startedAt=Date.now();S.round.myStartedAt=Date.now();
-    S.round.cur=playOrder()[0];S.screen='hole';
+    // A round opens on the GPS map of the first tee, not the scorecard — you are
+    // standing on the tee box, and the first thing you want is the hole in front
+    // of you. Same entry mapPrev/mapNext use; the map_open stat stays
+    // user-initiated so it keeps measuring people CHOOSING the map, not landing
+    // on it. closeMap still drops back to the score screen.
+    S.round.cur=playOrder()[0];mapHole=S.round.cur;S.screen='map';
     if(S.config.game!=='wolf')prefillNines(S.round.cur);});
   S.round._sharedAtStart=!!S.share.on;
   stat('round_start',{game:S.round.game,course:S.course.name,holes:S.round.span.count,firstTee:S.round.span.start+1,
