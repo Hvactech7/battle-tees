@@ -234,7 +234,7 @@
   table.st td{padding:11px 6px;border-bottom:1px solid var(--line)}
   table.st tr:last-child td{border-bottom:none}
   table.st td.r,table.st th.r{text-align:right}
-  nav.tabs{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;
+  nav.tabs{position:fixed;bottom:0;left:0;right:0;margin:0 auto;width:100%;max-width:480px;
     background:var(--card);border-top:2px solid var(--green);display:flex;z-index:6;padding-bottom:calc(8px + env(safe-area-inset-bottom))}
   nav.tabs button{flex:1;background:none;border:none;padding:11px 0 9px;font-size:12px;font-weight:600;color:var(--ink3);font-family:inherit}
   nav.tabs button.sel{color:var(--elec-mid)}
@@ -356,9 +356,9 @@
   html.light .sc td.eag{background:#cde5d2;color:#1c5c34}
   html.light button.ghost.sel{color:var(--elec)}
   html.light nav.tabs button.sel{color:var(--elec)}
-  #holemap{position:fixed;top:62px;bottom:calc(66px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);width:100%;max-width:480px;z-index:1;background:#0a0f18}
+  #holemap{position:fixed;top:62px;bottom:calc(66px + env(safe-area-inset-bottom));left:0;right:0;margin:0 auto;width:100%;max-width:480px;z-index:1;background:#0a0f18}
   /* extra side/bottom padding keeps the arrow buttons clear of iPhone rounded screen corners */
-  .mapbar{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;background:var(--card);border-top:2px solid var(--green);padding:6px 22px calc(14px + env(safe-area-inset-bottom));z-index:5}
+  .mapbar{position:fixed;bottom:0;left:0;right:0;margin:0 auto;width:100%;max-width:480px;background:var(--card);border-top:2px solid var(--green);padding:6px 22px calc(14px + env(safe-area-inset-bottom));z-index:5}
   .leaflet-container{font-family:inherit}
 </style>
 </head>
@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786750170';
+const BUILD='1786751787';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -2995,7 +2995,7 @@ function trackShotTap(){
 function openClubSheet(yds){
   closeClubSheet();
   const d=document.createElement('div');d.id='clubsheet';
-  d.style.cssText='position:fixed;left:50%;transform:translateX(-50%);bottom:calc(172px + env(safe-area-inset-bottom));z-index:80;width:min(440px,94vw);background:var(--card);border:2px solid var(--green);border-radius:14px;padding:12px;box-shadow:4px 4px 0 rgba(0,0,0,.4)';
+  d.style.cssText='position:fixed;left:0;right:0;margin:0 auto;bottom:calc(172px + env(safe-area-inset-bottom));z-index:80;width:min(440px,94vw);background:var(--card);border:2px solid var(--green);border-radius:14px;padding:12px;box-shadow:4px 4px 0 rgba(0,0,0,.4)';
   d.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <b class="num" style="font-size:24px">${ydDisp(yds)}${uLbl()}</b><span class="tiny">what club was that?</span>
       <button class="ghost danger" onclick="cancelMark()">✕</button></div>
@@ -3007,7 +3007,7 @@ function closeClubSheet(){const d=document.getElementById('clubsheet');if(d)d.re
 // brief centred message — same throwaway-overlay pattern as flashYardage
 function shotToast(msg){
   const d=document.createElement('div');
-  d.style.cssText='position:fixed;left:50%;transform:translateX(-50%);bottom:calc(178px + env(safe-area-inset-bottom));z-index:90;max-width:min(420px,92vw);background:var(--card);border:2px solid var(--amber-bd,#c9922e);border-radius:12px;padding:10px 14px;box-shadow:3px 3px 0 rgba(0,0,0,.4);pointer-events:none;text-align:center';
+  d.style.cssText='position:fixed;left:0;right:0;margin:0 auto;width:fit-content;bottom:calc(178px + env(safe-area-inset-bottom));z-index:90;max-width:min(420px,92vw);background:var(--card);border:2px solid var(--amber-bd,#c9922e);border-radius:12px;padding:10px 14px;box-shadow:3px 3px 0 rgba(0,0,0,.4);pointer-events:none;text-align:center';
   d.innerHTML=`<span class="tiny" style="font-size:14px">${esc(msg)}</span>`;
   document.body.appendChild(d);
   setTimeout(()=>{try{d.remove();}catch(e){}},2600);
@@ -3833,7 +3833,7 @@ function markToast(main,sub){
   const queued=!(typeof lobbySock!=='undefined'&&lobbySock&&lobbySock.readyState===1);
   const d=document.createElement('div');
   d.id='marktoast';
-  d.style.cssText='position:fixed;left:50%;transform:translateX(-50%);'+
+  d.style.cssText='position:fixed;left:0;right:0;margin:0 auto;width:fit-content;'+
     // clear of the Back button, which lives at top:100px
     'top:calc(158px + env(safe-area-inset-top));z-index:12;max-width:min(420px,92vw);'+
     'background:rgba(15,21,34,.94);border:2px solid var(--green);border-radius:12px;'+
@@ -5077,7 +5077,8 @@ function render(){
     if(a&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA'))try{a.blur();}catch(e){}
   }
   let html='';
-  if(scr==='home') html=vHome();
+  if(installGateOn()) html=vInstallGate();
+  else if(scr==='home') html=vHome();
   else if(scr==='courses') html=vCourses();
   else if(scr==='players') html=vPlayers();
   else if(scr==='rules') html=vRules();
@@ -5104,6 +5105,7 @@ function render(){
   const pageY=window.scrollY;
   const sameScreen=window.__lastScr===scr;
   window.__lastScr=scr;
+  try{if(window.__a2hsSync)window.__a2hsSync();}catch(e){}
   const full=magBanner()+html+holeSplash()+verifySheetHTML()+teeAskSheetHTML()+endAskSheetHTML()+mapInviteHTML()+greenClashHTML()+gamePickSheetHTML()+(S.screen!=='map'?puttAskSheetHTML():'');
   // Four phones syncing means render() fires constantly. Blowing away innerHTML
   // each time repainted the whole screen — that was the flicker on the course.
@@ -5269,6 +5271,54 @@ function gamePickCardHTML(){
     <button class="ghost mt" style="width:100%" onclick="openGamePick()">Choose Game(s)</button></div>`;
 }
 function go(scr){S.screen=scr;save();render();}
+// ---- the install-first gate -------------------------------------------------
+// Shown INSTEAD of any screen to a brand-new browser visitor: no profile yet,
+// not installed, not a spectator following a ?watch= link, never dismissed.
+// Registering in Safari and installing afterwards LOSES EVERYTHING — iOS keeps
+// a separate storage container for the installed app (Teal Bend, 8/15, twice).
+// So the one thing this screen asks is: install now, set up there.
+function installGateOn(){
+  try{
+    if(navigator.standalone===true)return false;
+    if(matchMedia('(display-mode: standalone)').matches===true)return false;
+  }catch(e){}
+  try{if(localStorage.getItem('btInstallGate'))return false;}catch(e){}
+  if(S.me&&S.me.name)return false;                 // already someone — too late
+  if(S.round&&S.round.started)return false;        // never mid-round
+  if(S.screen==='bfwatch'||S.screen==='gate')return false;   // spectators flow free
+  try{if(/[?&](watch|k)=/.test(String(location.search||'')))return false;}catch(e){}
+  return true;
+}
+function installGateSkip(){
+  try{localStorage.setItem('btInstallGate','1');}catch(e){}
+  try{stat('a2hs_gate',{skipped:true});}catch(e){}
+  render();
+}
+function vInstallGate(){
+  const droid=/android/i.test(navigator.userAgent||'');
+  try{const k='btA2HSGateStat';
+    if(!localStorage.getItem(k)){localStorage.setItem(k,'1');stat('a2hs_gate',{seen:true});}}catch(e){}
+  const step=(n,txt)=>`<div style="display:flex;gap:12px;align-items:baseline;padding:8px 0;border-top:1px solid var(--line);text-align:left"><b class="num" style="flex:none;font-size:19px;color:var(--gold,#e8c552)">${n}</b><span style="font-size:15.5px;line-height:1.4">${txt}</span></div>`;
+  const steps=droid
+    ?step(1,`Tap the <b>⋮ menu</b> (top right)`)
+      +step(2,`Tap <b>Add to Home screen</b>, then <b>Install</b>`)
+      +step(3,`Open <b>Battle Tees</b> from your home screen and set up there`)
+    :step(1,`Tap <b>Share</b> <span style="font-size:19px">&#x2B06;&#xFE0E;</span> in Safari's bar`)
+      +step(2,`Tap <b>Add to Home Screen</b>`)
+      +step(3,`Open <b>Battle Tees</b> from your home screen and set up there`);
+  return `<main style="padding-top:34px">
+    <div class="center" style="margin-bottom:14px">
+      <img src="${art('banner.jpg')}" style="width:min(320px,80vw);border-radius:14px;border:2px solid var(--gold,#c9a544)" onerror="this.style.display='none'">
+    </div>
+    <div class="card" style="border-color:var(--gold,#c9a544)">
+      <h2 style="font-size:17px;color:var(--gold,#e8c552)">⚔️ Put it on your Home Screen first</h2>
+      <div style="font-size:15.5px;line-height:1.45;margin-bottom:10px">Battle Tees runs as a real app from your home screen — GPS maps, offline scorecards, the works.</div>
+      ${steps}
+      <div class="tiny mt" style="color:var(--amber-bd)"><b>Do this before you set up your profile.</b> The browser and the installed app keep separate saves — anything you set up here stays here.</div>
+    </div>
+    <button class="ghost" style="width:100%;margin-top:4px" onclick="installGateSkip()">I'll stay in the browser for now</button>
+  </main>`;
+}
 function tabs(sel){
   return `<nav class="tabs">
     <button class="${sel==='hole'?'sel':''}" onclick="go('hole')"><span class="ic">⛳</span>Score</button>
@@ -9873,6 +9923,16 @@ try{
     +(droid?'<button id="a2hsGo" style="flex:none;border:1px solid var(--green-dk);background:linear-gradient(180deg,#e0bb45,#a8851e);color:#241d08;border-radius:8px;padding:7px 14px;font-weight:700;font-family:Rajdhani;font-size:14px">How</button>':'')
     +'<button id="a2hsX" style="flex:none;border:1px solid var(--line);background:#1b2433;color:var(--ink2);border-radius:8px;padding:7px 11px;font-weight:700">✕</button>';
   document.body.appendChild(bar);
+  // NEVER during a round. At the bottom it sat exactly on the nav bar (z 400 vs
+  // the nav's lower) so browser players had no navigation at all — and its
+  // advice is a trap mid-round: iOS gives an installed app a SEPARATE storage
+  // container, so following it cost two new players their profile and their
+  // joined round at Teal Bend (8/15). Pitch installs between rounds only.
+  window.__a2hsSync=function(){
+    try{bar.style.display=((typeof S!=='undefined'&&S.round&&S.round.started)
+      ||(typeof installGateOn==='function'&&installGateOn()))?'none':'flex';}catch(e){}
+  };
+  window.__a2hsSync();
   const go=document.getElementById('a2hsGo');
   if(go)go.onclick=async()=>{
     if(deferred){deferred.prompt();const r=await deferred.userChoice.catch(()=>null);deferred=null;
