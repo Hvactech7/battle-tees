@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786673006';
+const BUILD='1786677352';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1046,13 +1046,40 @@ window.addEventListener('online',kickSync);
 // yardage. The OS releases a wake lock every time the page hides, so it has to
 // be re-requested on every return to the foreground; there is no "set once"
 // form of this. Silently unavailable on browsers without the API.
-let wakeLock=null;
+let wakeLock=null,wakeState='idle',wakeTold=false;
 async function wakeOn(){
   try{
-    if(!('wakeLock' in navigator)||document.hidden||wakeLock)return;
+    if(!('wakeLock' in navigator)){wakeState='unsupported';return;}
+    if(document.hidden||wakeLock)return;
     wakeLock=await navigator.wakeLock.request('screen');
-    wakeLock.addEventListener('release',()=>{wakeLock=null;});
-  }catch(e){wakeLock=null;}   // denied (low battery, no permission) — not fatal
+    wakeState='held';
+    wakeLock.addEventListener('release',()=>{
+      wakeLock=null;
+      // THE OS TAKES THIS BACK on its own — Low Power Mode, a call, its own
+      // judgement — and nothing ever asked for it again, so the screen slept for
+      // the rest of the round (Cypress 8/13, a 2.5h round on GPS). Ask again
+      // while we are still the thing on screen.
+      if(!document.hidden){wakeState='lost';setTimeout(wakeOn,400);}
+      else wakeState='idle';
+    });
+  }catch(e){
+    // Denied. Low Power Mode is the usual reason, and it is silent: the promise
+    // simply rejects. Recorded so a round can be asked afterwards what happened.
+    wakeLock=null;wakeState='denied';
+    if(!wakeTold){wakeTold=true;stat('wake_denied',{err:(e&&e.name)||'?'});}
+  }
+}
+// Some engines only grant the lock inside a user gesture, and the load-time
+// request then fails once and is never retried. Every tap re-asks; wakeOn()
+// returns immediately when the lock is already held, so this costs nothing.
+document.addEventListener('touchend',()=>{if(!wakeLock)wakeOn();},{passive:true});
+document.addEventListener('click',()=>{if(!wakeLock)wakeOn();},{passive:true});
+function wakeLabel(){
+  return wakeState==='held'?'On — the screen will stay lit'
+    :wakeState==='unsupported'?'This browser cannot hold the screen awake'
+    :wakeState==='denied'?'Blocked — Low Power Mode will do this. Turn it off to keep the screen lit.'
+    :wakeState==='lost'?'The phone took it back — asking again'
+    :'Not held yet — tap anywhere to start it';
 }
 // A tap that arrives in the instant the app returns to the foreground was not
 // aimed at anything. iOS dispatches a click begun before backgrounding when the
@@ -2669,14 +2696,24 @@ function frameAround(center,spanYds,el){
 // hole, which re-creates this closure.
 const AUTO_ORIENT_STOP_YDS=100;
 function makeOrientFromMe(greenC,greenPoly,el){
-  let last=null, parked=false;
+  let last=null, parked=false, framed=false;
   return (from)=>{
     try{
       if(!from||!greenC||!L.Map.prototype.setBearing)return;
       if(parked)return;
-      if(mDist(from,greenC)*1.09361<AUTO_ORIENT_STOP_YDS){parked=true;return;}
+      if(mDist(from,greenC)*1.09361<AUTO_ORIENT_STOP_YDS){
+        // Park — but frame ONCE first if this closure never has. Walking in from
+        // outside the radius, the last frame was taken at ~100 yards and parking
+        // on it is right. A closure born INSIDE the radius is a different story:
+        // returning from another app rebuilds the hole at the full-hole fit and
+        // makes a fresh closure, which parked on that wide view and never moved
+        // again. Hole 5 on 8/13 — back from Pandora at the green, zoomed out for
+        // the rest of the hole.
+        if(!framed)orientGreenUp(from,greenC,greenPoly,[from],el);
+        parked=true;return;
+      }
       if(last&&mDist(from,last)<5)return;              // ignore GPS jitter
-      last=from.slice();
+      last=from.slice();framed=true;
       orientGreenUp(from,greenC,greenPoly,[from],el);
     }catch(e){}
   };
@@ -5389,6 +5426,11 @@ function vSettings(){
         <button class="ghost ${distUnit()==='yd'?'sel':''}" onclick="if(distUnit()!=='yd')toggleUnits()">Yards</button>
         <button class="ghost ${distUnit()==='m'?'sel':''}" onclick="if(distUnit()!=='m')toggleUnits()">Metres</button>
       </span></div>
+  </div>
+  <div class="card"><h2>☀️ Screen</h2>
+    <div class="row"><div style="flex:1;min-width:0"><b>Keep the screen awake</b>
+      <div class="tiny">The app asks the phone to stay lit while it is open. The phone can refuse — <b>Low Power Mode always does</b> — and it never says so out loud, so the state is shown here rather than discovered on the 5th green.</div></div>
+      <b class="tiny" style="text-align:right;max-width:46%;color:${wakeState==='held'?'var(--green-mid)':'var(--amber-bd)'}">${wakeLabel()}</b></div>
   </div>
   <div class="card"><h2>🧠 Course Amnesia</h2>
     <div class="row"><div style="flex:1;min-width:0"><b>Ignore saved course maps</b>
@@ -8456,7 +8498,7 @@ function advanceToNext(){
     S.screen='settle';
     askEndRound();
     if(!S.round._statFin){S.round._statFin=true;
-      stat('round_finish',{game:S.round.game,thru:S.round.holes.filter(r=>r.confirmed).length,
+      stat('round_finish',{wake:wakeState,game:S.round.game,thru:S.round.holes.filter(r=>r.confirmed).length,
         mins:S.round.startedAt?Math.round((Date.now()-S.round.startedAt)/60000):null,
         // shared state AT THE END — round_start's flag is captured before anyone
         // joins, so a round shared later used to log shared:false forever (PV 7/31)
