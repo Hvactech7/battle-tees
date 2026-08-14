@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786749460';
+const BUILD='1786750170';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -9510,7 +9510,9 @@ function vStandings(){
    }
    return tables;
   };
-  const tables=gamePickCardHTML()+stackOrder.map(x=>cardFor(x)).join('');
+  // In a review, the way OUT sits above everything — the hole screens carry
+  // this banner and Standings stranded you without it.
+  const tables=reviewBanner()+gamePickCardHTML()+stackOrder.map(x=>cardFor(x)).join('');
   const hist=(all==null||!all.perHole)?'':S.round.holes.map((r,h)=>{
     if(!r.confirmed)return '';
     const info=all.perHole[h];
