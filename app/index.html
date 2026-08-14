@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786746769';
+const BUILD='1786749100';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -603,6 +603,40 @@ function stampStat(rec,i){if(!rec.sts)rec.sts=[0,0,0,0];rec.sts[i]=Date.now();}
 function blankRound(){return {started:false,holes:Array.from({length:HOLES},blankHole),cur:0,dollarPerPt:0,span:{count:18,start:0},startedAt:null,myStartedAt:null};}
 
 let S=load();
+// A hole CONFIRMED AFTER ITS ROUND ENDED, carrying only prefilled scores nobody
+// typed (gts<=1), is the review-repair bug above — not golf. Un-card those.
+// Real pars also carry gts=1 (confirming the prefilled par is the feature), but
+// their confirm stamps landed DURING the round; the discriminator is the stamp
+// sitting later than the round's own end.
+try{
+  if(!localStorage.getItem('btGhostFix1')){
+    let fixed=0;
+    (S.history||[]).forEach(e=>{
+      if(!e||!e.endedAt||!e.round||!e.round.holes)return;
+      e.round.holes.forEach(r=>{
+        if(!r||!r.confirmed)return;
+        const scored=[0,1,2,3].filter(i=>r.gross&&r.gross[i]!=null);
+        if(!scored.length)return;
+        const stamps=(r.cfts||[]).filter(t=>t>1);
+        const postEnd=stamps.length&&stamps.every(t=>t>e.endedAt+60000);
+        const untyped=scored.every(i=>!(r.gts&&r.gts[i]>1));
+        if(postEnd&&untyped){
+          r.confirmed=false;r.cfts=[0,0,0,0];
+          scored.forEach(i=>{r.gross[i]=null;if(r.gts)r.gts[i]=0;});
+          fixed++;
+        }
+      });
+      e.thru=e.round.holes.filter(r=>r&&r.confirmed).length;
+    });
+    // ...and the one round the capped clock already rewrote: 8/13 Cypress,
+    // known-true 152 min from its own round_finish report.
+    (S.history||[]).forEach(e=>{
+      if(e&&e.id==='r17866692683663755'&&e.mins===480){e.mins=152;fixed++;}
+    });
+    localStorage.setItem('btGhostFix1','1');
+    if(fixed){try{save();}catch(e){}}
+  }
+}catch(e){}
 // Putts tracking became ON by default when the auto prompt shipped. Existing
 // libraries were all written with putts:false, so flip them once — the toggle
 // in Settings is how anyone turns it back off.
@@ -6863,9 +6897,12 @@ function archiveRound(){
     id:S.round._histId,
     startedAt:(prev&&prev.startedAt)||S.round.startedAt||null,
     endedAt:(S.round.reopened&&prev)?prev.endedAt:Date.now(),
+    // a reopened round's DURATION is history too — recomputing it from the
+    // review's clocks is how 152 minutes became 480 overnight
     game:S.round.game||S.config.game,courseId:S.course.id,courseName:S.course.name,
     code:S.share.on?S.share.code:null,thru,
-    mins:t0?Math.round(((S.round.myEndedAt||Date.now())-t0)/60000):null,
+    mins:(S.round.reopened&&prev&&prev.mins!=null)?prev.mins
+      :t0?Math.round(((S.round.myEndedAt||Date.now())-t0)/60000):null,
     players:actIdx().map(i=>S.players[i].name),
     sum:roundSummary(),
     round:clone(S.round),config:clone(S.config),playersSnap:clone(S.players)
@@ -6885,7 +6922,11 @@ function reviewCommit(){
   S.round.holes.forEach(r=>{
     if(!r||r.confirmed)return;
     const act=actIdx();
-    if(act.length&&act.every(i=>r.gross&&r.gross[i]!=null)){
+    // gts>1: a REAL entry. The prefill writes par with gts=1 (the deliberate
+    // ancient stamp), and on 8/14 this pass ratified one — hole 10, never
+    // played, confirmed a day after the round ended. A repair may only card a
+    // hole somebody actually typed a score on.
+    if(act.length&&act.every(i=>r.gross&&r.gross[i]!=null&&r.gts&&r.gts[i]>1)){
       r.confirmed=true;
       if(!r.cfts)r.cfts=[0,0,0,0];
       act.forEach(i=>{if(!r.cfts[i])r.cfts[i]=Date.now();});
@@ -6951,6 +6992,16 @@ function autoEndStaleRound(){
   const t0=S.round.myStartedAt||S.round.startedAt;
   if(!t0||Date.now()-t0<MAX_ROUND_MS)return false;
   const thru=(S.round.holes||[]).filter(r=>r&&r.confirmed).length;
+  // A REVIEW left open is not a round being played. Capping its clock rewrote
+  // the 8/13 Cypress round from 152 min to 480 a night later. Close the review
+  // the way Done does — commit nothing new, restamp nothing.
+  if(S.round.reopened){
+    try{stat('round_autoend',{game:S.round.game,thru,review:true});}catch(e){}
+    try{closeReview();}catch(e){
+      S.round=blankRound();S.screen='home';stView=null;save();render();
+    }
+    return true;
+  }
   S.round.myEndedAt=t0+MAX_ROUND_MS;      // cap the clock, don't use "now"
   S.round._autoEnded=true;
   try{stat('round_autoend',{game:S.round.game,thru,hours:8});}catch(e){}
@@ -6996,6 +7047,13 @@ function reopenRound(id){
   const c=S.courses.find(x=>x.id===e.courseId);if(c)S.course=clone(c);
   if(!S.round.myEndedAt)S.round.myEndedAt=e.endedAt;
   if(!S.round.myStartedAt&&e.mins!=null)S.round.myStartedAt=e.endedAt-e.mins*60000;
+  // Land on the last hole PLAYED. The archived cur sits on the NEXT hole —
+  // advanceToNext walked there and the prefill dressed it in par — so a 9-hole
+  // round opened "on hole 10", which read as the round restarting itself.
+  try{
+    const played=playOrder().filter(h=>(S.round.holes[h]||{}).confirmed);
+    S.round.cur=played.length?played[played.length-1]:playOrder()[0];
+  }catch(e2){}
   S.screen='hole';stView=null;
   // REVIEW rejoins the live share only if the round just ended (fixing scores
   // while the group is still at the 19th hole). Older rounds open OFFLINE —
