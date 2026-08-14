@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786749100';
+const BUILD='1786749460';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -609,7 +609,13 @@ let S=load();
 // their confirm stamps landed DURING the round; the discriminator is the stamp
 // sitting later than the round's own end.
 try{
+  // v2: the v1 repair was healed back off the phone by the review-rejoin above
+  // before that hole was closed — run the same repair once more.
+  if(!localStorage.getItem('btGhostFix2')){
+    localStorage.removeItem('btGhostFix1');
+  }
   if(!localStorage.getItem('btGhostFix1')){
+    localStorage.setItem('btGhostFix2','1');
     let fixed=0;
     (S.history||[]).forEach(e=>{
       if(!e||!e.endedAt||!e.round||!e.round.holes)return;
@@ -7060,7 +7066,12 @@ function reopenRound(id){
   // the relay doc is frozen at end-of-day and its heals clobber review repairs
   // (PV 7/25: Confirm changes → sync reverted the hole to Friday's chaos state).
   const fresh=e.endedAt&&(Date.now()-e.endedAt)<6*3600e3;
-  if(e.code&&fresh){S.share={on:true,code:e.code,creator:false};S.shareMetaTs=0;S.round.holes.forEach(r=>{r._ts=r._ts||0;});primeCaches(false);save();syncConnect();render();}
+  // ...and only when there was a GROUP. A solo round's code is a spectator
+  // room: rejoining it for review let the phone's own earlier push heal a
+  // repaired phantom right back (Rancho h10, 8/14 — twice). No second player,
+  // no settle, no rejoin.
+  const hadGroup=actIdx().length>1;
+  if(e.code&&fresh&&hadGroup){S.share={on:true,code:e.code,creator:false};S.shareMetaTs=0;S.round.holes.forEach(r=>{r._ts=r._ts||0;});primeCaches(false);save();syncConnect();render();}
   else{S.share={on:false,code:null};save();render();}
 }
 let armDelHist=null;
