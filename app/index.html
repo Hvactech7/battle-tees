@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786677352';
+const BUILD='1786678382';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1047,39 +1047,56 @@ window.addEventListener('online',kickSync);
 // be re-requested on every return to the foreground; there is no "set once"
 // form of this. Silently unavailable on browsers without the API.
 let wakeLock=null,wakeState='idle',wakeTold=false;
-async function wakeOn(){
+// The Settings row is LIVE. It used to be rendered once with whatever the state
+// was at that instant, while the real answer arrives asynchronously a moment
+// later — so it sat there reading "Blocked" long after the lock was held.
+function wakeSet(st){
+  if(wakeState===st)return;
+  wakeState=st;
+  try{const el=document.getElementById('wakestate');
+    if(el){el.textContent=wakeLabel();
+      el.style.color=st==='held'?'var(--green-mid)':'var(--amber-bd)';}
+  }catch(e){}
+}
+async function wakeOn(byHand){
   try{
-    if(!('wakeLock' in navigator)){wakeState='unsupported';return;}
+    if(!('wakeLock' in navigator)){wakeSet('unsupported');return;}
     if(document.hidden||wakeLock)return;
     wakeLock=await navigator.wakeLock.request('screen');
-    wakeState='held';
+    wakeSet('held');
     wakeLock.addEventListener('release',()=>{
       wakeLock=null;
       // THE OS TAKES THIS BACK on its own — Low Power Mode, a call, its own
       // judgement — and nothing ever asked for it again, so the screen slept for
       // the rest of the round (Cypress 8/13, a 2.5h round on GPS). Ask again
       // while we are still the thing on screen.
-      if(!document.hidden){wakeState='lost';setTimeout(wakeOn,400);}
-      else wakeState='idle';
+      if(!document.hidden){wakeSet('lost');setTimeout(()=>wakeOn(false),400);}
+      else wakeSet('idle');
     });
   }catch(e){
-    // Denied. Low Power Mode is the usual reason, and it is silent: the promise
-    // simply rejects. Recorded so a round can be asked afterwards what happened.
-    wakeLock=null;wakeState='denied';
+    wakeLock=null;
+    // iOS REFUSES THIS OUTSIDE A USER GESTURE — every time, NotAllowedError, in
+    // the same second as the app opens. Nathan's phone reported exactly that on
+    // 8/13 with Low Power Mode off. A load-time refusal is normal and says
+    // nothing about the phone; only a refusal that came from an actual tap is
+    // worth calling blocked, or worth reporting.
+    if(!byHand){wakeSet('needtap');return;}
+    wakeSet('denied');
     if(!wakeTold){wakeTold=true;stat('wake_denied',{err:(e&&e.name)||'?'});}
   }
 }
 // Some engines only grant the lock inside a user gesture, and the load-time
 // request then fails once and is never retried. Every tap re-asks; wakeOn()
 // returns immediately when the lock is already held, so this costs nothing.
-document.addEventListener('touchend',()=>{if(!wakeLock)wakeOn();},{passive:true});
-document.addEventListener('click',()=>{if(!wakeLock)wakeOn();},{passive:true});
+document.addEventListener('touchend',()=>{if(!wakeLock)wakeOn(true);},{passive:true});
+document.addEventListener('click',()=>{if(!wakeLock)wakeOn(true);},{passive:true});
 function wakeLabel(){
   return wakeState==='held'?'On — the screen will stay lit'
     :wakeState==='unsupported'?'This browser cannot hold the screen awake'
-    :wakeState==='denied'?'Blocked — Low Power Mode will do this. Turn it off to keep the screen lit.'
+    :wakeState==='denied'?'The phone refused. Low Power Mode does this — turn it off to keep the screen lit.'
     :wakeState==='lost'?'The phone took it back — asking again'
-    :'Not held yet — tap anywhere to start it';
+    :wakeState==='needtap'?'Arming — touch the screen once'
+    :'Starting up';
 }
 // A tap that arrives in the instant the app returns to the foreground was not
 // aimed at anything. iOS dispatches a click begun before backgrounding when the
@@ -5429,8 +5446,8 @@ function vSettings(){
   </div>
   <div class="card"><h2>☀️ Screen</h2>
     <div class="row"><div style="flex:1;min-width:0"><b>Keep the screen awake</b>
-      <div class="tiny">The app asks the phone to stay lit while it is open. The phone can refuse — <b>Low Power Mode always does</b> — and it never says so out loud, so the state is shown here rather than discovered on the 5th green.</div></div>
-      <b class="tiny" style="text-align:right;max-width:46%;color:${wakeState==='held'?'var(--green-mid)':'var(--amber-bd)'}">${wakeLabel()}</b></div>
+      <div class="tiny">iPhones only grant this when you have touched the screen, so it arms on your first tap and holds from then on. If the phone takes it back mid-round the app asks again. Shown here because a refusal is silent — <b>Low Power Mode</b> is the one that really blocks it.</div></div>
+      <b class="tiny" id="wakestate" style="text-align:right;max-width:46%;color:${wakeState==='held'?'var(--green-mid)':'var(--amber-bd)'}">${wakeLabel()}</b></div>
   </div>
   <div class="card"><h2>🧠 Course Amnesia</h2>
     <div class="row"><div style="flex:1;min-width:0"><b>Ignore saved course maps</b>
