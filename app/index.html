@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786691013';
+const BUILD='1786746769';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -891,6 +891,7 @@ function courseForShare(){
 }
 function shareMeta(){return {course:courseForShare(),players:S.players,config:S.config,started:S.round.started,dollarPerPt:S.round.dollarPerPt,span:S.round.span,startedAt:S.round.startedAt,games:S.round.games||null,rates:S.round.rates||null,
   shots:shotsForShare(),
+  capEnd:S.round.capEnd||null,
   _ts:S.shareMetaTs||0};}
 function contentKey(k){
   if(k==='meta'){const {_ts,...rest}=shareMeta();return JSON.stringify(rest);}
@@ -960,6 +961,29 @@ function applyOp(k,v,defer){
           if(S.config.nines&&realN>=3&&(S.config.nines.n||0)<realN)S.config.nines.n=Math.min(4,realN);
         }
         if(v.started){libSaveRoster();saveGroupFromRoster();}  // joiners remember the players AND the named group
+      if(v.capEnd&&S.round.started&&!S.round.reopened
+         &&v.capEnd.startedAt===S.round.startedAt&&!S.share.creator){
+        // the captain closed the round — archive what the group ratified and put
+        // the round away, exactly as if this phone had ended it, minus the asking
+        try{
+          archiveRound();
+          try{const _h=(S.history||[])[0];
+            if(_h&&_h.sum){roundSplash=null;showRoundSplash(_h.sum,_h.courseName);
+              if(roundSplash)roundSplash.closedBy=v.capEnd.by||'';
+              const d2=document.getElementById('roundsplash');
+              if(d2){d2.remove();}
+              const d3=document.createElement('div');
+              d3.id='roundsplash';d3.innerHTML=roundSplashHTML();
+              document.body.appendChild(d3.firstElementChild||d3);}
+          }catch(e){}
+          const wasShared=S.share&&S.share.on;
+          S.round=blankRound();S.screen='home';stView=null;clearStage();
+          try{resetRoster();}catch(e){}
+          save();
+          if(wasShared)setTimeout(()=>{try{leaveShare();}catch(e){}},0);
+        }catch(e){}
+        applyingRemote=false;render();return;
+      }
         localContent[k]=sentCache[k]=contentKey(k);
       }
     }else{
@@ -3111,6 +3135,7 @@ function mapConfirm(){
   set(()=>{
     const rec=S.round.holes[h];if(!rec)return;
     const mi=myPlayerIdx(),par=(S.course.holes[h]||{par:4}).par;
+    commitStage(h,S.share.on?myRows(h):actIdx());
     if(!rec.gts)rec.gts=[0,0,0,0];
     if(rec.gross[mi]==null){rec.gross[mi]=par;rec.gts[mi]=Date.now();}
     if(S.share.on){
@@ -3173,14 +3198,17 @@ function mapStatChipsHTML(hole){
 function mapChScore(d){reviewTouch();
   if(!S.round.started)return;
   const r=S.round.holes[mapHole]; if(!r||!r.gross)return;
-  const par=(S.course.holes[mapHole]||{par:4}).par;
-  const v=(r.gross[myPlayerIdx()]??par)+d;
-  r.gross[myPlayerIdx()]=Math.min(15,Math.max(1,v));
-  if(!r.gts)r.gts=[0,0,0,0];
-  r.gts[myPlayerIdx()]=Date.now();
-  stampChanges();save();syncPush();
+  if(isReview()){const par=(S.course.holes[mapHole]||{par:4}).par;
+    const v=(r.gross[myPlayerIdx()]??par)+d;
+    r.gross[myPlayerIdx()]=Math.min(15,Math.max(1,v));
+    if(!r.gts)r.gts=[0,0,0,0];r.gts[myPlayerIdx()]=Date.now();
+    stampChanges();save();syncPush();
+    const el0=document.getElementById('mapsc');
+    if(el0)el0.textContent=r.gross[myPlayerIdx()];
+    showMapConfirm();return;}
+  stageScore(mapHole,myPlayerIdx(),d);
   const el=document.getElementById('mapsc');
-  if(el)el.textContent=r.gross[myPlayerIdx()];
+  if(el)el.textContent=stagedG(r,mapHole,myPlayerIdx());
   showMapConfirm();
 }
 function vMap(){
@@ -6730,6 +6758,7 @@ function roundSplashHTML(){
   return `<div class="vfWrap">
     <div class="vfCard center" style="max-width:340px">
       <div class="tiny" style="letter-spacing:1px;opacity:.8">ROUND COMPLETE · ${x.holes} HOLE${x.holes===1?'':'S'}</div>
+      ${x.closedBy?`<div class="tiny" style="margin-top:2px;color:var(--amber-bd)">closed by ${esc(x.closedBy)}</div>`:''}
       <h2 class="vfTitle" style="margin:6px 0 2px">${esc(x.courseName||'')}</h2>
       ${res}
       <div style="display:flex;gap:18px;justify-content:center;margin:12px 0 6px">
@@ -8061,7 +8090,7 @@ function startRound(){
     // of you. Same entry mapPrev/mapNext use; the map_open stat stays
     // user-initiated so it keeps measuring people CHOOSING the map, not landing
     // on it. closeMap still drops back to the score screen.
-    S.round.cur=playOrder()[0];mapHole=S.round.cur;S.screen='map';
+    S.round.cur=playOrder()[0];mapHole=S.round.cur;S.screen='map';clearStage();
     if(S.config.game!=='wolf')prefillNines(S.round.cur);});
   S.round._sharedAtStart=!!S.share.on;
   stat('round_start',{game:S.round.game,course:S.course.name,holes:S.round.span.count,firstTee:S.round.span.start+1,
@@ -8126,7 +8155,7 @@ function vHole(){
     // score phase
     const modeLbl=rec.mode==='blind'?'Blind lone wolf':rec.mode==='lone'?'Lone wolf':'';
     const scoreRows=S.players.map((p,i)=>{
-      const g=rec.gross[i];
+      const g=stagedG(rec,h,i);
       const side=(i===rec.wolfAt||i===rec.partner)?'wolf':'field';
       const net=g!=null?g-dots(i):null;
       const lk=rowLock(h,i);
@@ -8148,7 +8177,7 @@ function vHole(){
     const skCard=stackHas('skins')?skinsCardHTML():'';
     const bbbOn=stackHas('bbb');
     const bbbCard=bbbOn?bbbCardHTML(rec,actIdx()):'';
-    let done=rec.gross.every(g=>g!=null)&&(!ctpScored()||rec.ctp!=null)
+    let done=rec.gross.every((g,gi)=>stagedG(rec,h,gi)!=null)&&(!ctpScored()||rec.ctp!=null)
       &&(!bbbOn||(rec.bbb&&['bingo','bango','bongo'].every(k=>rec.bbb[k]!=null)));
     const hamSt=hammerOn()?hamState(rec):null;
     if(hamSt&&hamSt.pend>=0)done=false;
@@ -8200,7 +8229,30 @@ function pickTake(i){set(()=>{const r=S.round.holes[S.round.cur];r.mode='partner
 function pickLone(){set(()=>{const r=S.round.holes[S.round.cur];r.mode='lone';prefill(r);});}
 function prefill(r){const par=S.course.holes[S.round.cur].par;if(!r.gts)r.gts=[0,0,0,0];r.gross=r.gross.map((g,i)=>{if(g==null){r.gts[i]=r.gts[i]||1;return par;}return g;});}
 function redoPick(){set(()=>{const r=S.round.holes[S.round.cur];r.mode=null;r.partner=null;});}
-function chScore(i,d){reviewTouch();set(()=>{const r=S.round.holes[S.round.cur];const v=(r.gross[i]??S.course.holes[S.round.cur].par)+d;r.gross[i]=Math.min(15,Math.max(1,v));if(!r.gts)r.gts=[0,0,0,0];r.gts[i]=Date.now();});}
+// ---- staged scores ----------------------------------------------------------
+// A score is not real until CONFIRM. The steppers used to write gross[] and
+// broadcast on every press, so the group watched each other dial 4->5->6 and
+// every intermediate number was a synced score (Rancho, 8/14). Edits now stage
+// locally — saved, so backgrounding keeps them; never synced, so nobody sees a
+// number the player has not stood behind. Engines and standings read gross[],
+// which only Confirm writes. Review mode keeps direct writes: reviewCommit
+// repairs the real record, staging there would break it.
+function stageMap(){const at=S.round.startedAt||0;
+  if(!S.stage||S.stage.at!==at)S.stage={at,v:{}};return S.stage.v;}
+function stagedG(rec,h,i){const st=S.stage;
+  const k=h+'-'+i;
+  if(st&&st.at===(S.round.startedAt||0)&&(k in st.v))return st.v[k];
+  return rec.gross[i];}
+function stageScore(h,i,d){const rec=S.round.holes[h];
+  const cur=stagedG(rec,h,i)??(S.course.holes[h]||{par:4}).par;
+  stageMap()[h+'-'+i]=Math.min(15,Math.max(1,cur+d));save();}
+function commitStage(h,rows){const rec=S.round.holes[h],m=stageMap();
+  (rows||[]).forEach(i=>{const k=h+'-'+i;
+    if(k in m){rec.gross[i]=m[k];if(!rec.gts)rec.gts=[0,0,0,0];rec.gts[i]=Date.now();delete m[k];}});}
+function clearStage(){S.stage={at:0,v:{}};}
+function chScore(i,d){reviewTouch();
+  if(isReview()){set(()=>{const r=S.round.holes[S.round.cur];const v=(r.gross[i]??S.course.holes[S.round.cur].par)+d;r.gross[i]=Math.min(15,Math.max(1,v));if(!r.gts)r.gts=[0,0,0,0];r.gts[i]=Date.now();});return;}
+  stageScore(S.round.cur,i,d);render();}
 // A par 3 gets a closest-to-pin pick regardless of what game is running.
 // Games that SCORE ctp (wolf, nines, vegas, umbrella) still require it before the
 // hole can be confirmed; the always-on picker is optional so it never blocks play.
@@ -8539,6 +8591,12 @@ function finishMyRound(){
       try{
         const mi=myPlayerIdx();
         if(S.players[mi])S.players[mi].ended=Date.now();
+        // THE CAPTAIN'S END ENDS THE ROUND. The starter is the captain: when
+        // they close out, a capEnd stamp rides the meta doc and every joined
+        // phone puts itself away with the synced scores. The doc persists on
+        // the relay, so a phone that reconnects later still hears it.
+        // startedAt guards a stale doc from killing a new round.
+        if(S.share.creator)S.round.capEnd={by:(S.me&&S.me.name)||'',at:Date.now(),startedAt:S.round.startedAt};
         S.shareMetaTs=Date.now();
         syncPush();
       }catch(e){}
@@ -8550,7 +8608,7 @@ function finishMyRound(){
     // retry into a no-op. endRound() and healUnfinishedRound() have always done
     // this; this path never did, and that is the entire bug.
     const wasShared=S.share&&S.share.on;
-    S.round=blankRound();S.screen='home';stView=null;
+    S.round=blankRound();S.screen='home';stView=null;clearStage();
     try{resetRoster();}catch(e){}
     save();
     if(wasShared)leaveShare();else render();
@@ -8602,7 +8660,7 @@ function maybeBroadcastRound(){
     setTimeout(bfBroadcastStart,300);
   }catch(e){}
 }
-function confirmHole(){const h=S.round.cur;if(greensIsMode())greensConsumeTarget();set(()=>{S.round.holes[h].confirmed=true;if(!isReview())advanceToNext();});maybeBroadcastRound();askPutts(h,()=>showSplash(h));}
+function confirmHole(){const h=S.round.cur;if(greensIsMode())greensConsumeTarget();set(()=>{commitStage(h,actIdx());S.round.holes[h].confirmed=true;if(!isReview())advanceToNext();});maybeBroadcastRound();askPutts(h,()=>showSplash(h));}
 // ----- shared rounds: each phone confirms its own rows, then moves on -----
 function myRows(h){
   // A row is mine to confirm if nobody owns it, my phone owns it, OR I have
@@ -8623,6 +8681,7 @@ function confirmMine(){
   let closed=false;
   set(()=>{
     const rec=S.round.holes[h];
+    commitStage(h,myRows(h));
     if(!rec.cfts)rec.cfts=[0,0,0,0];
     myRows(h).forEach(i=>{if(rec.gross[i]!=null)rec.cfts[i]=Date.now();});
     if(!rec.confirmed&&actIdx().every(i=>rec.cfts[i]>0)){rec.confirmed=true;closed=true;}
@@ -8683,7 +8742,7 @@ function vHoleNines(){
   const act=actIdx();
   const holeNav=holeNavHTML();
   const scoreRows=act.map(i=>{
-    const p=S.players[i], g=rec.gross[i];
+    const p=S.players[i], g=stagedG(rec,h,i);
     const net=g!=null?g-dots(i):null;
     const lk=rowLock(h,i);
     return `<div class="scorebar ${lk==='mine'?'rowmine':lk==='locked'?'rowlocked':''}">
@@ -8705,7 +8764,7 @@ function vHoleNines(){
   const skCard=stackHas('skins')?skinsCardHTML():'';
   const bbbOn=stackHas('bbb');
   const bbbCard=bbbOn?bbbCardHTML(rec,act):'';
-  let done=act.every(i=>rec.gross[i]!=null)&&(!ctpOn||rec.ctp!=null)
+  let done=act.every(i=>stagedG(rec,h,i)!=null)&&(!ctpOn||rec.ctp!=null)
     &&(!bbbOn||(rec.bbb&&['bingo','bango','bongo'].every(k=>rec.bbb[k]!=null)));
   if(hamSt){if(hamSt.fold>=0&&gamesOn().length===1)done=true;else if(hamSt.pend>=0)done=false;}
   let resultNote='';
@@ -8752,7 +8811,7 @@ function vHoleVegas(){
   const liveNum=t=>t.every(i=>liveSc[i]!=null)?vegasNum(liveSc,t,false):null;
   const res=rec.confirmed?all.perHole[h].results[VL]:null;
   const scoreRow=i=>{
-    const p=S.players[i], g=rec.gross[i];
+    const p=S.players[i], g=stagedG(rec,h,i);
     const net=g!=null?g-dots(i):null;
     const lk=rowLock(h,i);
     return `<div class="scorebar ${lk==='mine'?'rowmine':lk==='locked'?'rowlocked':''}">
@@ -8795,7 +8854,7 @@ function vHoleVegas(){
   const skCard=stackHas('skins')?skinsCardHTML():'';
   const bbbOn=stackHas('bbb');
   const bbbCard=bbbOn?bbbCardHTML(rec,actIdx()):'';
-  let done=[0,1,2,3].every(i=>rec.gross[i]!=null)&&(!ctpOn||rec.ctp!=null)
+  let done=[0,1,2,3].every(i=>stagedG(rec,h,i)!=null)&&(!ctpOn||rec.ctp!=null)
     &&(!bbbOn||(rec.bbb&&['bingo','bango','bongo'].every(k=>rec.bbb[k]!=null)));
   if(hamSt){if(hamSt.pend>=0)done=false;}
   let resultNote='';
@@ -8831,7 +8890,7 @@ function vHoleScramble(){
   const T=scrambleTeams(), capt=T.map(t=>t[0]);
   const holeNav=holeNavHTML();
   const rows=T.map((t,k)=>{
-    const g=rec.gross[capt[k]], d=scrambleDots(k,h);
+    const g=stagedG(rec,h,capt[k]), d=scrambleDots(k,h);
     return `<div class="scorebar">
       <div style="min-width:140px"><b>${teamLbl(t)}</b>
         <div class="tiny" style="font-size:15.5px">${d>0?`<span class="dots">${'●'.repeat(d)}</span>`:''} ${g!=null&&S.config.lens!=='gross'?`net ${g-d}`:''}</div></div>
@@ -8841,7 +8900,7 @@ function vHoleScramble(){
         <button onclick="chScore(${capt[k]},1)">+</button>
       </div>
     </div>`;}).join('');
-  const done=capt.every(i=>rec.gross[i]!=null);
+  const done=capt.every(i=>stagedG(rec,h,i)!=null);
   return topbar(`Hole ${h+1} · Par ${hole.par}`,`Handicap ${hole.si}${S.share.on?` · ${esc(S.share.code)} ${sockOpen?'●':'○ will sync'}`:''}`,'','hero',`<div style="display:flex;align-items:center;margin-left:auto;gap:12px">${gameBadgeHTML()}</div>`)+`<main>
     ${reviewBanner()}${runningTotalsCard()}
     <div class="card">
