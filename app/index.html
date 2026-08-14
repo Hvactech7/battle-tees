@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786686555';
+const BUILD='1786690581';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -5031,7 +5031,8 @@ function render(){
   // picking a row must not yank the list back to the top: preserve tagged
   // scroll boxes (and the page) across the innerHTML swap
   const keepScroll={};
-  document.querySelectorAll('[data-keepscroll]').forEach(e2=>{if(e2.id)keepScroll[e2.id]=e2.scrollTop;});
+  // both axes: the Battlefield scorecard scrolls sideways, the shot list scrolls down
+  document.querySelectorAll('[data-keepscroll]').forEach(e2=>{if(e2.id)keepScroll[e2.id]={top:e2.scrollTop,left:e2.scrollLeft};});
   const pageY=window.scrollY;
   const sameScreen=window.__lastScr===scr;
   window.__lastScr=scr;
@@ -5048,7 +5049,8 @@ function render(){
     }else el.innerHTML=full;
   }
   if(sameScreen){
-    Object.entries(keepScroll).forEach(([id,top])=>{const e2=document.getElementById(id);if(e2)e2.scrollTop=top;});
+    Object.entries(keepScroll).forEach(([id,pos])=>{const e2=document.getElementById(id);
+      if(e2){e2.scrollTop=pos.top;e2.scrollLeft=pos.left;}});
     if(pageY)window.scrollTo(0,pageY);
   }else window.scrollTo(0,0);
   if(scr==='map')requestAnimationFrame(initHoleMap);
@@ -5870,14 +5872,16 @@ function vBfWatch(){
         <div id="bfmap" style="height:210px;border-radius:8px;margin-top:6px"></div></div>`:''}`;
     }).join('');
     setTimeout(bfMiniMap,80);
-    // scorecard first — the current nine until tapped, then the full card
+    // scorecard first — the whole round, swiped sideways. It used to show one
+    // nine and swap on tap; the full table was always scrollable, the tap was
+    // only hiding it. Tagged keepscroll so the 20s live poll cannot yank a
+    // spectator back to hole 1 mid-swipe.
     let scCard='';
     if(confirmed>0){
-      const nineBase=S.round.holes.some((r,i)=>r&&r.confirmed&&i>=9)?9:0;
       const is9=(S.round.span&&S.round.span.count===9);
-      const sc=(bfCardFull||is9)?scorecardHTML():scorecard9HTML(nineBase);
-      scCard=`<div class="card" onclick="bfCardFull=!bfCardFull;render()" style="cursor:pointer">
-        <h2>Scorecard · gross <span class="tiny" style="font-weight:400">${is9?'':bfCardFull?'— tap for the current nine':'— tap for all 18'}</span></h2>
+      const sc=scorecardHTML().replace('class="sc-wrap"','class="sc-wrap" id="bfsc" data-keepscroll');
+      scCard=`<div class="card">
+        <h2>Scorecard · gross${is9?'':' <span class="tiny" style="font-weight:400">— swipe for the back nine</span>'}</h2>
         ${sc}</div>`;
     }
     return topbar(esc(e.starter||'Battle'),`${esc(course.name)} · ${games.map(g=>gameName(g)).join(' + ')}`,'bfield')+`<main>
