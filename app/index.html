@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786768761';
+const BUILD='1786769298';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1199,9 +1199,12 @@ function claimMySlot(steal){
   if(!S.share.on||!S.me||!S.me.name)return;
   const me=S.me.name.trim().toLowerCase();
   let changed=false;
+  // If any row already carries my pid, the NAME plays no part — a renamed
+  // player must never be re-seated by an old name still on some other row.
+  const pidSeated=!!(S.me.pid&&S.players.some(p=>p&&p.pid===S.me.pid));
   S.players.forEach(p=>{
     const pidMatch=!!(S.me.pid&&p.pid===S.me.pid);
-    const match=pidMatch||(p.name||'').trim().toLowerCase()===me;
+    const match=pidMatch||(!pidSeated&&(p.name||'').trim().toLowerCase()===me);
     if(match&&!p.pid&&S.me.pid){p.pid=S.me.pid;changed=true;}
     // steal-by-name only on join (state doc / round creation) so a replaced
     // phone can take its row over; later meta heals fill only EMPTY slots —
@@ -1439,13 +1442,25 @@ function saveEditMe(){
   const old=S.me.name;
   editingMe=false;
   set(()=>{
-    S.me={name,index:+((x&&x.value)||S.me.index)||S.me.index};
-    const e=S.playerLib.find(p=>p.name.trim().toLowerCase()===old.trim().toLowerCase());
-    if(e){
-      e.name=name;e.index=S.me.index;
-      S.players.forEach(p=>{if(p.libId===e.id){p.name=name;p.index=S.me.index;}});
-    }
+    // THE PID IS WHO YOU ARE. It used to be dropped here — S.me={name,index} —
+    // so a rename mid-round hunted for your slot by the OLD name and every
+    // pid-keyed lookup went blind. The display name is the only thing changing.
+    const pid=(S.me&&S.me.pid)||('u'+Date.now().toString(36)+Math.random().toString(36).slice(2,8));
+    S.me={name,index:+((x&&x.value)||S.me.index)||S.me.index,pid};
+    // my library card — by pid first, old name as the grandfathered fallback
+    const e=S.playerLib.find(p=>p.pid===pid)
+      ||S.playerLib.find(p=>p.name.trim().toLowerCase()===old.trim().toLowerCase());
+    if(e){e.name=name;e.index=S.me.index;e.pid=pid;}
+    // and MY row in the round, wherever it sits — by ownership, never by name,
+    // so the group sees the new name on the same slot with the same scores
+    const mi=myPlayerIdx();
+    S.players.forEach((p,i)=>{
+      const mine=(p.ownerDev===devId())||(p.pid===pid)||(i===mi&&(p.name||'').trim().toLowerCase()===old.trim().toLowerCase());
+      if(mine){p.name=name;p.index=S.me.index;p.pid=pid;}
+    });
+    if(S.share&&S.share.on)S.shareMetaTs=Date.now();   // tell the group
   });
+  setTimeout(registerProfile,0);   // the Pi keeps the pid -> current name
   sendHello();
 }
 function onlineList(){
