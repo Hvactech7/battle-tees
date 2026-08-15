@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786753277';
+const BUILD='1786754286';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1301,10 +1301,12 @@ function joinRoundCode(code){
   S.round.holes.forEach(r=>{r._ts=0;});
   primeCaches(false);
   save();syncConnect();render();
-  // the host's course arrives with the room — ask which tees on this one
+  // the host's course arrives with the room — ask which tees, then which card
   setTimeout(()=>{
-    if(S.share.on&&S.course&&(S.course.teeSets||[]).length)
-      askTee(null,'Which tees are you playing?',S.course.name);
+    if(!S.share.on)return;
+    if(S.course&&(S.course.teeSets||[]).length)
+      askTee(()=>askJoinSpan(),'Which tees are you playing?',S.course.name);
+    else askJoinSpan();
   },900);
 }
 function leaveShare(){
@@ -2116,7 +2118,9 @@ function actIdx(){return [0,1,2,3].slice(0,NP());}
 // Round span: which holes are in play (full 18, front/back 9) and the first tee.
 // Hole records stay indexed 0-17 (sync keys unchanged); the span just limits
 // navigation and position-based rules (wolf rotation, match clinches).
-function roundSpan(){return (S.round.started&&S.round.span)||S.config.span||{count:18,start:0};}
+// mySpan is a JOINER'S personal card — chosen at join time, never synced, and
+// senior to the group's span on this phone only.
+function roundSpan(){return (S.round.started&&(S.round.mySpan||S.round.span))||S.config.span||{count:18,start:0};}
 function playOrder(){
   const {count,start}=roundSpan();
   if(count===9){const base=start<9?0:9;return Array.from({length:9},(_,k)=>base+((start-base+k)%9));}
@@ -2940,7 +2944,32 @@ function openMap(){
 }
 function closeMap(){S.screen='hole';render();}
 function mapPrev(){mapHole=(mapHole+17)%18;render();}
-function mapNext(){mapHole=(mapHole+1)%18;render();}
+// Walking off the hole you are playing without scoring it is how holes go
+// missing from cards. The FIRST press of ▶ on an unscored current hole stays
+// put and points at the score input; pressing again within the toast's life
+// moves on anyway — a reminder, never a cage. Browsing other holes, reviews
+// and scored holes navigate freely.
+let mapNextArm=0;
+function mapNext(){
+  try{
+    if(S.round.started&&!isReview()&&mapHole===S.round.cur){
+      const rec=S.round.holes[mapHole];
+      if(rec&&!rec.confirmed&&Date.now()-mapNextArm>2600){
+        mapNextArm=Date.now();scoreNagToast();return;
+      }
+    }
+  }catch(e){}
+  mapNextArm=0;
+  mapHole=(mapHole+1)%18;render();
+}
+function scoreNagToast(){
+  const old=document.getElementById('scorenag');if(old)try{old.remove();}catch(e){}
+  const d=document.createElement('div');d.id='scorenag';
+  d.style.cssText='position:fixed;right:max(10px,calc(50vw - 230px));bottom:calc(226px + env(safe-area-inset-bottom));z-index:90;max-width:min(300px,80vw);background:var(--card);border:2px solid var(--amber-bd,#c9922e);border-radius:12px;padding:10px 14px;box-shadow:3px 3px 0 rgba(0,0,0,.4);pointer-events:none;text-align:center';
+  d.innerHTML='<div class="tiny" style="font-size:14.5px"><b>Score this hole first</b><br>— or press ▶ again to skip ahead —</div><div style="font-size:26px;line-height:1;margin-top:5px">⬇</div>';
+  document.body.appendChild(d);
+  setTimeout(()=>{try{d.remove();}catch(e){}},2600);
+}
 function teardownMap(){
   if(mapWatch!=null&&navigator.geolocation){navigator.geolocation.clearWatch(mapWatch);mapWatch=null;}
   if(LMAP){try{LMAP.remove();}catch(e){}LMAP=null;}
@@ -5117,7 +5146,7 @@ function render(){
   const sameScreen=window.__lastScr===scr;
   window.__lastScr=scr;
   try{if(window.__a2hsSync)window.__a2hsSync();}catch(e){}
-  const full=magBanner()+html+holeSplash()+verifySheetHTML()+teeAskSheetHTML()+pairsAskSheetHTML()+endAskSheetHTML()+mapInviteHTML()+greenClashHTML()+gamePickSheetHTML()+(S.screen!=='map'?puttAskSheetHTML():'');
+  const full=magBanner()+html+holeSplash()+verifySheetHTML()+teeAskSheetHTML()+joinSpanSheetHTML()+pairsAskSheetHTML()+endAskSheetHTML()+mapInviteHTML()+greenClashHTML()+gamePickSheetHTML()+(S.screen!=='map'?puttAskSheetHTML():'');
   // Four phones syncing means render() fires constantly. Blowing away innerHTML
   // each time repainted the whole screen — that was the flicker on the course.
   // Identical output is a no-op; otherwise patch only the nodes that differ.
@@ -7855,6 +7884,49 @@ function pairsAskSheetHTML(){
     <div class="tiny mb">These teams score the round. Tap to change, then lock them in.${pairsAsk.games.includes('sixes')?' Sixes rotates pairs each segment — fine-tune per six in Setup.':''}</div>
     ${pairsAsk.games.map(g=>`<div class="mt"><b>${name[g]||g}</b>${teamPickerRow(g)}</div>`).join('')}
     <button class="big mt" style="width:100%" onclick="pairsAskDone()">✓ &nbsp;These are the teams</button>
+  </div></div>`;
+}
+// ---- what are YOU playing? (join-time span pick) ----------------------------
+let joinSpanAsk=null;
+function askJoinSpan(){
+  if(!S.share.on||S.share.creator)return;
+  joinSpanAsk={count:18,start:0};render();
+}
+function joinSpanPick(count,start){
+  joinSpanAsk={count,start};render();
+}
+function joinSpanDone(){
+  if(!joinSpanAsk)return;
+  const sel={count:joinSpanAsk.count,start:joinSpanAsk.start};
+  const g=S.round.span||{count:18,start:0};
+  // matching the group needs no override; differing is a personal card
+  S.round.mySpan=(sel.count===g.count&&sel.start===g.start)?null:sel;
+  S.round.cur=sel.start;mapHole=sel.start;
+  joinSpanAsk=null;save();render();
+}
+function joinSpanSheetHTML(){
+  if(!joinSpanAsk)return '';
+  const a=joinSpanAsk;
+  const g=S.round.span||{count:18,start:0};
+  const lbl=sp=>sp.count===18?'All 18':(sp.start<9?'Front 9':'Back 9');
+  const groupLine=(S.round.started&&(g.count!==a.count||g.start!==a.start))
+    ?`<div class="tiny mt">The group's card is <b>${lbl(g)} from h${g.start+1}</b> —
+       <span style="color:var(--elec);text-decoration:underline;cursor:pointer" onclick="joinSpanPick(${g.count},${g.start})">match them</span></div>`:'';
+  const first=a.count===18?0:(a.start<9?0:9), n=a.count===18?18:9;
+  const holes=Array.from({length:n},(_,k)=>first+k).map(h=>
+    `<button class="ghost ${a.start===h?'sel':''}" style="min-width:44px;padding:8px 0" onclick="joinSpanPick(${a.count},${h})">${h+1}</button>`).join('');
+  return `<div class="vfWrap"><div class="vfCard" style="max-width:430px">
+    <h2 class="vfTitle" style="margin-bottom:2px">What are you playing?</h2>
+    <div class="tiny mb">Your card — the group's scores line up either way.</div>
+    <div style="display:flex;gap:6px">
+      <button class="ghost ${a.count===18?'sel':''}" style="flex:1" onclick="joinSpanPick(18,0)">All 18</button>
+      <button class="ghost ${a.count===9&&a.start<9?'sel':''}" style="flex:1" onclick="joinSpanPick(9,0)">Front 9</button>
+      <button class="ghost ${a.count===9&&a.start>=9?'sel':''}" style="flex:1" onclick="joinSpanPick(9,9)">Back 9</button>
+    </div>
+    <div class="tiny mt">Starting on</div>
+    <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:4px">${holes}</div>
+    ${groupLine}
+    <button class="big mt" style="width:100%" onclick="joinSpanDone()">✓ &nbsp;That's my card</button>
   </div></div>`;
 }
 function teeAskSheetHTML(){
