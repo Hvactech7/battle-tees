@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786751787';
+const BUILD='1786752530';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -5106,7 +5106,7 @@ function render(){
   const sameScreen=window.__lastScr===scr;
   window.__lastScr=scr;
   try{if(window.__a2hsSync)window.__a2hsSync();}catch(e){}
-  const full=magBanner()+html+holeSplash()+verifySheetHTML()+teeAskSheetHTML()+endAskSheetHTML()+mapInviteHTML()+greenClashHTML()+gamePickSheetHTML()+(S.screen!=='map'?puttAskSheetHTML():'');
+  const full=magBanner()+html+holeSplash()+verifySheetHTML()+teeAskSheetHTML()+pairsAskSheetHTML()+endAskSheetHTML()+mapInviteHTML()+greenClashHTML()+gamePickSheetHTML()+(S.screen!=='map'?puttAskSheetHTML():'');
   // Four phones syncing means render() fires constantly. Blowing away innerHTML
   // each time repainted the whole screen — that was the flicker on the course.
   // Identical output is a no-op; otherwise patch only the nodes that differ.
@@ -7810,6 +7810,42 @@ function teeAskDone(){
   const fn=teeAsk&&teeAsk.then;teeAsk=null;
   if(fn)fn(); else render();
 }
+// ---- the captain's partner confirm ------------------------------------------
+let pairsAsk=null;
+// The 2v2 games in the round's stack whose teams the captain should ratify.
+// Mystery rounds are skipped — nobody may know. Nassau only in its 2v2 form,
+// scramble only in 2v2 (duo and solo have no pairing to pick).
+function pairGamesForStart(){
+  if(NP()!==4)return [];
+  const gs=(S.config.games&&S.config.games.length?S.config.games:[S.config.game]);
+  const out=[];
+  gs.forEach(g=>{
+    if(mysteryPending(g))return;
+    if(g==='scramble'){if((S.config.scramble||{}).teams==='2v2')out.push('scramble');return;}
+    if(g==='nassau'){if((S.config.nassau||{}).n===4)out.push('nassau');return;}
+    if(['vegas','sixes','bestball','umbrella'].includes(g))out.push(g);
+  });
+  return out.filter((g,i,a)=>a.indexOf(g)===i);
+}
+function askPairs(then){
+  const gs=pairGamesForStart();
+  if(!gs.length){if(then)then();return;}
+  pairsAsk={then:then||null,games:gs};render();
+}
+function pairsAskDone(){
+  const t=pairsAsk&&pairsAsk.then;pairsAsk=null;render();
+  if(t)try{t();}catch(e){}
+}
+function pairsAskSheetHTML(){
+  if(!pairsAsk)return '';
+  const name={vegas:'Vegas',sixes:'Sixes',bestball:'Best Ball',umbrella:'Umbrella',nassau:'Nassau',scramble:'Scramble'};
+  return `<div class="vfWrap"><div class="vfCard" style="max-width:430px">
+    <h2 class="vfTitle" style="margin-bottom:2px">⚔️ Captain — confirm the partners</h2>
+    <div class="tiny mb">These teams score the round. Tap to change, then lock them in.${pairsAsk.games.includes('sixes')?' Sixes rotates pairs each segment — fine-tune per six in Setup.':''}</div>
+    ${pairsAsk.games.map(g=>`<div class="mt"><b>${name[g]||g}</b>${teamPickerRow(g)}</div>`).join('')}
+    <button class="big mt" style="width:100%" onclick="pairsAskDone()">✓ &nbsp;These are the teams</button>
+  </div></div>`;
+}
 function teeAskSheetHTML(){
   if(!teeAsk)return '';
   const sets=(S.course&&S.course.teeSets)||[];
@@ -8174,7 +8210,11 @@ function startRound(){
   if(!startRound._confirmed){
     return askTee(()=>{startRound._confirmed=true;startRound();},'Confirm your tees',S.course.name);
   }
-  startRound._confirmed=false;
+  // ...then the captain ratifies the 2v2 teams, once, before anything is scored
+  if(!startRound._pairsOk&&pairGamesForStart().length){
+    return askPairs(()=>{startRound._pairsOk=true;startRound();});
+  }
+  startRound._confirmed=false;startRound._pairsOk=false;
   pickingCourse=false;
   try{localStorage.removeItem('btGreensUsed');}catch(e){}
   greensState=null;
