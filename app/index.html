@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786754286';
+const BUILD='1786754586';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -7913,8 +7913,11 @@ function joinSpanSheetHTML(){
     ?`<div class="tiny mt">The group's card is <b>${lbl(g)} from h${g.start+1}</b> —
        <span style="color:var(--elec);text-decoration:underline;cursor:pointer" onclick="joinSpanPick(${g.count},${g.start})">match them</span></div>`:'';
   const first=a.count===18?0:(a.start<9?0:9), n=a.count===18?18:9;
-  const holes=Array.from({length:n},(_,k)=>first+k).map(h=>
-    `<button class="ghost ${a.start===h?'sel':''}" style="min-width:44px;padding:8px 0" onclick="joinSpanPick(${a.count},${h})">${h+1}</button>`).join('');
+  const holes=`<select onchange="joinSpanPick(${a.count},+this.value)"
+      style="width:100%;margin-top:4px;background:#0d1420;border:2px solid var(--line);border-radius:10px;color:var(--ink);font:600 17px Rajdhani,Inter,sans-serif;padding:11px 12px">
+    ${Array.from({length:n},(_,k)=>first+k).map(h=>
+      `<option value="${h}" ${a.start===h?'selected':''}>Hole ${h+1}</option>`).join('')}
+  </select>`;
   return `<div class="vfWrap"><div class="vfCard" style="max-width:430px">
     <h2 class="vfTitle" style="margin-bottom:2px">What are you playing?</h2>
     <div class="tiny mb">Your card — the group's scores line up either way.</div>
@@ -7924,7 +7927,7 @@ function joinSpanSheetHTML(){
       <button class="ghost ${a.count===9&&a.start>=9?'sel':''}" style="flex:1" onclick="joinSpanPick(9,9)">Back 9</button>
     </div>
     <div class="tiny mt">Starting on</div>
-    <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:4px">${holes}</div>
+    ${holes}
     ${groupLine}
     <button class="big mt" style="width:100%" onclick="joinSpanDone()">✓ &nbsp;That's my card</button>
   </div></div>`;
