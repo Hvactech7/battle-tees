@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786754586';
+const BUILD='1786756053';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -2943,32 +2943,39 @@ function openMap(){
   mapHole=S.round.cur||0;S.screen='map';render();
 }
 function closeMap(){S.screen='hole';render();}
-function mapPrev(){mapHole=(mapHole+17)%18;render();}
+function mapPrev(){clearScoreNag(false);mapHole=(mapHole+17)%18;render();}
 // Walking off the hole you are playing without scoring it is how holes go
 // missing from cards. The FIRST press of ▶ on an unscored current hole stays
 // put and points at the score input; pressing again within the toast's life
 // moves on anyway — a reminder, never a cage. Browsing other holes, reviews
 // and scored holes navigate freely.
-let mapNextArm=0;
+let scoreNagAckHole=-1;
 function mapNext(){
   try{
     if(S.round.started&&!isReview()&&mapHole===S.round.cur){
       const rec=S.round.holes[mapHole];
-      if(rec&&!rec.confirmed&&Date.now()-mapNextArm>2600){
-        mapNextArm=Date.now();scoreNagToast();return;
-      }
+      // the arrow does not move on until the hole is scored or the popup was
+      // CLOSED — an auto-fading toast let the reminder slip by unread
+      if(rec&&!rec.confirmed&&scoreNagAckHole!==mapHole){scoreNagToast();return;}
     }
   }catch(e){}
-  mapNextArm=0;
+  clearScoreNag(false);
   mapHole=(mapHole+1)%18;render();
 }
+function clearScoreNag(ack){
+  if(ack)scoreNagAckHole=mapHole;
+  const d=document.getElementById('scorenag');if(d)try{d.remove();}catch(e){}
+}
 function scoreNagToast(){
-  const old=document.getElementById('scorenag');if(old)try{old.remove();}catch(e){}
+  if(document.getElementById('scorenag'))return;   // already up, still unanswered
   const d=document.createElement('div');d.id='scorenag';
-  d.style.cssText='position:fixed;right:max(10px,calc(50vw - 230px));bottom:calc(226px + env(safe-area-inset-bottom));z-index:90;max-width:min(300px,80vw);background:var(--card);border:2px solid var(--amber-bd,#c9922e);border-radius:12px;padding:10px 14px;box-shadow:3px 3px 0 rgba(0,0,0,.4);pointer-events:none;text-align:center';
-  d.innerHTML='<div class="tiny" style="font-size:14.5px"><b>Score this hole first</b><br>— or press ▶ again to skip ahead —</div><div style="font-size:26px;line-height:1;margin-top:5px">⬇</div>';
+  d.style.cssText='position:fixed;right:max(10px,calc(50vw - 230px));bottom:calc(226px + env(safe-area-inset-bottom));z-index:90;width:min(300px,80vw);background:var(--card);border:2px solid var(--amber-bd,#c9922e);border-radius:12px;padding:10px 12px;box-shadow:3px 3px 0 rgba(0,0,0,.4)';
+  d.innerHTML='<div style="display:flex;align-items:flex-start;gap:8px">'
+    +'<div class="tiny" style="flex:1;font-size:14.5px;text-align:center;padding-top:3px"><b>Score this hole first</b><br>close this and ▶ moves on</div>'
+    +'<button onclick="clearScoreNag(true)" style="flex:none;border:1px solid var(--line);background:#1b2433;color:var(--ink2);border-radius:8px;padding:5px 10px;font-weight:700">✕</button></div>'
+    // the arrow hangs over the word Score on the button below
+    +'<div style="font-size:26px;line-height:1;margin-top:5px;text-align:right;padding-right:50px">⬇</div>';
   document.body.appendChild(d);
-  setTimeout(()=>{try{d.remove();}catch(e){}},2600);
 }
 function teardownMap(){
   if(mapWatch!=null&&navigator.geolocation){navigator.geolocation.clearWatch(mapWatch);mapWatch=null;}
@@ -3192,6 +3199,7 @@ function hideMapConfirm(){mapScoreHole=-1;paintMapConfirm();}
 // scoring screen's confirm (per-player in shared rounds, full confirm when
 // everyone's scored otherwise), then the map walks to the next open hole.
 function mapConfirm(){
+  clearScoreNag(false);
   // "Score" is a prompt, not a trigger: the first press only arms it, so a
   // stray tap can never card a hole you had not looked at.
   if(!mapScoreArmed()){showMapConfirm();return;}
