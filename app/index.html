@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786756053';
+const BUILD='1786768761';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -2807,26 +2807,24 @@ function frameAround(center,spanYds,el){
 // simply in front of you, and re-framing on every GPS fix would swing the zoom
 // wildly while you are trying to read a chip. It stays parked until the next
 // hole, which re-creates this closure.
-const AUTO_ORIENT_STOP_YDS=100;
+// Auto-frame fires at exactly two checkpoints as you approach the green:
+// crossing 225 yards and crossing 120. Re-framing on every GPS fix — the old
+// behaviour — swung the view constantly on the walk in (Teal Bend, 8/15).
+// Twice per hole, and that is all; a fix already inside a checkpoint when the
+// hole is drawn (back from another app at the green) counts as crossing it.
+const AUTO_ZOOM_YDS=[225,120];
 function makeOrientFromMe(greenC,greenPoly,el){
-  let last=null, parked=false, framed=false;
+  const done=[false,false];
   return (from)=>{
     try{
       if(!from||!greenC||!L.Map.prototype.setBearing)return;
-      if(parked)return;
-      if(mDist(from,greenC)*1.09361<AUTO_ORIENT_STOP_YDS){
-        // Park — but frame ONCE first if this closure never has. Walking in from
-        // outside the radius, the last frame was taken at ~100 yards and parking
-        // on it is right. A closure born INSIDE the radius is a different story:
-        // returning from another app rebuilds the hole at the full-hole fit and
-        // makes a fresh closure, which parked on that wide view and never moved
-        // again. Hole 5 on 8/13 — back from Pandora at the green, zoomed out for
-        // the rest of the hole.
-        if(!framed)orientGreenUp(from,greenC,greenPoly,[from],el);
-        parked=true;return;
-      }
-      if(last&&mDist(from,last)<5)return;              // ignore GPS jitter
-      last=from.slice();framed=true;
+      const y=mDist(from,greenC)*1.09361;
+      // fire the deepest checkpoint this fix is inside, and everything shallower
+      // it skipped past — one frame, then silence until the next checkpoint
+      let hit=-1;
+      for(let i=0;i<AUTO_ZOOM_YDS.length;i++){if(y<=AUTO_ZOOM_YDS[i]&&!done[i])hit=i;}
+      if(hit<0)return;
+      for(let i=0;i<=hit;i++)done[i]=true;
       orientGreenUp(from,greenC,greenPoly,[from],el);
     }catch(e){}
   };
