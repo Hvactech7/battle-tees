@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786752812';
+const BUILD='1786753277';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -3257,8 +3257,14 @@ function vMap(){
   let myTot=0,myPar=0;
   if(S.round.started){
     const mi=myPlayerIdx();
+    // MY strokes count the moment I ratify them — waiting for the HOLE to
+    // confirm meant a shared round showed nothing here until every phone
+    // caught up (Teal Bend 8/15: 'waiting on Kris · Nelson' all day, corner
+    // stuck on the game badge). A prefill (gts<=1, no cfts) never counts.
     playOrder().forEach(hh=>{const r=S.round.holes[hh];
-      if(r&&r.confirmed&&r.gross&&r.gross[mi]!=null){myTot+=r.gross[mi];myPar+=(S.course.holes[hh]||{par:4}).par;}});
+      if(!r||!r.gross||r.gross[mi]==null)return;
+      const mine=(r.cfts&&r.cfts[mi]>0)||(r.gts&&r.gts[mi]>1)||r.confirmed;
+      if(mine){myTot+=r.gross[mi];myPar+=(S.course.holes[hh]||{par:4}).par;}});
   }
   const d=myTot-myPar;
   const myScore=myPar>0?`<div style="text-align:center;flex:none;margin:0 14px 0 10px">
