@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786752530';
+const BUILD='1786752812';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -4684,7 +4684,12 @@ function puttsDue(h){
   const rec=S.round.holes[h]; if(!rec)return [];
   const done=(rec.stats&&rec.stats.putts)||[];
   const skip=rec.puttSkip||[];
-  return myRows(h).filter(i=>puttsOn(i)&&rec.gross[i]!=null&&!(done[i]>0)&&!skip[i]);
+  // In a SHARED round your phone asks about YOU, nobody else — confirming a
+  // score used to prompt for every row this phone could ratify, so the whole
+  // group's putts landed on whoever confirmed first (Teal Bend, 8/15). A
+  // single-phone round still collects everyone's: there is no other phone.
+  const rows=S.share.on?[myPlayerIdx()]:myRows(h);
+  return rows.filter(i=>puttsOn(i)&&rec.gross[i]!=null&&!(done[i]>0)&&!skip[i]);
 }
 // then() runs once the prompt is finished OR was never needed — that is how the
 // splash stays sequenced behind it.
