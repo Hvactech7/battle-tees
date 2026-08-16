@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786853007';
+const BUILD='1786853835';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -678,6 +678,7 @@ function load(){
       if(!s.theme)s.theme='dark';
       if(s.autoBackup==null)s.autoBackup=true;
       if(s.units!=='m')s.units='yd';        // yards is the default, always
+      s.config.lens='both';                  // gross AND net, always — the toggles are viewers
       if(!s.config.game)s.config.game='wolf';
       if(s.config.ctpAll===undefined)s.config.ctpAll=true;
       if(!s.config.ctpMoney)s.config.ctpMoney={amt:0,carry:false};
@@ -1238,6 +1239,7 @@ function claimMySlot(steal){
   }
   if(changed){stampChanges();save();syncPush();}
   try{maybeAskWolfOrder();}catch(e){}
+  try{maybeAskPairs();}catch(e){}
 }
 let unlockedRows={};
 function unlockRow(h,i){unlockedRows[h+'-'+i]=true;render();}
@@ -6277,7 +6279,7 @@ let wiz=null;
 function startWizard(){
   primeGeo();
   if(!S.round.started)resetRoster();
-  wiz={step:'kind',n:4};
+  wiz={step:'span',n:4};
   addMode='nearby';                       // the who-card scans nearby automatically
   S.screen='start';save();render();
 }
@@ -6311,9 +6313,9 @@ function wizOptsDone(){
 }
 function wizBack(){
   if(!wiz)return;
-  const b={count:'kind',who:'count',game:'who',opts:wiz.preGame?'who':'game',
+  const b={kind:'span',count:'kind',who:'count',game:'who',opts:wiz.preGame?'who':'game',
     course:wiz.solo?'kind':'opts',join:'kind'};
-  if(wiz.step==='kind'||(wiz.step==='count'&&wiz.preGame)){wiz=null;S.screen='home';render();return;}
+  if(wiz.step==='span'||(wiz.step==='count'&&wiz.preGame)){wiz=null;S.screen='home';render();return;}
   wiz.step=b[wiz.step]||'kind';
   render();
 }
@@ -6330,6 +6332,22 @@ function vStart(){
     <div class="row" style="border:none">
       <input type="text" id="joincode" placeholder="ABCDE" maxlength="8" autocapitalize="characters" style="width:46%;text-transform:uppercase;font-family:Rajdhani,sans-serif;font-size:20px;letter-spacing:3px">
       <button class="ghost sel" style="flex:1" onclick="joinRound()">Join</button></div></details>`;
+
+  if(step==='span'){
+    const sp=S.config.span||{count:18,start:0};
+    const first=sp.count===18?0:(sp.start<9?0:9), n=sp.count===18?18:9;
+    return head('Start a round','How many holes?')+`<main>
+    <div style="display:flex;gap:8px">
+      <button class="big ${sp.count===18?'':'ghost'}" style="flex:1;margin:0${sp.count===18?'':';background:var(--card)'}" onclick="setSpan(18,0);render()">All 18</button>
+      <button class="big ${sp.count===9&&sp.start<9?'':'ghost'}" style="flex:1;margin:0${sp.count===9&&sp.start<9?'':';background:var(--card)'}" onclick="setSpan(9,0);render()">Front 9</button>
+      <button class="big ${sp.count===9&&sp.start>=9?'':'ghost'}" style="flex:1;margin:0${sp.count===9&&sp.start>=9?'':';background:var(--card)'}" onclick="setSpan(9,9);render()">Back 9</button></div>
+    <div class="card mt"><div class="row"><span class="muted">First tee</span>
+      <select onchange="setSpan(${sp.count},+this.value)" style="background:#0d1420;border:2px solid var(--line);border-radius:10px;color:var(--ink);font:600 16px Rajdhani,Inter,sans-serif;padding:8px 10px">
+        ${Array.from({length:n},(_,k)=>first+k).map(h=>`<option value="${h}" ${sp.start===h?'selected':''}>Hole ${h+1}</option>`).join('')}</select></div>
+      <div class="tiny">Start from any tee — play wraps around.</div></div>
+    <button class="big" onclick="wiz.step=wiz.preGame?'count':'kind';render()">Next \u2192</button>
+    </main>`;
+  }
 
   if(step==='kind')return head('Start a round','What kind of round?')+`<main>
     <button class="big hb" style="padding:16px 12px" onclick="wizKind('solo')">⛳ Just me<div style="font-size:14px;font-weight:500;margin-top:4px;color:inherit;opacity:.92;font-family:Inter,-apple-system,sans-serif">Solo stroke play — score and GPS</div></button>
@@ -6601,7 +6619,7 @@ function gameIdFor(title){
 function startWithGame(g){
   primeGeo();
   if(!S.round.started)resetRoster();
-  wiz={step:'count',n:4,preGame:g};
+  wiz={step:'span',n:4,preGame:g};
   addMode='nearby';S.screen='start';save();render();
 }
 function vPickCourse(){
@@ -7783,10 +7801,7 @@ function vRoundOpts(){
   return topbar('Round options',S.course?S.course.name:'','','','')+`<main>
     ${gamePickCardHTML()}
     <div class="card"><h2>Scoring options</h2>
-      <div class="seg">
-        ${['gross','net','both'].map(L=>`<button class="ghost ${S.config.lens===L?'sel':''}" onclick="set(()=>S.config.lens='${L}')">${L[0].toUpperCase()+L.slice(1)}</button>`).join('')}
-      </div>
-      <div class="row mt"><span class="muted">Handicap allowance</span>
+      <div class="row"><span class="muted">Handicap allowance</span>
         <div class="stepper"><button onclick="chAllow(-5)">&#8722;</button><span class="val num" style="font-size:17px">${S.config.allowance}%</span><button onclick="chAllow(5)">+</button></div></div>
     </div>
     ${wolf?`<div class="card"><h2>Rules</h2>
@@ -7815,13 +7830,18 @@ function gameOptionsHTML(){
   const bbb=stackHas('bbb');
   const nassau=stackHas('nassau');
   const skins=stackHas('skins');
+  // In the wizard the group has not JOINED yet, so team pickers would be
+  // picking teams for empty seats — the captain's partner/order sheet fires
+  // when the fourth arrives instead. Holes/first tee were the wizard's first
+  // card. Setup (mid-round) still shows all of it.
+  const inWiz=!!(wiz&&S.screen==='start');
   const P=S.config.pts;
   const pt=(k,lbl)=>`<div class="row"><span class="muted">${lbl}</span>
     <div class="stepper"><button onclick="chPt('${k}',-1)">−</button><span class="val num">${P[k]}</span><button onclick="chPt('${k}',1)">+</button></div></div>`;
   const V=S.config.vegas;
   const pairLbl=T=>`${esc(S.players[T[0][0]].name)} &amp; ${esc(S.players[T[0][1]].name)} <span class="muted">vs</span> ${esc(S.players[T[1][0]].name)} &amp; ${esc(S.players[T[1][1]].name)}`;
   return `
-  ${sixes?`<div class="card"><h2>Starting partners</h2>
+  ${(sixes&&!inWiz)?`<div class="card"><h2>Starting partners</h2>
     ${[[[0,1],[2,3]],[[0,2],[1,3]],[[0,3],[1,2]]].map((T,pi)=>`
       <button class="ghost ${S.config.sixes.pairing===pi?'sel':''}" style="width:100%;text-align:left;margin-bottom:8px" onclick="set(()=>S.config.sixes.pairing=${pi})">${pairLbl(T)}</button>`).join('')}
     <div class="tiny mt">Partners rotate every ${(S.config.span&&S.config.span.count===9)?'three':'six'} holes so everyone teams with everyone. Best ball wins the hole — 1 point each.</div>
@@ -7868,7 +7888,7 @@ function gameOptionsHTML(){
       </span></div>
     <div class="tiny mt">Three separate match-play bets: front nine, back nine, and the overall. ${(S.config.nassau.press||'manual')==='off'?'No presses — just the three bets.':(S.config.nassau.press||'manual')==='manual'?'A side that is down can press — a fresh bet on the remaining holes of that nine.':'Every bet automatically presses the first time a side falls exactly 2 down.'}${(S.config.span&&S.config.span.count===9)?' <b>9-hole round: collapses to a single overall match.</b>':''}</div>
   </div>`:''}
-  ${(()=>{const pairBtns=g2=>[[[0,1],[2,3]],[[0,2],[1,3]],[[0,3],[1,2]]].map((T,pi)=>`
+  ${inWiz?'':(()=>{const pairBtns=g2=>[[[0,1],[2,3]],[[0,2],[1,3]],[[0,3],[1,2]]].map((T,pi)=>`
       <button class="ghost ${teamPairing(g2)===pi?'sel':''}" style="width:100%;text-align:left;margin-bottom:8px" onclick="setTeamPairing('${g2}',${pi})">${pairLbl(T)}</button>`).join('');
     // Mystery partners: setup/round-options list every pairing by name and the
     // saved duo names on top of it. Found by the 3000-scenario sweep — the
@@ -7897,7 +7917,7 @@ function gameOptionsHTML(){
     if(nassau&&S.config.nassau.n!==2)out+=mysteryPending('nassau')?mystBlock('nassau','🏅 Nassau teams'):`<div class="card"><h2>🏅 Nassau teams</h2>${pairBtns('nassau')}${teamNamesHTML('nassau')}
       <div class="tiny mt">Best ball of each team decides every hole across all three bets.</div></div>`;
     return out;})()}
-  ${vegas?`<div class="card"><h2>🎲 Vegas teams</h2>
+  ${(vegas&&!inWiz)?`<div class="card"><h2>🎲 Vegas teams</h2>
     ${mysteryPending('vegas')?`<div class="tiny">🎲 Mystery partners — hidden until the draw at the end of the round.</div>
       <button class="ghost mt" style="width:100%" onclick="toggleMystery('vegas')">Cancel mystery — pick partners now</button>`
     :`${[[[0,1],[2,3]],[[0,2],[1,3]],[[0,3],[1,2]]].map((T,pi)=>`
@@ -7958,7 +7978,7 @@ function gameOptionsHTML(){
       <button class="ghost ${S.config.nines.ctp?'sel':''}" onclick="set(()=>S.config.nines.ctp=!S.config.nines.ctp)">${S.config.nines.ctp?'On':'Off'}</button></div>
     <div class="tiny mt">${NP()===3?'Best score takes 5, middle 3, worst 1.':'Best score takes 5, then 3, then 1 — worst gets 0.'} Ties pool those spots and split evenly.</div>
   </div>`:''}
-  <div class="card"><h2>Round</h2>
+  ${inWiz?'':`<div class="card"><h2>Round</h2>
     <div class="row"><span class="muted">Holes</span>
       <span class="seg" style="display:inline-flex;gap:6px">
         <button class="ghost ${S.config.span.count===18?'sel':''}" onclick="setSpan(18,0)">18</button>
@@ -7970,12 +7990,9 @@ function gameOptionsHTML(){
         ${(S.config.span.count===9?(S.config.span.start<9?[0,1,2,3,4,5,6,7,8]:[9,10,11,12,13,14,15,16,17]):[...Array(18).keys()]).map(hh=>`<option value="${hh}" ${S.config.span.start===hh?'selected':''}>Hole ${hh+1}</option>`).join('')}
       </select></div>
     <div class="tiny mt">Start from any tee — play wraps around${S.config.span.count===9?' within the nine':''}. The clock starts when the round does.</div>
-  </div>
+  </div>`}
   <div class="card"><h2>Scoring options</h2>
-    <div class="seg">
-      ${['gross','net','both'].map(L=>`<button class="ghost ${S.config.lens===L?'sel':''}" onclick="set(()=>S.config.lens='${L}')">${L[0].toUpperCase()+L.slice(1)}</button>`).join('')}
-    </div>
-    <div class="row mt"><span class="muted">Handicap allowance</span>
+    <div class="row"><span class="muted">Handicap allowance</span>
       <div class="stepper"><button onclick="chAllow(-5)">−</button><span class="val num" style="font-size:17px">${S.config.allowance}%</span><button onclick="chAllow(5)">+</button></div></div>
   </div>
   ${S.config.game!=='wolf'?'':`<div class="card"><h2>Points (per player)</h2>
@@ -8199,6 +8216,25 @@ function askPairs(then){
   const gs=pairGamesForStart();
   if(!gs.length){if(then)then();return;}
   pairsAsk={then:then||null,games:gs};render();
+}
+// The partner sheet fires when the group has JOINED — the wizard's options card
+// no longer shows team pickers, because at that point the seats are empty.
+// Same shape as the Wolf order ask: captain only, four real players, before
+// anything is scored, once per round.
+function pairsDue(){
+  try{
+    if(!S.round.started||isReview())return false;
+    if(S.round._pairsOk)return false;
+    if(S.share&&S.share.on&&!S.share.creator)return false;
+    if(S.round.holes.some(r=>r&&r.confirmed))return false;
+    const real=S.players.filter(p=>p&&p.name&&!/^Player \d$/.test(p.name.trim())).length;
+    if(real<4)return false;
+    return pairGamesForStart().length>0;
+  }catch(e){return false;}
+}
+function maybeAskPairs(){
+  if(pairsAsk||!pairsDue())return;
+  askPairs(()=>{set(()=>{S.round._pairsOk=true;});});
 }
 function pairsAskDone(){
   const t=pairsAsk&&pairsAsk.then;pairsAsk=null;render();
@@ -8663,12 +8699,11 @@ function startRound(){
   if(!startRound._confirmed){
     return askTee(()=>{startRound._confirmed=true;startRound();},'Confirm your tees',S.course.name);
   }
-  // ...then the captain ratifies the 2v2 teams, once, before anything is scored
-  if(!startRound._pairsOk&&pairGamesForStart().length){
-    return askPairs(()=>{startRound._pairsOk=true;startRound();});
-  }
+  // The 2v2 partner sheet no longer fires HERE — at start the seats may be
+  // empty. It fires (maybeAskPairs) the moment the fourth real player is in,
+  // by join or by name, on the captain's phone.
   startRound._confirmed=false;startRound._pairsOk=false;wiz=null;
-  setTimeout(()=>{try{maybeAskWolfOrder();}catch(e){}},0);
+  setTimeout(()=>{try{maybeAskWolfOrder();}catch(e){}try{maybeAskPairs();}catch(e){}},0);
   pickingCourse=false;
   try{localStorage.removeItem('btGreensUsed');}catch(e){}
   greensState=null;
