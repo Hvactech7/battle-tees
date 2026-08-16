@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786848104';
+const BUILD='1786848991';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -5183,6 +5183,7 @@ function render(){
   else if(scr==='standings') html=vStandings();
   else if(scr==='settle') html=vStandings();
   else if(scr==='map') html=vMap();
+  else if(scr==='shotview') html=vShotView();
   // picking a row must not yank the list back to the top: preserve tagged
   // scroll boxes (and the page) across the innerHTML swap
   const keepScroll={};
@@ -5210,6 +5211,7 @@ function render(){
     if(pageY)window.scrollTo(0,pageY);
   }else window.scrollTo(0,0);
   if(scr==='map')requestAnimationFrame(initHoleMap);
+  if(scr==='shotview')requestAnimationFrame(initShotView);
   else teardownMap();
 }
 function verifySheetHTML(){
@@ -6060,26 +6062,7 @@ function vBfWatch(){
     const tg=games.find(g=>['bestball','scramble','vegas','nassau','sixes','umbrella'].includes(g));
     if(tg&&NP()===4){try{const T=matchTeams(tg==='vegas'?'vegas':tg);
       teamLine=T.map(t=>t.map(i=>esc((S.players[i]||{}).name||'?')).join(' & ')).join('  vs  ');}catch(err){}}
-    const shots=flatShots(meta.shots);
-    // Only holes with tracked shots earn a row — the per-hole scores are already
-    // on the scorecard above; this list existed as the way INTO the shot-line
-    // map for a hole, and that is all it does now.
-    const holeRows=S.round.holes.map((r,h)=>{
-      if(!r||!r.confirmed)return '';
-      if(!shots.some(x=>x.h===h))return '';
-      const par=(course.holes[h%course.holes.length]||{}).par||4;
-      const sc=act.map(i=>{let g=r.gross[i];if(g==null)return '–';
-        if(L==='net')g-=fullDotsOn(i,h%course.holes.length);return g;}).join(' · ');
-      const hs=shots.filter(x=>x.h===h);
-      return `<div class="row" style="cursor:${hs.length?'pointer':'default'}" ${hs.length?`onclick="bfHole=${h};render()"`:''}>
-        <span><b class="num">${h+1}</b> <span class="tiny">par ${par}</span></span>
-        <span class="num">${sc}</span>
-        <span class="tiny" style="flex:none">${hs.length?`📍${hs.length}`:''}</span></div>
-      ${bfHole===h&&hs.length?`<div style="background:var(--bg);border-radius:10px;padding:8px 10px;margin:4px 0">
-        ${hs.map(x=>`<div class="tiny">${esc(x.club||'shot')} — ${ydDisp(x.yds)}${uLbl()}</div>`).join('')}
-        <div id="bfmap" style="height:210px;border-radius:8px;margin-top:6px"></div></div>`:''}`;
-    }).join('');
-    setTimeout(bfMiniMap,80);
+    const shotsCard=trackedShotsCardHTML(meta.shots,meta.players,course,S.round.holes);
     // scorecard first — the whole round, swiped sideways. It used to show one
     // nine and swap on tap; the full table was always scrollable, the tap was
     // only hiding it. Tagged keepscroll so the 20s live poll cannot yank a
@@ -6117,19 +6100,113 @@ function vBfWatch(){
     </div>
     ${wolfBits.length?`<div class="card"><h2>🐺 Lone wolves</h2><div class="tiny">${wolfBits.join('<br>')}</div></div>`:''}
     ${ctps.length?`<div class="card"><h2>🎯 Closest to the pin</h2><div class="tiny">${ctps.join('<br>')}</div></div>`:''}
-    ${holeRows?`<div class="card"><h2>Tracked shots <span class="tiny" style="font-weight:400">— tap a hole to see them</span></h2>${holeRows}</div>`:''}
+    ${shotsCard}
     </main>`;
   });
 }
 // tiny read-only Leaflet with the tracked lines for the opened hole
-function bfMiniMap(){
+// The Tracked-shots card: only holes with tracked shots earn a row; tapping
+// one opens the shot-line mini-map for that hole. Shared by the Battlefield
+// watch view (shots from the room doc) and a saved round's Standings (shots
+// from the round itself) — same card, same colours, same map.
+function trackedShotsCardHTML(shotMap,players,course,holes){
+  const shots=flatShots(shotMap);
+  if(!shots.length)return '';
+  const rows=(holes||[]).map((r,h)=>{
+    if(!r||!r.confirmed)return '';
+    const hs=shots.filter(x=>x.h===h);
+    if(!hs.length)return '';
+    const par=((course&&course.holes||[])[h%18]||{}).par||4;
+    return `<div class="row" style="cursor:pointer" onclick="bfHole=${bfHole===h?'null':h};render()">
+      <span><b class="num">${h+1}</b> <span class="tiny">par ${par}</span></span>
+      <span class="tiny" style="flex:none">📍${hs.length}${bfHole===h?' ▾':''}</span></div>
+    ${bfHole===h?`<div style="background:var(--bg);border-radius:10px;padding:8px 10px;margin:4px 0">
+      ${hs.map(x=>`<div class="tiny">${esc(x.club||'shot')} — ${ydDisp(x.yds)}${uLbl()}</div>`).join('')}
+      <div id="bfmap" style="height:210px;border-radius:8px;margin-top:6px;cursor:pointer" title="Open full screen"></div>
+      <div class="tiny" style="text-align:center;margin-top:4px;color:var(--elec)">tap the map to open it full screen</div></div>`:''}`;
+  }).join('');
+  if(!rows)return '';
+  setTimeout(()=>bfMiniMap(shotMap,players),80);
+  return `<div class="card"><h2>Tracked shots <span class="tiny" style="font-weight:400">— tap a hole to see them</span></h2>${rows}</div>`;
+}
+// ---- full-screen read-only shot viewer --------------------------------------
+let shotView=null;   // {h, shots:[{a,b,yds,club,pk}], players, course, back}
+function openShotView(h,shotMap,players,course){
+  const shots=flatShots(shotMap).filter(x=>x.h===h&&x.a&&x.b);
+  if(!shots.length)return;
+  shotView={h,shots,players:players||[],course:course||S.course,back:S.screen};
+  S.screen='shotview';render();
+}
+function closeShotView(){
+  const back=(shotView&&shotView.back)||'standings';
+  shotView=null;
+  try{if(SVMAP){SVMAP.remove();}}catch(e){}SVMAP=null;
+  S.screen=back;render();
+}
+let SVMAP=null;
+function vShotView(){
+  if(!shotView)return vHome();
+  const v=shotView, hole=((v.course&&v.course.holes)||[])[v.h%18]||{par:4};
+  const nm=pk=>{const p=(v.players||[]).find(q=>q&&(q.pid===pk||q.ownerDev===pk));return p?esc((p.name||'').split(' ')[0]):'';};
+  const rows=v.shots.map((x,i)=>`<div class="tiny" style="display:flex;gap:8px;align-items:center;padding:3px 0">
+      <span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${SV_COLS[i%SV_COLS.length]};flex:none"></span>
+      <b>${esc(x.club||'shot')}</b> · <span class="num" style="font-size:16px">${ydDisp(x.yds)}${uLbl()}</span>${nm(x.pk)?` <span class="muted">· ${nm(x.pk)}</span>`:''}</div>`).join('');
+  return topbar(`Hole ${v.h+1} · Par ${hole.par}`,`${esc((v.course&&v.course.name)||'')} · tracked shots`,'','hero maphero','')+`
+  <div id="svmap" style="position:fixed;top:62px;bottom:0;left:0;right:0;margin:0 auto;width:100%;max-width:480px;z-index:1;background:#0a0f18"></div>
+  <button onclick="closeShotView()" style="position:fixed;right:max(10px,calc(50vw - 230px));top:calc(100px + env(safe-area-inset-top));z-index:6;background:rgba(15,21,34,.82);border:1.5px solid var(--line);border-radius:12px;color:#fff;padding:10px 17px;font-size:17px;font-weight:600;font-family:inherit">Back</button>
+  <div style="position:fixed;left:max(10px,calc(50vw - 230px));right:max(10px,calc(50vw - 230px));bottom:calc(14px + env(safe-area-inset-bottom));z-index:6;background:rgba(15,21,34,.9);border:1.5px solid var(--line);border-radius:12px;padding:8px 12px">${rows}
+    <div class="tiny" style="color:var(--ink3);margin-top:4px">Pinch to zoom · drag to look around · nothing here can be changed</div></div>`;
+}
+const SV_COLS=['#e8604f','#4aa8ff','#f5c542','#6fdc8c','#d98cff','#ff9f43'];
+async function initShotView(){
+  const el=document.getElementById('svmap');
+  if(!el||!shotView)return;
+  try{if(SVMAP){SVMAP.remove();}}catch(e){}SVMAP=null;
+  if(typeof L==='undefined'){try{await loadLeaflet();}catch(e){}}
+  if(typeof L==='undefined'||!document.getElementById('svmap')||!shotView)return;
+  const v=shotView;
+  SVMAP=L.map(el,{zoomControl:false,attributionControl:false});
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:20,maxNativeZoom:19}).addTo(SVMAP);
+  const pts=[];
+  // the hole itself, when the course has it — centreline and green, unlabelled
+  try{
+    const geo=v.course&&v.course.geo&&v.course.geo.holes&&v.course.geo.holes[(v.h%18)+1];
+    if(geo&&geo.path&&geo.path.length>1){
+      L.polyline(geo.path,{color:'#0a1220',weight:5,opacity:.35,interactive:false}).addTo(SVMAP);
+      L.polyline(geo.path,{color:'#e8e2d6',weight:2,opacity:.55,dashArray:'6 6',interactive:false}).addTo(SVMAP);
+      geo.path.forEach(p=>pts.push(p));
+    }
+    if(geo&&geo.green&&geo.green.length>2){
+      L.polygon(geo.green,{color:'#7fd49a',weight:2,fillColor:'#7fd49a',fillOpacity:.18,interactive:false}).addTo(SVMAP);
+      geo.green.forEach(p=>pts.push(p));
+    }
+  }catch(e){}
+  v.shots.forEach((x,i)=>{
+    const col=SV_COLS[i%SV_COLS.length];
+    L.polyline([x.a,x.b],{color:'#0a1220',weight:5,opacity:.4,interactive:false}).addTo(SVMAP);
+    L.polyline([x.a,x.b],{color:col,weight:2.8,opacity:.95,interactive:false}).addTo(SVMAP);
+    L.circleMarker(x.a,{radius:4,color:'#0a1220',weight:1.5,fillColor:'#fff',fillOpacity:1,interactive:false}).addTo(SVMAP);
+    L.circleMarker(x.b,{radius:5,color:'#0a1220',weight:1.5,fillColor:col,fillOpacity:1,interactive:false}).addTo(SVMAP)
+      .bindTooltip(`${ydDisp(x.yds)}${uLbl()}`,{permanent:true,direction:'top',offset:[0,-6],className:'maplbl'});
+    pts.push(x.a,x.b);
+  });
+  if(pts.length)SVMAP.fitBounds(L.latLngBounds(pts).pad(0.25));
+}
+async function bfMiniMap(shotMap,players){
   const el=document.getElementById('bfmap');
-  if(!el||el._done||bfHole==null||!bfWatch||!bfWatch.doc)return;
+  if(!el||el._done||bfHole==null)return;
   el._done=true;
-  const meta=bfWatch.doc.meta||{};
-  const shots=flatShots(meta.shots).filter(x=>x.h===bfHole&&x.a&&x.b);
-  if(!shots.length||typeof L==='undefined')return;
+  const shots=flatShots(shotMap).filter(x=>x.h===bfHole&&x.a&&x.b);
+  if(!shots.length)return;
+  // a saved round's Standings can be reached without the map screen ever
+  // having loaded Leaflet this session — fetch it here rather than draw nothing
+  if(typeof L==='undefined'){try{await loadLeaflet();}catch(e){}}
+  if(typeof L==='undefined'||!document.getElementById('bfmap'))return;
   const m=L.map(el,{zoomControl:false,attributionControl:false,dragging:true});
+  // tap the little map -> the full-screen read-only viewer for this hole
+  const openFull=()=>{try{openShotView(bfHole,shotMap,players,S.course);}catch(e){}};
+  el.addEventListener('click',openFull);
+  m.on('click',openFull);
   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19}).addTo(m);
   const pts=[];
   // now that all four players' lines land here, one colour would be a tangle —
@@ -6139,7 +6216,7 @@ function bfMiniMap(){
   const colFor=pk=>{
     if(pk==null)return SHOT_COLS[0];
     let i=pkOrder.indexOf(pk);
-    if(i<0){const p=(bfWatch.doc.meta.players||[]).findIndex(q=>q&&(q.pid===pk||q.ownerDev===pk));
+    if(i<0){const p=(players||[]).findIndex(q=>q&&(q.pid===pk||q.ownerDev===pk));
       i=p>=0?p:pkOrder.length;pkOrder[i]=pk;}
     return SHOT_COLS[i%SHOT_COLS.length];
   };
@@ -9824,9 +9901,11 @@ function vStandings(){
         const tot=S.round.holes.reduce((a,r)=>a+((r.stats&&r.stats[k])?r.stats[k][i]:0),0);
         return `<td class="r num" style="font-size:26px">${tot}</td>`;
       }).join('')}</tr>`;}).join('')}</table></div>`:'';
+  // tracked shots — the group's lines plus mine, from the round itself
+  const shotsCard=S.round.started?trackedShotsCardHTML(shotsForShare(),S.players,S.course,S.round.holes):'';
   const extra=(thru>0?`
     <div class="card" onclick="openFullCard()" style="cursor:pointer"><h2>Scorecard · gross strokes <span class="tiny" style="font-weight:400">— tap for all 18</span></h2>${scorecardHTML()}
-      <div class="tiny mt">Green = under par · amber = bogey · red = double or worse. Swipe the card sideways.</div></div>`:'')+statsCard;
+      <div class="tiny mt">Green = under par · amber = bogey · red = double or worse. Swipe the card sideways.</div></div>`:'')+shotsCard+statsCard;
   return topbar('Standings',esc(S.course.name),'','','')+`<main>${paceLine()}${tables}${extra}
     ${(all!=null&&all.perHole)?`<div class="card"><h2>Hole history (tap to edit)</h2>${hist||'<div class="muted">No holes confirmed yet.</div>'}</div>`:''}
     ${settleSectionHTML()}
