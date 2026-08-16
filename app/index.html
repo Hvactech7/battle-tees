@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786857544';
+const BUILD='1786857956';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -5638,13 +5638,14 @@ function vHome(){
       <button class="big" onclick="go('hole')">Continue round</button>
       <button class="ghost mt" style="width:100%" onclick="openRoundOpts()">⚙️ Adjust round settings</button>
       <button class="big danger mt" onclick="askEndRound()">End round now</button>
-      ${(S.share&&S.share.on&&S.share.creator)?`
-      <button class="ghost mt" style="width:100%;border-color:var(--red,#c0392b);color:var(--red,#c0392b)" onclick="cancelRound()">${armCancel?'⚠️ Tap again — cancels for EVERYONE, nothing is saved':'✕ Cancel round & close the room'}</button>
-      <div class="tiny mt">Wrong course, wrong game, false start — this kicks everyone out and keeps nothing. To finish and save, use End round.</div>`:''}
     `}
     ${S.share.on&&!S.share.bf?`<div class="row mt" style="border-top:1px solid var(--line)">
         <span class="tiny">Live sync · <b class="num" style="font-size:16px;letter-spacing:2px">${esc(S.share.code)}</b> ${sockOpen?'<span style="color:var(--elec)">● connected</span>':'<span style="color:var(--red)">○ reconnecting…</span>'}</span>
-        <button class="ghost danger" onclick="leaveShare()">Leave</button></div>`
+        ${S.share.creator
+          ?`<button class="ghost danger" style="flex:none;max-width:60%;white-space:normal;line-height:1.2" onclick="cancelRound()">${armCancel?'⚠️ Tap again — everyone out, nothing saved':'✕ Cancel & close room'}</button>`
+          :`<button class="ghost danger" onclick="leaveShare()">Leave</button>`}</div>
+      ${S.share.creator?`<div class="tiny mt">Cancel kicks everyone out and keeps nothing — for a false start.</div>
+      <div class="tiny">To finish and save, use End round.</div>`:''}`
       :S.round.reopened?''
       :`<button class="ghost mt" style="width:100%" onclick="goGroup()">👥 Make this a group round</button>
         <div class="tiny mt">Get a code your group can join — your scores so far come with you.</div>`}
