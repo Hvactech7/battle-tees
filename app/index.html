@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786769298';
+const BUILD='1786840151';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1303,6 +1303,10 @@ function joinRoundCode(code){
   S.shareMetaTs=0;
   S.round.holes.forEach(r=>{r._ts=0;});
   primeCaches(false);
+  // a joiner's round starts on the GPS map like everyone else's — Shaun's phone
+  // opened on the Score screen at Teal Bend (8/15) because only startRound()
+  // landed on the map
+  mapHole=S.round.cur||0;S.screen='map';
   save();syncConnect();render();
   // the host's course arrives with the room — ask which tees, then which card
   setTimeout(()=>{
@@ -4354,9 +4358,17 @@ function withTeeFix(geo,h){
   const p=geo.path.slice();p[0]=f.slice();
   return Object.assign({},geo,{path:p});
 }
+let initHoleMapRun=0;
 async function initHoleMap(){
   const el=document.getElementById('holemap');
   if(!el)return;
+  // ONE builder at a time. This is async and awaits geo/Leaflet after the
+  // teardown; two renders in one frame (a fresh round's first paint) meant two
+  // calls both woke up and both called L.map(el) on the same div — "Map
+  // container is already initialized", twice at Teal Bend on hole 1. Only the
+  // newest call may build; older ones return when they wake.
+  const run=++initHoleMapRun;
+  const stale=()=>run!==initHoleMapRun;
   teardownMap();
   const sub=()=>document.getElementById('fmbsub');
   let geoErr='';
@@ -4379,7 +4391,7 @@ async function initHoleMap(){
       // NO data (card-only course) → fall through and build the ring view.
       if(S.course.geo&&!S.course.geo.empty)return;
     }catch(e){geoErr=e.message;}
-    if(S.screen!=='map')return;
+    if(S.screen!=='map'||stale())return;
   }
   const geo=withTeeFix(S.course.geo&&S.course.geo.holes?S.course.geo.holes[physHole(mapHole)+1]:null,physHole(mapHole));
   // Leaflet (with rotation) is the primary hole-map renderer — green-up orientation
@@ -4387,7 +4399,7 @@ async function initHoleMap(){
   // remains the fallback if the Leaflet CDN is unreachable.
   let leafletOK=false;
   try{await loadLeaflet();leafletOK=!!window.L;}catch(e){}
-  if(S.screen!=='map')return;
+  if(S.screen!=='map'||stale())return;
   if(!leafletOK){
     if(GMAPS_KEY&&!GM_BROKEN){
       try{
@@ -4398,6 +4410,9 @@ async function initHoleMap(){
     }
     const s2=sub();if(s2)s2.textContent='Map needs an internet connection — try again with signal.';return;
   }
+  if(stale())return;
+  // belt and braces: if a map is somehow still bound to this div, drop it
+  if(el._leaflet_id){try{if(LMAP)LMAP.remove();}catch(e){}try{delete el._leaflet_id;}catch(e){}LMAP=null;}
   if(greensIsMode()){initGreensMap(el);return;}
   manualOn=false;   // every hole starts in normal (locked) mode
   const canRotate=!!L.Map.prototype.setBearing;
@@ -8921,6 +8936,13 @@ function bfScoredHoles(){
 function maybeBroadcastRound(){
   try{
     if(!S.round.started||S.round._bfSent||isReview())return;
+    // THE CAPTAIN ANNOUNCES THE ROUND. Every phone used to race to open the
+    // Battlefield room the moment IT saw two scored holes, so whichever joiner
+    // confirmed hole 2 first became the starter of record — Nelson on 8/14,
+    // Shaun on 8/15 — and the captain's friends never got the email because
+    // by the time the captain's phone arrived the room was first=False. In a
+    // shared round only the creator opens it; a solo round is its own captain.
+    if(S.share&&S.share.on&&!S.share.creator)return;
     if(bfScoredHoles()<BF_MIN_HOLES)return;
     S.round._bfSent=true;
     setTimeout(bfBroadcastStart,300);
@@ -10115,7 +10137,11 @@ if ('serviceWorker' in navigator) {
   });
   window.addEventListener('load', function () {
     navigator.serviceWorker.register('sw.js', {updateViaCache: 'none'}).then(function (reg) {
-      var check = function () { try { reg.update(); } catch (e) {} };
+      // reg.update() returns a promise; on a FIRST install (no active worker
+      // yet) Safari rejects it with its internal 'newestWorker is null' —
+      // Shaun's fresh browser open at Teal Bend, 8/15. Harmless, but an
+      // unhandled rejection. Swallow the promise, not just the call.
+      var check = function () { try { var p = reg.update(); if (p && p.catch) p.catch(function () {}); } catch (e) {} };
       check();
       document.addEventListener('visibilitychange', function () {
         if (!document.hidden) check();
