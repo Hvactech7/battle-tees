@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786852358';
+const BUILD='1786853007';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -6285,7 +6285,7 @@ function wizKind(k){
   if(k==='solo'){
     // a solo round is Stroke, full stop — go straight to the course
     set(()=>{S.config.game='stroke';S.config.games=['stroke'];S.config.stroke.n=1;ensureMeFirst();});
-    wiz.step='course';pickingCourse=true;finder={status:'idle',choices:[],error:''};render();return;
+    wiz.solo=true;wiz.step='course';pickingCourse=true;finder={status:'idle',choices:[],error:''};render();return;
   }
   if(k==='join'){wiz.step='join';sendHello();grabCoords();render();return;}
   wiz.step='count';render();
@@ -6304,15 +6304,17 @@ function wizToGame(){
 }
 function wizChooseGame(g){
   chooseGame(g);                          // sets config, lands on 'setup' — we take over
-  wiz.step='course';pickingCourse=true;finder={status:'idle',choices:[],error:''};
-  S.screen='start';render();
+  wiz.step='opts';S.screen='start';render();
+}
+function wizOptsDone(){
+  wiz.step='course';pickingCourse=true;finder={status:'idle',choices:[],error:''};render();
 }
 function wizBack(){
   if(!wiz)return;
-  const b={count:'kind',who:'count',game:'who',course:wiz.preGame?'who':(S.config.stroke&&S.config.stroke.n===1&&(S.config.games||[]).join()==='stroke'&&wiz.n===1)?'kind':'game',join:'kind'};
+  const b={count:'kind',who:'count',game:'who',opts:wiz.preGame?'who':'game',
+    course:wiz.solo?'kind':'opts',join:'kind'};
   if(wiz.step==='kind'||(wiz.step==='count'&&wiz.preGame)){wiz=null;S.screen='home';render();return;}
-  if(wiz.step==='course'&&wiz.solo){wiz.step='kind';}
-  else wiz.step=b[wiz.step]||'kind';
+  wiz.step=b[wiz.step]||'kind';
   render();
 }
 function vStart(){
@@ -6379,6 +6381,11 @@ function vStart(){
 
   if(step==='game')return head('Pick your game','What are you playing today?')+`<main>
     <div class="card">${gameGridHTML('wizChooseGame')}</div></main>`;
+
+  if(step==='opts')return head(`${gameName(S.config.game)} options`,'House rules for today — change anything, or just go on')+`<main>
+    ${gameOptionsHTML()}
+    <button class="big" onclick="wizOptsDone()">Next \u2014 pick the course \u2192</button>
+    </main>`;
 
   if(step==='course')return head('Where are you playing?',`${gameName(S.config.game)} · ${actIdx().filter(i=>isRealPl(S.players[i])).map(i=>esc((S.players[i].name||'').split(' ')[0])).join(', ')}`)+`<main>
     <div class="card"><h2>Pick the course</h2>
@@ -7793,9 +7800,9 @@ function vRoundOpts(){
   </main>`;
 }
 
-function vSetup(){
-  nbShown=onlineList();
-  const ch=courseHandicaps(), st=playingStrokes();
+// Every game's option cards — the same cards Setup shows, so the wizard and
+// Setup never disagree. Depends only on S.
+function gameOptionsHTML(){
   const nines=stackHas('nines');
   const vegas=stackHas('vegas');
   const stroke=stackHas('stroke');
@@ -7808,54 +7815,28 @@ function vSetup(){
   const bbb=stackHas('bbb');
   const nassau=stackHas('nassau');
   const skins=stackHas('skins');
-  const rows=actIdx().map(i=>{
-    const p=S.players[i];
-    const teeOpts=S.course.teeSets.map(t=>`<option value="${t.id}" ${p.tee===t.id?'selected':''}>${esc(t.name)}</option>`).join('');
-    const isMe=!!(S.me.name&&(p.name||'').trim().toLowerCase()===S.me.name.trim().toLowerCase());
-    const pickSel=(nbShown.length||S.playerLib.length)?`<span style="position:relative;flex:none;width:42px;border:2px solid var(--elec);border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--elec);background:var(--card);font-size:15px;box-shadow:2px 2px 0 var(--elec-dk)">▾<select style="position:absolute;inset:0;opacity:0;width:100%;height:100%" onchange="pickPlayerOpt(${i},this.value)">
-        <option value="">Pick a player…</option>
-        ${nbShown.some(n=>n.near)?`<optgroup label="Nearby — on the course">${nbShown.map((n,j)=>n.near?`<option value="nb:${j}">📍 ${esc(n.name)}${n.index!=null?` · ${n.index}`:''}</option>`:'').join('')}</optgroup>`:''}
-        ${nbShown.some(n=>!n.near)?`<optgroup label="Online — elsewhere">${nbShown.map((n,j)=>!n.near?`<option value="nb:${j}">🌐 ${esc(n.name)}${n.index!=null?` · ${n.index}`:''}</option>`:'').join('')}</optgroup>`:''}
-        ${S.playerLib.length?`<optgroup label="Saved players">${S.playerLib.map(e=>`<option value="lib:${e.id}">${esc(e.name)} · ${e.index}${e.teeName?` · ${esc(e.teeName)}`:''}</option>`).join('')}</optgroup>`:''}
-      </select></span>`:'';
-    return `<div class="card">
-      <div class="row"><b>Golfer ${i+1}${isMe?' <span class="pill gray">you</span>':''}${(!isMe&&p.scorer===devId()&&(S.share.on||S.players.some(x=>x.nearby)))?' <span class="pill gray">you score them</span>':''}${S.config.game==='wolf'?` — tees off ${['1st','2nd','3rd','4th'][i]}`:''}</b>
-        <span>${i>0?`<button class="ghost" onclick="movePl(${i})">↑</button>`:''}</span></div>
-      <div class="grid2 mt">
-        <div><div class="tiny">Name</div><div style="padding:10px 2px;font-weight:700;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p.name)}</div></div>
-        <div><div class="tiny">Tees</div><select style="width:100%;padding:9px;border:2px solid var(--line);border-radius:8px;font-size:15px;background:var(--card)" onchange="setPl(${i},'tee',this.value)">${teeOpts}</select></div>
-        <div><div class="tiny">Handicap index</div><input type="text" inputmode="decimal" value="${p.index}" onfocus="tapClear(this)" onblur="commitPl(this,${i},'index')"></div>
-        <div><div class="tiny">or course hcp</div><input type="text" inputmode="numeric" placeholder="auto: ${ch[i]}" value="${p.chOverride==null?'':p.chOverride}" onfocus="tapClear(this)" onblur="commitPl(this,${i},'chOverride')"></div>
-      </div>
-      <div class="tiny mt">Course hcp <b>${ch[i]}</b> → plays with <b>${st[i]}</b> stroke${st[i]===1?'':'s'} (off the low man)</div>
-    </div>`;
-  }).join('');
   const P=S.config.pts;
   const pt=(k,lbl)=>`<div class="row"><span class="muted">${lbl}</span>
     <div class="stepper"><button onclick="chPt('${k}',-1)">−</button><span class="val num">${P[k]}</span><button onclick="chPt('${k}',1)">+</button></div></div>`;
   const V=S.config.vegas;
   const pairLbl=T=>`${esc(S.players[T[0][0]].name)} &amp; ${esc(S.players[T[0][1]].name)} <span class="muted">vs</span> ${esc(S.players[T[1][0]].name)} &amp; ${esc(S.players[T[1][1]].name)}`;
-  const SUBS={nines:'Every hole is worth 9 points: 5 · 3 · 1',vegas:'Low team number takes the difference',stroke:'Straight scoring — net, gross or both',stableford:'Points vs par — highest total wins',quota:'Beat your own number',sixes:'Partners rotate — best ball wins the hole',umbrella:'Six points a hole — sweep for twelve',bbb:'Three taps a hole — bingo, bango, bongo',nassau:'Front nine · back nine · overall — three bets',skins:'Win the hole outright — ties roll the pot',bestball:'2 v 2 — better ball wins the hole',
-    scramble:S.config.scramble.teams==='duo'?'Two of you, one ball':S.config.scramble.teams==='solo'?'All four, one ball':'2 v 2 — one ball per team'};
-  const stackN=(S.config.games||[]).length;
-  return topbar(`Round setup — ${gameName(S.config.game)}${stackN>1?` +${stackN-1}`:''}`,SUBS[S.config.game]||'Order = tee order on hole 1 (wolf rotation)','gate')+`<main>
-  <button class="ghost" style="width:100%;margin-bottom:12px" onclick="go('gate')">⚔️ Edit group — add or remove golfers</button>
-  ${rows}
-  <div class="card"><div class="row"><span class="muted">⛳ Closest to pin on every par 3</span>
-    <button class="ghost ${S.config.ctpAll?'sel':''}" onclick="toggleCtpAll()">${S.config.ctpAll?'On':'Off'}</button></div>
-    <div class="tiny mt">${S.config.ctpAll
-      ? 'Every par 3 offers a CTP pick and it lands on your scorecard. Games that score CTP still do.'
-      : 'CTP only appears in games that score it — Wolf, Nines, Vegas, Umbrella.'}</div></div>
-  ${gamePickCardHTML()}
+  return `
   ${sixes?`<div class="card"><h2>Starting partners</h2>
     ${[[[0,1],[2,3]],[[0,2],[1,3]],[[0,3],[1,2]]].map((T,pi)=>`
       <button class="ghost ${S.config.sixes.pairing===pi?'sel':''}" style="width:100%;text-align:left;margin-bottom:8px" onclick="set(()=>S.config.sixes.pairing=${pi})">${pairLbl(T)}</button>`).join('')}
     <div class="tiny mt">Partners rotate every ${(S.config.span&&S.config.span.count===9)?'three':'six'} holes so everyone teams with everyone. Best ball wins the hole — 1 point each.</div>
   </div>`:''}
-  ${(bestball||sixes)?`<div class="card hamcard"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><h2 style="margin-bottom:0">🔨 Hammer <span class="tiny" style="font-weight:400">— battle modifier</span></h2><img src="${art('/hammer.png')}" style="height:56px;flex:none" onerror="this.style.display='none'"></div>
-    <div class="row" style="border-top:none"><span class="muted">Double-or-fold, any time mid-hole</span>
-      <button class="ghost ${S.config.hammer.on?'sel':''}" onclick="set(()=>S.config.hammer.on=!S.config.hammer.on)">${S.config.hammer.on?'On':'Off'}</button></div>
+  ${(bestball||sixes)?`<div class="card hamcard" style="padding:0;overflow:hidden">
+    <div style="display:flex;align-items:center;gap:14px;padding:14px 16px;background:linear-gradient(90deg,rgba(184,115,51,.28),rgba(184,115,51,.06))">
+      <img src="${art('/hammer.png')}" style="height:84px;flex:none;filter:drop-shadow(0 0 12px rgba(232,150,60,.45))" onerror="this.style.display='none'">
+      <div style="flex:1;min-width:0"><h2 style="margin:0;font-size:20px;color:#e8a95a;text-transform:none;letter-spacing:.3px">🔨 Add The Hammer?</h2>
+        <div class="tiny" style="margin-top:3px">Battle modifier for ${bestball&&sixes?'Best Ball & Sixes':bestball?'Best Ball':'Sixes'} — double-or-fold, any time mid-hole</div></div></div>
+    <div style="padding:12px 16px 14px">
+    <div style="display:flex;gap:8px">
+      <button class="big ${S.config.hammer.on?'':'ghost'}" style="flex:1;margin:0${S.config.hammer.on?'':';background:var(--card)'}" onclick="set(()=>S.config.hammer.on=true)">${S.config.hammer.on?'✓ ':''}Yes — hammer's in</button>
+      <button class="ghost ${!S.config.hammer.on?'sel':''}" style="flex:1" onclick="set(()=>S.config.hammer.on=false)">No thanks</button></div>
     <div class="tiny mt">Either team can throw the hammer to double what the hole is worth. The other side <b>accepts</b> — the double is live and they take the hammer (only they can re-throw) — or <b>folds</b> and concedes the hole at the old stake. Every hole starts fresh at 1×.</div>
+    </div>
   </div>`:''}
   ${skins?(()=>{const K=S.config.skins;const vals=skinsHoleVals();const tot=playOrder().reduce((a,h)=>a+vals[h],0);
   return `<div class="card"><h2>Skins</h2>
@@ -8012,6 +7993,63 @@ function vSetup(){
     <div class="row"><span class="muted">Last place is wolf on 17–18</span>
       <button class="ghost ${S.config.last2LastPlace?'sel':''}" onclick="set(()=>S.config.last2LastPlace=!S.config.last2LastPlace)">${S.config.last2LastPlace?'On':'Off'}</button></div>
   </div>`}
+  `;
+}
+function vSetup(){
+  nbShown=onlineList();
+  const ch=courseHandicaps(), st=playingStrokes();
+  const nines=stackHas('nines');
+  const vegas=stackHas('vegas');
+  const stroke=stackHas('stroke');
+  const stbl=stackHas('stableford');
+  const quota=stackHas('quota');
+  const sixes=stackHas('sixes');
+  const umbrella=stackHas('umbrella');
+  const bestball=stackHas('bestball');
+  const scramble=stackHas('scramble');
+  const bbb=stackHas('bbb');
+  const nassau=stackHas('nassau');
+  const skins=stackHas('skins');
+  const rows=actIdx().map(i=>{
+    const p=S.players[i];
+    const teeOpts=S.course.teeSets.map(t=>`<option value="${t.id}" ${p.tee===t.id?'selected':''}>${esc(t.name)}</option>`).join('');
+    const isMe=!!(S.me.name&&(p.name||'').trim().toLowerCase()===S.me.name.trim().toLowerCase());
+    const pickSel=(nbShown.length||S.playerLib.length)?`<span style="position:relative;flex:none;width:42px;border:2px solid var(--elec);border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--elec);background:var(--card);font-size:15px;box-shadow:2px 2px 0 var(--elec-dk)">▾<select style="position:absolute;inset:0;opacity:0;width:100%;height:100%" onchange="pickPlayerOpt(${i},this.value)">
+        <option value="">Pick a player…</option>
+        ${nbShown.some(n=>n.near)?`<optgroup label="Nearby — on the course">${nbShown.map((n,j)=>n.near?`<option value="nb:${j}">📍 ${esc(n.name)}${n.index!=null?` · ${n.index}`:''}</option>`:'').join('')}</optgroup>`:''}
+        ${nbShown.some(n=>!n.near)?`<optgroup label="Online — elsewhere">${nbShown.map((n,j)=>!n.near?`<option value="nb:${j}">🌐 ${esc(n.name)}${n.index!=null?` · ${n.index}`:''}</option>`:'').join('')}</optgroup>`:''}
+        ${S.playerLib.length?`<optgroup label="Saved players">${S.playerLib.map(e=>`<option value="lib:${e.id}">${esc(e.name)} · ${e.index}${e.teeName?` · ${esc(e.teeName)}`:''}</option>`).join('')}</optgroup>`:''}
+      </select></span>`:'';
+    return `<div class="card">
+      <div class="row"><b>Golfer ${i+1}${isMe?' <span class="pill gray">you</span>':''}${(!isMe&&p.scorer===devId()&&(S.share.on||S.players.some(x=>x.nearby)))?' <span class="pill gray">you score them</span>':''}${S.config.game==='wolf'?` — tees off ${['1st','2nd','3rd','4th'][i]}`:''}</b>
+        <span>${i>0?`<button class="ghost" onclick="movePl(${i})">↑</button>`:''}</span></div>
+      <div class="grid2 mt">
+        <div><div class="tiny">Name</div><div style="padding:10px 2px;font-weight:700;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p.name)}</div></div>
+        <div><div class="tiny">Tees</div><select style="width:100%;padding:9px;border:2px solid var(--line);border-radius:8px;font-size:15px;background:var(--card)" onchange="setPl(${i},'tee',this.value)">${teeOpts}</select></div>
+        <div><div class="tiny">Handicap index</div><input type="text" inputmode="decimal" value="${p.index}" onfocus="tapClear(this)" onblur="commitPl(this,${i},'index')"></div>
+        <div><div class="tiny">or course hcp</div><input type="text" inputmode="numeric" placeholder="auto: ${ch[i]}" value="${p.chOverride==null?'':p.chOverride}" onfocus="tapClear(this)" onblur="commitPl(this,${i},'chOverride')"></div>
+      </div>
+      <div class="tiny mt">Course hcp <b>${ch[i]}</b> → plays with <b>${st[i]}</b> stroke${st[i]===1?'':'s'} (off the low man)</div>
+    </div>`;
+  }).join('');
+  const P=S.config.pts;
+  const pt=(k,lbl)=>`<div class="row"><span class="muted">${lbl}</span>
+    <div class="stepper"><button onclick="chPt('${k}',-1)">−</button><span class="val num">${P[k]}</span><button onclick="chPt('${k}',1)">+</button></div></div>`;
+  const V=S.config.vegas;
+  const pairLbl=T=>`${esc(S.players[T[0][0]].name)} &amp; ${esc(S.players[T[0][1]].name)} <span class="muted">vs</span> ${esc(S.players[T[1][0]].name)} &amp; ${esc(S.players[T[1][1]].name)}`;
+  const SUBS={nines:'Every hole is worth 9 points: 5 · 3 · 1',vegas:'Low team number takes the difference',stroke:'Straight scoring — net, gross or both',stableford:'Points vs par — highest total wins',quota:'Beat your own number',sixes:'Partners rotate — best ball wins the hole',umbrella:'Six points a hole — sweep for twelve',bbb:'Three taps a hole — bingo, bango, bongo',nassau:'Front nine · back nine · overall — three bets',skins:'Win the hole outright — ties roll the pot',bestball:'2 v 2 — better ball wins the hole',
+    scramble:S.config.scramble.teams==='duo'?'Two of you, one ball':S.config.scramble.teams==='solo'?'All four, one ball':'2 v 2 — one ball per team'};
+  const stackN=(S.config.games||[]).length;
+  return topbar(`Round setup — ${gameName(S.config.game)}${stackN>1?` +${stackN-1}`:''}`,SUBS[S.config.game]||'Order = tee order on hole 1 (wolf rotation)','gate')+`<main>
+  <button class="ghost" style="width:100%;margin-bottom:12px" onclick="go('gate')">⚔️ Edit group — add or remove golfers</button>
+  ${rows}
+  <div class="card"><div class="row"><span class="muted">⛳ Closest to pin on every par 3</span>
+    <button class="ghost ${S.config.ctpAll?'sel':''}" onclick="toggleCtpAll()">${S.config.ctpAll?'On':'Off'}</button></div>
+    <div class="tiny mt">${S.config.ctpAll
+      ? 'Every par 3 offers a CTP pick and it lands on your scorecard. Games that score CTP still do.'
+      : 'CTP only appears in games that score it — Wolf, Nines, Vegas, Umbrella.'}</div></div>
+  ${gamePickCardHTML()}
+  ${gameOptionsHTML()}
   <button class="big" onclick="startPick()">Next — pick the course →</button>
   </main>`;
 }
