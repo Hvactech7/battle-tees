@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786856532';
+const BUILD='1786856846';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -4478,9 +4478,13 @@ async function initHoleMap(){
       // refresh keeps up with that. Dragging redraws the line live, so the
       // yardage the player is judging against updates under their thumb.
       // Tap the marker to put it back where the map had it.
-      const teeMk=L.marker(geo.path[0],{draggable:true,icon:L.divIcon({className:'',
-        html:'<div class="teedot" style="width:13px;height:13px;border-radius:3px;background:#7fe3a1;border:2.5px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.6)"></div>',
-        iconSize:[13,13],iconAnchor:[7,7]})}).addTo(LMAP);
+      // The tee marker is HIDDEN by Nathan's ruling (8/15) — the satellite shows
+      // the tee box, and a green square on it read as clutter. It still exists
+      // for its geometry (drag/redraw plumbing, tee-fix restore) but is
+      // invisible and untouchable; moving a tee is done in Manual mode.
+      const teeMk=L.marker(geo.path[0],{draggable:false,interactive:false,opacity:0,icon:L.divIcon({className:'',
+        html:'<div class="teedot" style="width:0;height:0"></div>',
+        iconSize:[0,0],iconAnchor:[0,0]})}).addTo(LMAP);
       const teeSay=()=>{
         const t=teeMk.getLatLng(),g=mapMarks.greenC||pathEnd;
         return g?yd(mDist([t.lat,t.lng],g))+uLbl()+' tee':'tee';
