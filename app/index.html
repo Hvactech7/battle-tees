@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786849390';
+const BUILD='1786851417';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -5184,6 +5184,7 @@ function render(){
   else if(scr==='settle') html=vStandings();
   else if(scr==='map') html=vMap();
   else if(scr==='shotview') html=vShotView();
+  else if(scr==='start') html=vStart();
   // picking a row must not yank the list back to the top: preserve tagged
   // scroll boxes (and the page) across the innerHTML swap
   const keepScroll={};
@@ -5578,8 +5579,7 @@ function vHome(){
   ${markNotesHTML()}
   <div class="center" style="margin:10px 0 18px"><img src="${art('/banner.jpg')}" alt="Battle Tees" style="width:100%;aspect-ratio:1200/509;display:block;border-radius:14px;border:2px solid var(--green);box-shadow:4px 4px 0 var(--green)" onerror="this.outerHTML='<h1 style=&quot;color:var(--green);font-size:20px&quot;>Battle Tees</h1>'"></div>
   ${!inRound?`
-  <button class="big hb" onclick="goGroup()">⚔️ Multi-Player Round</button>
-  <button class="big mt hb" style="background:var(--card);color:var(--green-mid);border-color:var(--green)" onclick="soloRound()">⛳ Single Player Round</button>
+  <button class="big hb" style="font-size:24px;padding:20px 0" onclick="startWizard()">⚔️ START ROUND</button>
   <div style="height:14px"></div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
     <button class="ghost hb" style="padding:12px" onclick="go('courses')">⛳ Courses</button>
@@ -6271,6 +6271,138 @@ function startOwnSetup(){set(()=>{S.screen='pickgame';});}
 // entering the create flow FROM HOME is always a fresh start: just you.
 // (In-flow navigation — setup ↔ builder ↔ game picker — keeps your picks;
 // active and past rounds are never touched.)
+// ---- the start-round wizard: one card at a time ---------------------------------
+// step: 'kind' | 'count' | 'who' | 'game' | 'course' | 'join'
+let wiz=null;
+function startWizard(){
+  primeGeo();
+  if(!S.round.started)resetRoster();
+  wiz={step:'kind',n:4};
+  addMode='nearby';                       // the who-card scans nearby automatically
+  S.screen='start';save();render();
+}
+function wizKind(k){
+  if(k==='solo'){
+    // a solo round is Stroke, full stop — go straight to the course
+    set(()=>{S.config.game='stroke';S.config.games=['stroke'];S.config.stroke.n=1;ensureMeFirst();});
+    wiz.step='course';pickingCourse=true;finder={status:'idle',choices:[],error:''};render();return;
+  }
+  if(k==='join'){wiz.step='join';sendHello();grabCoords();render();return;}
+  wiz.step='count';render();
+}
+function wizCount(n){
+  wiz.n=n;wiz.step='who';
+  ensureMeFirst();
+  try{openGatePick();}catch(e){}          // start the nearby scan the moment the card opens
+  addMode='nearby';render();
+}
+function wizToGame(){
+  try{gatePick.open=false;clearInterval(gatePick.timer);}catch(e){}
+  set(()=>syncGroupCounts());
+  wiz.step='game';render();
+}
+function wizChooseGame(g){
+  chooseGame(g);                          // sets config, lands on 'setup' — we take over
+  wiz.step='course';pickingCourse=true;finder={status:'idle',choices:[],error:''};
+  S.screen='start';render();
+}
+function wizBack(){
+  if(!wiz)return;
+  const b={count:'kind',who:'count',game:'who',course:(S.config.stroke&&S.config.stroke.n===1&&(S.config.games||[]).join()==='stroke'&&wiz.n===1)?'kind':'game',join:'kind'};
+  if(wiz.step==='kind'){wiz=null;S.screen='home';render();return;}
+  if(wiz.step==='course'&&wiz.solo){wiz.step='kind';}
+  else wiz.step=b[wiz.step]||'kind';
+  render();
+}
+function vStart(){
+  if(!wiz)wiz={step:'kind',n:4};
+  const step=wiz.step;
+  const low=s2=>String(s2||'').trim().toLowerCase();
+  const meNm=low(S.me&&S.me.name);
+  const inRoster=nm=>S.players.some(p=>isRealPl(p)&&low(p.name)===low(nm));
+  const nFilled=S.players.filter(isRealPl).length;
+  const back=step==='kind'?'home':'';
+  const head=(t,sub)=>topbar(t,sub,'','',`<button class="ghost" onclick="wizBack()">‹ Back</button>`);
+  const codeBox=`<details class="card" style="padding:10px 14px;margin-top:12px"><summary class="tiny" style="cursor:pointer;color:var(--ink3)">Have a round code? Join with it</summary>
+    <div class="row" style="border:none">
+      <input type="text" id="joincode" placeholder="ABCDE" maxlength="8" autocapitalize="characters" style="width:46%;text-transform:uppercase;font-family:Rajdhani,sans-serif;font-size:20px;letter-spacing:3px">
+      <button class="ghost sel" style="flex:1" onclick="joinRound()">Join</button></div></details>`;
+
+  if(step==='kind')return head('Start a round','What kind of round?')+`<main>
+    <button class="big hb" onclick="wizKind('solo')">⛳ Just me<div class="tiny" style="font-weight:400;margin-top:2px">Solo stroke play — score and GPS</div></button>
+    <button class="big mt hb" onclick="wizKind('multi')">⚔️ Multi-player<div class="tiny" style="font-weight:400;margin-top:2px">2–4 golfers, any game — you'll be the captain</div></button>
+    <button class="big mt hb" style="background:var(--card);color:var(--green-mid);border-color:var(--green)" onclick="wizKind('join')">👥 Join an existing round<div class="tiny" style="font-weight:400;margin-top:2px">Someone already started it — find it nearby or by code</div></button>
+    </main>`;
+
+  if(step==='count')return head('Multi-player','How many golfers, including you?')+`<main>
+    <div style="display:flex;gap:10px">${[2,3,4].map(n=>`<button class="big" style="flex:1;margin:0;font-size:30px" onclick="wizCount(${n})">${n}</button>`).join('')}</div>
+    <div class="tiny mt">You can still add or drop people once the round is going.</div>
+    </main>`;
+
+  if(step==='who'){
+    const slotRows=S.players.map((p,i)=>{
+      if(!isRealPl(p))return '';
+      const isMe=low(p.name)===meNm;
+      return `<div class="row"><div style="flex:1;min-width:0"><b style="font-size:17px">${esc(p.name)}</b>${isMe?' <span class="pill gray">you</span>':''}
+          <div class="tiny">Index ${p.index}${p.nearby?' · <span style="color:var(--amber)">◌ invited when you start</span>':(!isMe?' · <span class="muted">✎ you\'ll score them</span>':'')}</div></div>
+        ${isMe?'':`<button class="ghost danger" onclick="removeGolfer(${i})">✕</button>`}</div>`;}).join('');
+    const nearbyRows=(gatePick.list||[]).filter(n=>!inRoster(n.name)).map(n=>`
+      <div class="row" style="cursor:pointer" onclick="gateAddOne('${esc(n.id)}')">
+        <div><b>${n.near?'📍':'🌐'} ${esc(n.name)}</b><div class="tiny">Index ${n.index!=null?n.index:'?'} · ${n.near?'nearby':'online'}</div></div>
+        <span class="pill wolf">+ add</span></div>`).join('');
+    const libRows=(S.playerLib||[]).filter(e=>e.name&&!inRoster(e.name)&&low(e.name)!==meNm).map(e=>`
+      <div class="row" style="cursor:pointer" onclick="addFromLib('${e.id}')">
+        <div><b>${esc(e.name)}</b><div class="tiny">Index ${e.index}${e.teeName?` · ${esc(e.teeName)}`:''}</div></div>
+        <span class="pill wolf">+ add</span></div>`).join('');
+    const want=wiz.n||4, full=nFilled>=want;
+    return head('Who\'s playing?',`${nFilled} of ${want} — the rest can join with the code`)+`<main>
+    <div class="card">${slotRows}
+      ${!full?`<div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
+        <button class="ghost ${addMode==='nearby'?'sel':''}" onclick="setAddMode('nearby')">📍 Nearby</button>
+        <button class="ghost ${addMode==='lib'?'sel':''}" onclick="setAddMode('lib')">👥 Saved</button>
+        <button class="ghost ${addMode==='type'?'sel':''}" onclick="setAddMode('type')">⌨️ Type a name</button></div>
+      ${addMode==='nearby'?`<div class="mt">${nearbyRows||`<div class="tiny">${(lobbySock&&lobbySock.readyState===1)?'Scanning\u2026 anyone nearby with Battle Tees open shows up here.':'Connecting\u2026'}</div>`}
+        <div class="tiny mt">Can't see someone? They can join with the round code once you've started.</div></div>`:''}
+      ${addMode==='lib'?`<div class="mt">${libRows||'<div class="tiny">Everyone you\'ve saved is already in.</div>'}</div>`:''}
+      ${addMode==='type'?`<div class="grid2 mt">
+        <div><div class="tiny">Name</div><input type="text" id="newName"></div>
+        <div><div class="tiny">Handicap index</div><input type="text" inputmode="decimal" id="newIdx" placeholder="10"></div></div>
+        <button class="ghost mt" style="width:100%" onclick="addTypedGolfer()">Add golfer</button>
+        <div class="tiny mt">No phone needed \u2014 you'll enter their scores.</div>`:''}`
+      :`<div class="tiny mt">That's everyone.</div>`}
+    </div>
+    <button class="big" onclick="wizToGame()">Move on to pick the game \u2192</button>
+    ${!full?`<div class="tiny mt center">Missing someone? Go on anyway \u2014 they join with the code.</div>`:''}
+    </main>`;
+  }
+
+  if(step==='game')return head('Pick your game','What are you playing today?')+`<main>
+    <div class="card">${gameGridHTML('wizChooseGame')}</div></main>`;
+
+  if(step==='course')return head('Where are you playing?',`${gameName(S.config.game)} · ${actIdx().filter(i=>isRealPl(S.players[i])).map(i=>esc((S.players[i].name||'').split(' ')[0])).join(', ')}`)+`<main>
+    <div class="card"><h2>Pick the course</h2>
+      ${finder.status==='idle'?courseListHTML(true):''}
+      ${courseFinderHTML(true)}</div>
+    <button class="big mt" style="width:100%" onclick="wiz=null;startRound()">Start Round \u2014 ${esc(S.course.name)}</button>
+    <div class="tiny mt center">The round opens on the GPS map of hole 1.</div>
+    </main>`;
+
+  if(step==='join'){
+    const rows=liveInvites().map(inv=>`<div class="card" style="border-color:var(--amber)">
+      <h2 style="color:var(--amber)">${inv.group?`\u201c${esc(inv.group)}\u201d`:'Round in progress'} <span class="tiny" style="font-weight:400">\u00b7 code ${esc(inv.code)}</span></h2>
+      <div class="mb"><b>${esc(inv.course||'Shared round')}</b><div class="tiny">${(inv.players||[]).map(esc).join(' \u00b7 ')}</div></div>
+      <button class="big warn" style="margin:0" onclick="joinFromInvite('${esc(inv.code)}')">${armJoinSwap===inv.code?'\u26a0\ufe0f Tap again \u2014 ends current round':'\u26a4 Join this round'}</button></div>`).join('');
+    return head('Join a round','Rounds started near you')+`<main>
+    ${rows||`<div class="card"><div class="tiny">${(lobbySock&&lobbySock.readyState===1)?'Looking for rounds near you\u2026 the captain\'s round shows up here once they start it.':'Connecting\u2026'}</div></div>`}
+    <div class="card"><h2>Or type the code</h2>
+      <div class="row" style="border:none">
+        <input type="text" id="joincode" placeholder="ABCDE" maxlength="8" autocapitalize="characters" style="width:46%;text-transform:uppercase;font-family:Rajdhani,sans-serif;font-size:20px;letter-spacing:3px">
+        <button class="ghost sel" style="flex:1" onclick="joinRound()">Join</button></div>
+      <div class="tiny mt">Ask the captain \u2014 it's on their Setup screen.</div></div>
+    </main>`;
+  }
+  return vHome();
+}
 function goGroup(){set(()=>{if(!S.round.started)resetRoster();S.screen='gate';});}
 function soloRound(){primeGeo();set(()=>{
   if(!S.round.started)resetRoster();
@@ -7409,7 +7541,7 @@ function applyGhinCourse(g){
   S.players.forEach(p=>{p.tee=null;});
   applyTeePrefs();
   finder={status:'idle',choices:[],error:''};
-  S.screen=pickingCourse?'pickcourse':'course';save();render();
+  S.screen=(wiz&&wiz.step==='course')?'start':(pickingCourse?'pickcourse':'course');save();render();
 }
 // second pass on the same query — stays inside the list so the typed text and
 // our own results are still on screen behind it
@@ -7525,7 +7657,7 @@ async function useFoundCourse(idx){
       S.course=clone(saved||bc);
       S.players.forEach(p=>{if(!S.course.teeSets.some(t=>t.id===p.tee))p.tee=S.course.teeSets[0].id;});
       finder={status:'idle',choices:[],error:''};
-      S.screen=pickingCourse?'pickcourse':'course';
+      S.screen=(wiz&&wiz.step==='course')?'start':(pickingCourse?'pickcourse':'course');
     });
     return;
   }
@@ -7564,7 +7696,7 @@ async function useFoundCourse(idx){
         +(g&&g.error?` (USGA lookup: ${g.error})`:'')};
     S.players.forEach(p=>p.tee=S.course.teeSets[0].id);
     finder={status:'idle',choices:[],error:''};
-    S.screen=pickingCourse?'pickcourse':'course';save();render();
+    S.screen=(wiz&&wiz.step==='course')?'start':(pickingCourse?'pickcourse':'course');save();render();
   }catch(e){finder={status:'error',choices:[],error:'Could not download hole data — check your connection.'};render();}
 }
 function addBlankCourse(){
@@ -7576,7 +7708,7 @@ function addBlankCourse(){
     teeSets:[{id:'t'+Date.now(),name:'White',rating:72.0,slope:120}],
     holes:Array.from({length:HOLES},(_,i)=>({par:4,si:i+1}))};
   S.players.forEach(p=>p.tee=S.course.teeSets[0].id);
-  S.screen=pickingCourse?'pickcourse':'course';
+  S.screen=(wiz&&wiz.step==='course')?'start':(pickingCourse?'pickcourse':'course');
 });}
 
 // ----- course editor -----
@@ -8477,7 +8609,7 @@ function startRound(){
   if(!startRound._pairsOk&&pairGamesForStart().length){
     return askPairs(()=>{startRound._pairsOk=true;startRound();});
   }
-  startRound._confirmed=false;startRound._pairsOk=false;
+  startRound._confirmed=false;startRound._pairsOk=false;wiz=null;
   setTimeout(()=>{try{maybeAskWolfOrder();}catch(e){}},0);
   pickingCourse=false;
   try{localStorage.removeItem('btGreensUsed');}catch(e){}
