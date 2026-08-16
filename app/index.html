@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786840151';
+const BUILD='1786841251';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1317,7 +1317,16 @@ function joinRoundCode(code){
   },900);
 }
 function leaveShare(){
-  if(S.share.creator&&sockOpen){try{sock.send(JSON.stringify({t:'uninvite',room:S.share.code}));}catch(e){}}
+  // The creator's invite comes down with the room. It used to ride the sync
+  // socket ONLY if it was open at this instant — a coin flip on a course —
+  // and HCVTH's (8/15) stayed 'Accept round invitation' on Setup for hours
+  // after every score was in. Any open socket will do; the relay also retires
+  // it on 'battle end' as a backstop.
+  if(S.share.creator){
+    const msg=JSON.stringify({t:'uninvite',room:S.share.code});
+    const ws=(sockOpen&&sock)||((lobbySock&&lobbySock.readyState===1)?lobbySock:null);
+    if(ws){try{ws.send(msg);}catch(e){}}
+  }
   S.share={on:false,code:null};
   if(sock){const s=sock;sock=null;try{s.close();}catch(e){}}
   sockOpen=false;
@@ -8249,7 +8258,14 @@ function openGroupCreate(){
 // ---------- group builder ----------
 let addMode=null,dismissedInvites=new Set();
 function dismissInvite(code){dismissedInvites.add(code);render();}
-function liveInvites(){return (invites||[]).filter(i=>!dismissedInvites.has(i.code));}
+// An invite to a round THIS phone already played and ended is dead on arrival —
+// it is the one round it cannot possibly need to join. Belt for the relay's
+// braces: if the uninvite broadcast was missed, the card still never shows.
+function liveInvites(){
+  const mine=new Set((S.history||[]).map(e=>e&&e.code).filter(Boolean));
+  const cur=(S.share&&S.share.on&&S.share.code)||null;
+  return (invites||[]).filter(i=>!dismissedInvites.has(i.code)&&!(mine.has(i.code)&&i.code!==cur));
+}
 function setAddMode(m){addMode=addMode===m?null:m;if(addMode==='nearby'&&!gatePick.open)openGatePick();render();}
 function isRealPl(p){return p&&p.name&&!/^Player \d$/.test(p.name);}
 function firstEmptySlot(){return S.players.findIndex(p=>!isRealPl(p));}
