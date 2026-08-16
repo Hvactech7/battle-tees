@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786856846';
+const BUILD='1786857155';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -7472,7 +7472,9 @@ function reopenRound(id){
     const played=playOrder().filter(h=>(S.round.holes[h]||{}).confirmed);
     S.round.cur=played.length?played[played.length-1]:playOrder()[0];
   }catch(e2){}
-  S.screen='hole';stView=null;
+  // A review opens on Standings — the round as a whole, with the Done banner
+  // at the top. The hole screen is a tap away for anyone fixing a score.
+  S.screen='standings';stView=null;
   // REVIEW rejoins the live share only if the round just ended (fixing scores
   // while the group is still at the 19th hole). Older rounds open OFFLINE —
   // the relay doc is frozen at end-of-day and its heals clobber review repairs
