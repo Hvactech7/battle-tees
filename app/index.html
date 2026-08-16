@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786853835';
+const BUILD='1786856532';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -3338,7 +3338,10 @@ function vMap(){
     <div class="tiny" style="color:var(--ink2);white-space:nowrap;font-size:12px">${myTot} strokes</div></div>`:'';
   return topbar(`Hole ${mapHole+1} · Par ${hole.par}${(S.round.holes[mapHole]||{}).confirmed?' ✓':''}`,
     `Handicap ${hole.si}${(S.round.holes[mapHole]||{}).confirmed?' · scored':' · NOT scored yet'}`,'','hero maphero',
-    `<div style="display:flex;align-items:center;margin-left:auto">${myScore}${gameBadgeHTML()}</div>`)+`
+    `<div style="display:flex;align-items:center;margin-left:auto;gap:10px">${myScore}${
+      (S.share&&S.share.on&&S.share.creator&&S.share.code)?`<div style="text-align:center;flex:none;margin-right:20px;color:var(--gold,#e8c552);font-family:Rajdhani,Inter,sans-serif;font-weight:700;line-height:1.05">
+        <div style="font-size:10px;font-weight:600;opacity:.85;letter-spacing:.5px">JOIN CODE</div>
+        <div class="num" style="font-size:22px;letter-spacing:3px">${esc(S.share.code)}</div></div>`:''}${gameBadgeHTML()}</div>`)+`
   <div id="holemap"></div>
   ${mapStatChipsHTML(hole)}
   <button id="trackbtn" onclick="trackShotTap()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(112px + env(safe-area-inset-bottom));z-index:6;width:120px;height:46px;background:var(--card);border:2px solid ${trackShot&&trackShot.hole===mapHole?'var(--amber-bd)':'var(--green)'};border-radius:12px;color:${trackShot&&trackShot.hole===mapHole?'var(--amber-bd)':'var(--green-mid)'};font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:19px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">${trackShot&&trackShot.hole===mapHole?'Mark It':'Track It'}</button>
