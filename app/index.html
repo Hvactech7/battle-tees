@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786841865';
+const BUILD='1786848104';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -6061,8 +6061,12 @@ function vBfWatch(){
     if(tg&&NP()===4){try{const T=matchTeams(tg==='vegas'?'vegas':tg);
       teamLine=T.map(t=>t.map(i=>esc((S.players[i]||{}).name||'?')).join(' & ')).join('  vs  ');}catch(err){}}
     const shots=flatShots(meta.shots);
+    // Only holes with tracked shots earn a row — the per-hole scores are already
+    // on the scorecard above; this list existed as the way INTO the shot-line
+    // map for a hole, and that is all it does now.
     const holeRows=S.round.holes.map((r,h)=>{
       if(!r||!r.confirmed)return '';
+      if(!shots.some(x=>x.h===h))return '';
       const par=(course.holes[h%course.holes.length]||{}).par||4;
       const sc=act.map(i=>{let g=r.gross[i];if(g==null)return '–';
         if(L==='net')g-=fullDotsOn(i,h%course.holes.length);return g;}).join(' · ');
@@ -6113,7 +6117,7 @@ function vBfWatch(){
     </div>
     ${wolfBits.length?`<div class="card"><h2>🐺 Lone wolves</h2><div class="tiny">${wolfBits.join('<br>')}</div></div>`:''}
     ${ctps.length?`<div class="card"><h2>🎯 Closest to the pin</h2><div class="tiny">${ctps.join('<br>')}</div></div>`:''}
-    <div class="card"><h2>Holes ${L==='net'?'· net':'· gross'}</h2>${holeRows||'<div class="muted">No holes confirmed yet.</div>'}</div>
+    ${holeRows?`<div class="card"><h2>Tracked shots <span class="tiny" style="font-weight:400">— tap a hole to see them</span></h2>${holeRows}</div>`:''}
     </main>`;
   });
 }
