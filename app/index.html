@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786851695';
+const BUILD='1786852358';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -6299,6 +6299,7 @@ function wizCount(n){
 function wizToGame(){
   try{gatePick.open=false;clearInterval(gatePick.timer);}catch(e){}
   set(()=>syncGroupCounts());
+  if(wiz.preGame){wizChooseGame(wiz.preGame);return;}   // came from a rules card — game already chosen
   wiz.step='game';render();
 }
 function wizChooseGame(g){
@@ -6308,8 +6309,8 @@ function wizChooseGame(g){
 }
 function wizBack(){
   if(!wiz)return;
-  const b={count:'kind',who:'count',game:'who',course:(S.config.stroke&&S.config.stroke.n===1&&(S.config.games||[]).join()==='stroke'&&wiz.n===1)?'kind':'game',join:'kind'};
-  if(wiz.step==='kind'){wiz=null;S.screen='home';render();return;}
+  const b={count:'kind',who:'count',game:'who',course:wiz.preGame?'who':(S.config.stroke&&S.config.stroke.n===1&&(S.config.games||[]).join()==='stroke'&&wiz.n===1)?'kind':'game',join:'kind'};
+  if(wiz.step==='kind'||(wiz.step==='count'&&wiz.preGame)){wiz=null;S.screen='home';render();return;}
   if(wiz.step==='course'&&wiz.solo){wiz.step='kind';}
   else wiz.step=b[wiz.step]||'kind';
   render();
@@ -6575,7 +6576,26 @@ function ruleCard(art,title,tag,body,key){
       ${art}<span style="flex:1;min-width:0"><b style="font-family:Rajdhani,sans-serif;font-size:22px">${title}</b>
       <span class="tiny" style="display:block">${tag}</span></span><span style="color:var(--ink3)">▾</span></summary>
     <div style="margin-top:10px;font-size:15px;line-height:1.55">${body}</div>
+    ${(()=>{const g=gameIdFor(title);if(!g||S.round.started)return '';
+      return `<button class="big mt" style="width:100%" onclick="startWithGame('${g}')">⚔️ &nbsp;Start ${esc(title)} now</button>`;})()}
   </details>`;
+}
+// title -> game id, for the rules cards. Hammer is a modifier: no start.
+function gameIdFor(title){
+  const t=String(title||'').trim().toLowerCase();
+  const m={'wolf':'wolf','9\u2019s':'nines',"9's":'nines','vegas':'vegas','stroke':'stroke','best ball':'bestball',
+    'scramble':'scramble','sixes':'sixes','umbrella':'umbrella','quota':'quota','stableford':'stableford',
+    'bingo bango bongo':'bbb','nassau':'nassau','skins':'skins'};
+  return m[t]||null;
+}
+// The wizard, entered with the game already picked: solo games go straight to
+// the course; team games ask how many, then who, then the course. Stroke from a
+// rules card is a group stroke play — the wizard's Just-me path is the solo one.
+function startWithGame(g){
+  primeGeo();
+  if(!S.round.started)resetRoster();
+  wiz={step:'count',n:4,preGame:g};
+  addMode='nearby';S.screen='start';save();render();
 }
 function vPickCourse(){
   return topbar(`Where are you playing?`,`${gameName(S.config.game)} · ${actIdx().map(i=>esc((S.players[i].name||'').split(' ')[0])).join(', ')}`,'setup')+`<main>
