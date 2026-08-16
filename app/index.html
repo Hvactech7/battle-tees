@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786841251';
+const BUILD='1786841865';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1237,6 +1237,7 @@ function claimMySlot(steal){
     }
   }
   if(changed){stampChanges();save();syncPush();}
+  try{maybeAskWolfOrder();}catch(e){}
 }
 let unlockedRows={};
 function unlockRow(h,i){unlockedRows[h+'-'+i]=true;render();}
@@ -5191,7 +5192,7 @@ function render(){
   const sameScreen=window.__lastScr===scr;
   window.__lastScr=scr;
   try{if(window.__a2hsSync)window.__a2hsSync();}catch(e){}
-  const full=magBanner()+html+holeSplash()+verifySheetHTML()+teeAskSheetHTML()+joinSpanSheetHTML()+pairsAskSheetHTML()+endAskSheetHTML()+mapInviteHTML()+greenClashHTML()+gamePickSheetHTML()+(S.screen!=='map'?puttAskSheetHTML():'');
+  const full=magBanner()+html+holeSplash()+verifySheetHTML()+teeAskSheetHTML()+joinSpanSheetHTML()+pairsAskSheetHTML()+wolfOrderSheetHTML()+endAskSheetHTML()+mapInviteHTML()+greenClashHTML()+gamePickSheetHTML()+(S.screen!=='map'?puttAskSheetHTML():'');
   // Four phones syncing means render() fires constantly. Blowing away innerHTML
   // each time repainted the whole screen — that was the flicker on the course.
   // Identical output is a no-op; otherwise patch only the nodes that differ.
@@ -8072,6 +8073,38 @@ function movePl(i){set(()=>{const a=S.players;[a[i-1],a[i]]=[a[i],a[i-1]];});}
 // Only while NOTHING is confirmed. Player index is the key for every per-hole
 // array, so a bare S.players swap would leave scores, stats and wolf picks
 // pointing at the wrong golfer — carry all of it across together.
+// ---- Wolf: confirm the order once four are seated ---------------------------
+let orderAsk=false;
+function wolfOrderDue(){
+  try{
+    if(!S.round.started||isReview())return false;
+    if(S.round._orderOk)return false;
+    if(gameOn()!=='wolf')return false;
+    if(S.share&&S.share.on&&!S.share.creator)return false;      // captain's call
+    if(!canReorderRoster())return false;                       // a hole is in — too late
+    const real=S.players.filter(p=>p&&p.name&&!/^Player \d$/.test(p.name.trim())).length;
+    return real>=4;
+  }catch(e){return false;}
+}
+function maybeAskWolfOrder(){
+  if(orderAsk||!wolfOrderDue())return;
+  orderAsk=true;render();
+}
+function wolfOrderDone(){
+  orderAsk=false;
+  set(()=>{S.round._orderOk=true;});
+}
+function wolfOrderSheetHTML(){
+  if(!orderAsk)return '';
+  if(!wolfOrderDue()){orderAsk=false;return '';}
+  return `<div class="vfWrap"><div class="vfCard" style="max-width:430px">
+    <h2 class="vfTitle" style="margin-bottom:2px">🐺 Confirm the order of play</h2>
+    <div class="tiny mb">First listed is the Wolf on hole 1, then it rotates. Tap ↑ to move a golfer up.</div>
+    ${S.players.slice(0,4).map((p,i)=>`<div class="row"><div style="flex:1;min-width:0"><b>${['1st','2nd','3rd','4th'][i]} · ${esc(p.name)}</b>${i===0?' <span class="pill wolf">wolf h1</span>':''}</div>
+      ${i>0?`<button class="ghost" onclick="movePlRound(${i})" style="flex:none">↑</button>`:''}</div>`).join('')}
+    <button class="big mt" style="width:100%" onclick="wolfOrderDone()">✓ &nbsp;This is the order</button>
+  </div></div>`;
+}
 let reorderOpen=false;
 function canReorderRoster(){
   return !!(S.round.started&&!isReview()&&!S.round.holes.some(r=>r.confirmed));
@@ -8353,6 +8386,7 @@ function startRound(){
     return askPairs(()=>{startRound._pairsOk=true;startRound();});
   }
   startRound._confirmed=false;startRound._pairsOk=false;
+  setTimeout(()=>{try{maybeAskWolfOrder();}catch(e){}},0);
   pickingCourse=false;
   try{localStorage.removeItem('btGreensUsed');}catch(e){}
   greensState=null;
