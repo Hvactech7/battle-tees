@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786848991';
+const BUILD='1786849390';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -6132,16 +6132,28 @@ function trackedShotsCardHTML(shotMap,players,course,holes){
 // ---- full-screen read-only shot viewer --------------------------------------
 let shotView=null;   // {h, shots:[{a,b,yds,club,pk}], players, course, back}
 function openShotView(h,shotMap,players,course){
+  if(S.screen==='shotview')return;   // already open — a second tap must not re-open OVER itself
   const shots=flatShots(shotMap).filter(x=>x.h===h&&x.a&&x.b);
   if(!shots.length)return;
-  shotView={h,shots,players:players||[],course:course||S.course,back:S.screen};
+  // remember exactly where the reader was: the screen, how far down it, and
+  // which hole was expanded — Back puts all three back, not just the screen
+  shotView={h,shots,players:players||[],course:course||S.course,back:S.screen,
+    backY:window.scrollY||0,backHole:bfHole,backSt:stView};
   S.screen='shotview';render();
 }
 function closeShotView(){
-  const back=(shotView&&shotView.back)||'standings';
+  const v=shotView||{};
+  const back=v.back||'standings';
   shotView=null;
   try{if(SVMAP){SVMAP.remove();}}catch(e){}SVMAP=null;
+  bfHole=(v.backHole!=null)?v.backHole:bfHole;
   S.screen=back;render();
+  if(v.backSt!==undefined)stView=v.backSt;
+  // render() scrolls a screen change to the top; put the reader back where
+  // they were once the page has laid out
+  const y=v.backY||0;
+  if(y){requestAnimationFrame(()=>{window.scrollTo(0,y);
+    requestAnimationFrame(()=>window.scrollTo(0,y));});}
 }
 let SVMAP=null;
 function vShotView(){
@@ -6205,8 +6217,7 @@ async function bfMiniMap(shotMap,players){
   const m=L.map(el,{zoomControl:false,attributionControl:false,dragging:true});
   // tap the little map -> the full-screen read-only viewer for this hole
   const openFull=()=>{try{openShotView(bfHole,shotMap,players,S.course);}catch(e){}};
-  el.addEventListener('click',openFull);
-  m.on('click',openFull);
+  m.on('click',openFull);   // Leaflet's own click — the DOM listener as well fired it TWICE
   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19}).addTo(m);
   const pts=[];
   // now that all four players' lines land here, one colour would be a tangle —
