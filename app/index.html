@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786858762';
+const BUILD='1786859272';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -2918,6 +2918,18 @@ function uLbl(){return distUnit()==='m'?'m':'y';}
 function yd(m){return distUnit()==='m'?Math.round(m):Math.round(m*1.09361);}
 // scorecard yardages are stored in YARDS, so they convert from yards, not metres
 function ydDisp(y){const n=+y;if(!isFinite(n))return y;return distUnit()==='m'?Math.round(n*0.9144):Math.round(n);}
+// The in-app share: native share sheet when the phone has one, clipboard
+// otherwise. Tracked as its own source (share_link) — a third funnel apart
+// from the two QR codes.
+async function shareAppLink(){
+  const url='https://battletees.app/app/?src=share_link';
+  try{stat('share_app',{via:navigator.share?'sheet':'copy'});}catch(e){}
+  try{
+    if(navigator.share){await navigator.share({title:'Battle Tees',text:'Golf side games, live scores and GPS — get Battle Tees',url});return;}
+  }catch(e){if(e&&e.name==='AbortError')return;}
+  try{await navigator.clipboard.writeText(url);shotToast('Link copied — paste it anywhere.');}
+  catch(e){shotToast(url);}
+}
 function toggleUnits(){set(()=>{S.units=distUnit()==='m'?'yd':'m';});}
 function centroidOf(poly){
   let la=0,lo=0;poly.forEach(p=>{la+=p[0];lo+=p[1];});
@@ -5711,6 +5723,15 @@ function vSettings(){
       <div class="tiny">${sub}</div></div>
     <button class="ghost ${bf[key]?'sel':''}" onclick="bfToggle('${key}')">${bf[key]?'On':'Off'}</button></div>`;
   return topbar('Settings','','home')+`<main>
+  <div class="card"><h2>📲 Share Battle Tees</h2>
+    <div style="display:flex;gap:16px;align-items:center">
+      <div style="flex:none;background:#fff;border-radius:12px;padding:8px;line-height:0" title="https://battletees.app/app/?src=qr_app">
+        <img src="${art('/qr-app.svg')}" alt="Battle Tees QR" style="width:132px;height:132px;display:block" onerror="this.parentNode.style.display='none'"></div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:15.5px;line-height:1.45">Let a friend scan this to get the app.</div>
+        <div class="tiny mt">Installs from this code are counted separately from the email one, so we learn where new players actually come from.</div>
+        <button class="ghost mt" style="width:100%" onclick="shareAppLink()">Send the link instead</button></div></div>
+  </div>
   <div class="card"><h2>⚔️ Battlefield</h2>
     ${row('Announce my rounds','Starting a round emails your Battle Friends a watch link and puts the round on the Community Battlefield.','broadcast')}
     ${row('Email me when friends play','Get the “Battlefield is set” email when someone who has you in their library tees off.','emails')}
