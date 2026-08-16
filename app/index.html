@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786858547';
+const BUILD='1786858762';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -641,6 +641,18 @@ try{
     });
     localStorage.setItem('btGhostFix1','1');
     if(fixed){try{save();}catch(e){}}
+  }
+}catch(e){}
+// ...and anything already recorded under the bar goes. Once.
+try{
+  if(!localStorage.getItem('btMinHoles1')){
+    const before=(S.history||[]).length;
+    S.history=(S.history||[]).filter(e=>{
+      const n=e&&e.round&&e.round.holes?e.round.holes.filter(r=>r&&r.confirmed).length:(e&&e.thru)||0;
+      return n>=2;
+    });
+    localStorage.setItem('btMinHoles1','1');
+    if((S.history||[]).length!==before){try{save();}catch(e){}}
   }
 }catch(e){}
 // Putts tracking became ON by default when the auto prompt shipped. Existing
@@ -7323,10 +7335,17 @@ function roundSummary(){
       players:act.length,game:gameOn(),result};
   }catch(e){return null;}
 }
+// A round is not a round until two holes are scored. Nathan's ruling 8/15:
+// nothing under that bar is recorded ANYWHERE — the Battlefield already had
+// this gate; the phone's own history did not. A review re-archiving an
+// existing entry is untouched (that entry passed the bar when it was made).
+const MIN_ROUND_HOLES=2;
 function archiveRound(){
   if(!S.round.started)return;
-  if(!S.round._histId)S.round._histId='r'+Date.now()+Math.floor(Math.random()*1e4);
   const thru=S.round.holes.filter(r=>r.confirmed).length;
+  const existing=!!(S.round._histId&&(S.history||[]).some(e=>e.id===S.round._histId));
+  if(!existing&&thru<MIN_ROUND_HOLES)return;   // never happened
+  if(!S.round._histId)S.round._histId='r'+Date.now()+Math.floor(Math.random()*1e4);
   const t0=S.round.myStartedAt||S.round.startedAt;
   // A round's identity is the day it was PLAYED. Re-archiving after an edit keeps
   // the original end stamp (no reorder, no date change); a live continue gets a
