@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786858317';
+const BUILD='1786858547';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -7176,8 +7176,11 @@ function vPlayers(){
         ${status}</div>
       <span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
         ${action}
-        <button class="ghost" onclick="startEditPlayer('${e.id}')">Edit</button>
-        <button class="ghost danger" onclick="delPlayer('${e.id}')">✕</button>
+        ${armDelPlayer===e.id
+          ?`<button class="ghost" onclick="delPlayerCancel()">Keep</button>
+            <button class="ghost danger" style="font-weight:700" onclick="delPlayer('${e.id}')">Confirm Delete</button>`
+          :`<button class="ghost" onclick="startEditPlayer('${e.id}')">Edit</button>
+            <button class="ghost danger" onclick="delPlayer('${e.id}')">✕</button>`}
       </span></div>`;})()).join('')
     :'<div class="tiny">Golfers you set up in a round are saved here automatically.</div>';})()}
     ${backupBlockHTML()}
@@ -8407,10 +8410,22 @@ function loadPlayer(i,libId){
     if(t)p.tee=t.id;
   });
 }
-function delPlayer(libId){set(()=>{
-  S.playerLib=S.playerLib.filter(x=>x.id!==libId);
-  S.players.forEach(p=>{if(p.libId===libId)delete p.libId;});
-});}
+// Deleting a saved golfer takes two taps: ✕ arms it, Confirm Delete does it.
+// One stray tap on a 46px button used to erase a friend from the library.
+let armDelPlayer=null;
+function delPlayer(libId){
+  if(armDelPlayer!==libId){
+    armDelPlayer=libId;render();
+    setTimeout(()=>{if(armDelPlayer===libId){armDelPlayer=null;render();}},4000);
+    return;
+  }
+  armDelPlayer=null;
+  set(()=>{
+    S.playerLib=S.playerLib.filter(x=>x.id!==libId);
+    S.players.forEach(p=>{if(p.libId===libId)delete p.libId;});
+  });
+}
+function delPlayerCancel(){armDelPlayer=null;render();}
 // Two Tylers in one round break name-keyed fallbacks (claims, stats, teams)
 // and confuse the scorecard — auto-disambiguate to 'Tyler 2' on every path.
 // Display-only: pids are untouched, and upsertLib won't rename a library
