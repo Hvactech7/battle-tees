@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786859272';
+const BUILD='1786944544';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -2838,7 +2838,7 @@ const FRAME_YDS=300;   // Nathan's call: yards across the screen, HARD, never wi
 function autoBearing(deg){
   try{
     if(!LMAP||!L.Map.prototype.setBearing)return;
-    LMAP._btAutoRot=true;
+    LMAP._btAutoRot=true;LMAP._btAutoBearing=deg;
     try{LMAP.setBearing(deg);}finally{LMAP._btAutoRot=false;}
   }catch(e){}
 }
@@ -4487,11 +4487,25 @@ async function initHoleMap(){
   if(canRotate){
     try{LMAP.touchRotate&&LMAP.touchRotate.enable();}catch(e){}
     let rotT=0;
+    // Once YOU turn it, nothing may snap it back — but a PINCH is not a turn.
+    // Two fingers zooming drift a few degrees, Leaflet-rotate fires 'rotate'
+    // for that too, and treating it as intent pinned the hole at whatever
+    // angle the pinch left it (NateBall, Davis 8/16: a hole "rendered
+    // horizontally" until he backed out and in). A deliberate twist is tens of
+    // degrees from where the auto-frame put it; only that counts as yours.
+    LMAP._btAutoBearing=null;
     LMAP.on('rotate',()=>{
-      // Once YOU turn it, nothing may snap it back. orientFromMe re-fires on
-      // every GPS update for a green-only hole, so without this flag a hand
-      // twist was undone a second after you lifted your fingers.
-      if(!LMAP._btAutoRot)LMAP._btUserRot=true;
+      if(!LMAP._btAutoRot){
+        const now=LMAP.getBearing?LMAP.getBearing():0;
+        const base=(LMAP._btAutoBearing==null)?now:LMAP._btAutoBearing;
+        const d=Math.abs(((now-base)%360+540)%360-180);
+        if(d>=15)LMAP._btUserRot=true;              // a real twist
+        else if(!LMAP._btUserRot&&LMAP._btAutoBearing!=null){
+          // pinch drift off the auto bearing: snap back once the fingers lift
+          clearTimeout(LMAP._btDriftT);
+          LMAP._btDriftT=setTimeout(()=>{try{if(!LMAP._btUserRot)autoBearing(LMAP._btAutoBearing);}catch(e){}},260);
+        }
+      }
       if(rotT)return;
       rotT=setTimeout(()=>{rotT=0;try{sat._update();}catch(e){}},120);
     });
