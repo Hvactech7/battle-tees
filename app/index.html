@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786952645';
+const BUILD='1786952932';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -9953,6 +9953,7 @@ function roundComplete(){
 // tracker, the FW/GIR chips on the hole map, and the shot log's yardages.
 // [key, label, hint, min, max, step, format, default]
 const CHAL_DEFS=[
+  ['score','Total strokes or fewer','Gross, for the whole round', 55,140,1,v=>String(v), 90],
   ['pars', 'Pars per round',    'From your scores',            0,18,1,  v=>String(v), 4],
   ['birds','Birdies per round', 'From your scores',            0,18,1,  v=>String(v), 1],
   ['putts','Putts or fewer',    'Turns on the Putts tracker',  18,45,1, v=>String(v), 32],
@@ -9964,8 +9965,20 @@ const CHAL_DEF=k=>CHAL_DEFS.find(d=>d[0]===k);
 function chalAll(){ if(!S.chal)S.chal={}; return S.chal; }
 function chalOf(k){ const C=chalAll(); if(!C[k])C[k]={on:false,val:CHAL_DEF(k)[7]}; return C[k]; }
 function chalOn(){ return CHAL_DEFS.filter(d=>chalOf(d[0]).on); }
-// LOWER is better for putts; every other metric is "reach or beat".
-const CHAL_LOWER={putts:1};
+// LOWER is better for strokes and putts; every other metric is "reach or beat".
+const CHAL_LOWER={putts:1,score:1};
+// CUMULATIVE metrics only mean something against a FINISHED round. Judging them
+// early is a lie in the flattering direction: 12 putts thru 6 holes "beats" a 32
+// goal, and 30 strokes thru 7 "beats" a 90. These stay unjudged until the last
+// hole is in, and show a thru-count instead of a verdict.
+const CHAL_CUM={putts:1,score:1};
+// An 18-hole target has to shrink for a 9-hole round or it is free to beat.
+function chalGoal(k){
+  const raw=chalOf(k).val;
+  if(!CHAL_CUM[k])return raw;
+  const sp=roundSpan();
+  return (sp&&sp.count===9)?Math.round(raw/2):raw;
+}
 
 // Choosing a goal that depends on a tracker TURNS THAT TRACKER ON. Without this
 // a putts goal quietly collects nothing and reads as a failed goal every round —
@@ -9986,11 +9999,11 @@ function chalResults(){
   const R=S.round.holes,hs=S.course.holes;
   const done=playOrder().filter(h=>R[h]&&R[h].confirmed);
   if(!done.length)return [];
-  let pars=0,birds=0,putts=0,fwHoles=0,fwHit=0,girHit=0;
+  let pars=0,birds=0,putts=0,fwHoles=0,fwHit=0,girHit=0,score=0,scored=0;
   done.forEach(h=>{
     const par=(hs[physHole(h)]||hs[h]||{}).par||4;
     const g=R[h].gross[i];
-    if(g!=null){const d=g-par; if(d===0)pars++; else if(d<=-1)birds++;}
+    if(g!=null){const d=g-par; if(d===0)pars++; else if(d<=-1)birds++; score+=g; scored++;}
     const st=R[h].stats||{};
     if(st.putts)putts+=(st.putts[i]||0);
     if(par>=4){fwHoles++; if(st.fw&&st.fw[i])fwHit++;}
@@ -9999,18 +10012,22 @@ function chalResults(){
   let drive=0;
   const sl=(S.shotLog&&S.shotLog['s'+(S.round.startedAt||0)])||[];
   sl.forEach(s=>{const y=+s.yds||0; if(y>drive)drive=y;});
-  const got={pars,birds,putts,
+  const got={pars,birds,putts,score,
     fw:fwHoles?Math.round(fwHit/fwHoles*100):0,
     gir:Math.round(girHit/done.length*100),
     drive};
+  const finished=roundComplete();
+  const thru=done.length, total=playOrder().length;
   return chalOn().map(d=>{
-    const k=d[0],goal=chalOf(k).val,v=got[k],lower=!!CHAL_LOWER[k];
+    const k=d[0],goal=chalGoal(k),v=got[k],lower=!!CHAL_LOWER[k];
     // a metric with no data at all is "no data", never a failure
-    const none=(k==='putts'&&v===0)||(k==='drive'&&v===0);
-    const hit=none?false:(lower?v<=goal:v>=goal);
+    const none=(k==='putts'&&v===0)||(k==='drive'&&v===0)||(k==='score'&&!scored);
+    // cumulative goals stay unjudged until the round is actually finished
+    const pending=!none&&!!CHAL_CUM[k]&&!finished;
+    const hit=(none||pending)?false:(lower?v<=goal:v>=goal);
     const pct=none?0:Math.max(0,Math.min(100,lower?Math.round(goal/Math.max(v,1)*100)
                                                   :Math.round(v/Math.max(goal,1)*100)));
-    return {k,nm:d[1],fmt:d[6],goal,got:v,hit,pct,none};
+    return {k,nm:d[1],fmt:d[6],goal,got:v,hit,pct,none,pending,thru,total};
   });
 }
 
@@ -10061,14 +10078,14 @@ function chalResultsHTML(){
     <h2 style="color:var(--elec-mid)">⛳ Your challenges</h2>
     ${res.map(r=>`<div style="padding:9px 0">
       <div class="row" style="padding:0;border-top:none">
-        <span>${esc(r.nm)}${r.hit?' <b style="color:var(--green-mid)">✓ beat it</b>':''}</span>
+        <span>${esc(r.nm)}${r.hit?' <b style="color:var(--green-mid)">✓ beat it</b>':r.pending?` <span class="tinier">thru ${r.thru}/${r.total}</span>`:''}</span>
         <span class="num" style="color:${r.hit?'var(--green-mid)':'var(--ink2)'}">${r.none?'no data':r.fmt(r.got)+' / '+r.fmt(r.goal)}</span>
       </div>
       <div style="height:9px;border-radius:99px;background:#2a3448;overflow:hidden;margin-top:7px">
-        <div style="height:100%;border-radius:99px;width:${r.pct}%;background:${r.hit?'var(--green)':'var(--elec)'}"></div></div>
+        <div style="height:100%;border-radius:99px;width:${r.pct}%;background:${r.hit?'var(--green)':r.pending?'var(--ink3)':'var(--elec)'}"></div></div>
       ${r.none?`<div class="tinier mt">Nothing tracked this round — ${esc(CHAL_DEF(r.k)[2])}.</div>`:''}
     </div>`).join('')}
-    <div class="tinier mt">${beat} of ${res.length} beaten.</div>
+    <div class="tinier mt">${res.some(r=>r.pending)?`${beat} beaten so far — running totals settle at the last hole.`:`${beat} of ${res.length} beaten.`}</div>
     <button class="ghost mt" style="width:100%;padding:12px" onclick="openChal()">Adjust my challenges</button>
   </div>`;
 }
@@ -10108,6 +10125,7 @@ function vChal(){
       ${rows}
     </div>
     ${chalOf('putts').on?`<div class="tiny" style="margin:-6px 0 12px">✓ The Putts tracker switches on automatically so this goal has data to read.</div>`:''}
+    ${(chalOf('score').on||chalOf('putts').on)?`<div class="tiny" style="margin:-6px 0 12px">Running totals are set for 18 holes — on a 9-hole round the target halves automatically, and neither is judged until the last hole.</div>`:''}
     <button class="big" onclick="chalSave()">Save my challenges</button>
   </main>`;
 }
