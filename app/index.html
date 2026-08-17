@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786952932';
+const BUILD='1786953669';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -9967,11 +9967,15 @@ function chalOf(k){ const C=chalAll(); if(!C[k])C[k]={on:false,val:CHAL_DEF(k)[7
 function chalOn(){ return CHAL_DEFS.filter(d=>chalOf(d[0]).on); }
 // LOWER is better for strokes and putts; every other metric is "reach or beat".
 const CHAL_LOWER={putts:1,score:1};
-// CUMULATIVE metrics only mean something against a FINISHED round. Judging them
-// early is a lie in the flattering direction: 12 putts thru 6 holes "beats" a 32
-// goal, and 30 strokes thru 7 "beats" a 90. These stay unjudged until the last
-// hole is in, and show a thru-count instead of a verdict.
+// CUMULATIVE totals need their target scaled to the holes actually played —
+// an 18-hole number is free to beat over 9.
 const CHAL_CUM={putts:1,score:1};
+// Only pars and birdies are judged LIVE. They are counts that can only climb, so
+// a "beat it" earned on hole 12 is still true on 18. Everything else can move the
+// wrong way — running totals accumulate, percentages fall, a long drive is only
+// the longest so far — so a mid-round verdict on those is a promise the last six
+// holes can break. They hold until the final hole is confirmed.
+const CHAL_LIVE={pars:1,birds:1};
 // An 18-hole target has to shrink for a 9-hole round or it is free to beat.
 function chalGoal(k){
   const raw=chalOf(k).val;
@@ -10022,8 +10026,8 @@ function chalResults(){
     const k=d[0],goal=chalGoal(k),v=got[k],lower=!!CHAL_LOWER[k];
     // a metric with no data at all is "no data", never a failure
     const none=(k==='putts'&&v===0)||(k==='drive'&&v===0)||(k==='score'&&!scored);
-    // cumulative goals stay unjudged until the round is actually finished
-    const pending=!none&&!!CHAL_CUM[k]&&!finished;
+    // everything except pars and birdies stays unjudged until the round is done
+    const pending=!none&&!CHAL_LIVE[k]&&!finished;
     const hit=(none||pending)?false:(lower?v<=goal:v>=goal);
     const pct=none?0:Math.max(0,Math.min(100,lower?Math.round(goal/Math.max(v,1)*100)
                                                   :Math.round(v/Math.max(goal,1)*100)));
@@ -10085,7 +10089,7 @@ function chalResultsHTML(){
         <div style="height:100%;border-radius:99px;width:${r.pct}%;background:${r.hit?'var(--green)':r.pending?'var(--ink3)':'var(--elec)'}"></div></div>
       ${r.none?`<div class="tinier mt">Nothing tracked this round — ${esc(CHAL_DEF(r.k)[2])}.</div>`:''}
     </div>`).join('')}
-    <div class="tinier mt">${res.some(r=>r.pending)?`${beat} beaten so far — running totals settle at the last hole.`:`${beat} of ${res.length} beaten.`}</div>
+    <div class="tinier mt">${res.some(r=>r.pending)?`${beat} beaten so far — the rest settle when the round is done.`:`${beat} of ${res.length} beaten.`}</div>
     <button class="ghost mt" style="width:100%;padding:12px" onclick="openChal()">Adjust my challenges</button>
   </div>`;
 }
@@ -10125,7 +10129,7 @@ function vChal(){
       ${rows}
     </div>
     ${chalOf('putts').on?`<div class="tiny" style="margin:-6px 0 12px">✓ The Putts tracker switches on automatically so this goal has data to read.</div>`:''}
-    ${(chalOf('score').on||chalOf('putts').on)?`<div class="tiny" style="margin:-6px 0 12px">Running totals are set for 18 holes — on a 9-hole round the target halves automatically, and neither is judged until the last hole.</div>`:''}
+    ${(chalOf('score').on||chalOf('putts').on)?`<div class="tiny" style="margin:-6px 0 12px">Set for 18 holes — on a 9-hole round the target halves automatically. Every challenge except pars and birdies is judged when the round finishes.</div>`:''}
     <button class="big" onclick="chalSave()">Save my challenges</button>
   </main>`;
 }
