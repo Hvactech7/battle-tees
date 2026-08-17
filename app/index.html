@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1786944544';
+const BUILD='1786946073';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -5789,7 +5789,7 @@ function vSettings(){
   </main>`;
 }
 // ---------- Community Battlefield: list + spectator ----------
-let bfList=null,bfWatch=null,bfTimer=null,bfLens='net',bfHole=null,bfCardFull=false;
+let bfList=null,bfWatch=null,bfTimer=null,bfLens='gross',bfHole=null,bfCardFull=false;
 // Battles live on THIS phone forever once seen — their own localStorage key,
 // deliberately outside the backup payload: never backed up, never restored.
 function bfStore(){try{return JSON.parse(localStorage.getItem('btBattles'))||{};}catch(e){return {};}}
@@ -6027,14 +6027,36 @@ function vBattlefield(){
    :!L.length?'<div class="card center muted">No battles right now. Start a round and yours shows up here for your friends.</div>'
    :L.map(e=>{
       const day=e.at?new Date(e.at*1000).toLocaleDateString(undefined,{month:'short',day:'numeric'}):'';
+      const when=e.live?'<span style="color:var(--elec)">● live</span> · playing '+dur(e):(day?day+' · ':'')+'finished · '+dur(e);
+      // one card per PLAYER in the round — gross to par where they stand right
+      // now, and the same highlights the end-of-round splash shows. Zero
+      // counts are omitted, exactly as on the splash.
+      const ppl=(e.sum||[]).filter(x=>x&&x.thru>0);
+      const hl=x=>{const b=[];
+        if(x.eagles>0)b.push(`<b>${x.eagles}</b> eagle${x.eagles===1?'':'s'}`);
+        if(x.birdies>0)b.push(`<b>${x.birdies}</b> birdie${x.birdies===1?'':'s'}`);
+        if(x.pars>0)b.push(`<b>${x.pars}</b> par${x.pars===1?'':'s'}`);
+        if(x.putts>0)b.push(`<b>${x.putts}</b> putts`);
+        if((x.ctp||[]).length)b.push(`🎯 <b>${x.ctp.length}</b> CTP`);
+        if(x.longShot&&x.longShot.yds>0)b.push(`💥 <b>${ydDisp(x.longShot.yds)}${uLbl()}</b>${x.longShot.club?' '+esc(x.longShot.club):''}`);
+        return b.join(' · ');};
+      const tp=n=>n===0?'E':(n>0?'+':'')+n;
+      const cards=ppl.length?ppl.map(x=>`
+        <div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-top:1px solid var(--line)">
+          <div style="flex:1;min-width:0"><b style="font-size:16px">${esc(x.name)}</b>
+            <div class="tiny">${hl(x)||'<span class="muted">no highlights yet</span>'}</div></div>
+          <div style="text-align:right;flex:none">
+            <div class="num" style="font-size:28px;line-height:1;color:${x.toPar<0?'#7fd49a':x.toPar>0?'var(--amber-bd)':'var(--ink)'}">${tp(x.toPar)}</div>
+            <div class="tiny">${x.gross} · thru ${x.thru}</div></div>
+        </div>`).join('')
+        :`<div class="tiny" style="padding-top:6px;color:var(--ink3)">${e.live?'No holes carded yet.':'No scores were recorded.'}</div>`;
       return `<div class="card" style="padding:12px 14px;cursor:pointer" onclick="openBfWatch('${esc(e.code)}')">
       <div class="row" style="border-top:none">
         <div style="flex:1;min-width:0"><b style="font-family:Rajdhani,sans-serif;font-size:20px">${esc(e.starter)}</b>
-          <div class="tiny">${esc(e.course||'')} · ${esc(e.game||'')}</div>
-          <div class="tiny">${e.live?'<span style="color:var(--elec)">● live</span> · playing '+dur(e):(day?day+' · ':'')+'finished · '+dur(e)}</div></div>
+          <div class="tiny">${esc(e.course||'')} · ${esc(e.game||'')} · ${when}</div></div>
         <span class="pill wolf" style="flex:none">${e.live?'Watch':'View'}</span>
         ${e._archived?`<button class="ghost danger" style="flex:none;margin-left:6px" onclick="event.stopPropagation();bfForget('${esc(e.code)}')">✕</button>`:''}
-      </div></div>`;}).join('')}
+      </div>${cards}</div>`;}).join('')}
   <button class="ghost mt" style="width:100%" onclick="openBattlefield()">↻ Refresh</button>
   </main>`;
 }
@@ -6154,8 +6176,8 @@ function vBfWatch(){
     <div class="card" style="padding:10px 14px"><div class="row" style="border-top:none">
       <span>${e.endedAt?'Final':'<span style="color:var(--elec)">● LIVE</span>'} · thru ${confirmed} ${mins?`· ${mins>=60?Math.floor(mins/60)+'h '+mins%60+'m':mins+' min'}`:''}</span>
       <span class="seg" style="display:inline-flex;gap:4px">
-        <button class="ghost ${L==='net'?'sel':''}" onclick="bfLens='net';render()">Net</button>
-        <button class="ghost ${L==='gross'?'sel':''}" onclick="bfLens='gross';render()">Gross</button>
+        <button class="ghost ${L==='gross'?'sel':''}" style="${L==='gross'?'':';color:var(--ink3);border-color:var(--line);box-shadow:2px 2px 0 rgba(0,0,0,.2)'}" onclick="bfLens='gross';render()">Gross</button>
+        <button class="ghost ${L==='net'?'sel':''}" style="${L==='net'?'':';color:var(--ink3);border-color:var(--line);box-shadow:2px 2px 0 rgba(0,0,0,.2)'}" onclick="bfLens='net';render()">Net</button>
       </span></div>
       ${teamLine?`<div class="tiny mt">⚔️ ${teamLine}</div>`:''}</div>
     ${games.map(g=>{const led=ledgers[g];if(!led)return '';
