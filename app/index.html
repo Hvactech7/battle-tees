@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1787014230';
+const BUILD='1787016114';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -600,6 +600,12 @@ function statArr(rec,k){if(!rec.stats)rec.stats={};if(!rec.stats[k])rec.stats[k]
 // 2 of 18 holes. Stamp the slot the way gross[] is stamped by gts[], so the
 // merge can keep each player's own entry. A player only ever writes his own slot.
 function stampStat(rec,i){if(!rec.sts)rec.sts=[0,0,0,0];rec.sts[i]=Date.now();}
+// Putts count for a round ONLY when they were entered on every scored hole —
+// a partial set reads as fewer putts than were taken, so a player who skipped
+// the prompt on a few holes is left out of the putts highlight and the putts
+// stats entirely (Nathan, 8/17). A hole answered 0 (a chip-in) is an entry:
+// setPutts marks it in stats.puttsIn, which merges per slot like every stat.
+function puttsEntered(rec,i){const st=(rec&&rec.stats)||{};return !!((st.putts&&st.putts[i]>0)||(st.puttsIn&&st.puttsIn[i]>0));}
 function blankRound(){return {started:false,holes:Array.from({length:HOLES},blankHole),cur:0,dollarPerPt:0,span:{count:18,start:0},startedAt:null,myStartedAt:null};}
 
 let S=load();
@@ -4887,6 +4893,7 @@ function setPutts(i,v){
   set(()=>{
     const rec=S.round.holes[h];
     statArr(rec,'putts')[i]=v;
+    statArr(rec,'puttsIn')[i]=1;            // answered — a 0 (chip-in) is still an entry
     stampStat(rec,i);                       // per-slot stamp so two phones merge
     // Mark it ASKED as well as recorded. Answered-ness used to be inferred from
     // the value, so tapping 0 — a chip-in, the very first button — read as
@@ -6823,8 +6830,11 @@ function vStats(){
   const KEYS=[['putts','Putts'],['chips','Chips'],['bunker','Bunker shots'],['pen','Penalties']];
   const extras=KEYS.map(([k,label])=>{
     const recd=rounds.map(r=>{
-      let tot=0,any=false;
-      r.holes.forEach(x=>{const st=x.r.stats&&x.r.stats[k];if(st&&st[r.mi]>0){tot+=st[r.mi];any=true;}});
+      let tot=0,any=false,ent=0;
+      r.holes.forEach(x=>{const st=x.r.stats&&x.r.stats[k];if(st&&st[r.mi]>0){tot+=st[r.mi];any=true;}
+        if(k==='putts'&&puttsEntered(x.r,r.mi))ent++;});
+      // putts: every scored hole answered, or the round is left out of the average
+      if(k==='putts'&&ent<r.holes.length)return null;
       return any?{tot,n:r.holes.length}:null;
     }).filter(Boolean);
     if(!recd.length)return null;
@@ -6901,8 +6911,8 @@ function vStats(){
     ${rounds.length?'<div class="tiny mt">Confirmed holes from your past rounds. 9-hole rounds are normalized into the per-18 averages.</div>':''}</div>
   ${acc}
   <div class="card"><h2>🥌 Short game &amp; extras</h2>
-    ${extrasAll||'<div class="tiny">Turn on tracking (putts, chips, bunker, penalties) in Round options — rounds where you track them feed these averages. Untracked rounds are ignored, never counted as zero.</div>'}
-    ${extras?'<div class="tiny mt">Only rounds where each stat was recorded count toward its average.</div>':''}</div>
+    ${extrasAll||'<div class="tiny">Turn on tracking (putts, chips, bunker, penalties) in Round options — rounds where you track them feed these averages. Untracked rounds are ignored, never counted as zero — and putts count only from rounds where you answered every hole.</div>'}
+    ${extras?'<div class="tiny mt">Only rounds where each stat was recorded count toward its average — putts only from rounds where you answered every hole.</div>':''}</div>
   <div class="card"><h2>🏌️ Club distances</h2>
     ${clubRows?`<table class="st"><tr><th>Club</th><th class="r">Shots</th><th class="r">Avg</th><th class="r">Longest</th></tr>${clubRows}</table>
     <div class="tiny" style="font-weight:700;margin-top:12px">Last ${recent.length} shots</div>
@@ -7325,9 +7335,9 @@ function roundSplashHTML(){
   if(x.birdies>0)bits.push(`<b>${x.birdies}</b> birdie${x.birdies===1?'':'s'}`);
   if(x.pars>0)bits.push(`<b>${x.pars}</b> par${x.pars===1?'':'s'}`);
   const acc=[];
-  // putts only when they were actually tracked; a round with tracking off must
-  // never read as zero putts
-  if(x.putts&&x.putts.n>0)acc.push(`<b>${x.putts.n}</b> putts${x.putts.holes<x.holes?` <span style="opacity:.7">(${x.putts.holes} hole${x.putts.holes===1?'':'s'})</span>`:''}`);
+  // putts only when they were entered on every hole of the round; a round with
+  // tracking off, or a partial set, must never read as a putts number
+  if(x.putts&&x.putts.n>0&&!(x.putts.holes<x.holes))acc.push(`<b>${x.putts.n}</b> putts`);
   if(x.fw&&x.fw.of)acc.push(`<b>${Math.round(100*x.fw.hit/x.fw.of)}%</b> fairways`);
   if(x.gir&&x.gir.of)acc.push(`<b>${Math.round(100*x.gir.hit/x.gir.of)}%</b> greens`);
   const ctp=(x.ctp||[]).length
@@ -7397,8 +7407,7 @@ function roundSummary(){
       if(fv>0||gv>0)tracked=true;
       if(p>=4){fwN++;if(fv>0)fwHit++;}
       girN++;if(gv>0)girHit++;
-      const pv=st.putts?st.putts[mi]:0;
-      if(pv>0){putts+=pv;puttHoles++;}
+      if(puttsEntered(r,mi)){putts+=(st.putts&&st.putts[mi])||0;puttHoles++;}
       if(r.ctp===mi)ctps.push(h+1);        // -1 means nobody was on, never a person
     });
     // the longest Track It of the round — whatever survived any undos
@@ -7432,7 +7441,8 @@ function roundSummary(){
       eagles,birdies,pars,
       fw:tracked&&fwN?{hit:fwHit,of:fwN}:null,
       gir:tracked&&girN?{hit:girHit,of:girN}:null,
-      putts:puttHoles?{n:putts,holes:puttHoles}:null, ctp:ctps, longShot,
+      // every scored hole answered, or the putts are not reported at all
+      putts:(puttHoles&&puttHoles===holes.length)?{n:putts,holes:puttHoles}:null, ctp:ctps, longShot,
       players:act.length,game:gameOn(),result};
   }catch(e){return null;}
 }
@@ -8620,7 +8630,8 @@ function swapRoundPlayers(a,b){
   (S.round.holes||[]).forEach(r=>{
     if(!r)return;
     sw(r.gross);sw(r.gts);sw(r.cfts);sw(r.net);
-    if(r.stats){sw(r.stats.gir);sw(r.stats.fw);sw(r.stats.putts);sw(r.stats.bunker);sw(r.stats.chips);sw(r.stats.pen);}
+    if(r.stats)Object.keys(r.stats).forEach(k=>sw(r.stats[k]));
+    sw(r.puttSkip);
     if(r.wolfAt!=null)r.wolfAt=fix(r.wolfAt);
     if(r.partner!=null)r.partner=fix(r.partner);
     if(r.ctp!=null&&r.ctp>=0)r.ctp=fix(r.ctp);
@@ -10035,19 +10046,20 @@ function chalResults(){
   const R=S.round.holes,hs=S.course.holes;
   const done=playOrder().filter(h=>R[h]&&R[h].confirmed);
   if(!done.length)return [];
-  let pars=0,birds=0,putts=0,fwHoles=0,fwHit=0,girHit=0,score=0,scored=0;
+  let pars=0,birds=0,putts=0,puttHoles=0,fwHoles=0,fwHit=0,girHit=0,score=0,scored=0;
   done.forEach(h=>{
     const par=(hs[physHole(h)]||hs[h]||{}).par||4;
     const g=R[h].gross[i];
     if(g!=null){const d=g-par; if(d===0)pars++; else if(d<=-1)birds++; score+=g; scored++;}
     const st=R[h].stats||{};
-    if(st.putts)putts+=(st.putts[i]||0);
+    if(puttsEntered(R[h],i)){putts+=(st.putts&&st.putts[i])||0;puttHoles++;}
     if(par>=4){fwHoles++; if(st.fw&&st.fw[i])fwHit++;}
     if(st.gir&&st.gir[i])girHit++;
   });
   let drive=0;
   const sl=(S.shotLog&&S.shotLog['s'+(S.round.startedAt||0)])||[];
   sl.forEach(s=>{const y=+s.yds||0; if(y>drive)drive=y;});
+  if(puttHoles<scored)putts=0;   // a hole skipped = the putts goal has no data, never a pass
   const got={pars,birds,putts,score,
     fw:fwHoles?Math.round(fwHit/fwHoles*100):0,
     gir:Math.round(girHit/done.length*100),
