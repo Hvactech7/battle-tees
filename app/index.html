@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1787016114';
+const BUILD='1787031284';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -6272,7 +6272,7 @@ function trackedShotsCardHTML(shotMap,players,course,holes){
       <div class="tiny" style="text-align:center;margin-top:4px;color:var(--elec)">tap the map to open it full screen</div></div>`:''}`;
   }).join('');
   if(!rows)return '';
-  setTimeout(()=>bfMiniMap(shotMap,players),80);
+  setTimeout(()=>bfMiniMap(shotMap,players,course),80);
   return `<div class="card"><h2>Tracked shots <span class="tiny" style="font-weight:400">— tap a hole to see them</span></h2>${rows}</div>`;
 }
 // ---- full-screen read-only shot viewer --------------------------------------
@@ -6350,7 +6350,11 @@ async function initShotView(){
   });
   if(pts.length)SVMAP.fitBounds(L.latLngBounds(pts).pad(0.25));
 }
-async function bfMiniMap(shotMap,players){
+// `course` is the ROUND's course — in the Battlefield it comes from the room doc
+// and must be carried in: by the time the map is tapped, withDoc() has long
+// since put S.course back to whatever this phone has chosen in Courses, and
+// the full-screen viewer was naming (and framing) that course instead.
+async function bfMiniMap(shotMap,players,course){
   const el=document.getElementById('bfmap');
   if(!el||el._done||bfHole==null)return;
   el._done=true;
@@ -6362,7 +6366,7 @@ async function bfMiniMap(shotMap,players){
   if(typeof L==='undefined'||!document.getElementById('bfmap'))return;
   const m=L.map(el,{zoomControl:false,attributionControl:false,dragging:true});
   // tap the little map -> the full-screen read-only viewer for this hole
-  const openFull=()=>{try{openShotView(bfHole,shotMap,players,S.course);}catch(e){}};
+  const openFull=()=>{try{openShotView(bfHole,shotMap,players,course||S.course);}catch(e){}};
   m.on('click',openFull);   // Leaflet's own click — the DOM listener as well fired it TWICE
   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19}).addTo(m);
   const pts=[];
@@ -7474,7 +7478,11 @@ function archiveRound(){
       :t0?Math.round(((S.round.myEndedAt||Date.now())-t0)/60000):null,
     players:actIdx().map(i=>S.players[i].name),
     sum:roundSummary(),
-    round:clone(S.round),config:clone(S.config),playersSnap:clone(S.players)
+    round:clone(S.round),config:clone(S.config),playersSnap:clone(S.players),
+    // the course as played, minus its map blob (geo re-fetches by id/geoUrl):
+    // if the course is later removed from Courses, the review still knows
+    // exactly what it was, not whatever the phone has chosen since
+    courseSnap:(()=>{const c=clone(S.course);delete c.geo;return c;})()
   };
   S.history=(S.history||[]).filter(e=>e.id!==entry.id);
   S.history.unshift(entry);
@@ -7636,7 +7644,15 @@ function reopenRound(id){
   S.round=clone(e.round);S.round.started=true;S.round.reopened=true;
   S.config=clone(e.config);
   if(e.playersSnap)S.players=clone(e.playersSnap);
-  const c=S.courses.find(x=>x.id===e.courseId);if(c)S.course=clone(c);
+  // the library copy first (it may have been corrected since), then the
+  // snapshot taken at archive time, then a named stub — never the course the
+  // phone happens to have chosen today
+  const c=S.courses.find(x=>x.id===e.courseId);
+  if(c)S.course=clone(c);
+  else if(e.courseSnap)S.course=clone(e.courseSnap);
+  else if(!S.course||S.course.id!==e.courseId)S.course={id:e.courseId||'unknown',name:e.courseName||'Course',
+    teeSets:[{id:'t0',name:'Tee',rating:72,slope:113}],
+    holes:Array.from({length:18},(_,i)=>({par:4,si:i+1,yards:[]}))};
   if(!S.round.myEndedAt)S.round.myEndedAt=e.endedAt;
   if(!S.round.myStartedAt&&e.mins!=null)S.round.myStartedAt=e.endedAt-e.mins*60000;
   // Land on the last hole PLAYED. The archived cur sits on the NEXT hole —
