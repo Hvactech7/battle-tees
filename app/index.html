@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1787033348';
+const BUILD='1787067602';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -6215,6 +6215,7 @@ function vBattlefield(){
         if(x.eagles>0)b.push(`<b>${x.eagles}</b> eagle${x.eagles===1?'':'s'}`);
         if(x.birdies>0)b.push(`<b>${x.birdies}</b> birdie${x.birdies===1?'':'s'}`);
         if(x.pars>0)b.push(`<b>${x.pars}</b> par${x.pars===1?'':'s'}`);
+        if(!(x.birdies>0)&&x.bogeys>0)b.push(`<b>${x.bogeys}</b> bogey${x.bogeys===1?'':'s'}`);   // no birdies: bogeys stand in
         if(x.putts>0)b.push(`<b>${x.putts}</b> putts`);
         if((x.ctp||[]).length)b.push(`🎯 <b>${x.ctp.length}</b> CTP`);
         if(x.longShot&&x.longShot.yds>0)b.push(`💥 <b>${ydDisp(x.longShot.yds)}${uLbl()}</b>${x.longShot.club?' '+esc(x.longShot.club):''}`);
@@ -6370,6 +6371,7 @@ function vBfWatch(){
         if(tally[k].eag)bits.push(tally[k].eag+(tally[k].eag>1?' eagles':' eagle'));
         if(tally[k].bird)bits.push(tally[k].bird+(tally[k].bird>1?' birdies':' birdie'));
         if(tally[k].par)bits.push(tally[k].par+(tally[k].par>1?' pars':' par'));
+        if(!tally[k].bird&&tally[k].bog)bits.push(tally[k].bog+(tally[k].bog>1?' bogeys':' bogey'));   // no birdies: bogeys stand in
         return `<div class="row"><span>${esc((S.players[i]||{}).name||'?')}</span>
         <span class="tiny">${bits.length?bits.join(' · '):'—'}</span></div>`;}).join('')}
     </div>
@@ -7504,6 +7506,9 @@ function roundSplashHTML(){
   if(x.eagles>0)bits.push(`<b>${x.eagles}</b> eagle${x.eagles===1?'':'s'}`);
   if(x.birdies>0)bits.push(`<b>${x.birdies}</b> birdie${x.birdies===1?'':'s'}`);
   if(x.pars>0)bits.push(`<b>${x.pars}</b> par${x.pars===1?'':'s'}`);
+  // no birdies to brag about: the bogeys stand in, so the line still says
+  // something about how the round went (Nathan, 8/17)
+  if(!(x.birdies>0)&&x.bogeys>0)bits.push(`<b>${x.bogeys}</b> bogey${x.bogeys===1?'':'s'}`);
   const acc=[];
   // putts only when they were entered on every hole of the round; a round with
   // tracking off, or a partial set, must never read as a putts number
@@ -7564,14 +7569,14 @@ function roundSummary(){
     const mi=myPlayerIdx(), act=actIdx();
     const holes=playOrder().filter(h=>{const r=S.round.holes[h];return r&&r.confirmed&&r.gross&&r.gross[mi]!=null;});
     if(!holes.length)return null;
-    let gross=0,par=0,eagles=0,birdies=0,pars=0;
+    let gross=0,par=0,eagles=0,birdies=0,pars=0,bogeys=0;
     let fwHit=0,fwN=0,girHit=0,girN=0,tracked=false;
     let putts=0,puttHoles=0;const ctps=[];
     holes.forEach(h=>{
       const r=S.round.holes[h], p=(S.course.holes[h]||{par:4}).par, g=r.gross[mi];
       gross+=g;par+=p;
       const d=g-p;
-      if(d<=-2)eagles++;else if(d===-1)birdies++;else if(d===0)pars++;
+      if(d<=-2)eagles++;else if(d===-1)birdies++;else if(d===0)pars++;else if(d===1)bogeys++;
       const st=r.stats||{};
       const fv=st.fw?st.fw[mi]:0, gv=st.gir?st.gir[mi]:0;
       if(fv>0||gv>0)tracked=true;
@@ -7608,7 +7613,7 @@ function roundSummary(){
       }catch(e){}
     }
     return {gross,net,par,toPar:gross-par,holes:holes.length,
-      eagles,birdies,pars,
+      eagles,birdies,pars,bogeys,
       fw:tracked&&fwN?{hit:fwHit,of:fwN}:null,
       gir:tracked&&girN?{hit:girHit,of:girN}:null,
       // every scored hole answered, or the putts are not reported at all
