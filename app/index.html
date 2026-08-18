@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1787012863';
+const BUILD='1787013835';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -2769,50 +2769,19 @@ function lastLinesFor(h){
 // White crosshair markers for the distance line — the target on the green and
 // any midpoints. A ring with a gap in the middle and four ticks, dark casing so
 // it reads on a light fairway; the tooltip sits above it.
-// The reticle covers a fixed patch of GROUND — CROSSHAIR_YDS across — so it
-// grows as you zoom into the green and shrinks as you pull back, like a ring
-// painted on the turf. Stroke weights are in screen px and stay put.
-const CROSSHAIR_YDS=25;
-function crosshairPx(){
-  try{
-    if(!LMAP)return 35;
-    const c=LMAP.getCenter(), z=LMAP.getZoom();
-    const mpp=40075016.686*Math.abs(Math.cos(c.lat*Math.PI/180))/Math.pow(2,z+8);
-    return Math.max(14,Math.min(400,Math.round(CROSSHAIR_YDS*0.9144/mpp)));
-  }catch(e){return 35;}
+// White scope-reticle markers for the distance line — the target on the green
+// and any midpoints. Fixed SCREEN size (35px) so it stays a sight, never a blob,
+// at every zoom: thin ring, four short sight lines at 45° running in from the
+// ring, a centre dot on the pin. Dark casing so it reads on a light fairway.
+function crosshairHTML(cls){
+  return '<div class="'+(cls||'')+'" style="width:35px;height:35px;position:relative;color:#fff;filter:drop-shadow(0 0 2px rgba(0,0,0,.9)) drop-shadow(0 1px 3px rgba(0,0,0,.6))">'
+    +'<svg width="35" height="35" viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-linecap="butt">'
+    +'<circle cx="13" cy="13" r="11.5" stroke-width="1.2"/>'
+    +'<path stroke-width="1.3" transform="rotate(45 13 13)" d="M13 1.5v5.4M13 19.1v5.4M1.5 13h5.4M19.1 13h5.4"/>'
+    +'<circle cx="13" cy="13" r="1.375" fill="currentColor" stroke="none"/></svg></div>';
 }
-function crosshairHTML(cls,px){
-  px=px||crosshairPx();
-  // stroke widths are expressed in viewBox units, so scale them inversely to
-  // hold ~1.6px ring / ~1.75px sights on screen at any size
-  const k=26/px, ring=(1.6*k).toFixed(3), sight=(1.75*k).toFixed(3);
-  return '<div class="'+(cls||'')+'" style="width:'+px+'px;height:'+px+'px;position:relative;color:#fff;filter:drop-shadow(0 0 2px rgba(0,0,0,.9)) drop-shadow(0 1px 3px rgba(0,0,0,.6))">'
-    +'<svg width="'+px+'" height="'+px+'" viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-linecap="butt">'
-    +'<circle cx="13" cy="13" r="11.5" stroke-width="'+ring+'"/>'
-    +'<path stroke-width="'+sight+'" transform="rotate(45 13 13)" d="M13 1.5v8.3M13 16.2v8.3M1.5 13h8.3M16.2 13h8.3"/></svg></div>';
-}
-function crosshairIcon(cls,px){
-  px=px||crosshairPx();
-  return L.divIcon({className:'',html:crosshairHTML(cls,px),iconSize:[px,px],iconAnchor:[px/2,px/2]});
-}
-// every reticle on the map re-sizes to the new zoom
-let lReticles=[];
-function rescaleReticles(){
-  const px=crosshairPx();
-  // never drop a marker here — a marker mid-setIcon has no element for a tick.
-  // Only teardownMap empties this list.
-  lReticles.forEach(m=>{
-    if(!m||!m._map)return;
-    const cls=(m._btCls||'');
-    try{m.setIcon(crosshairIcon(cls,px));}catch(e){}
-    // the tooltip rides above the ring, however big it is
-    try{const tt=m.getTooltip&&m.getTooltip();
-      if(tt){tt.options.offset=L.point(0,-(px/2+4));if(tt.isOpen&&tt.isOpen()){m.closeTooltip();m.openTooltip();}}
-    }catch(e){}
-    // the aim-moved tint must survive the icon swap
-    try{if(cls==='aimdot'){const d2=m.getElement()&&m.getElement().querySelector('.aimdot');
-      if(d2)d2.style.color=(mapMarks&&mapMarks.aimC)?'#ff8a3d':'#ffffff';}}catch(e){}
-  });
+function crosshairIcon(cls){
+  return L.divIcon({className:'',html:crosshairHTML(cls),iconSize:[35,35],iconAnchor:[17.5,17.5]});
 }
 function drawShotLines(){
   lShots.forEach(l=>{try{LMAP.removeLayer(l);}catch(e){}});lShots=[];
@@ -3095,7 +3064,7 @@ function scoreNagToast(){
 function teardownMap(){
   if(mapWatch!=null&&navigator.geolocation){navigator.geolocation.clearWatch(mapWatch);mapWatch=null;}
   if(LMAP){try{LMAP.remove();}catch(e){}LMAP=null;}
-  mapMarks={};lSpine=null;gmSpine=null;lTee=null;lShots=[];gmShots=[];lReticles=[];
+  mapMarks={};lSpine=null;gmSpine=null;lTee=null;lShots=[];gmShots=[];
 }
 // whose phone is this? self-claimed slot first, then profile-name match, else slot 0
 // ---------- shot tracker ----------
@@ -4637,9 +4606,7 @@ async function initHoleMap(){
     // tap it afterwards to snap back to the green center (aimC rides separately
     // from greenC so F/M/B always speaks for the real green)
     var lGreen=L.marker(greenC,{draggable:true,icon:crosshairIcon('aimdot')}).addTo(LMAP);
-    lGreen.bindTooltip(hasPath?yd(mDist(geo.path[0],greenC))+uLbl():'green',{permanent:true,direction:'top',offset:[0,-(crosshairPx()/2+4)],className:'maplbl'});
-    lGreen._btCls='aimdot';lReticles.push(lGreen);
-    LMAP.on('zoomend',rescaleReticles);
+    lGreen.bindTooltip(hasPath?yd(mDist(geo.path[0],greenC))+uLbl():'green',{permanent:true,direction:'top',offset:[0,-18],className:'maplbl'});
     const aimHome=greenC.slice();
     let aimJustDragged=false;
     const aimPaint=()=>{
@@ -4760,6 +4727,16 @@ async function initHoleMap(){
     if((mapMarks.aimC||mapMarks.greenC)&&typeof lGreen!=='undefined'&&lGreen&&mapMarks.ref)
       lGreen.setTooltipContent(yd(mDist(mapMarks.ref,mapMarks.aimC||mapMarks.greenC))+uLbl()+(mapMarks.aimC?' 🎯':''));
   };
+  // the sight ring's outer edge in screen pixels (35px icon, r=11.5 of 26 + stroke)
+  const RETICLE_PX=16.5;
+  const trimLeg=(a,b,ta,tb)=>{
+    const pa=LMAP.latLngToLayerPoint(a),pb=LMAP.latLngToLayerPoint(b);
+    const dx=pb.x-pa.x,dy=pb.y-pa.y,len=Math.hypot(dx,dy);
+    if(len<=ta+tb+1)return null;                       // too short to show between the rings
+    const ux=dx/len,uy=dy/len;
+    return [LMAP.layerPointToLatLng(L.point(pa.x+ux*ta,pa.y+uy*ta)),
+            LMAP.layerPointToLatLng(L.point(pb.x-ux*tb,pb.y-uy*tb))];
+  };
   // the line is live whenever GPS has a fix (me → green) — taps just add waypoints
   const refreshTapLine=()=>{
     const from=mapMarks.mePos||(lTaps.length?mapMarks.ref:null);
@@ -4770,10 +4747,16 @@ async function initHoleMap(){
     const endC=mapMarks.aimC||mapMarks.greenC;
     const pts=[from,...ts,endC].filter(Boolean);
     if(pts.length<2){dropTapLine();return;}
-    if(lTapLine){lTapLine.setLatLngs(pts);lTapCase.setLatLngs(pts);}
+    // every point after the first wears a sight: each leg stops at the ring's
+    // outer edge instead of running through it (trimmed in screen pixels, so
+    // it is re-cut on zoomend to keep the same gap at any scale)
+    const segs=[];
+    for(let i=1;i<pts.length;i++){const sg=trimLeg(pts[i-1],pts[i],i>1?RETICLE_PX:0,RETICLE_PX);if(sg)segs.push(sg);}
+    if(!segs.length){[lTapLine,lTapCase].forEach(o=>{if(o)LMAP.removeLayer(o);});lTapLine=lTapCase=null;}
+    else if(lTapLine){lTapLine.setLatLngs(segs);lTapCase.setLatLngs(segs);}
     else{
-      lTapCase=L.polyline(pts,{color:'#0a1220',weight:4,opacity:.45}).addTo(LMAP);
-      lTapLine=L.polyline(pts,{color:'#ffffff',weight:2,opacity:.95}).addTo(LMAP);
+      lTapCase=L.polyline(segs,{color:'#0a1220',weight:4,opacity:.45,lineCap:'butt'}).addTo(LMAP);
+      lTapLine=L.polyline(segs,{color:'#ffffff',weight:2,opacity:.95,lineCap:'butt'}).addTo(LMAP);
       lTaps.forEach(m=>m.bringToFront&&m.bringToFront());
     }
     // each dot prices its arriving leg
@@ -4787,6 +4770,7 @@ async function initHoleMap(){
     refreshTapLine();
   };
   mapMarks.refreshTapLine=refreshTapLine;
+  LMAP.on('zoomend',()=>{try{refreshTapLine();}catch(e){}});   // re-cut the ring gaps at the new scale
   mapMarks.setMe=pos=>{if(!LMAP)return;
     if(!pos){if(lMe){LMAP.removeLayer(lMe);lMe=null;}refreshTapLine();return;}
     if(!lMe)lMe=L.circleMarker(pos,{radius:8,color:'#fff',weight:2.5,fillColor:'#2b86ec',fillOpacity:1}).addTo(LMAP);else lMe.setLatLng(pos);
@@ -4800,8 +4784,7 @@ async function initHoleMap(){
       best.setLatLng(t);
     }else{
       const m=L.marker(t,{icon:crosshairIcon(),interactive:false}).addTo(LMAP);
-      m.bindTooltip('',{permanent:true,direction:'top',offset:[0,-(crosshairPx()/2+4)],className:'maplbl'});
-      m._btCls='';lReticles.push(m);
+      m.bindTooltip('',{permanent:true,direction:'top',offset:[0,-18],className:'maplbl'});
       lTaps.push(m);
     }
     refreshTapLine();
