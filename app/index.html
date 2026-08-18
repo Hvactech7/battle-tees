@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1787031284';
+const BUILD='1787032001';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -2909,27 +2909,57 @@ function makeOrientFromMe(greenC,greenPoly,el){
     }catch(e){}
   };
 }
+// The camera for green-up: bearing that puts `greenC` straight up from `from`,
+// and the centre/zoom that fit `pts` + the green into a viewport of el's size
+// (110px spared top-and-bottom, 30px side-to-side for the overlays). Pure maths
+// — the live hole map and the read-only shot viewer both point their maps with it.
+// `padBottom` (px) reserves a strip at the foot of the viewport — the shot
+// viewer's legend sits there — so the bottom of the frame lands above it.
+function greenUpCamera(from,greenC,greenPoly,pts,el,padBottom){
+  const rad=Math.PI/180, lat0=from[0]*rad;
+  const M=pt=>[(pt[1]-from[1])*111320*Math.cos(lat0),(pt[0]-from[0])*110540];  // metres [east,north]
+  const g=M(greenC); const len=Math.hypot(g[0],g[1])||1;
+  const u=[g[0]/len,g[1]/len], v=[-u[1],u[0]];
+  let a0=1e9,a1=-1e9,c0=1e9,c1=-1e9;
+  ((pts&&pts.length?pts:[from]).concat(greenPoly||[greenC])).forEach(pt=>{const m=M(pt);
+    const a=m[0]*u[0]+m[1]*u[1], c=m[0]*v[0]+m[1]*v[1];
+    if(a<a0)a0=a;if(a>a1)a1=a;if(c<c0)c0=c;if(c>c1)c1=c;});
+  const pb=padBottom||0;
+  const vh=((el&&el.clientHeight)||600)-pb, vw=(el&&el.clientWidth)||360;
+  const mpp=Math.max((a1-a0)*1.18/Math.max(1,vh-110),(c1-c0)*1.35/Math.max(1,vw-30),0.05);
+  const zoom=Math.min(20,Math.log2(156543.03392*Math.cos(lat0)/mpp));
+  // the map centres on `center`; pull it toward `from` by half the reserved
+  // strip so the content is centred in the part of the screen that is visible
+  const midA=(a0+a1)/2-(pb/2)*mpp, midC=(c0+c1)/2;
+  const cx=u[0]*midA+v[0]*midC, cy=u[1]*midA+v[1]*midC;
+  const center=[from[0]+cy/110540, from[1]+cx/(111320*Math.cos(lat0))];
+  return {bearing:-((Math.atan2(g[0],g[1])/rad+360)%360),center,zoom};
+}
 function orientGreenUp(from,greenC,greenPoly,pts,el){
   try{
     if(!LMAP||!from||!greenC||!L.Map.prototype.setBearing)return false;
-    const rad=Math.PI/180, lat0=from[0]*rad;
-    const M=pt=>[(pt[1]-from[1])*111320*Math.cos(lat0),(pt[0]-from[0])*110540];  // metres [east,north]
-    const g=M(greenC); const len=Math.hypot(g[0],g[1])||1;
-    const u=[g[0]/len,g[1]/len], v=[-u[1],u[0]];
-    let a0=1e9,a1=-1e9,c0=1e9,c1=-1e9;
-    ((pts&&pts.length?pts:[from]).concat(greenPoly||[greenC])).forEach(pt=>{const m=M(pt);
-      const a=m[0]*u[0]+m[1]*u[1], c=m[0]*v[0]+m[1]*v[1];
-      if(a<a0)a0=a;if(a>a1)a1=a;if(c<c0)c0=c;if(c>c1)c1=c;});
-    const vh=(el&&el.clientHeight)||600, vw=(el&&el.clientWidth)||360;
-    const mpp=Math.max((a1-a0)*1.18/Math.max(1,vh-110),(c1-c0)*1.35/Math.max(1,vw-30),0.05);
-    const zoom=Math.min(20,Math.log2(156543.03392*Math.cos(lat0)/mpp));
-    const midA=(a0+a1)/2, midC=(c0+c1)/2;
-    const cx=u[0]*midA+v[0]*midC, cy=u[1]*midA+v[1]*midC;
-    const center=[from[0]+cy/110540, from[1]+cx/(111320*Math.cos(lat0))];
-    if(!LMAP._btUserRot)autoBearing(-((Math.atan2(g[0],g[1])/rad+360)%360));
-    LMAP.setView(center,zoom,{animate:false});
+    const cam=greenUpCamera(from,greenC,greenPoly,pts,el);
+    if(!LMAP._btUserRot)autoBearing(cam.bearing);
+    LMAP.setView(cam.center,cam.zoom,{animate:false});
     return true;
   }catch(e){return false;}
+}
+// The hosted hole map for ANY course object, without touching S.course — the
+// shot viewer reads a Battlefield round's course, or a saved round's, and
+// neither is necessarily the one on the phone's map screen. Returns null when
+// there is nothing hosted; never throws.
+async function fetchCourseGeo(course){
+  try{
+    if(!course)return null;
+    let url=course.geoUrl||HOSTED_GEO[course.id];
+    if(!url)return null;
+    if(!/^(https?:)?\/\//i.test(url)&&url[0]!=='/')url='/'+url;
+    const r=await fetch(url);if(!r.ok)return null;
+    const js=await r.json();
+    if(js&&js.holes&&Object.keys(js.holes).length)return {ts:Date.now(),holes:js.holes};
+    if(js&&js.greens&&js.greens.length)return {ts:Date.now(),holes:{},greens:js.greens};
+  }catch(e){}
+  return null;
 }
 function mDist(a,b){return kmBetween(a[0],a[1],b[0],b[1])*1000;}
 // DISTANCE UNITS. Yards is the default and always has been — this only changes
@@ -6312,7 +6342,7 @@ function vShotView(){
   return topbar(`Hole ${v.h+1} · Par ${hole.par}`,`${esc((v.course&&v.course.name)||'')} · tracked shots`,'','hero maphero','')+`
   <div id="svmap" style="position:fixed;top:62px;bottom:0;left:0;right:0;margin:0 auto;width:100%;max-width:480px;z-index:1;background:#0a0f18"></div>
   <button onclick="closeShotView()" style="position:fixed;right:max(10px,calc(50vw - 230px));top:calc(100px + env(safe-area-inset-top));z-index:6;background:rgba(15,21,34,.82);border:1.5px solid var(--line);border-radius:12px;color:#fff;padding:10px 17px;font-size:17px;font-weight:600;font-family:inherit">Back</button>
-  <div style="position:fixed;left:max(10px,calc(50vw - 230px));right:max(10px,calc(50vw - 230px));bottom:calc(14px + env(safe-area-inset-bottom));z-index:6;background:rgba(15,21,34,.9);border:1.5px solid var(--line);border-radius:12px;padding:8px 12px">${rows}
+  <div id="svlegend" style="position:fixed;left:max(10px,calc(50vw - 230px));right:max(10px,calc(50vw - 230px));bottom:calc(14px + env(safe-area-inset-bottom));z-index:6;background:rgba(15,21,34,.9);border:1.5px solid var(--line);border-radius:12px;padding:8px 12px">${rows}
     <div class="tiny" style="color:var(--ink3);margin-top:4px">Pinch to zoom · drag to look around · nothing here can be changed</div></div>`;
 }
 const SV_COLS=['#e8604f','#4aa8ff','#f5c542','#6fdc8c','#d98cff','#ff9f43'];
@@ -6323,12 +6353,25 @@ async function initShotView(){
   if(typeof L==='undefined'){try{await loadLeaflet();}catch(e){}}
   if(typeof L==='undefined'||!document.getElementById('svmap')||!shotView)return;
   const v=shotView;
-  SVMAP=L.map(el,{zoomControl:false,attributionControl:false});
+  // the hole map may not be on this course object yet (a saved round opened
+  // fresh, a Battlefield doc that travelled without it) — fetch it so the
+  // viewer can point green-up rather than guess
+  if(!(v.course&&v.course.geo&&v.course.geo.holes)){
+    const g=await fetchCourseGeo(v.course);
+    if(shotView!==v||!document.getElementById('svmap'))return;   // Back was tapped meanwhile
+    if(g&&v.course)v.course.geo=g;
+  }
+  const canRot=!!L.Map.prototype.setBearing;
+  SVMAP=L.map(el,canRot?{zoomControl:false,attributionControl:false,rotate:true,rotateControl:false,touchRotate:false,zoomSnap:0}
+                       :{zoomControl:false,attributionControl:false});
   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:20,maxNativeZoom:19}).addTo(SVMAP);
   const pts=[];
+  let greenC=null,greenPoly=null;
   // the hole itself, when the course has it — centreline and green, unlabelled
   try{
     const geo=v.course&&v.course.geo&&v.course.geo.holes&&v.course.geo.holes[(v.h%18)+1];
+    if(geo&&geo.green&&geo.green.length>2){greenPoly=geo.green;greenC=centroidOf(geo.green);}
+    else if(geo&&geo.path&&geo.path.length>1)greenC=geo.path[geo.path.length-1];
     if(geo&&geo.path&&geo.path.length>1){
       L.polyline(geo.path,{color:'#0a1220',weight:5,opacity:.35,interactive:false}).addTo(SVMAP);
       L.polyline(geo.path,{color:'#e8e2d6',weight:2,opacity:.55,dashArray:'6 6',interactive:false}).addTo(SVMAP);
@@ -6348,6 +6391,29 @@ async function initShotView(){
       .bindTooltip(`${ydDisp(x.yds)}${uLbl()}`,{permanent:true,direction:'top',offset:[0,-6],className:'maplbl'});
     pts.push(x.a,x.b);
   });
+  // GREEN UP, like the hole map: the green at the top of the screen, the start
+  // of the tracked shot near the bottom — never the whole hole from a mile up.
+  // With several shots on the hole the earliest start (farthest from the green)
+  // is the bottom; every shot still fits. No hole map at all: point along the
+  // shot itself, its far end standing in for the green.
+  try{
+    const shotPts=[];v.shots.forEach(x=>{shotPts.push(x.a,x.b);});
+    const far=(o,list)=>list.reduce((b,p)=>mDist(p,o)>mDist(b,o)?p:b,list[0]);
+    let from,target=greenC;
+    if(target)from=far(target,v.shots.map(x=>x.a));
+    else{
+      const long=v.shots.reduce((b,x)=>(x.yds||0)>(b.yds||0)?x:b,v.shots[0]);
+      from=long.a;target=far(from,shotPts);
+    }
+    if(canRot&&from&&target&&mDist(from,target)>5){
+      const legend=document.getElementById('svlegend');
+      const pad=legend?Math.min(260,legend.getBoundingClientRect().height+20):100;
+      const cam=greenUpCamera(from,target,greenPoly,shotPts,el,pad);
+      SVMAP.setBearing(cam.bearing);
+      SVMAP.setView(cam.center,cam.zoom,{animate:false});
+      return;
+    }
+  }catch(e){}
   if(pts.length)SVMAP.fitBounds(L.latLngBounds(pts).pad(0.25));
 }
 // `course` is the ROUND's course — in the Battlefield it comes from the room doc
