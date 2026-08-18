@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1787032001';
+const BUILD='1787033348';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -722,6 +722,14 @@ function load(){
       if(s.config.nassau&&s.config.nassau.pairing==null)s.config.nassau.pairing=0;
       if(!s.config.span)s.config.span={count:18,start:0};
       if(!s.round.span)s.round.span={count:18,start:0};
+      // killed mid course-preview: the course being LOOKED AT must not become
+      // the chosen one — put the real course back and land on Courses
+      if(s._previewOf){
+        const k=(s.courses||[]).find(c=>c&&c.id===s._previewOf);
+        if(k)s.course=clone(k);
+        delete s._previewOf;
+        if(s.screen==='map')s.screen='courses';
+      }
       // empty map caches written while the hosted path was 404ing (app moved to
       // /app/, national geoUrls were root-relative) — drop them so they refetch
       (s.courses||[]).forEach(c=>{if(c&&c.geo&&c.geo.empty)delete c.geo;});
@@ -941,7 +949,8 @@ function lastShotAt(a){return (a&&a.length)?Math.max(...a.map(s=>s.at||0)):0;}
 // real one), never the blackout. Content-identical to the non-amnesia payload,
 // so flipping the switch mid-round pushes nothing.
 function courseForShare(){
-  const c=S.course;
+  // a course preview swaps S.course for a look; the ROUND's course is the kept one
+  const c=(typeof coursePreview!=='undefined'&&coursePreview&&coursePreview.keep)||S.course;
   if(!c||!(c.geo&&c.geo.amn))return c;
   const out=Object.assign({},c);
   delete out.geoReal;
@@ -999,8 +1008,13 @@ function applyOp(k,v,defer){
         // blackout, park what they sent so it is there the instant I switch off.
         const wasBlack=S.course&&S.course.geo&&S.course.geo.amn&&amnesiaOn((v.course||{}).id);
         const blackout=wasBlack?S.course.geo:null, parked=wasBlack?((v.course&&v.course.geo)||S.course.geoReal):null;
-        S.course=v.course;S.players=v.players;S.config=v.config;
-        if(wasBlack){S.course.geo=blackout;if(parked)S.course.geoReal=parked;}
+        // mid course-preview the round's course lives in coursePreview.keep —
+        // the incoming one lands there, and the preview keeps showing its own
+        if(typeof coursePreview!=='undefined'&&coursePreview){coursePreview.keep=v.course;S.players=v.players;S.config=v.config;}
+        else{
+          S.course=v.course;S.players=v.players;S.config=v.config;
+          if(wasBlack){S.course.geo=blackout;if(parked)S.course.geoReal=parked;}
+        }
         S.round.started=v.started;S.round.dollarPerPt=v.dollarPerPt;
         if(v.games)S.round.games=v.games;
         if(v.rates)S.round.rates=v.rates;
@@ -3049,10 +3063,41 @@ function mapGeoNote(){
   const s2=document.getElementById('fmbsub');
   if(!s2||S.screen!=='map')return;
   if(mapMarks&&mapMarks.mePos)return;               // we have a fix; leave the yardage alone
+  if(mapMarks&&mapMarks._preview)return;            // previewing an unmapped hole: its own note stands
   // the map bar is short; a long sentence here wraps and shoves the fixed buttons
   if(geoState==='denied')s2.innerHTML='Location off — yardages from the tee. Enable in Settings › Privacy.';
   else if(geoState==='waiting')s2.textContent='waiting for GPS — distance will appear once your phone has a fix.';
 }
+// ---- COURSE PREVIEW: the GPS screen for any course in the library, no round ----
+// "View" on a Courses row opens hole 1 exactly as the GPS screen would show it
+// and the arrows walk every hole. The map machinery reads S.course, so the
+// viewed course is swapped in for the duration and the chosen course is put
+// back on Back — and by load() if the app was killed mid-preview (S._previewOf).
+// Nothing round-scoped is drawn or offered: no scores, no Track It, no marks.
+let coursePreview=null;   // {i,id,keep,invited}
+function openCoursePreview(i){
+  const c=S.courses[i];if(!c)return;
+  if(!coursePreview){
+    syncLib();                       // the chosen course's edits go home first
+    coursePreview={i,id:c.id,keep:clone(S.course),invited:false};
+  }else{coursePreview.i=i;coursePreview.id=c.id;coursePreview.invited=false;}
+  S._previewOf=coursePreview.keep.id;
+  S.course=clone(c);
+  mapHole=0;manualOn=false;
+  try{stat('course_view',{course:c.name,courseId:c.id});}catch(e){}
+  S.screen='map';save();render();
+}
+function closeCoursePreview(){
+  if(!coursePreview){S.screen='courses';render();return;}
+  const cp=coursePreview;coursePreview=null;
+  teardownMap();
+  syncLib();                         // whatever the preview learned (the map) stays with that course
+  S.course=cp.keep;                  // the kept course is the truth (a shared round may have updated it)
+  if(!S.course.geo){const lib=S.courses.find(x=>x.id===S.course.id);if(lib&&lib.geo)S.course.geo=lib.geo;}
+  delete S._previewOf;
+  S.screen='courses';save();render();
+}
+function previewHoleCount(){return (S.course&&(S.course.loop9||(S.course.holes||[]).length===9))?9:18;}
 function openMap(){
   primeGeo();                       // fires the iOS prompt on this tap
   // GPS is the headline feature and its usage was entirely unmeasured — once per
@@ -3063,7 +3108,9 @@ function openMap(){
   mapHole=S.round.cur||0;S.screen='map';render();
 }
 function closeMap(){S.screen='hole';render();}
-function mapPrev(){clearScoreNag(false);mapHole=(mapHole+17)%18;render();}
+function mapPrev(){clearScoreNag(false);
+  if(coursePreview){const n=previewHoleCount();mapHole=(mapHole+n-1)%n;render();return;}
+  mapHole=(mapHole+17)%18;render();}
 // Walking off the hole you are playing without scoring it is how holes go
 // missing from cards. The FIRST press of ▶ on an unscored current hole stays
 // put and points at the score input; pressing again within the toast's life
@@ -3071,6 +3118,7 @@ function mapPrev(){clearScoreNag(false);mapHole=(mapHole+17)%18;render();}
 // and scored holes navigate freely.
 let scoreNagAckHole=-1;
 function mapNext(){
+  if(coursePreview){const n=previewHoleCount();mapHole=(mapHole+1)%n;render();return;}
   try{
     if(S.round.started&&!isReview()&&mapHole===S.round.cur){
       const rec=S.round.holes[mapHole];
@@ -3410,6 +3458,7 @@ function mapChScore(d){reviewTouch();
 }
 function vMap(){
   const hole=S.course.holes[mapHole]||{par:4,si:0};
+  if(coursePreview)return vMapPreview(hole);
   // my running score, top-right where Back used to live: to-par big, strokes small
   let myTot=0,myPar=0;
   if(S.round.started){
@@ -3472,6 +3521,24 @@ function vMap(){
         <div class="num" id="fmb" style="font-size:29px;white-space:nowrap">—</div>
         <div class="tiny" id="fmbsub" style="max-height:2.7em;overflow:hidden">loading…</div>
         ${amnesiaOn(S.course.id)?`<div class="tiny" style="color:var(--amber-bd,#e0a53a);margin-top:2px">🧠 amnesia on — this phone is ignoring the saved map. <a href="?amnesia=off" style="color:inherit;text-decoration:underline">turn off</a></div>`:''}
+      </div>
+      <button class="ghost" onclick="mapNext()">▶</button>
+    </div>
+  </div>`;
+}
+// The preview's chrome: the same map, the same header shape and yardage bar,
+// none of the round's inputs. Back closes the preview and restores the course.
+function vMapPreview(hole){
+  return topbar(`Hole ${mapHole+1} · Par ${hole.par}`,`Handicap ${hole.si} · ${S.course.name||''}`,'','hero maphero',
+    `<div style="display:flex;align-items:center;margin-left:auto;gap:10px"><span class="pill gray" style="flex:none;letter-spacing:.6px">PREVIEW</span></div>`)+`
+  <div id="holemap"></div>
+  <button onclick="closeCoursePreview()" style="position:fixed;right:max(10px,calc(50vw - 230px));top:calc(100px + env(safe-area-inset-top));z-index:6;background:rgba(15,21,34,.82);border:1.5px solid var(--line);border-radius:12px;color:#fff;padding:10px 17px;font-size:17px;font-weight:600;font-family:inherit">Back</button>
+  <div class="mapbar">
+    <div class="row" style="border:none;padding:2px 0">
+      <button class="ghost" onclick="mapPrev()">◀</button>
+      <div class="center" style="flex:1">
+        <div class="num" id="fmb" style="font-size:29px;white-space:nowrap">—</div>
+        <div class="tiny" id="fmbsub" style="max-height:2.7em;overflow:hidden">loading…</div>
       </div>
       <button class="ghost" onclick="mapNext()">▶</button>
     </div>
@@ -3943,6 +4010,16 @@ function manualSearchView(){
 let mapInvite=false;
 function mapInviteHTML(){
   if(!mapInvite)return '';
+  if(coursePreview)return `<div class="vfWrap" role="dialog" aria-modal="true" aria-labelledby="miT">
+    <div class="vfCard">
+      <h2 id="miT" class="vfTitle">Could you help us out?</h2>
+      <div class="tiny mb">We have no map for <b>${esc(S.course.name||'this course')}</b> hole
+        <b>${mapHole+1}</b> yet — no tee, no green — so there is nothing to show here from home.</div>
+      <div class="tiny mb"><b>Once you are on the course</b>, tap <b>📍 Map this hole</b> on the GPS screen and
+        point out the tee and the green — about ten seconds. You get live yardage to the green for the
+        rest of the hole, and this hole goes on the map for everyone who plays it after you.</div>
+      <button class="big mt" onclick="declineMapInvite()">Got it</button>
+    </div></div>`;
   return `<div class="vfWrap" role="dialog" aria-modal="true" aria-labelledby="miT">
     <div class="vfCard">
       <h2 id="miT" class="vfTitle">Could you help us out?</h2>
@@ -4410,6 +4487,11 @@ function initGreensMap(el){
     if(from)greensPickTarget(from);   // every fix re-acquires; was: only when unset
     paint();
     if(!elF)return;
+    if(coursePreview&&!from){   // previewing from home: say what IS mapped here
+      elF.textContent='—';
+      if(sub)sub.textContent=`${pts.length} green${pts.length===1?'':'s'} mapped — hole lines aren't mapped yet. On the course, GPS ranges you to the nearest green.`;
+      return;
+    }
     if(st.target!=null&&from){
       elF.textContent=yd(mDist(from,pts[st.target]))+uLbl();
       if(sub)sub.textContent=`to the green · tap a dot to switch · ${pts.length-st.used.length} of ${pts.length} left`;
@@ -4631,7 +4713,7 @@ async function initHoleMap(){
       });
       lTee=teeMk;
     }
-    drawShotLines();
+    if(!coursePreview)drawShotLines();
     // no hazard/green overlays — the satellite imagery shows them natively
     // (green polygon still powers F/M/B + centroid math below)
     if(geo.green&&geo.green.length>2){
@@ -4688,6 +4770,21 @@ async function initHoleMap(){
       if(myCoords){updateFMB(myCoords,'yards from you');mapMarks.orientFromMe(myCoords);}
       const s3=sub();if(s3)s3.textContent='green mapped here (tee line not mapped) — yardages run off your GPS.';
     }
+  }else if(coursePreview){
+    // PREVIEW of a hole with nothing mapped: sit over the course itself (its
+    // known location, else any hole we do have) rather than over the viewer's
+    // kitchen, say plainly that it is unmapped, and ask once — the way the GPS
+    // screen asks — but for when they are actually standing on it.
+    let c=S.course.loc||null;
+    if(!c){try{const hs=Object.values((S.course.geo&&S.course.geo.holes)||{});
+      const any=hs.find(g=>g&&((g.green&&g.green.length>2)||(g.path&&g.path.length>1)));
+      if(any)c=(any.green&&any.green.length>2)?centroidOf(any.green):any.path[any.path.length-1];}catch(e){}}
+    if(!c)c=myCoords||[38.6972,-121.6173];
+    if(canRotate)autoBearing(0);
+    LMAP.setView(c,S.course.loc?15:16);
+    mapMarks={greenC:null,greenPoly:null,ref:c,mePos:null,aimC:null,_synthRef:true,_preview:true};
+    const s2=sub();if(s2)s2.textContent=`Hole ${mapHole+1} isn't mapped yet — once you're on the course, 📍 Map this hole marks the tee and green in about ten seconds.`;
+    if(!coursePreview.invited){coursePreview.invited=true;setTimeout(()=>{if(coursePreview&&S.screen==='map')showMapInvite();},700);}
   }else{
     const c=myCoords||[38.6972,-121.6173];
     const synthRef=!myCoords;   // no GPS yet: this centre is a placeholder, not a location
@@ -4857,8 +4954,10 @@ async function initHoleMap(){
   cont.addEventListener('pointercancel',endDrag);
   mapMarks._suppress=()=>suppressClick;
   startMapGps();
-  drawTrackPin();
-  drawShotLines();                   // residual shot lines — geo or no geo
+  if(!coursePreview){
+    drawTrackPin();
+    drawShotLines();                 // residual shot lines — geo or no geo
+  }
   LMAP.on('click',e=>{if(mapMarks._suppress&&mapMarks._suppress())return;mapTapAt([e.latlng.lat,e.latlng.lng]);});
 }
 function updateFMB(pos,label){
@@ -7221,6 +7320,7 @@ function courseRowHTML(x,forPick){
   </div>`;
   return `<div class="row" style="${active?'background:var(--green-lt);border-radius:10px;padding:9px 12px;border-top:none;margin:2px 0':''}">
     <div onclick="pickCourse(${i})" style="flex:1;min-width:0;cursor:pointer"><b${active?' style="color:var(--green)"':''}>${esc(c.name)}</b><div class="tiny">Par ${par} · ${c.teeSets.map(t=>esc(t.name)).join(' / ')}</div></div>${miTag}
+    <button class="ghost" onclick="openCoursePreview(${i})" style="flex:none;margin-right:6px">View</button>
     ${active?`<button class="ghost sel" onclick="go('course')" style="flex:none">Edit</button>`
       :S.courses.length>1?`<button class="ghost danger" onclick="delCourse(${i})" style="flex:none">${armDelCourse===i?'Delete?':'✕'}</button>`:''}
   </div>`;
