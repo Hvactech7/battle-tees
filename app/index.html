@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1787013835';
+const BUILD='1787014230';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -5683,7 +5683,7 @@ function vHome(){
   ${markNotesHTML()}
   <div class="center" style="margin:10px 0 18px"><img src="${art('/banner.jpg')}" alt="Battle Tees" style="width:100%;aspect-ratio:1200/509;display:block;border-radius:14px;border:2px solid var(--green);box-shadow:4px 4px 0 var(--green)" onerror="this.outerHTML='<h1 style=&quot;color:var(--green);font-size:20px&quot;>Battle Tees</h1>'"></div>
   ${!inRound?`
-  <button class="big hb" style="font-size:24px;padding:20px 0" onclick="startWizard()">⚔️ START ROUND</button>
+  <button class="big hb" style="font-family:Cinzel,Rajdhani,Inter,serif;font-weight:700;font-size:26px;letter-spacing:2px;text-shadow:0 1px 0 rgba(0,0,0,.35);padding:20px 0" onclick="startWizard()">⚔️ START ROUND ⚔️</button>
   <div style="height:14px"></div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
     <button class="ghost hb" style="padding:12px" onclick="go('courses')">⛳ Courses</button>
@@ -5691,7 +5691,7 @@ function vHome(){
     <button class="ghost hb" style="padding:12px" onclick="go('stats')">📊 Stats</button>
     <button class="ghost hb" style="padding:12px" onclick="go('history')">🕰 Rounds</button>
   </div>
-  <button class="ghost hb" style="width:100%;padding:12px;margin-bottom:16px" onclick="openBattlefield()">⚔️ Community Battlefield</button>
+  <button class="ghost hb" style="width:100%;padding:12px;margin-bottom:16px" onclick="openBattlefield()">⚔️ Community Battlefield ⚔️</button>
   `:''}
   ${!S.me.name?`<div class="card"><h2>Your profile</h2>
     <div class="tiny mb">So nearby phones can add you to a round by name.</div>
@@ -5737,7 +5737,7 @@ function vHome(){
     <button class="ghost hb" style="padding:12px" onclick="go('stats')">📊 Stats</button>
     <button class="ghost hb" style="padding:12px" onclick="go('history')">🕰 Rounds</button>
   </div>
-  <button class="ghost hb" style="width:100%;padding:12px;margin-bottom:16px" onclick="openBattlefield()">⚔️ Community Battlefield</button>
+  <button class="ghost hb" style="width:100%;padding:12px;margin-bottom:16px" onclick="openBattlefield()">⚔️ Community Battlefield ⚔️</button>
   `:''}
   <div class="card"><h2>Games &amp; rules</h2>
     ${gameGridHTML('showRules')}
