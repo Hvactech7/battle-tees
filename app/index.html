@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1787067602';
+const BUILD='1787099032';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1133,12 +1133,14 @@ function applyOp(k,v,defer){
   }finally{applyingRemote=false;}
   // an incoming meta can carry a players array stamped before our slot claim —
   // re-claim so a simultaneous join can't erase row ownership
-  if(!defer){if(k==='meta')claimMySlot(false);save();syncPush();render();}
+  if(!defer){if(k==='meta')claimMySlot(false);save();syncPush();render();
+    if(k!=='meta')try{askPuttsOwed();}catch(e){}}   // my row carded from another phone: ask ME my putts
 }
 function onStateDoc(doc){
   Object.entries(doc||{}).forEach(([k,v])=>applyOp(k,v,true));
   claimMySlot(true);
   save();syncPush();render();
+  try{setTimeout(askPuttsOwed,300);}catch(e){}       // rejoined mid-round: anything owed, oldest first
 }
 function syncConnect(){
   if(!S.share||!S.share.on||sock)return;
@@ -4999,6 +5001,28 @@ function puttsDue(h){
   // single-phone round still collects everyone's: there is no other phone.
   const rows=S.share.on?[myPlayerIdx()]:myRows(h);
   return rows.filter(i=>puttsOn(i)&&rec.gross[i]!=null&&!(done[i]>0)&&!skip[i]);
+}
+// PUTTS OWED. The prompt fires from MY confirm — so a hole that got carded
+// without this phone ever being asked slips through: the app killed with the
+// prompt up (a cold relaunch, Paradise Valley 8/18), or in a shared round
+// someone else carded my row. Now that a round's putts count only when every
+// hole is answered, an unasked hole silently throws the whole round's putts
+// away. Sweep the round for holes where my row is in and nothing was answered
+// or declined, oldest first, one prompt at a time; a hole you declined ("Not
+// now") or answered 0 on is never re-asked. Runs at boot and when a hole doc
+// arrives from another phone.
+function askPuttsOwed(){
+  try{
+    if(puttAsk||!S.round.started||isReview())return false;
+    const mi=myPlayerIdx();
+    for(const h of playOrder()){
+      const r=S.round.holes[h];if(!r)continue;
+      const mineIn=r.confirmed||(r.cfts&&r.cfts[mi]>0);
+      if(!mineIn)continue;
+      if(puttsDue(h).length){askPutts(h,()=>{setTimeout(askPuttsOwed,0);});return true;}
+    }
+  }catch(e){}
+  return false;
 }
 // then() runs once the prompt is finished OR was never needed — that is how the
 // splash stays sequenced behind it.
@@ -11008,7 +11032,17 @@ setInterval(()=>{if(S.round.started&&!S.round.myEndedAt&&S.round.startedAt&&(S.s
 applyTheme();
 healUnfinishedRound();   // rescue a round stranded between _finished and archive
 autoEndStaleRound();
+// A cold relaunch on the GPS screen — iOS killed the app while you were in
+// another one and brought it back from scratch (Paradise Valley 8/18, twice) —
+// came back on HOLE 1: mapHole lives in memory, not in S, and the map read it
+// before anything had set it. Land on the hole the round is on, exactly where
+// the GPS button would have put you.
+function landOnBoot(){
+  try{if(S.screen==='map'&&S.round&&S.round.started)mapHole=S.round.cur||0;}catch(e){}
+}
+landOnBoot();
 render();
+try{setTimeout(askPuttsOwed,400);}catch(e){}   // a hole carded while the prompt was killed
 tryMagicLink();
 if(S.share&&S.share.on){primeCaches(false);syncConnect();}
 else lobbyConnect();
