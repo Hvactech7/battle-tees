@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1787102868';
+const BUILD='1787103137';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1154,8 +1154,16 @@ function onStateDoc(doc){
   save();syncPush();render();
   try{setTimeout(askPuttsOwed,300);}catch(e){}       // rejoined mid-round: anything owed, oldest first
 }
+// A PREVIEW NEVER WRITES TO A LIVE ROOM. A page served from localhost is a
+// developer's copy; it must not open the sync socket to the production relay
+// (8/18: one did, holding a real room code, and pushed its fake meta doc over
+// a finished round). Set localStorage.btAllowRelay to opt a preview in.
+function previewSandboxed(){
+  try{return /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname)&&!localStorage.getItem('btAllowRelay');}catch(e){return false;}
+}
 function syncConnect(){
   if(!S.share||!S.share.on||sock)return;
+  if(previewSandboxed())return;
   try{sock=new WebSocket(RELAY);}catch(e){sock=null;scheduleReconnect();return;}
   sock.onopen=()=>{
     sockOpen=true;retryMs=1000;
