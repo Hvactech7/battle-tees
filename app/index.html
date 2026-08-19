@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1787099816';
+const BUILD='1787102868';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -957,6 +957,13 @@ function courseForShare(){
   if(c.geoReal)out.geo=c.geoReal;else delete out.geo;
   return out;
 }
+// A GROUP share is other phones in the room. A Battlefield broadcast opens a
+// share room too (spectators need a doc), flagged bf — but nobody is in it as a
+// player, and every row is on this phone. Anything that means "the group" —
+// the join code on the header, whose putts this phone asks for, when the map's
+// Confirm may walk on — asks this, never S.share.on (8/18: a solo round wore a
+// JOIN CODE it never had).
+function groupShare(){return !!(S.share&&S.share.on&&!S.share.bf);}
 function shareMeta(){return {course:courseForShare(),players:S.players,config:S.config,started:S.round.started,dollarPerPt:S.round.dollarPerPt,span:S.round.span,startedAt:S.round.startedAt,games:S.round.games||null,rates:S.round.rates||null,
   shots:shotsForShare(),
   capEnd:S.round.capEnd||null,
@@ -1015,6 +1022,11 @@ function applyOp(k,v,defer){
           S.course=v.course;S.players=v.players;S.config=v.config;
           if(wasBlack){S.course.geo=blackout;if(parked)S.course.geoReal=parked;}
         }
+        // a friend typed the code into a SOLO room: another phone now owns a
+        // row, so this is a group — drop the broadcast flag and post the invite
+        // so the rest of the group can find it in the nearby list
+        try{if(S.share&&S.share.bf&&S.share.creator&&(S.players||[]).some(p=>p&&p.ownerDev&&p.ownerDev!==devId())){
+          delete S.share.bf;postRoomInvite();}}catch(e){}
         S.round.started=v.started;S.round.dollarPerPt=v.dollarPerPt;
         if(v.games)S.round.games=v.games;
         if(v.rates)S.round.rates=v.rates;
@@ -1148,8 +1160,7 @@ function syncConnect(){
   sock.onopen=()=>{
     sockOpen=true;retryMs=1000;
     sock.send(JSON.stringify({t:'join',room:S.share.code}));
-    if(S.share.creator&&!S.share.bf)sock.send(JSON.stringify({t:'invite',room:S.share.code,
-      info:{course:S.course.name,players:S.players.map(p=>p.name),group:S.config.groupName||'',ts:Date.now()}}));
+    postRoomInvite();
     syncPush();  // catch-up: anything edited while offline goes out immediately
     render();
   };
@@ -1305,6 +1316,41 @@ function rowLock(h,i){
 // From the mid-round group editor: share, then land on home, where the join
 // code and sync status are shown.
 function startGroupFromGate(){shareRound();go('home');}
+// The lobby invite: what makes this room show up in everyone's "Join a round"
+// list nearby. Sent on connect for a group room, and the moment a solo room
+// becomes one (below).
+function postRoomInvite(){
+  try{if(!(S.share&&S.share.on&&S.share.code&&S.share.creator&&!S.share.bf))return;
+    if(typeof sockOpen!=='undefined'&&sockOpen&&sock)
+      sock.send(JSON.stringify({t:'invite',room:S.share.code,
+        info:{course:S.course.name,players:S.players.map(p=>p.name),group:S.config.groupName||'',ts:Date.now()}}));
+  }catch(e){}
+}
+// A SOLO round is one tap from a group. Its Battlefield room already has a code
+// (the header shows it); tapping the code — or a friend simply typing it — opens
+// the room to players: the bf flag drops, the invite goes out so the room is in
+// the nearby Join list, and from then on it is a group round (Nathan, 8/18:
+// "I start out as a single, then join a group soon after we start").
+function openRoomToFriends(){
+  if(!(S.share&&S.share.on&&S.share.code&&S.share.creator))return false;
+  if(!S.share.bf)return false;
+  delete S.share.bf;
+  S.round.holes.forEach(r=>{if(!r._ts)r._ts=Date.now();});
+  claimMySlot(true);
+  S.shareMetaTs=Date.now();
+  postRoomInvite();
+  primeCaches(false);save();syncPush();
+  return true;
+}
+function inviteFromMap(){
+  if(!(S.share&&S.share.on&&S.share.creator&&S.share.code))return;
+  if(S.share.bf){
+    openRoomToFriends();
+    try{stat('round_share',{side:'host',via:'mapchip',game:S.round.game,thru:S.round.holes.filter(r=>r.confirmed).length,players:NP()});}catch(e){}
+    shotToast('Room open — friends can pick it from Join a round nearby, or enter '+S.share.code);
+    render();
+  }else shotToast('Friends join with '+S.share.code+' — or pick it from Join a round nearby');
+}
 function shareRound(){
   lobbyClose();
   const midRound=!!(S.round&&S.round.started);
@@ -1313,11 +1359,8 @@ function shareRound(){
     // Minting a new one here stranded every spectator on a zombie room that
     // still answered polls as "LIVE" and never received its end stamp.
     delete S.share.bf;S.share.creator=true;
-    if(typeof sockOpen!=='undefined'&&sockOpen&&sock){
-      // already connected — the on-connect invite won't re-fire, so send it now
-      try{sock.send(JSON.stringify({t:'invite',room:S.share.code,
-        info:{course:S.course.name,players:S.players.map(p=>p.name),group:S.config.groupName||'',ts:Date.now()}}));}catch(e){}
-    }
+    // already connected — the on-connect invite won't re-fire, so send it now
+    postRoomInvite();
   }else S.share={on:true,code:makeCode(),creator:true};
   if(midRound)stat('round_share',{side:'host',game:S.round.game,
     thru:S.round.holes.filter(r=>r.confirmed).length,players:NP()});
@@ -1424,12 +1467,23 @@ try{
   if(m&&!localStorage.getItem('btSrc'))localStorage.setItem('btSrc',m[1]);
   btSrc=localStorage.getItem('btSrc')||'';
 }catch(e){}
+// FRIEND TAG. A round-start email carries ?watch=CODE&f=TAG, the TAG being the
+// recipient's — so the Pi can say WHO opened a round in Safari, not just that
+// some iPhone did (8/18). First tag wins and sticks to the device (the phone IS
+// the friend); the tag on the link that was actually followed rides the
+// bf_watch event as `f` as well.
+let btFtag='',btLinkTag='';
+try{
+  const m=/[?&]f=([A-Za-z0-9]{4,12})/.exec(location.search||'');
+  if(m){btLinkTag=m[1];if(!localStorage.getItem('btFtag'))localStorage.setItem('btFtag',m[1]);}
+  btFtag=localStorage.getItem('btFtag')||'';
+}catch(e){}
 function stat(ev,extra){
   // A local preview build shares the live relay, so testing here used to post real
   // rounds into production stats. Anything served from localhost stays local.
   if(/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname))return;
   const e=Object.assign({t:'stat',ev,dev:devId(),who:(S.me&&S.me.name)||'',build:BUILD,
-    mode:btMode(),reh:btReh,src:btSrc,at:Date.now()},extra||{});
+    mode:btMode(),reh:btReh,src:btSrc,at:Date.now()},btFtag?{ftag:btFtag}:{},extra||{});
   try{
     if(lobbySock&&lobbySock.readyState===1){lobbySock.send(JSON.stringify(e));return;}
     // CAP WAS 50, and it silently ate real field data. Cypress Lakes 8/12: no
@@ -3382,17 +3436,17 @@ function mapConfirm(){
   set(()=>{
     const rec=S.round.holes[h];if(!rec)return;
     const mi=myPlayerIdx(),par=(S.course.holes[h]||{par:4}).par;
-    commitStage(h,S.share.on?myRows(h):actIdx());
+    commitStage(h,groupShare()?myRows(h):actIdx());
     if(!rec.gts)rec.gts=[0,0,0,0];
     if(rec.gross[mi]==null){rec.gross[mi]=par;rec.gts[mi]=Date.now();}
-    if(S.share.on){
+    if(groupShare()){
       if(!rec.cfts)rec.cfts=[0,0,0,0];
       myRows(h).forEach(i=>{if(rec.gross[i]!=null)rec.cfts[i]=Date.now();});
       if(!rec.confirmed&&actIdx().every(i=>rec.cfts[i]>0)){rec.confirmed=true;closed=true;}
     }else if(!rec.confirmed&&actIdx().every(i=>rec.gross[i]!=null)){
       rec.confirmed=true;closed=true;
     }
-    if(h===S.round.cur&&!isReview()&&(rec.confirmed||S.share.on))advanceToNext();
+    if(h===S.round.cur&&!isReview()&&(rec.confirmed||groupShare()))advanceToNext();
     // the map walks forward to the next open hole
     const o=playOrder();
     const at=Math.max(0,o.indexOf(h));
@@ -3481,8 +3535,8 @@ function vMap(){
   return topbar(`Hole ${mapHole+1} · Par ${hole.par}${(S.round.holes[mapHole]||{}).confirmed?' ✓':''}`,
     `Handicap ${hole.si}${(S.round.holes[mapHole]||{}).confirmed?' · scored':' · NOT scored yet'}`,'','hero maphero',
     `<div style="display:flex;align-items:center;margin-left:auto;gap:10px">${myScore}${
-      (S.share&&S.share.on&&S.share.creator&&S.share.code)?`<div style="text-align:center;flex:none;margin-right:20px;color:var(--gold,#e8c552);font-family:Rajdhani,Inter,sans-serif;font-weight:700;line-height:1.05">
-        <div style="font-size:10px;font-weight:600;opacity:.85;letter-spacing:.5px">JOIN CODE</div>
+      (S.share&&S.share.on&&S.share.creator&&S.share.code)?`<div onclick="inviteFromMap()" style="text-align:center;flex:none;margin-right:20px;color:var(--gold,#e8c552);font-family:Rajdhani,Inter,sans-serif;font-weight:700;line-height:1.05;cursor:pointer">
+        <div style="font-size:10px;font-weight:600;opacity:.85;letter-spacing:.5px">${S.share.bf?'TAP TO INVITE':'JOIN CODE'}</div>
         <div class="num" style="font-size:22px;letter-spacing:3px">${esc(S.share.code)}</div></div>`:''}${gameBadgeHTML()}</div>`)+`
   <div id="holemap"></div>
   ${mapStatChipsHTML(hole)}
@@ -4999,7 +5053,7 @@ function puttsDue(h){
   // score used to prompt for every row this phone could ratify, so the whole
   // group's putts landed on whoever confirmed first (Teal Bend, 8/15). A
   // single-phone round still collects everyone's: there is no other phone.
-  const rows=S.share.on?[myPlayerIdx()]:myRows(h);
+  const rows=groupShare()?[myPlayerIdx()]:myRows(h);
   return rows.filter(i=>puttsOn(i)&&rec.gross[i]!=null&&!(done[i]>0)&&!skip[i]);
 }
 // PUTTS OWED. The prompt fires from MY confirm — so a hole that got carded
@@ -5930,6 +5984,8 @@ function vHome(){
       ${S.share.creator?`<div class="tiny mt">• <b>Cancel &amp; Close Room</b> kicks everyone out and keeps nothing — for a false start.</div>
       <div class="tiny">• <b>End Round Now</b> finishes and saves the round for everyone.</div>`:''}`
       :S.round.reopened?''
+      :(S.share.on&&S.share.bf&&S.share.creator)?`<button class="ghost mt" style="width:100%" onclick="inviteFromMap();render()">👥 Open Room To Friends — <b class="num" style="letter-spacing:2px">${esc(S.share.code)}</b></button>
+        <div class="tiny mt">Friends pick it from <b>Join a round</b> nearby or enter the code — your scores so far come with you. Typing the code works even before you tap.</div>`
       :`<button class="ghost mt" style="width:100%" onclick="goGroup()">👥 Make This A Group Round</button>
         <div class="tiny mt">Get a code your group can join — your scores so far come with you.</div>`}
   </div>`:''}
@@ -6310,7 +6366,7 @@ function openBfWatch(code){
   const st=bfStore()[code];
   bfWatch={code,doc:(st&&st.doc)||null,entry:(st&&st.entry)||null,err:null};bfHole=null;bfCardFull=false;
   // Spectating is the growth loop — worth knowing whether anyone actually watches.
-  try{stat('bf_watch',{code,cached:!!(st&&st.doc)});}catch(e){}
+  try{stat('bf_watch',Object.assign({code,cached:!!(st&&st.doc)},btLinkTag?{f:btLinkTag}:{}));}catch(e){}
   S.screen='bfwatch';render();
   bfPoll();
   clearInterval(bfTimer);bfTimer=setInterval(bfPoll,20000);
