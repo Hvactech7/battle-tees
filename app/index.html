@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1787170806';
+const BUILD='1787178245';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -6115,9 +6115,20 @@ function bfStore(){try{return JSON.parse(localStorage.getItem('btBattles'))||{};
 function bfStorePut(code,entry,doc){
   try{
     const st=bfStore();
-    st[code]={entry:entry||st[code]&&st[code].entry||{code},doc:doc||(st[code]&&st[code].doc)||null,at:Date.now()};
+    const prev=st[code]||{};
+    // docAt = when the DOC was fetched (the entry refreshes on its own). A doc
+    // cached mid-round is only final once re-fetched AFTER the round's end.
+    st[code]={entry:entry||prev.entry||{code},doc:doc||prev.doc||null,at:Date.now(),
+      docAt:doc?Date.now():(prev.docAt||0)};
     localStorage.setItem('btBattles',JSON.stringify(st));
   }catch(e){}   // storage full: the battle still shows while the relay has it
+}
+// Watching a LIVE round caches its doc as of that moment. When the round later
+// ends, the entry turns Final on the next list — but the cached doc still stops
+// at whatever hole the watcher last saw (KNNB9 8/19: "Final · thru 12" while
+// the relay held all 18). The doc is final only if fetched after the end.
+function bfDocFinal(entryEndedAt,doc,docAt){
+  return !!(entryEndedAt&&doc&&(docAt||0)>=entryEndedAt*1000);
 }
 // ---- friends ----
 // A friend is anyone you have shared a round with — the relay links you both
@@ -6314,7 +6325,8 @@ function openBattlefield(){
     live.forEach(e=>{bfStorePut(e.code,e,null);
       // pull the doc for anything new or still moving so it survives the relay's sweep
       const st=bfStore();
-      if(e.live||!(st[e.code]&&st[e.code].doc))
+      const cached=st[e.code];
+      if(e.live||!(cached&&cached.doc)||!bfDocFinal(e.endedAt,cached.doc,cached.docAt))
         relayBattle({op:'peek',code:e.code}).then(pr=>{
           if(pr&&pr.doc&&pr.doc.meta)bfStorePut(e.code,pr.entry||e,pr.doc);
         }).catch(()=>{});
@@ -6382,7 +6394,7 @@ function vBattlefield(){
 }
 function openBfWatch(code){
   const st=bfStore()[code];
-  bfWatch={code,doc:(st&&st.doc)||null,entry:(st&&st.entry)||null,err:null};bfHole=null;bfCardFull=false;
+  bfWatch={code,doc:(st&&st.doc)||null,entry:(st&&st.entry)||null,docAt:(st&&st.docAt)||0,err:null};bfHole=null;bfCardFull=false;
   // Spectating is the growth loop — worth knowing whether anyone actually watches.
   try{stat('bf_watch',Object.assign({code,cached:!!(st&&st.doc)},btLinkTag?{f:btLinkTag}:{}));}catch(e){}
   S.screen='bfwatch';render();
@@ -6391,18 +6403,19 @@ function openBfWatch(code){
 }
 function bfPoll(){
   if(!bfWatch||S.screen!=='bfwatch'){clearInterval(bfTimer);bfTimer=null;return;}
-  const finished=bfWatch.entry&&bfWatch.entry.endedAt&&bfWatch.doc;
+  const finished=bfDocFinal(bfWatch.entry&&bfWatch.entry.endedAt,bfWatch.doc,bfWatch.docAt);
   if(finished){clearInterval(bfTimer);bfTimer=null;return;}   // archive is final — stop polling
   relayBattle({op:'peek',code:bfWatch.code}).then(r=>{
     if(!bfWatch)return;
     if(r&&r.doc&&r.doc.meta){
-      bfWatch.doc=r.doc;bfWatch.entry=r.entry||bfWatch.entry;bfWatch._miss=0;
+      bfWatch.doc=r.doc;bfWatch.entry=r.entry||bfWatch.entry;bfWatch._miss=0;bfWatch.docAt=Date.now();
       bfStorePut(bfWatch.code,bfWatch.entry,r.doc);   // keep the local copy current
     }else if(bfWatch.doc){
       // the relay has moved on — this battle now lives only on this phone
       bfWatch._miss=(bfWatch._miss||0)+1;
       if(bfWatch._miss>=2){
         if(bfWatch.entry&&!bfWatch.entry.endedAt)bfWatch.entry.endedAt=Math.floor(Date.now()/1000);
+        bfWatch.docAt=Date.now();                     // the relay is gone: what we hold IS the archive
         bfStorePut(bfWatch.code,bfWatch.entry,bfWatch.doc);
         clearInterval(bfTimer);bfTimer=null;
       }
