@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1787103137';
+const BUILD='1787170806';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1633,9 +1633,13 @@ function bfBroadcastStart(){
     // names ride along for friends whose library row never picked up a pid —
     // the relay matches them to verified profile names privately
     const names=[...new Set(actIdx().map(i=>S.players[i]).filter(p=>p&&p.name).map(p=>p.name.trim()))];
+    // the ROUND's start time rides along: the announce can reach the relay
+    // long after the first tee (no signal at Paradise Valley until hole 3,
+    // 8/18 — 20 minutes lost from the Battlefield clock)
     relayBattle({op:'start',code:S.share.code,
       starter:(S.me&&S.me.name)||'A Friend',starterPid:(S.me&&S.me.pid)||'',
-      course:S.course.name,game:gameName(S.round.game),pids,names}).catch(()=>{});
+      course:S.course.name,game:gameName(S.round.game),pids,names,
+      startedAt:S.round.startedAt||null}).catch(()=>{});
   }catch(e){}
 }
 // MUST send on the socket we already hold, synchronously: endRound() calls
@@ -1645,13 +1649,19 @@ function bfBroadcastStart(){
 function bfBroadcastEnd(){
   try{
     if(!(S.share.on&&S.share.code))return;
+    // THE CAPTAIN CLOSES THE BATTLE. A joiner finishing early, or a joiner's
+    // phone auto-ending a stale round the next morning, used to stamp the
+    // room's end — "finished" while the group was still on 12, or an 8-hour
+    // round that was really 3½. The captain's capEnd is the round's end.
+    if(!S.share.creator)return;
+    const endedAt=(S.round.capEnd&&S.round.capEnd.at)||S.round.myEndedAt||Date.now();
     const ws=(sockOpen&&sock)||((lobbySock&&lobbySock.readyState===1)?lobbySock:null);
     if(ws&&ws.readyState===1){
-      ws.send(JSON.stringify({t:'battle',op:'end',code:S.share.code,
+      ws.send(JSON.stringify({t:'battle',op:'end',code:S.share.code,endedAt,
         rid:'f'+Math.random().toString(36).slice(2,8)}));
       return;
     }
-    relayBattle({op:'end',code:S.share.code}).catch(()=>{});   // no socket: best effort
+    relayBattle({op:'end',code:S.share.code,endedAt}).catch(()=>{});   // no socket: best effort
   }catch(e){}
 }
 async function relayBattle(payload){
