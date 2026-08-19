@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1787099032';
+const BUILD='1787099816';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -5033,38 +5033,74 @@ function askPutts(h,then){
   paintPuttAsk();
   return true;
 }
+let puttCloseT=0;
 function closePuttAsk(){
+  clearTimeout(puttCloseT);puttCloseT=0;
   const then=puttAsk&&puttAsk.then;
   puttAsk=null;
   const el=document.getElementById('puttask');if(el)el.remove();
   if(S.screen!=='map')render();
   if(then)then();
 }
-function setPutts(i,v){
-  if(!puttAsk)return;
-  const h=puttAsk.h;
-  set(()=>{
-    const rec=S.round.holes[h];
-    statArr(rec,'putts')[i]=v;
-    statArr(rec,'puttsIn')[i]=1;            // answered — a 0 (chip-in) is still an entry
-    stampStat(rec,i);                       // per-slot stamp so two phones merge
-    // Mark it ASKED as well as recorded. Answered-ness used to be inferred from
-    // the value, so tapping 0 — a chip-in, the very first button — read as
-    // "never answered" and the prompt came back every time.
-    if(!rec.puttSkip)rec.puttSkip=[0,0,0,0];
-    rec.puttSkip[i]=1;
-  });
-  puttAsk.rows=puttAsk.rows.filter(x=>x!==i);
-  if(!puttAsk.rows.length)closePuttAsk();else paintPuttAsk();
+// Persist a putts answer WITHOUT set(): set() ends in render(), and on the map
+// screen every render tears Leaflet down and rebuilds it — a full map rebuild
+// and a GPS restart on every putt tap (h17, Paradise Valley 8/18: a press that
+// seemed to do nothing, then landed late). Stamp, save, sync; repaint only the
+// screens that draw the sheet through render().
+function puttPersist(fn){
+  try{fn();}catch(e){}
+  stampChanges();save();syncPush();
+  if(S.screen!=='map')render();
 }
-function skipPutts(){
-  if(!puttAsk)return;
+function puttWrite(h,i,v){
+  const rec=S.round.holes[h];if(!rec)return;
+  statArr(rec,'putts')[i]=v;
+  statArr(rec,'puttsIn')[i]=1;            // answered — a 0 (chip-in) is still an entry
+  stampStat(rec,i);                       // per-slot stamp so two phones merge
+  // Mark it ASKED as well as recorded. Answered-ness used to be inferred from
+  // the value, so tapping 0 — a chip-in, the very first button — read as
+  // "never answered" and the prompt came back every time.
+  if(!rec.puttSkip)rec.puttSkip=[0,0,0,0];
+  rec.puttSkip[i]=1;
+}
+// The answer is taken on POINTERUP, not only on click: a tap that slides a
+// touch is a scroll to iOS and never becomes a click, and out on the course
+// that is exactly the tap that "did nothing". A pointer answer leaves the sheet
+// up as a "✓ got it" card for a beat, so the click iOS may still synthesize
+// lands on the sheet — never on the Confirm button or the map under it — and
+// the card comes down on its own.
+let puttTouch=null;
+function puttPD(e){puttTouch={x:e.clientX,y:e.clientY};}
+function puttPU(e,i,v){
+  const t=puttTouch;puttTouch=null;
+  if(!t||Math.hypot(e.clientX-t.x,e.clientY-t.y)>14)return;   // a slide, not a tap
+  setPutts(i,v,'pointer');
+}
+function puttPUskip(e){
+  const t=puttTouch;puttTouch=null;
+  if(!t||Math.hypot(e.clientX-t.x,e.clientY-t.y)>14)return;
+  skipPutts('pointer');
+}
+function puttSettle(src){
+  if(src==='pointer'){paintPuttAsk();clearTimeout(puttCloseT);puttCloseT=setTimeout(closePuttAsk,420);}
+  else closePuttAsk();
+}
+function setPutts(i,v,src){
+  if(!puttAsk||!puttAsk.rows.includes(i))return;   // answered already (the click after a pointer answer)
+  const h=puttAsk.h;
+  puttAsk.rows=puttAsk.rows.filter(x=>x!==i);      // answer FIRST, persist second
+  puttPersist(()=>puttWrite(h,i,v));
+  if(!puttAsk||!puttAsk.rows.length)puttSettle(src);else paintPuttAsk();
+}
+function skipPutts(src){
+  if(!puttAsk||!puttAsk.rows.length)return;
   const h=puttAsk.h,rows=puttAsk.rows.slice();
-  set(()=>{const rec=S.round.holes[h];
+  puttAsk.rows=[];
+  puttPersist(()=>{const rec=S.round.holes[h];if(!rec)return;
     if(!rec.puttSkip)rec.puttSkip=[0,0,0,0];
     rows.forEach(i=>{rec.puttSkip[i]=1;});   // asked and declined: do not re-ask
   });
-  closePuttAsk();
+  puttSettle(src);
 }
 // The map screen gets the sheet appended directly — a render() there rebuilds
 // Leaflet mid-prompt (the trap the Undo Track It button hit).
@@ -5079,14 +5115,20 @@ function puttAskSheetHTML(inner){
   if(!puttAsk)return '';
   const h=puttAsk.h;
   const opts=[0,1,2,3,4];
-  const body=`<div class="vfCard" style="width:min(420px,100%)">
+  // every row answered (a pointer answer, closing on its own): a "got it" card
+  // holds the screen for a beat so a trailing click lands on nothing that acts
+  const body=!puttAsk.rows.length?`<div class="vfCard" style="width:min(420px,100%)">
       <h2 class="vfTitle">Putts</h2>
-      <div class="tiny mb">Hole ${h+1}${puttAsk.rows.length>1?'':''} — tap how many you had.</div>
+      <div class="tiny" style="font-size:16px;color:var(--green-mid);font-weight:700">✓ Hole ${h+1} — got it</div>
+    </div>`
+  :`<div class="vfCard" style="width:min(420px,100%)">
+      <h2 class="vfTitle">Putts</h2>
+      <div class="tiny mb">Hole ${h+1} — tap how many you had.</div>
       ${puttAsk.rows.map(i=>`
         ${puttAsk.rows.length>1?`<div class="tiny" style="color:var(--gold);font-weight:700;margin-top:8px">${esc((S.players[i]||{}).name||'')}</div>`:''}
         <div class="puttrow">${opts.map(v=>
-          `<button class="puttbtn" onclick="setPutts(${i},${v})">${v===4?'4+':v}</button>`).join('')}</div>`).join('')}
-      <button class="ghost mt" style="width:100%" onclick="skipPutts()">Not this hole</button>
+          `<button class="puttbtn" onpointerdown="puttPD(event)" onpointerup="puttPU(event,${i},${v})" onclick="setPutts(${i},${v},'click')">${v===4?'4+':v}</button>`).join('')}</div>`).join('')}
+      <button class="ghost mt" style="width:100%" onpointerdown="puttPD(event)" onpointerup="puttPUskip(event)" onclick="skipPutts('click')">Not this hole</button>
     </div>`;
   return inner?`<div class="vfWrap" role="dialog" aria-modal="true">${body}</div>`
               :`<div class="vfWrap" role="dialog" aria-modal="true">${body}</div>`;
