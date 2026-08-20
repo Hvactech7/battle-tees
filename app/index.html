@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1787178245';
+const BUILD='1787264107';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -3172,6 +3172,25 @@ function closeCoursePreview(){
   S.screen='courses';save();render();
 }
 function previewHoleCount(){return (S.course&&(S.course.loop9||(S.course.holes||[]).length===9))?9:18;}
+// MAP CREDITS. Esri (imagery) and OSM (course data) both require attribution,
+// but not a permanent banner: on a phone the accepted form (OSM's attribution
+// guideline) is a collapsed control that expands on tap. Tiny ⓘ, tap to read,
+// folds itself back up. Direct DOM — a render here would rebuild Leaflet.
+const MAP_CREDITS='Imagery © Esri, Maxar · Course data © OpenStreetMap contributors';
+let mapCreditsT=0;
+function toggleMapCredits(){
+  const b=document.getElementById('mapattrib');if(!b)return;
+  const open=b.dataset.open==='1';
+  clearTimeout(mapCreditsT);
+  if(open){b.dataset.open='';b.textContent='ⓘ';b.style.padding='0 6px';}
+  else{
+    b.dataset.open='1';b.textContent=MAP_CREDITS;b.style.padding='0 10px';
+    mapCreditsT=setTimeout(()=>{try{if(b.dataset.open==='1')toggleMapCredits();}catch(e){}},5000);
+  }
+}
+function mapCreditsChipHTML(){
+  return `<button id="mapattrib" onclick="toggleMapCredits()" style="position:fixed;right:max(8px,calc(50vw - 236px));bottom:calc(72px + env(safe-area-inset-bottom));z-index:5;height:20px;padding:0 6px;border:none;border-radius:10px;background:rgba(10,16,26,.55);color:rgba(255,255,255,.72);font-size:10.5px;line-height:20px;font-family:inherit;max-width:92vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">ⓘ</button>`;
+}
 function openMap(){
   primeGeo();                       // fires the iOS prompt on this tap
   // GPS is the headline feature and its usage was entirely unmeasured — once per
@@ -3557,6 +3576,7 @@ function vMap(){
         <div style="font-size:10px;font-weight:600;opacity:.85;letter-spacing:.5px">${S.share.bf?'TAP TO INVITE':'JOIN CODE'}</div>
         <div class="num" style="font-size:22px;letter-spacing:3px">${esc(S.share.code)}</div></div>`:''}${gameBadgeHTML()}</div>`)+`
   <div id="holemap"></div>
+  ${mapCreditsChipHTML()}
   ${mapStatChipsHTML(hole)}
   <button id="trackbtn" onclick="trackShotTap()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(112px + env(safe-area-inset-bottom));z-index:6;width:120px;height:46px;background:var(--card);border:2px solid ${trackShot&&trackShot.hole===mapHole?'var(--amber-bd)':'var(--green)'};border-radius:12px;color:${trackShot&&trackShot.hole===mapHole?'var(--amber-bd)':'var(--green-mid)'};font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:19px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">${trackShot&&trackShot.hole===mapHole?'Mark It':'Track It'}</button>
   ${trackShot&&trackShot.hole===mapHole?`<button id="trackxbtn" onclick="clearTrackStart()" style="position:fixed;left:max(138px,calc(50vw - 102px));bottom:calc(112px + env(safe-area-inset-bottom));z-index:6;width:46px;height:46px;background:var(--card);border:2px solid var(--red,#c0392b);border-radius:12px;color:var(--red,#c0392b);font-size:22px;font-weight:800;box-shadow:2px 2px 0 rgba(0,0,0,.35)">✕</button>`:''}
@@ -3606,6 +3626,7 @@ function vMapPreview(hole){
   return topbar(`Hole ${mapHole+1} · Par ${hole.par}`,`Handicap ${hole.si} · ${S.course.name||''}`,'','hero maphero',
     `<div style="display:flex;align-items:center;margin-left:auto;gap:10px"><span class="pill gray" style="flex:none;letter-spacing:.6px">PREVIEW</span></div>`)+`
   <div id="holemap"></div>
+  ${mapCreditsChipHTML()}
   <button onclick="closeCoursePreview()" style="position:fixed;right:max(10px,calc(50vw - 230px));top:calc(100px + env(safe-area-inset-top));z-index:6;background:rgba(15,21,34,.82);border:1.5px solid var(--line);border-radius:12px;color:#fff;padding:10px 17px;font-size:17px;font-weight:600;font-family:inherit">Back</button>
   <div class="mapbar">
     <div class="row" style="border:none;padding:2px 0">
@@ -4536,9 +4557,9 @@ function greensSetTarget(i){
 function initGreensMap(el){
   greensState=greensLoad();
   const pts=greensPts();
-  LMAP=L.map(el,{zoomControl:false});
+  LMAP=L.map(el,{zoomControl:false,attributionControl:false});
   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    {maxZoom:20,maxNativeZoom:19,attribution:'Esri, Maxar | Course data © OpenStreetMap contributors'}).addTo(LMAP);
+    {maxZoom:20,maxNativeZoom:19}).addTo(LMAP);
   LMAP.fitBounds(L.latLngBounds(pts).pad(0.12));
   const dots={};let meDot=null;
   const paint=()=>{
@@ -4678,9 +4699,10 @@ async function initHoleMap(){
   if(greensIsMode()){initGreensMap(el);return;}
   manualOn=false;   // every hole starts in normal (locked) mode
   const canRotate=!!L.Map.prototype.setBearing;
-  LMAP=L.map(el,canRotate?{zoomControl:false,rotate:true,rotateControl:false,touchRotate:false,zoomSnap:0}:{zoomControl:false});
+  // no Leaflet attribution banner — the ⓘ chip in vMap carries the credits
+  LMAP=L.map(el,canRotate?{zoomControl:false,attributionControl:false,rotate:true,rotateControl:false,touchRotate:false,zoomSnap:0}:{zoomControl:false,attributionControl:false});
   const sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    {maxZoom:20,maxNativeZoom:19,attribution:'Esri, Maxar | Course data © OpenStreetMap contributors'}).addTo(LMAP);
+    {maxZoom:20,maxNativeZoom:19}).addTo(LMAP);   // credits live on the ⓘ chip
   // ROTATED CORNERS. leaflet-rotate widens the tile bounds for the current
   // bearing correctly (814x840 px for a 375x684 viewport at 42°), but nothing
   // re-runs the tile pass when the bearing CHANGES — so a twisted map kept the
