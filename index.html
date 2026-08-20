@@ -433,24 +433,7 @@ document.addEventListener('keydown',function(e){
   if(e.key==='Escape'){['betaModal','linkModal'].forEach(function(id){var m=document.getElementById(id);if(m)m.classList.remove('open');});}});
 if(location.hash==='#beta')addEventListener('load',openBeta);
 </script>
-<script>
-function openBeta(){document.getElementById('betaModal').classList.add('open');
-  setTimeout(function(){var n=document.getElementById('bfName');if(n)n.focus()},60);}
-function sendBeta(e){
-  e.preventDefault();
-  var v=function(id){return (document.getElementById(id).value||'').trim();};
-  var name=v('bfName'), email=v('bfEmail'), course=v('bfCourse'), note=v('bfNote');
-  var body='Beta access request from battletees.app\n\n'
-    +'Name:   '+name+'\n'+'Email:  '+email+'\n'+'Course: '+(course||'-')+'\n\n'
-    +'Their group:\n'+(note||'-')+'\n';
-  location.href='mailto:hello@battletees.app?subject='
-    +encodeURIComponent('Beta access request \u2014 '+name)+'&body='+encodeURIComponent(body);
-  return false;
-}
-document.addEventListener('keydown',function(e){
-  if(e.key==='Escape'){['betaModal','linkModal'].forEach(function(id){var m=document.getElementById(id);if(m)m.classList.remove('open');});}});
-if(location.hash==='#beta')addEventListener('load',openBeta);
-</script>
+
 <!-- Cloudflare Web Analytics --><script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "55fe6253d0e54b02bc8e2d96e101c600"}'></script><!-- End Cloudflare Web Analytics -->
 </body>
 </html>
