@@ -367,7 +367,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1787264107';
+const BUILD='1787264770';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -7935,19 +7935,27 @@ function healUnfinishedRound(){
 }
 function autoEndStaleRound(){
   if(!S.round||!S.round.started)return false;
-  const t0=S.round.myStartedAt||S.round.startedAt;
-  if(!t0||Date.now()-t0<MAX_ROUND_MS)return false;
-  const thru=(S.round.holes||[]).filter(r=>r&&r.confirmed).length;
   // A REVIEW left open is not a round being played. Capping its clock rewrote
   // the 8/13 Cypress round from 152 min to 480 a night later. Close the review
-  // the way Done does — commit nothing new, restamp nothing.
+  // the way Done does — commit nothing new, restamp nothing. But it ages from
+  // when it was OPENED: the round's own tee time is days old by definition, so
+  // the old test closed every review the moment the app was backgrounded and
+  // resumed — Past Rounds → stats → check a text → back on the list (Nathan
+  // 8/20, NateBall 8/19 twice). A review missing its stamp (opened on an older
+  // build) gets one now and a full grace period rather than an instant close.
   if(S.round.reopened){
+    if(!S.round._reopenedAt){S.round._reopenedAt=Date.now();try{save();}catch(e){}return false;}
+    if(Date.now()-S.round._reopenedAt<MAX_ROUND_MS)return false;
+    const thru=(S.round.holes||[]).filter(r=>r&&r.confirmed).length;
     try{stat('round_autoend',{game:S.round.game,thru,review:true});}catch(e){}
     try{closeReview();}catch(e){
       S.round=blankRound();S.screen='home';stView=null;save();render();
     }
     return true;
   }
+  const t0=S.round.myStartedAt||S.round.startedAt;
+  if(!t0||Date.now()-t0<MAX_ROUND_MS)return false;
+  const thru=(S.round.holes||[]).filter(r=>r&&r.confirmed).length;
   S.round.myEndedAt=t0+MAX_ROUND_MS;      // cap the clock, don't use "now"
   S.round._autoEnded=true;
   try{stat('round_autoend',{game:S.round.game,thru,hours:8});}catch(e){}
@@ -7988,6 +7996,7 @@ function endRound(){
 function reopenRound(id){
   const e=(S.history||[]).find(x=>x.id===id);if(!e)return;
   S.round=clone(e.round);S.round.started=true;S.round.reopened=true;
+  S.round._reopenedAt=Date.now();   // a review ages from NOW, not from the round's tee time
   S.config=clone(e.config);
   if(e.playersSnap)S.players=clone(e.playersSnap);
   // the library copy first (it may have been corrected since), then the
