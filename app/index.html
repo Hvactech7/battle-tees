@@ -375,7 +375,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1787290614';
+const BUILD='1787291154';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -7809,7 +7809,7 @@ function vPlayers(){
           <div id="meEErr" class="tiny mt" style="color:var(--red);font-weight:600"></div>
         </div>
       </div>
-      <div class="row" style="border-top:none">
+      <div class="row" style="border-top:none;margin-bottom:10px">
         <button class="ghost sel" style="flex:1" onclick="saveEditMe()">Save</button>
         <button class="ghost" onclick="cancelEditMe()">Cancel</button>
       </div>`
@@ -8950,8 +8950,8 @@ function applyTeePrefs(){
 }
 function stdTeePicker(libId,cur){
   return `<div class="mt"><div class="tiny">Usual tees</div>
-    <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:4px">
-      ${STD_TEES.map(t=>`<button class="ghost ${cur===t?'sel':''}" style="flex:1;min-width:56px;padding:9px 4px;font-size:14px"
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin-top:4px">
+      ${STD_TEES.map(t=>`<button class="ghost ${cur===t?'sel':''}" style="margin:0;padding:9px 2px;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"
         onclick="setStdTee('${libId}','${t}')">${t}${t==='Red'?'<span style="font-size:10px;opacity:.7"> ♀</span>':''}</button>`).join('')}
     </div>
   </div>`;
