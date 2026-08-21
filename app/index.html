@@ -375,7 +375,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1787289607';
+const BUILD='1787290259';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1593,7 +1593,9 @@ function saveEditMe(){
     // so a rename mid-round hunted for your slot by the OLD name and every
     // pid-keyed lookup went blind. The display name is the only thing changing.
     const pid=(S.me&&S.me.pid)||('u'+Date.now().toString(36)+Math.random().toString(36).slice(2,8));
+    const photo=S.me&&S.me.photo;   // the photo rides through a profile save (8/20: Save wiped it back to initials)
     S.me={name,index:+((x&&x.value)||S.me.index)||S.me.index,pid};
+    if(photo)S.me.photo=photo;
     // my library card — by pid first, old name as the grandfathered fallback
     const e=S.playerLib.find(p=>p.pid===pid)
       ||S.playerLib.find(p=>p.name.trim().toLowerCase()===old.trim().toLowerCase());
