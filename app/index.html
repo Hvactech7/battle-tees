@@ -375,7 +375,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1787290259';
+const BUILD='1787290344';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -722,6 +722,9 @@ function load(){
       if(!s.config.scramble)s.config.scramble={teams:'2v2'};
       if(!s.history)s.history=[];
       if(!s.hcpPending)s.hcpPending=[];
+      // a photo the buggy Save wiped from the profile survives on the library
+      // card (removeMyPhoto clears both, so a deliberate removal stays removed)
+      if(s.me&&!s.me.photo){const _pl=(s.playerLib||[]).find(pp=>pp&&pp.pid===s.me.pid&&pp.photo);if(_pl)s.me.photo=_pl.photo;}
       // courses built blank before pars were confirmable: uniform par-4 cards
       // on custom- ids were the Add-blank template, never a real scorecard
       (s.courses||[]).concat(s.course?[s.course]:[]).forEach(c=>{
