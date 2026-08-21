@@ -375,7 +375,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1787286117';
+const BUILD='1787289607';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1300,6 +1300,8 @@ function claimMySlot(steal){
     // my phone is the authority on MY handicap — a stale index someone loaded
     // from their library gets corrected to my current profile the moment I join
     if(match&&p.ownerDev===devId()&&S.me.index!=null&&+p.index!==+S.me.index){p.index=+S.me.index;changed=true;}
+    if(PHOTOS_ON&&match&&p.ownerDev===devId()&&(p.photo||'')!==(S.me.photo||'')){
+      if(S.me.photo)p.photo=S.me.photo;else delete p.photo;changed=true;}
   });
   // Mid-round pickup group: someone joins whose name matches NO row. Seat them in
   // the first placeholder slot (default "Player N" name, unowned, unscored) and
@@ -5808,7 +5810,7 @@ function render(){
   const sameScreen=window.__lastScr===scr;
   window.__lastScr=scr;
   try{if(window.__a2hsSync)window.__a2hsSync();}catch(e){}
-  const full=magBanner()+html+holeSplash()+verifySheetHTML()+teeAskSheetHTML()+joinSpanSheetHTML()+pairsAskSheetHTML()+wolfOrderSheetHTML()+endAskSheetHTML()+mapInviteHTML()+greenClashHTML()+gamePickSheetHTML()+(S.screen!=='map'?puttAskSheetHTML():'')+(S.screen!=='map'?parAskSheetHTML():'');
+  const full=magBanner()+html+holeSplash()+verifySheetHTML()+teeAskSheetHTML()+joinSpanSheetHTML()+pairsAskSheetHTML()+wolfOrderSheetHTML()+endAskSheetHTML()+mapInviteHTML()+greenClashHTML()+gamePickSheetHTML()+(S.screen!=='map'?puttAskSheetHTML():'')+(S.screen!=='map'?parAskSheetHTML():'')+photoCropHTML();
   // Four phones syncing means render() fires constantly. Blowing away innerHTML
   // each time repainted the whole screen — that was the flicker on the course.
   // Identical output is a no-op; otherwise patch only the nodes that differ.
@@ -7791,6 +7793,12 @@ function vPlayers(){
             <div><div class="tiny">Handicap index</div><input id="meEIdx" type="text" inputmode="decimal" value="${S.me.index}"></div>
           </div>
           <div class="mt"><div class="tiny">Email — backups &amp; restore</div><input id="meEEmail" type="text" inputmode="email" autocapitalize="off" placeholder="you@email.com" value="${esc(localStorage.getItem('wolfBackupEmail')||'')}"></div>
+          ${PHOTOS_ON?`<div class="mt" style="display:flex;align-items:center;gap:10px">${avatarHTML(S.me,44)}
+            <button class="ghost" onclick="openPhotoPick()">📷 ${S.me.photo?'Change Photo':'Add Photo'}</button>
+            ${S.me.photo?`<button class="ghost danger" onclick="removeMyPhoto()">Remove</button>`:''}
+            <input type="file" id="photoFile" accept="image/*" style="display:none" onchange="photoFilePicked(this)">
+          </div>
+          <div class="tiny mt" style="opacity:.75">Optional — your Battle Friends see it next to your name.</div>`:''}
           ${(()=>{const ml=S.playerLib.find(x=>x.name.trim().toLowerCase()===S.me.name.trim().toLowerCase());
             return ml?stdTeePicker(ml.id,ml.stdTee||stdTeeOf(ml.teeName)):'';})()}
           <div id="meEErr" class="tiny mt" style="color:var(--red);font-weight:600"></div>
@@ -7801,7 +7809,7 @@ function vPlayers(){
         <button class="ghost" onclick="cancelEditMe()">Cancel</button>
       </div>`
     :(()=>{const meLib=S.playerLib.find(e=>e.name.trim().toLowerCase()===S.me.name.trim().toLowerCase());
-      return `<div class="row"><div><b>${esc(S.me.name)}</b><div class="tiny">Index ${S.me.index}${meLib&&(meLib.stdTee||meLib.teeName)?` · ${esc(meLib.stdTee||meLib.teeName)} tees`:''}</div></div>
+      return `<div class="row"><div style="display:flex;align-items:center;gap:10px;min-width:0">${avatarHTML(S.me,40)}<div style="min-width:0"><b>${esc(S.me.name)}</b><div class="tiny">Index ${S.me.index}${meLib&&(meLib.stdTee||meLib.teeName)?` · ${esc(meLib.stdTee||meLib.teeName)} tees`:''}</div></div></div>
       <button class="ghost" onclick="editMe()">Edit</button></div>`;})()):''}
     ${S.me.name?chalProfileHTML():''}
     ${scanOpen?`
@@ -7866,9 +7874,9 @@ function vPlayers(){
           ? sug.map(x=>`<button class="ghost" style="flex:none" onclick="confirmFriend('${e.id}','${esc(x.pid)}')">Yes — ${esc((x.name||'').split(' ')[0])}</button>`).join('')
           : `<button class="ghost" style="flex:none" onclick="inviteToBattle('${esc(e.name)}')">Invite</button>`;
       return `<div class="row">
-      <div style="flex:1;min-width:0"><b>${linked?'<span title="Battle friend">⚔️</span> ':''}${esc(e.name)}</b>
+      <div style="flex:1;min-width:0;display:flex;align-items:center;gap:10px">${avatarHTML(e,36)}<div style="min-width:0"><b>${linked?'<span title="Battle friend">⚔️</span> ':''}${esc(e.name)}</b>
         <div class="tiny">Index ${e.index}${(e.stdTee||e.teeName)?` · ${esc(e.stdTee||e.teeName)} tees`:''}</div>
-        ${status}</div>
+        ${status}</div></div>
       <span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
         ${action}
         ${armDelPlayer===e.id
@@ -8049,7 +8057,8 @@ function archiveRound(){
       :t0?Math.round(((S.round.myEndedAt||Date.now())-t0)/60000):null,
     players:actIdx().map(i=>S.players[i].name),
     sum:roundSummary(),
-    round:clone(S.round),config:clone(S.config),playersSnap:clone(S.players),
+    round:clone(S.round),config:clone(S.config),
+    playersSnap:(()=>{const a=clone(S.players);a.forEach(pp=>{if(pp)delete pp.photo;});return a;})(),
     // the course as played, minus its map blob (geo re-fetches by id/geoUrl):
     // if the course is later removed from Courses, the review still knows
     // exactly what it was, not whatever the phone has chosen since
@@ -8829,7 +8838,7 @@ function vSetup(){
       <div class="row"><b>Golfer ${i+1}${isMe?' <span class="pill gray">you</span>':''}${(!isMe&&p.scorer===devId()&&(S.share.on||S.players.some(x=>x.nearby)))?' <span class="pill gray">you score them</span>':''}${S.config.game==='wolf'?` — tees off ${['1st','2nd','3rd','4th'][i]}`:''}</b>
         <span>${i>0?`<button class="ghost" onclick="movePl(${i})">↑</button>`:''}</span></div>
       <div class="grid2 mt">
-        <div><div class="tiny">Name</div><div style="padding:10px 2px;font-weight:700;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p.name)}</div></div>
+        <div><div class="tiny">Name</div><div style="padding:6px 2px;font-weight:700;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:8px">${avatarHTML(p,30)}<span style="min-width:0;overflow:hidden;text-overflow:ellipsis">${esc(p.name)}</span></div></div>
         <div><div class="tiny">Tees</div><select style="width:100%;padding:9px;border:2px solid var(--line);border-radius:8px;font-size:15px;background:var(--card)" onchange="setPl(${i},'tee',this.value)">${teeOpts}</select></div>
         <div><div class="tiny">Handicap index</div><input type="text" inputmode="decimal" value="${p.index}" onfocus="tapClear(this)" onblur="commitPl(this,${i},'index')"></div>
         <div></div>
@@ -9104,6 +9113,127 @@ function teeAskSheetHTML(){
       <button class="big mt" onclick="teeAskDone()">Play from ${esc((sets.find(t=>t.id===cur)||sets[0]).name)}</button>
     </div></div>`;
 }
+// ============ PROFILE PHOTOS (optional) =====================================
+// THE KILL SWITCH: flip to false and the whole feature is gone — every avatar
+// renders as nothing, the editor hides its buttons, the crop tool won't open,
+// and no photo is written or synced again. Stored photos sit inert in state.
+let PHOTOS_ON=true;
+// A tiny square JPEG (192px, ~8KB) stored as a data URI on S.me.photo — small
+// enough to ride the roster in shareMeta, so every phone in your rounds sees
+// it and keeps it on your library card. Nobody needs one: the circle falls
+// back to initials. History snapshots strip photos to keep storage lean.
+function avatarHTML(p,size){
+  if(!PHOTOS_ON)return '';
+  const s2=size||34;
+  const ph=p&&p.photo;
+  if(ph&&/^data:image\//.test(ph))
+    return `<span style="flex:none;width:${s2}px;height:${s2}px;border-radius:50%;background-image:url(${ph});background-size:cover;background-position:center;display:inline-block;border:1.5px solid var(--gold,#e8c552);vertical-align:middle"></span>`;
+  const ini=esc(String((p&&p.name)||'?').trim().split(/\s+/).map(w=>w[0]||'').slice(0,2).join('').toUpperCase()||'?');
+  return `<span style="flex:none;width:${s2}px;height:${s2}px;border-radius:50%;background:var(--elec-dk,#1c5eb0);color:#eef6ff;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:${Math.round(s2*0.4)}px;border:1.5px solid var(--line);vertical-align:middle">${ini}</span>`;
+}
+// THE CIRCLE CROP. The photo is letterboxed into the stage; the gold circle is
+// the crop — DRAG it anywhere on the picture, size it with the slider, and
+// "Use photo" renders exactly that circle to a 192px square (shown round
+// everywhere). All geometry lives in photoCrop; dragging patches the DOM
+// directly so the overlay never re-renders mid-gesture.
+let photoCrop=null,cropDrag=null;
+function openPhotoPick(){if(!PHOTOS_ON)return;const f=document.getElementById('photoFile');if(f){f.value='';f.click();}}
+function photoFilePicked(inp){
+  const f=inp&&inp.files&&inp.files[0];if(!f)return;
+  const rd=new FileReader();
+  rd.onload=()=>{
+    const im=new Image();
+    im.onload=()=>{
+      photoCrop={src:String(rd.result),iw:im.naturalWidth||im.width,ih:im.naturalHeight||im.height,
+        dw:0,dh:0,ox:0,oy:0,cx:0,cy:0,r:0};
+      render();requestAnimationFrame(paintCrop);
+    };
+    im.src=String(rd.result);
+  };
+  rd.readAsDataURL(f);
+}
+function photoCropHTML(){
+  if(!photoCrop)return '';
+  return `<div class="vfWrap" role="dialog" aria-modal="true">
+    <div class="vfCard" style="width:min(430px,100%)">
+      <h2 class="vfTitle">Frame your photo</h2>
+      <div class="tiny mb">Drag the circle over the part you want. The slider sizes it.</div>
+      <div id="cropStage" style="position:relative;width:100%;height:300px;background:#0a0f18;border-radius:10px;overflow:hidden;touch-action:none"
+        onpointerdown="cropPD(event)" onpointermove="cropPM(event)" onpointerup="cropPU()" onpointercancel="cropPU()">
+        <img id="cropImg" src="${photoCrop.src}" style="position:absolute;pointer-events:none;user-select:none" draggable="false">
+        <div id="cropHole" style="position:absolute;border:2.5px solid var(--gold,#e8c552);border-radius:50%;box-shadow:0 0 0 9999px rgba(6,10,16,.66);pointer-events:none"></div>
+      </div>
+      <input type="range" id="cropR" min="30" max="150" value="100" oninput="cropSize(+this.value)" style="width:100%;margin-top:14px">
+      <button class="big mt" onclick="cropUse()">✓ &nbsp;Use Photo</button>
+      <button class="ghost mt" style="width:100%" onclick="photoCrop=null;render()">Cancel</button>
+    </div></div>`;
+}
+function paintCrop(){
+  const pc=photoCrop,st=document.getElementById('cropStage');
+  if(!pc||!st)return;
+  const W=st.clientWidth||390,Hh=st.clientHeight||300;
+  const sc=Math.min(W/pc.iw,Hh/pc.ih);
+  pc.dw=pc.iw*sc;pc.dh=pc.ih*sc;pc.ox=(W-pc.dw)/2;pc.oy=(Hh-pc.dh)/2;
+  if(!pc.r){pc.r=Math.min(pc.dw,pc.dh)/2*0.8;pc.cx=pc.ox+pc.dw/2;pc.cy=pc.oy+pc.dh/2;
+    const sl=document.getElementById('cropR');
+    if(sl){sl.min=String(Math.max(24,Math.round(Math.min(pc.dw,pc.dh)*0.15)));sl.max=String(Math.round(Math.min(pc.dw,pc.dh)/2));sl.value=String(Math.round(pc.r));}}
+  cropClamp();
+  const im=document.getElementById('cropImg');
+  if(im){im.style.left=pc.ox+'px';im.style.top=pc.oy+'px';im.style.width=pc.dw+'px';im.style.height=pc.dh+'px';}
+  cropPaintHole();
+}
+function cropPaintHole(){
+  const pc=photoCrop,h=document.getElementById('cropHole');
+  if(!pc||!h)return;
+  h.style.left=(pc.cx-pc.r)+'px';h.style.top=(pc.cy-pc.r)+'px';
+  h.style.width=(pc.r*2)+'px';h.style.height=(pc.r*2)+'px';
+}
+function cropClamp(){
+  const pc=photoCrop;if(!pc)return;
+  pc.r=Math.max(20,Math.min(pc.r,Math.min(pc.dw,pc.dh)/2));
+  pc.cx=Math.max(pc.ox+pc.r,Math.min(pc.cx,pc.ox+pc.dw-pc.r));
+  pc.cy=Math.max(pc.oy+pc.r,Math.min(pc.cy,pc.oy+pc.dh-pc.r));
+}
+function cropPt(e){const st=document.getElementById('cropStage'),r=st.getBoundingClientRect();return [e.clientX-r.left,e.clientY-r.top];}
+function cropPD(e){if(!photoCrop)return;const [x,y]=cropPt(e);cropDrag={dx:photoCrop.cx-x,dy:photoCrop.cy-y};try{e.target.setPointerCapture&&e.target.setPointerCapture(e.pointerId);}catch(_){}e.preventDefault();}
+function cropPM(e){if(!photoCrop||!cropDrag)return;const [x,y]=cropPt(e);photoCrop.cx=x+cropDrag.dx;photoCrop.cy=y+cropDrag.dy;cropClamp();cropPaintHole();e.preventDefault();}
+function cropPU(){cropDrag=null;}
+function cropSize(v){const pc=photoCrop;if(!pc)return;pc.r=+v||pc.r;cropClamp();cropPaintHole();}
+// the chosen circle, in SOURCE pixels — pure math so the harness can hold it
+function cropRect(pc){
+  const k=pc.iw/pc.dw;
+  return {sx:(pc.cx-pc.r-pc.ox)*k,sy:(pc.cy-pc.r-pc.oy)*k,sw:pc.r*2*k};
+}
+function cropUse(){
+  const pc=photoCrop;if(!pc)return;
+  try{
+    const im=document.getElementById('cropImg');
+    const {sx,sy,sw}=cropRect(pc);
+    const cv=document.createElement('canvas');cv.width=192;cv.height=192;
+    cv.getContext('2d').drawImage(im,sx,sy,sw,sw,0,0,192,192);
+    let out=cv.toDataURL('image/jpeg',0.82);
+    if(out.length>90000)out=cv.toDataURL('image/jpeg',0.55);   // pathological source: clamp the payload
+    applyMyPhoto(out);
+  }catch(e){shotToast('Could not read that photo — try another.');}
+  photoCrop=null;render();
+}
+// write the photo everywhere I live: profile, my roster row, my library card —
+// and restamp the meta so the group's phones wear it too
+function applyMyPhoto(dataUrl){
+  if(!PHOTOS_ON&&dataUrl)return;
+  set(()=>{
+    if(dataUrl)S.me.photo=dataUrl;else delete S.me.photo;
+    const mi=myPlayerIdx();
+    if(S.players[mi]&&(S.players[mi].ownerDev===devId()||S.players[mi].pid===S.me.pid)){
+      if(dataUrl)S.players[mi].photo=dataUrl;else delete S.players[mi].photo;
+    }
+    const low=(S.me.name||'').trim().toLowerCase();
+    const lib=S.playerLib.find(e=>(S.me.pid&&e.pid===S.me.pid))||S.playerLib.find(e=>(e.name||'').trim().toLowerCase()===low);
+    if(lib){if(dataUrl)lib.photo=dataUrl;else delete lib.photo;}
+    if(S.share&&S.share.on)S.shareMetaTs=Date.now();
+  });
+}
+function removeMyPhoto(){applyMyPhoto(null);}
 function upsertLib(p){
   if(!S.playerLib)return;
   const nm=(p.name||'').trim();
@@ -9130,6 +9260,7 @@ function upsertLib(p){
   // one tap. (I briefly added a !e.pid guard above this line, having read the
   // top of the function and not the bottom. It was redundant and unreachable.)
   if(p.pid)e.pid=p.pid;
+  if(PHOTOS_ON&&p.photo)e.photo=p.photo;   // a face that arrived with the roster stays on the card
 }
 function loadPlayer(i,libId){
   if(!libId)return;
