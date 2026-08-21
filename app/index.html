@@ -375,7 +375,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1787290344';
+const BUILD='1787290614';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -8954,7 +8954,6 @@ function stdTeePicker(libId,cur){
       ${STD_TEES.map(t=>`<button class="ghost ${cur===t?'sel':''}" style="flex:1;min-width:56px;padding:9px 4px;font-size:14px"
         onclick="setStdTee('${libId}','${t}')">${t}${t==='Red'?'<span style="font-size:10px;opacity:.7"> ♀</span>':''}</button>`).join('')}
     </div>
-    <div class="tiny mt" style="opacity:.75">Used on any course with standard tee names. Courses with their own names remember your pick separately.</div>
   </div>`;
 }
 function setStdTee(libId,t){
