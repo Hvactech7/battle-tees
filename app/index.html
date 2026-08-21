@@ -375,7 +375,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1787285339';
+const BUILD='1787286117';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -722,6 +722,12 @@ function load(){
       if(!s.config.scramble)s.config.scramble={teams:'2v2'};
       if(!s.history)s.history=[];
       if(!s.hcpPending)s.hcpPending=[];
+      // courses built blank before pars were confirmable: uniform par-4 cards
+      // on custom- ids were the Add-blank template, never a real scorecard
+      (s.courses||[]).concat(s.course?[s.course]:[]).forEach(c=>{
+        if(!c||c._cardGuess!=null)return;
+        if(String(c.id||'').indexOf('custom-')===0&&(c.holes||[]).length&&c.holes.every(h=>h&&h.par===4&&!h.parOk))c._cardGuess=true;
+      });
       if(!s.groupLib)s.groupLib=[];
       if(!s.teamLib)s.teamLib=[];
       if(s.me&&s.me.name&&!s.me.pid)s.me.pid='u'+Date.now().toString(36)+Math.random().toString(36).slice(2,8);
@@ -1031,6 +1037,9 @@ function applyOp(k,v,defer){
           S.course=v.course;S.players=v.players;S.config=v.config;
           if(wasBlack){S.course.geo=blackout;if(parked)S.course.geoReal=parked;}
         }
+        // somebody else answered the par question: their course rode this meta —
+        // the sheet on this phone retracts rather than asking twice
+        try{if(typeof parAsk!=='undefined'&&parAsk&&parHoleConfirmed(parAsk.h))closeParAsk();}catch(e){}
         // a friend typed the code into a SOLO room: another phone now owns a
         // row, so this is a group — drop the broadcast flag and post the invite
         // so the rest of the group can find it in the nearby list
@@ -1419,6 +1428,7 @@ function joinRoundCode(code){
   // landed on the map
   mapHole=S.round.cur||0;S.screen='map';
   save();syncConnect();render();
+  try{setTimeout(maybeAskPar,1600);}catch(e){}
   // the host's course arrives with the room — ask which tees, then which card
   setTimeout(()=>{
     if(!S.share.on)return;
@@ -5220,6 +5230,78 @@ const $=s=>document.querySelector(s);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 // ---- hole splash: fires on every phone when a hole's scores are complete ----
 let splash=null,splashTimer=null;
+// ---- unconfirmed par prompt -------------------------------------------------
+// A course built without a real scorecard (Add blank) carries GUESSED pars —
+// flagged _cardGuess at creation, each hole earning parOk once a human speaks.
+// At the start of such a hole the group is asked: "This hole's par is not
+// confirmed. Can you tell us what it is?" — 3/4/5/6. One answer fixes the card
+// for good: the course library keeps it, the group's phones hear it on the
+// meta doc, untouched prefills re-dress, and the Pi logs a parmark.
+let parAsk=null,parAskSeen={};
+function parHoleConfirmed(h){
+  try{const c=S.course;if(!c||!c._cardGuess)return true;
+    const hd=c.holes[physHole(h)]||{};return !!hd.parOk;}catch(e){return true;}
+}
+function maybeAskPar(){
+  try{
+    if(parAsk||!S.round||!S.round.started||isReview())return;
+    if(typeof coursePreview!=='undefined'&&coursePreview)return;
+    if((typeof puttAsk!=='undefined'&&puttAsk)||(typeof splash!=='undefined'&&splash)){setTimeout(maybeAskPar,1200);return;}
+    const h=S.round.cur||0;
+    if(parHoleConfirmed(h))return;
+    const k=(S.round.startedAt||0)+':'+h;
+    if(parAskSeen[k])return;
+    parAskSeen[k]=1;
+    parAsk={h};paintParAsk();
+  }catch(e){}
+}
+function closeParAsk(){
+  parAsk=null;
+  const el=document.getElementById('parask');if(el)el.remove();
+  if(S.screen!=='map')render();
+}
+function setParPick(v){
+  if(!parAsk)return;
+  const h=parAsk.h,ph=physHole(h);
+  set(()=>{
+    const hd=S.course.holes[ph];if(!hd)return;
+    hd.par=v;hd.parOk=true;
+    if((S.course.holes||[]).every(x=>x&&x.parOk))delete S.course._cardGuess;
+    // a prefill dressed in the guessed par re-dresses; a typed or ratified
+    // score is somebody's golf and is never touched
+    const rec=S.round.holes[h];
+    if(rec&&rec.gross)rec.gross.forEach((g,i)=>{
+      if(g!=null&&(!rec.gts||(rec.gts[i]||0)<=1)&&(!rec.cfts||!(rec.cfts[i]>0)))rec.gross[i]=v;});
+    syncLib();
+    if(S.share&&S.share.on)S.shareMetaTs=Date.now();
+  });
+  try{stat('parmark',{course:S.course.id,courseName:S.course.name,hole:ph+1,par:v});}catch(e){}
+  closeParAsk();
+  if(S.screen==='map'){   // the map never re-renders mid-hole: patch what shows the par
+    try{const t=document.querySelector('header.top h1');if(t)t.textContent='Hole '+(h+1)+' · Par '+v;}catch(e){}
+    try{const sc=document.getElementById('mapsc');
+      const rec=S.round.holes[h],mi=myPlayerIdx();
+      if(sc&&!(rec&&rec.gross&&rec.gross[mi]!=null&&(rec.gts&&rec.gts[mi]>1||rec.cfts&&rec.cfts[mi]>0)))sc.textContent=v;}catch(e){}
+  }
+}
+function skipParAsk(){closeParAsk();}
+function parAskSheetHTML(inner){
+  if(!parAsk)return '';
+  return `<div class="vfWrap" role="dialog" aria-modal="true">
+    <div class="vfCard" style="width:min(420px,100%)">
+      <h2 class="vfTitle">Hole ${parAsk.h+1} — what's the par?</h2>
+      <div class="tiny mb">This hole's par is not confirmed. Can you tell us what it is?</div>
+      <div class="puttrow">${[3,4,5,6].map(v=>`<button class="puttbtn" onclick="setParPick(${v})">${v}</button>`).join('')}</div>
+      <button class="ghost mt" style="width:100%" onclick="skipParAsk()">Not sure</button>
+    </div></div>`;
+}
+function paintParAsk(){
+  if(S.screen==='map'){
+    let el=document.getElementById('parask');
+    if(!el){el=document.createElement('div');el.id='parask';document.body.appendChild(el);}
+    el.innerHTML=parAskSheetHTML(true);
+  }else render();
+}
 // ---- automatic putts prompt -------------------------------------------------
 // Fires the instant a hole is confirmed, BEFORE the hole splash, so the two
 // overlays never stack. Only asks for rows this phone actually scores, only
@@ -5726,7 +5808,7 @@ function render(){
   const sameScreen=window.__lastScr===scr;
   window.__lastScr=scr;
   try{if(window.__a2hsSync)window.__a2hsSync();}catch(e){}
-  const full=magBanner()+html+holeSplash()+verifySheetHTML()+teeAskSheetHTML()+joinSpanSheetHTML()+pairsAskSheetHTML()+wolfOrderSheetHTML()+endAskSheetHTML()+mapInviteHTML()+greenClashHTML()+gamePickSheetHTML()+(S.screen!=='map'?puttAskSheetHTML():'');
+  const full=magBanner()+html+holeSplash()+verifySheetHTML()+teeAskSheetHTML()+joinSpanSheetHTML()+pairsAskSheetHTML()+wolfOrderSheetHTML()+endAskSheetHTML()+mapInviteHTML()+greenClashHTML()+gamePickSheetHTML()+(S.screen!=='map'?puttAskSheetHTML():'')+(S.screen!=='map'?parAskSheetHTML():'');
   // Four phones syncing means render() fires constantly. Blowing away innerHTML
   // each time repainted the whole screen — that was the flicker on the course.
   // Identical output is a no-op; otherwise patch only the nodes that differ.
@@ -8454,7 +8536,7 @@ function addBlankCourse(){
   set(()=>{
   syncLib();
   const id='custom-'+Date.now();
-  S.course={id,name:'New course',
+  S.course={id,name:'New course',_cardGuess:true,   // no scorecard behind these pars
     teeSets:[{id:'t'+Date.now(),name:'White',rating:72.0,slope:120}],
     holes:Array.from({length:HOLES},(_,i)=>({par:4,si:i+1}))};
   S.players.forEach(p=>p.tee=S.course.teeSets[0].id);
@@ -8488,7 +8570,8 @@ function vCourse(){
   <div class="card"><h2>Holes — par & stroke index</h2>${holes}</div>
   </main>`;
 }
-function chPar(i,d){set(()=>{S.course.holes[i].par=Math.min(6,Math.max(3,S.course.holes[i].par+d));});}
+function chPar(i,d){set(()=>{const hd=S.course.holes[i];hd.par=Math.min(6,Math.max(3,hd.par+d));hd.parOk=true;
+  if((S.course.holes||[]).every(x=>x&&x.parOk))delete S.course._cardGuess;});}
 function chSI(i,v){set(()=>{S.course.holes[i].si=Math.min(18,Math.max(1,Math.round(+v||1)));});}
 function chTee(i,k,v){set(()=>{S.course.teeSets[i][k]=k==='name'?v:+v;});}
 function addTee(){set(()=>{S.course.teeSets.push({id:'t'+Date.now(),name:'New',rating:72.0,slope:120});});}
@@ -9457,6 +9540,7 @@ function startRound(){
     // user-initiated so it keeps measuring people CHOOSING the map, not landing
     // on it. closeMap still drops back to the score screen.
     S.round.cur=playOrder()[0];mapHole=S.round.cur;S.screen='map';clearStage();
+    try{setTimeout(maybeAskPar,900);}catch(e){}
     if(S.config.game!=='wolf')prefillNines(S.round.cur);});
   S.round._sharedAtStart=!!S.share.on;
   stat('round_start',{game:S.round.game,course:S.course.name,holes:S.round.span.count,firstTee:S.round.span.start+1,
@@ -10011,7 +10095,7 @@ function advanceToNext(){
         role:S.share.on?(S.share.bf?'solo-broadcast':(S.share.creator?'host':'joiner')):'solo',
         players:NP(), sharedAtStart:!!S.round._sharedAtStart,
         sharedLater:!!(S.share.on&&!S.round._sharedAtStart)});}
-  }else{S.round.cur=next;if(gameOn()!=='wolf')prefillNines(next);}
+  }else{S.round.cur=next;if(gameOn()!=='wolf')prefillNines(next);try{setTimeout(maybeAskPar,900);}catch(e){}}
 }
 // Announce the round the first time a hole is genuinely confirmed — once, from
 // whichever of the three confirm paths gets there first.
@@ -11064,7 +11148,7 @@ function vStandings(){
     ${settleSectionHTML()}
   </main>`+tabs('standings');
 }
-function jumpAndGo(h){set(()=>{S.round.cur=h;S.screen='hole';});}
+function jumpAndGo(h){set(()=>{S.round.cur=h;S.screen='hole';});try{setTimeout(maybeAskPar,400);}catch(e){}}
 
 // ----- settlement -----
 const PAIRS_GAMES=['wolf','vegas','bestball','scramble','sixes','umbrella','nassau','skins'];
@@ -11363,6 +11447,7 @@ function landOnBoot(){
 landOnBoot();
 if(!S.hcpLog)hcpBackfill();   // one-time: the rounds already played set the handicaps
 try{setTimeout(()=>hcpSync(true),3500);}catch(e){}   // then reconcile with the Pi's book
+try{if(S.round&&S.round.started)setTimeout(maybeAskPar,2200);}catch(e){}   // resumed on an unconfirmed hole
 render();
 try{setTimeout(askPuttsOwed,400);}catch(e){}   // a hole carded while the prompt was killed
 tryMagicLink();
