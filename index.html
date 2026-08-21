@@ -195,6 +195,25 @@ th{color:var(--muted);font-size:11px;letter-spacing:1.5px;text-transform:upperca
 @keyframes pop{from{transform:scale(.92);opacity:0}to{transform:scale(1);opacity:1}}
 .modal-x{position:absolute;top:10px;right:12px;background:none;border:none;color:var(--ink3);font-size:20px;cursor:pointer;padding:6px}
 .modal-x:hover{color:var(--ink)}
+/* sound toggle — the page still autoplays muted (browsers require it); a tap
+   turns one clip's audio on and every other clip off. Only one is ever audible. */
+.sndbtn{position:absolute;top:12px;right:12px;z-index:6;width:40px;height:40px;padding:0;
+  display:grid;place-items:center;border-radius:50%;cursor:pointer;color:var(--gold);
+  border:1px solid rgba(224,187,69,.45);background:rgba(10,16,26,.62);
+  -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
+  transition:background .18s ease,border-color .18s ease,transform .18s ease}
+.sndbtn:hover{background:rgba(10,16,26,.85);border-color:var(--gold);transform:scale(1.06)}
+.sndbtn:focus-visible{outline:2px solid var(--elec);outline-offset:2px}
+.sndbtn svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.9;
+  stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
+.sndbtn .on{display:none}
+.sndbtn[aria-pressed=true]{background:rgba(224,187,69,.18);border-color:var(--gold);color:#f4dc90}
+.sndbtn[aria-pressed=true] .on{display:block}
+.sndbtn[aria-pressed=true] .off{display:none}
+.vid:hover .sndbtn{transform:none}
+.wolfband .sndbtn{top:auto;bottom:20px;right:20px}
+@media(max-width:560px){.sndbtn{width:36px;height:36px;top:10px;right:10px}
+  .wolfband .sndbtn{bottom:12px;right:12px}}
 </style><script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","name":"Battle Tees Golf App","alternateName":["Battle Tees","BattleTees"],"url":"https://battletees.app/","description":"13 golf betting games plus the Hammer modifier, scored live across every phone in the group."}</script>
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"Battle Tees Golf App","alternateName":["Battle Tees","BattleTees"],"url":"https://battletees.app/","logo":"https://battletees.app/icon-512.png"}</script>
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"ItemList","name":"Golf betting games","itemListElement":[{"@type":"ListItem","position":1,"name":"Wolf","url":"https://battletees.app/rules/wolf/"},{"@type":"ListItem","position":2,"name":"9's","url":"https://battletees.app/rules/nines/"},{"@type":"ListItem","position":3,"name":"Vegas","url":"https://battletees.app/rules/vegas/"},{"@type":"ListItem","position":4,"name":"Stroke","url":"https://battletees.app/rules/stroke/"},{"@type":"ListItem","position":5,"name":"Best Ball","url":"https://battletees.app/rules/best-ball/"},{"@type":"ListItem","position":6,"name":"Scramble","url":"https://battletees.app/rules/scramble/"},{"@type":"ListItem","position":7,"name":"Sixes","url":"https://battletees.app/rules/sixes/"},{"@type":"ListItem","position":8,"name":"Umbrella","url":"https://battletees.app/rules/umbrella/"},{"@type":"ListItem","position":9,"name":"Quota","url":"https://battletees.app/rules/quota/"},{"@type":"ListItem","position":10,"name":"Stableford","url":"https://battletees.app/rules/stableford/"},{"@type":"ListItem","position":11,"name":"Bingo Bango Bongo","url":"https://battletees.app/rules/bingo-bango-bongo/"},{"@type":"ListItem","position":12,"name":"Nassau","url":"https://battletees.app/rules/nassau/"},{"@type":"ListItem","position":13,"name":"Skins","url":"https://battletees.app/rules/skins/"},{"@type":"ListItem","position":14,"name":"Hammer","url":"https://battletees.app/rules/hammer/"}]}</script>
@@ -432,6 +451,51 @@ function sendBeta(e){
 document.addEventListener('keydown',function(e){
   if(e.key==='Escape'){['betaModal','linkModal'].forEach(function(id){var m=document.getElementById(id);if(m)m.classList.remove('open');});}});
 if(location.hash==='#beta')addEventListener('load',openBeta);
+</script>
+
+<script>
+/* One speaker button per clip. The page must autoplay muted or browsers block
+   it outright, so sound is opt-in: a tap unmutes that clip and silences every
+   other one — never two at once. Scrolling a playing clip out of view, or
+   backgrounding the tab, gives the audio back up on its own. */
+(function(){
+  var vids=[].slice.call(document.querySelectorAll('.vid video, .wolfband video'));
+  if(!vids.length)return;
+  var ICONS='<svg class=off viewBox="0 0 24 24" aria-hidden=true><path d="M4 9v6h4l5 4V5L8 9H4z"/>'
+    +'<line x1="17" y1="9" x2="22" y2="15"/><line x1="22" y1="9" x2="17" y2="15"/></svg>'
+    +'<svg class=on viewBox="0 0 24 24" aria-hidden=true><path d="M4 9v6h4l5 4V5L8 9H4z"/>'
+    +'<path d="M16.4 8.6a4.8 4.8 0 0 1 0 6.8"/><path d="M19.1 5.9a8.6 8.6 0 0 1 0 12.2"/></svg>';
+  function silence(v){
+    v.muted=true;
+    if(v._btn){v._btn.setAttribute('aria-pressed','false');v._btn.setAttribute('aria-label','Turn sound on');}
+  }
+  vids.forEach(function(v){
+    var host=v.parentElement; if(!host)return;
+    var b=document.createElement('button');
+    b.type='button'; b.className='sndbtn'; b.innerHTML=ICONS;
+    b.setAttribute('aria-pressed','false');
+    b.setAttribute('aria-label','Turn sound on');
+    b.addEventListener('click',function(e){
+      e.preventDefault(); e.stopPropagation();
+      var turnOn=v.muted;
+      vids.forEach(silence);                 // only ever one audible
+      if(turnOn){
+        v.muted=false; v.volume=1;
+        b.setAttribute('aria-pressed','true');
+        b.setAttribute('aria-label','Turn sound off');
+        var p=v.play(); if(p&&p.catch)p.catch(function(){});
+      }
+    });
+    v._btn=b; host.appendChild(b);
+  });
+  if('IntersectionObserver' in window){
+    var io=new IntersectionObserver(function(es){
+      es.forEach(function(en){ if(!en.isIntersecting&&!en.target.muted)silence(en.target); });
+    },{threshold:0});
+    vids.forEach(function(v){io.observe(v);});
+  }
+  document.addEventListener('visibilitychange',function(){ if(document.hidden)vids.forEach(silence); });
+})();
 </script>
 
 <!-- Cloudflare Web Analytics --><script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "55fe6253d0e54b02bc8e2d96e101c600"}'></script><!-- End Cloudflare Web Analytics -->
