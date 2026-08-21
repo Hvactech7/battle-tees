@@ -375,7 +375,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1787273175';
+const BUILD='1787273498';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1075,7 +1075,7 @@ function applyOp(k,v,defer){
         try{
           archiveRound();
           try{const _h=(S.history||[])[0];
-            if(_h&&_h.sum){roundSplash=null;showRoundSplash(_h.sum,_h.courseName);
+            if(_h&&_h.sum&&S.round._histId&&_h.id===S.round._histId){roundSplash=null;showRoundSplash(_h.sum,_h.courseName);
               if(roundSplash)roundSplash.closedBy=v.capEnd.by||'';
               const d2=document.getElementById('roundsplash');
               if(d2){d2.remove();}
@@ -9750,7 +9750,6 @@ function endAskSheetHTML(){
           Blank holes stay blank — they are left out of your totals and your stats.</div>
         <button class="big mt" onclick="endAskScore()">✎ &nbsp;Let me finish scoring</button>
         <button class="ghost mt" style="width:100%" onclick="endAskAnyway()">End the round anyway</button>
-        <button class="ghost mt" style="width:100%" onclick="endAskNo()">Cancel — keep playing</button>
       </div></div>`;
   }
   // Same prompt whether you finished the card or are walking in early — only the
@@ -9803,8 +9802,12 @@ function finishMyRound(){
       save();render();
       return;
     }
-    // the round is safely in history now; show what it was
-    try{const _h=(S.history||[])[0];if(_h&&_h.sum)showRoundSplash(_h.sum,_h.courseName);}catch(e){}
+    // the round is safely in history now; show what it was — but ONLY if it
+    // was actually recorded: under the 2-hole gate archiveRound refuses
+    // quietly, and history[0] is then some OLD round's card (8/20: ending an
+    // empty Cypress start replayed the Paradise highlights)
+    try{const _h=(S.history||[])[0];
+      if(_h&&_h.sum&&S.round._histId&&_h.id===S.round._histId)showRoundSplash(_h.sum,_h.courseName);}catch(e){}
     // TELL THE GROUP FIRST. Walking in early leaves your rows locked to a phone
     // that will never write again — indistinguishable from a player who simply
     // has not scored yet, so the group could sit waiting on hole 6 for a score
