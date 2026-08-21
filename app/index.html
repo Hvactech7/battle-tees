@@ -375,7 +375,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1787278298';
+const BUILD='1787282980';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -721,6 +721,7 @@ function load(){
       if(!s.config.games)s.config.games=[s.config.game||'wolf'];
       if(!s.config.scramble)s.config.scramble={teams:'2v2'};
       if(!s.history)s.history=[];
+      if(!s.hcpPending)s.hcpPending=[];
       if(!s.groupLib)s.groupLib=[];
       if(!s.teamLib)s.teamLib=[];
       if(s.me&&s.me.name&&!s.me.pid)s.me.pid='u'+Date.now().toString(36)+Math.random().toString(36).slice(2,8);
@@ -2193,10 +2194,143 @@ function physHole(h){return (S.course&&S.course.loop9)?h%9:h;}
 function courseHandicaps(){
   const pt=parTotal();
   return S.players.map(p=>{
-    if(p.chOverride!=null&&p.chOverride!=='') return Math.round(+p.chOverride);
-    const t=teeOf(p);
-    return Math.round(p.index*(t.slope/113)+(t.rating-pt));
+    const t=teeOf(p)||{};   // a course with no tee sets plays as par/113
+    return Math.round(p.index*((+t.slope||113)/113)+((+t.rating||pt)-pt));
   });
+}
+// ============ THE HANDICAP ENGINE (USGA/WHS, Nathan's seeding) ==============
+// The index is the average of the BEST 8 of the last 20 score differentials,
+// where a differential = (113 / slope) x (adjusted gross - course rating).
+// Adjusted gross follows WHS: each scored hole capped at net double bogey
+// (par + 2 + strokes received; par + 5 with no index yet), unscored holes of
+// the round's span filled at net par — so a 9-hole round still yields an
+// 18-hole differential. No rating on file: rating = par, slope = 113.
+// UNDER 20 ROUNDS — Nathan's seeding (8/20): the missing slots are filled with
+// the average of the real differentials. One round: all 20 read the same.
+// Two rounds: the two real ones stand, 18 slots at their average. And so on;
+// at 20 real rounds the filler is gone. The log is per player (pid, else
+// name), keyed by round id so a review re-archive REPLACES its differential.
+function hcpKey(p){return (p&&p.pid)||('nm:'+String((p&&p.name)||'').trim().toLowerCase());}
+// One round, one key, on every phone: a shared round keys by its room code, so
+// two phones pushing the same round merge to a single entry in the Pi's book.
+function hcpRoundKey(entry){return (entry.code||('d'+String(devId()).slice(0,8)))+':'+(entry.startedAt||0);}
+function hcpDiffFor(entry,mi){
+  try{
+    const snap=(entry.playersSnap||[])[mi];if(!snap)return null;
+    const course=S.courses.find(c=>c.id===entry.courseId)||entry.courseSnap;
+    const hs=(course&&course.holes&&course.holes.length)?course.holes
+      :Array.from({length:18},(_,i)=>({par:4,si:i+1}));
+    const pt=hs.reduce((a,h)=>a+(h.par||4),0);
+    const tee=(course&&(course.teeSets||[]).find(t=>t.id===snap.tee))||(course&&(course.teeSets||[])[0])||null;
+    const rating=(tee&&isFinite(+tee.rating)&&+tee.rating>40)?+tee.rating:pt;
+    const slope=(tee&&isFinite(+tee.slope)&&+tee.slope>=55)?+tee.slope:113;
+    const sp=(entry.round&&entry.round.span)||{count:18,start:0};
+    const span=sp.count===9?Array.from({length:9},(_,k)=>(sp.start||0)+k):[...Array(18).keys()];
+    const holes=(entry.round&&entry.round.holes)||[];
+    const idx=+snap.index;
+    const ch=isFinite(idx)?Math.round(idx*(slope/113)+(rating-pt)):null;
+    const strokes=h=>{const si=(hs[h%hs.length]||{}).si||((h%18)+1);
+      if(ch==null)return 0;
+      return (ch>=si?1:0)+((ch-18)>=si?1:0)+((ch-36)>=si?1:0);};
+    let ags=0,scored=0;
+    span.forEach(h=>{
+      const r=holes[h],par=(hs[h%hs.length]||{}).par||4;
+      const g=(r&&r.confirmed&&r.gross&&r.gross[mi]!=null)?r.gross[mi]:null;
+      if(g!=null){scored++;ags+=Math.min(g,ch==null?par+5:par+2+strokes(h));}
+      else ags+=par+strokes(h);   // net par for the holes the round did not reach
+    });
+    if(scored<9)return null;      // not enough golf to say anything (WHS minimum)
+    if(sp.count===9){             // the other nine at net par completes the 18
+      [...Array(18).keys()].filter(h=>!span.includes(h)).forEach(h=>{
+        ags+=((hs[h%hs.length]||{}).par||4)+strokes(h);});
+    }
+    return Math.round((113/slope)*(ags-rating)*10)/10;
+  }catch(e){return null;}
+}
+function hcpIndexFromLog(list){
+  const real=(list||[]).map(x=>x.d).filter(d=>isFinite(d));
+  if(!real.length)return null;
+  const avg=real.reduce((a,b)=>a+b,0)/real.length;
+  const window=real.slice(-20);
+  while(window.length<20)window.push(avg);
+  const best8=window.slice().sort((a,b)=>a-b).slice(0,8);
+  const ix=Math.round(best8.reduce((a,b)=>a+b,0)/8*10)/10;
+  return Math.max(-10,Math.min(54,ix));
+}
+// Called as a round lands in history: log each player's differential (keyed by
+// round id — an edited review replaces, never doubles) and write the fresh
+// index back to the library card and, for me, the profile. Manual input still
+// seeds a brand-new player; from the first logged round the scores speak.
+function hcpAfterArchive(entry){
+  try{
+    if(!entry||!entry.playersSnap)return;
+    if(!S.hcpLog)S.hcpLog={};
+    (entry.playersSnap||[]).slice(0,4).forEach((snap,mi)=>{
+      if(!snap||!snap.name)return;
+      if(/^Player \d$/.test(snap.name.trim())&&!snap.pid)return;   // an empty seat, not a golfer
+      const d=hcpDiffFor(entry,mi);if(d==null)return;
+      const key=hcpKey(snap);
+      const rk=hcpRoundKey(entry);
+      const log=(S.hcpLog[key]=S.hcpLog[key]||[]);
+      const at=entry.endedAt||Date.now();
+      const hit=log.find(x=>x.id===rk||x.id===entry.id);
+      if(hit){hit.id=rk;hit.d=d;hit.at=at;}else log.push({id:rk,at,d});
+      log.sort((a,b)=>(a.at||0)-(b.at||0));
+      if(log.length>20)log.splice(0,log.length-20);
+      // pid'd players go to the Pi's book — queued, pushed when there's signal
+      if(snap.pid){
+        if(!S.hcpPending)S.hcpPending=[];
+        const pi=S.hcpPending.findIndex(x=>x.pid===snap.pid&&x.k===rk);
+        const row={pid:snap.pid,k:rk,at,d};
+        if(pi>=0)S.hcpPending[pi]=row;else S.hcpPending.push(row);
+        if(S.hcpPending.length>200)S.hcpPending.splice(0,S.hcpPending.length-200);
+      }
+      const ix=hcpIndexFromLog(log);if(ix==null)return;
+      const low=snap.name.trim().toLowerCase();
+      const lib=S.playerLib.find(e=>(snap.pid&&e.pid===snap.pid))||S.playerLib.find(e=>(e.name||'').trim().toLowerCase()===low);
+      if(lib)lib.index=ix;
+      if((S.me&&S.me.pid&&S.me.pid===snap.pid)||(S.me&&(S.me.name||'').trim().toLowerCase()===low))S.me.index=ix;
+    });
+  }catch(e){}
+}
+// THE PI KEEPS THE BOOK. Push what this phone computed (queued in hcpPending,
+// so no signal just waits), pull the official index for me and everyone on my
+// players list, and write what comes back — the Pi's log is the union of every
+// phone's rounds, so it knows rounds this phone never saw. Name-only players
+// (no pid) stay local. Throttled; a preview never talks to the live relay.
+let hcpSyncAt=0,hcpSyncBusy=false;
+async function hcpSync(force){
+  try{
+    if(hcpSyncBusy)return;
+    if(typeof previewSandboxed==='function'&&previewSandboxed())return;
+    const pend=(S.hcpPending||[]);
+    if(!force&&!pend.length&&Date.now()-hcpSyncAt<60000)return;
+    hcpSyncBusy=true;
+    const push=pend.slice(0,50);
+    const pids=[...new Set([S.me&&S.me.pid].concat((S.playerLib||[]).map(e=>e&&e.pid)).filter(Boolean))];
+    const r=await relayBattle({op:'hcp',push,pull:pids});
+    hcpSyncAt=Date.now();
+    if(r&&r.ok){
+      if(!r.testMuted&&push.length)S.hcpPending=pend.slice(push.length);
+      const idx=r.idx||{};
+      let changed=false;
+      Object.entries(idx).forEach(([pid,v])=>{
+        if(!v||!isFinite(+v.ix))return;
+        (S.playerLib||[]).forEach(e=>{if(e&&e.pid===pid&&e.index!==v.ix){e.index=v.ix;changed=true;}});
+        if(S.me&&S.me.pid===pid&&S.me.index!==v.ix){S.me.index=v.ix;changed=true;}
+      });
+      if(changed||push.length){save();if(S.screen==='players'||S.screen==='home')render();}
+    }
+  }catch(e){}finally{hcpSyncBusy=false;}
+}
+// First run on a phone with history: replay it oldest-first so everyone's
+// index starts from the rounds already played, not from a typed guess.
+function hcpBackfill(){
+  try{
+    S.hcpLog={};
+    (S.history||[]).slice().sort((a,b)=>(a.startedAt||0)-(b.startedAt||0)).forEach(e=>hcpAfterArchive(e));
+    save();
+  }catch(e){}
 }
 // Which game the currently-running ENGINE is scoring for. Strokes rules differ by
 // game (stroke play = full handicap, everything else = off the low man), and with
@@ -7563,6 +7697,7 @@ function grpEdAddNew(){
 }
 function vPlayers(){
   loadFriends();          // fills the ⚔️ markers; no-op once cached
+  try{hcpSync();}catch(e){}   // fresh official handicaps for the list (throttled)
   return topbar('Players','','home')+`<main>
   ${groupsCardHTML()}
   <div class="card"><h2>Players</h2>
@@ -7841,6 +7976,8 @@ function archiveRound(){
   S.history=(S.history||[]).filter(e=>e.id!==entry.id);
   S.history.unshift(entry);
   S.history=S.history.slice(0,12);
+  hcpAfterArchive(entry);   // the round now speaks for everyone's handicap
+  try{setTimeout(()=>hcpSync(true),1500);}catch(e){}
 }
 function isReview(){return !!(S.round.started&&S.round.reopened);}
 let revDirty=false;
@@ -8606,9 +8743,9 @@ function vSetup(){
         <div><div class="tiny">Name</div><div style="padding:10px 2px;font-weight:700;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p.name)}</div></div>
         <div><div class="tiny">Tees</div><select style="width:100%;padding:9px;border:2px solid var(--line);border-radius:8px;font-size:15px;background:var(--card)" onchange="setPl(${i},'tee',this.value)">${teeOpts}</select></div>
         <div><div class="tiny">Handicap index</div><input type="text" inputmode="decimal" value="${p.index}" onfocus="tapClear(this)" onblur="commitPl(this,${i},'index')"></div>
-        <div><div class="tiny">or course hcp</div><input type="text" inputmode="numeric" placeholder="auto: ${ch[i]}" value="${p.chOverride==null?'':p.chOverride}" onfocus="tapClear(this)" onblur="commitPl(this,${i},'chOverride')"></div>
+        <div></div>
       </div>
-      <div class="tiny mt">Course hcp <b>${ch[i]}</b> → plays with <b>${st[i]}</b> stroke${st[i]===1?'':'s'} (off the low man)</div>
+      <div class="tiny mt">Course hcp <b>${ch[i]}</b> → plays with <b>${st[i]}</b> stroke${st[i]===1?'':'s'} (off the low man). Handicaps adjust themselves as rounds are saved.</div>
     </div>`;
   }).join('');
   const P=S.config.pts;
@@ -8643,7 +8780,7 @@ function tapClear(el){
 }
 function commitPl(el,i,k){
   let v=el.value.trim();
-  if(v===''&&k!=='chOverride')v=el.dataset.prev||'';
+  if(v==='')v=el.dataset.prev||'';
   if(v===el.dataset.prev){el.value=v;return;}
   setPl(i,k,v);
 }
@@ -11218,6 +11355,8 @@ function landOnBoot(){
   try{if(S.screen==='map'&&S.round&&S.round.started)mapHole=S.round.cur||0;}catch(e){}
 }
 landOnBoot();
+if(!S.hcpLog)hcpBackfill();   // one-time: the rounds already played set the handicaps
+try{setTimeout(()=>hcpSync(true),3500);}catch(e){}   // then reconcile with the Pi's book
 render();
 try{setTimeout(askPuttsOwed,400);}catch(e){}   // a hole carded while the prompt was killed
 tryMagicLink();
