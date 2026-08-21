@@ -375,7 +375,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1787282980';
+const BUILD='1787285339';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -7975,6 +7975,12 @@ function archiveRound(){
   };
   S.history=(S.history||[]).filter(e=>e.id!==entry.id);
   S.history.unshift(entry);
+  // Past rounds live in the order they were PLAYED. A review re-archive used to
+  // unshift its round to the top of the list (Nathan, 8/20) — the sort puts it
+  // back on its own day; startedAt pins the date, endedAt-mins stands in for
+  // entries too old to carry one.
+  const _at=e=>e.startedAt||((e.endedAt||0)-(e.mins||0)*60000)||0;
+  S.history.sort((a,b)=>_at(b)-_at(a));
   S.history=S.history.slice(0,12);
   hcpAfterArchive(entry);   // the round now speaks for everyone's handicap
   try{setTimeout(()=>hcpSync(true),1500);}catch(e){}
