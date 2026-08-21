@@ -375,7 +375,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1787291154';
+const BUILD='1787293129';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -7798,12 +7798,11 @@ function vPlayers(){
             <div><div class="tiny">Handicap index</div><input id="meEIdx" type="text" inputmode="decimal" value="${S.me.index}"></div>
           </div>
           <div class="mt"><div class="tiny">Email — backups &amp; restore</div><input id="meEEmail" type="text" inputmode="email" autocapitalize="off" placeholder="you@email.com" value="${esc(localStorage.getItem('wolfBackupEmail')||'')}"></div>
-          ${PHOTOS_ON?`<div class="mt" style="display:flex;align-items:center;gap:10px">${avatarHTML(S.me,44)}
+          ${PHOTOS_ON?`<div class="mt" style="display:flex;align-items:center;gap:10px">${avatarHTML(S.me,59)}
             <button class="ghost" onclick="openPhotoPick()">📷 ${S.me.photo?'Change Photo':'Add Photo'}</button>
             ${S.me.photo?`<button class="ghost danger" onclick="removeMyPhoto()">Remove</button>`:''}
             <input type="file" id="photoFile" accept="image/*" style="display:none" onchange="photoFilePicked(this)">
-          </div>
-          <div class="tiny mt" style="opacity:.75">Optional — your Battle Friends see it next to your name.</div>`:''}
+          </div>`:''}
           ${(()=>{const ml=S.playerLib.find(x=>x.name.trim().toLowerCase()===S.me.name.trim().toLowerCase());
             return ml?stdTeePicker(ml.id,ml.stdTee||stdTeeOf(ml.teeName)):'';})()}
           <div id="meEErr" class="tiny mt" style="color:var(--red);font-weight:600"></div>
@@ -7814,7 +7813,7 @@ function vPlayers(){
         <button class="ghost" onclick="cancelEditMe()">Cancel</button>
       </div>`
     :(()=>{const meLib=S.playerLib.find(e=>e.name.trim().toLowerCase()===S.me.name.trim().toLowerCase());
-      return `<div class="row"><div style="display:flex;align-items:center;gap:10px;min-width:0">${avatarHTML(S.me,40)}<div style="min-width:0"><b>${esc(S.me.name)}</b><div class="tiny">Index ${S.me.index}${meLib&&(meLib.stdTee||meLib.teeName)?` · ${esc(meLib.stdTee||meLib.teeName)} tees`:''}</div></div></div>
+      return `<div class="row"><div style="display:flex;align-items:center;gap:10px;min-width:0">${avatarHTML(S.me,54)}<div style="min-width:0"><b>${esc(S.me.name)}</b><div class="tiny">Index ${S.me.index}${meLib&&(meLib.stdTee||meLib.teeName)?` · ${esc(meLib.stdTee||meLib.teeName)} tees`:''}</div></div></div>
       <button class="ghost" onclick="editMe()">Edit</button></div>`;})()):''}
     ${S.me.name?chalProfileHTML():''}
     ${scanOpen?`
