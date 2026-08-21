@@ -328,15 +328,23 @@
   .flexwrap{display:flex;flex-wrap:wrap;gap:6px}
   .sc-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
   table.sc{border-collapse:collapse}
-  .sc th{font-size:12px;color:var(--ink3);font-weight:600;padding:4px 0;min-width:26px}
-  .sc td{font-family:Rajdhani,Inter,sans-serif;font-weight:600;font-size:18px;text-align:center;min-width:26px;padding:5px 1px;border-bottom:1px solid var(--line);white-space:nowrap;line-height:25px}
-  .sc td.nm,.sc th.nm{font-family:Inter,-apple-system,sans-serif;font-size:14px;text-align:left;position:sticky;left:0;background:var(--card);min-width:52px;max-width:92px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:7px;font-stretch:normal;letter-spacing:0}
-  .sc .parrow td{color:var(--ink3);font-weight:500}
-  .sc td.tt{font-weight:700}
-  .sc td.bir{background:#14301d;color:#7fd49a}
-  .sc td.eag{background:#0f3a24;color:#9fe8b8}
-  .sc td.bog{background:var(--amber-lt);color:var(--amber)}
-  .sc td.dbl{background:var(--red-lt);color:var(--red)}
+  /* the Hole/Par/HCP band reads like a spreadsheet: bigger figures, hairline
+     grid between JUST these rows — the score rows below stay clean (8/20) */
+  .sc th{font-family:Rajdhani,Inter,sans-serif;font-size:15px;color:var(--ink2);font-weight:700;padding:4px 0;min-width:34px;border-right:.5px solid rgba(135,146,168,.28);border-bottom:.5px solid rgba(135,146,168,.28)}
+  .sc th:last-child{border-right:none}
+  .sc td{font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:21px;text-align:center;min-width:34px;padding:6px 2px;border-bottom:1px solid var(--line);white-space:nowrap;line-height:1.3}
+  .sc td.nm,.sc th.nm{font-family:Inter,-apple-system,sans-serif;font-size:13px;text-align:left;position:sticky;left:0;background:var(--card);min-width:52px;max-width:92px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:7px;font-stretch:normal;letter-spacing:0}
+  .sc .parrow td{color:var(--ink);font-weight:700;font-size:16px;padding:3px 2px;border-right:.5px solid rgba(135,146,168,.28);border-bottom:.5px solid rgba(135,146,168,.28)}
+  .sc .parrow td:last-child{border-right:none}
+  .sc .hcprow td{color:var(--ink3);font-weight:600;font-size:12.5px;padding:1px 2px 4px;border-right:.5px solid rgba(135,146,168,.28);border-bottom:1px solid var(--line)}
+  .sc .hcprow td:last-child{border-right:none}
+  .sc td.tt{font-weight:700;color:var(--gold,#e8c552);font-size:19px}
+  /* paper-card marks: ○ birdie · ◎ eagle · □ bogey · ▣ double+ (Nathan 8/20) */
+  .sc .scm{display:inline-flex;align-items:center;justify-content:center;width:29px;height:29px;line-height:1}
+  .sc .scm.bir{border:1.8px solid #7fd49a;border-radius:50%;color:#7fd49a}
+  .sc .scm.eag{border:1.8px solid #9fe8b8;border-radius:50%;box-shadow:0 0 0 2.2px var(--card),0 0 0 3.8px #9fe8b8;color:#9fe8b8}
+  .sc .scm.bog{border:1.8px solid var(--amber);color:var(--amber)}
+  .sc .scm.dbl{border:1.8px solid var(--red);box-shadow:0 0 0 2.2px var(--card),0 0 0 3.8px var(--red);color:var(--red)}
   .sc td.e{color:var(--ink3);font-weight:400}
   html.light{
     --green:#a8823a; --green-mid:#8a6414; --green-lt:#f3e8c8;
@@ -367,7 +375,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1787264770';
+const BUILD='1787273175';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -10144,10 +10152,11 @@ function vHoleScramble(){
 // tap the standings scorecard → full 18 as two stacked nines (front/OUT, back/IN+TOT)
 function scSegTable(idx,segLabel,extraTot){
   const hs=S.course.holes;
-  const cell=(g,par)=>{if(g==null)return '<td class="e">·</td>';const d=g-par;const c=d<=-2?'eag':d===-1?'bir':d===0?'':d===1?'bog':'dbl';return `<td class="${c}">${g}</td>`;};
+  const cell=scCell;
   const parSeg=idx.reduce((a,i)=>a+hs[i].par,0);
   let out='<div class="sc-wrap"><table class="sc" style="width:100%"><tr><th class="nm">Hole</th>'+idx.map(i=>`<th>${i+1}</th>`).join('')+`<th>${segLabel}</th>`+(extraTot?'<th>TOT</th>':'')+'</tr>';
   out+='<tr class="parrow"><td class="nm">Par</td>'+idx.map(i=>`<td>${hs[i].par}</td>`).join('')+`<td>${parSeg}</td>`+(extraTot?`<td>${hs.reduce((a,h)=>a+h.par,0)}</td>`:'')+'</tr>';
+  out+=scHcpRow(hs,[...idx,null,...(extraTot?[null]:[])]);
   const rowDefs=gameOn()==='scramble'?scrambleTeams().map(t=>({name:teamNameFor(t)||t.map(i=>S.players[i].name).join(' & '),pi:t[0]})):S.players.slice(0,NP()).map((p,pi)=>({name:p.name,pi}));
   rowDefs.forEach(({name:rowName,pi})=>{
     const g=i=>S.round.holes[i].confirmed?S.round.holes[i].gross[pi]:null;
@@ -10181,24 +10190,33 @@ function openFullCard(){
   document.body.appendChild(d);
 }
 function closeFullCard(){const d=document.getElementById('fullcard');if(d)d.remove();}
+// the ONE score cell: the digit wearing its paper-card mark (circle birdie,
+// double-circle eagle, square bogey, double-square worse). Par is bare.
+function scCell(g,par){
+  if(g==null)return '<td class="e">·</td>';
+  const d=g-par;
+  const c=d<=-2?'eag':d===-1?'bir':d===0?'':d===1?'bog':'dbl';
+  return `<td><span class="scm${c?' '+c:''}">${g}</span></td>`;
+}
+// the HCP row under Par: each hole's stroke index, blanks under total columns
+function scHcpRow(hs,groups){
+  return '<tr class="hcprow"><td class="nm">HCP</td>'
+    +groups.map(g=>g==null?'<td></td>':`<td>${hs[g]&&hs[g].si!=null?hs[g].si:''}</td>`).join('')+'</tr>';
+}
 function scorecardHTML(lens){
   const hs=S.course.holes;
   const sp=roundSpan();
   if(sp.count===9)return scorecard9HTML(sp.start<9?0:9,lens);
   const net=lens==='net';
   const idx=[...Array(18).keys()];
-  const cell=(g,par)=>{
-    if(g==null)return '<td class="e">·</td>';
-    const d=g-par;
-    const c=d<=-2?'eag':d===-1?'bir':d===0?'':d===1?'bog':'dbl';
-    return `<td class="${c}">${g}</td>`;
-  };
+  const cell=scCell;
   const parOut=hs.slice(0,9).reduce((a,h)=>a+h.par,0), parIn=hs.slice(9).reduce((a,h)=>a+h.par,0);
   let html='<div class="sc-wrap"><table class="sc"><tr><th class="nm">Hole</th>'
     +idx.slice(0,9).map(i=>`<th>${i+1}</th>`).join('')+'<th>OUT</th>'
     +idx.slice(9).map(i=>`<th>${i+1}</th>`).join('')+'<th>IN</th><th>TOT</th></tr>';
   html+='<tr class="parrow"><td class="nm">Par</td>'+hs.slice(0,9).map(h=>`<td>${h.par}</td>`).join('')
     +`<td>${parOut}</td>`+hs.slice(9).map(h=>`<td>${h.par}</td>`).join('')+`<td>${parIn}</td><td>${parOut+parIn}</td></tr>`;
+  html+=scHcpRow(hs,[...idx.slice(0,9),null,...idx.slice(9),null,null]);
   const rowDefs=gameOn()==='scramble'?scrambleTeams().map(t=>({name:teamNameFor(t)||t.map(i=>S.players[i].name).join(' & '),pi:t[0]})):S.players.slice(0,NP()).map((p,pi)=>({name:p.name,pi}));
   rowDefs.forEach(({name:rowName,pi})=>{
     const g=i=>{if(!S.round.holes[i].confirmed)return null;
@@ -10220,16 +10238,12 @@ function scorecard9HTML(base,lens){
   const hs=S.course.holes;
   const net=lens==='net';
   const idx=Array.from({length:9},(_,k)=>base+k);
-  const cell=(g,par)=>{
-    if(g==null)return '<td class="e">·</td>';
-    const d=g-par;
-    const c=d<=-2?'eag':d===-1?'bir':d===0?'':d===1?'bog':'dbl';
-    return `<td class="${c}">${g}</td>`;
-  };
+  const cell=scCell;
   const parTot=idx.reduce((a,i)=>a+hs[i].par,0);
   let html='<div class="sc-wrap"><table class="sc"><tr><th class="nm">Hole</th>'
     +idx.map(i=>`<th>${i+1}</th>`).join('')+'<th>TOT</th></tr>';
   html+='<tr class="parrow"><td class="nm">Par</td>'+idx.map(i=>`<td>${hs[i].par}</td>`).join('')+`<td>${parTot}</td></tr>`;
+  html+=scHcpRow(hs,[...idx,null]);
   const rowDefs=gameOn()==='scramble'?scrambleTeams().map(t=>({name:teamNameFor(t)||t.map(i=>S.players[i].name).join(' & '),pi:t[0]})):S.players.slice(0,NP()).map((p,pi)=>({name:p.name,pi}));
   rowDefs.forEach(({name:rowName,pi})=>{
     const g=i=>{if(!S.round.holes[i].confirmed)return null;
@@ -10898,7 +10912,7 @@ function vStandings(){
   const shotsCard=S.round.started?trackedShotsCardHTML(shotsForShare(),S.players,S.course,S.round.holes):'';
   const extra=(thru>0?`
     <div class="card" onclick="openFullCard()" style="cursor:pointer"><h2>Scorecard · gross strokes <span class="tiny" style="font-weight:400">— tap for all 18</span></h2>${scorecardHTML()}
-      <div class="tiny mt">Green = under par · amber = bogey · red = double or worse. Swipe the card sideways.</div></div>`:'')+shotsCard+statsCard;
+      <div class="tiny mt"><span style="color:#7fd49a">○</span> birdie · <span style="color:#9fe8b8">◎</span> eagle · <span style="color:var(--amber)">□</span> bogey · <span style="color:var(--red)">▣</span> double+ · HCP = hole handicap. Swipe the card sideways.</div></div>`:'')+shotsCard+statsCard;
   return topbar('Standings',esc(S.course.name),'','','')+`<main>${paceLine()}${tables}${extra}
     ${(all!=null&&all.perHole)?`<div class="card"><h2>Hole history (tap to edit)</h2>${hist||'<div class="muted">No holes confirmed yet.</div>'}</div>`:''}
     ${settleSectionHTML()}
