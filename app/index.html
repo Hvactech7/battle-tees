@@ -375,7 +375,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1787294934';
+const BUILD='1787434983';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -2233,6 +2233,16 @@ function hcpKey(p){return (p&&p.pid)||('nm:'+String((p&&p.name)||'').trim().toLo
 // One round, one key, on every phone: a shared round keys by its room code, so
 // two phones pushing the same round merge to a single entry in the Pi's book.
 function hcpRoundKey(entry){return (entry.code||('d'+String(devId()).slice(0,8)))+':'+(entry.startedAt||0);}
+// Two keys name the SAME round when they share a (non-zero) start stamp —
+// the code half can differ between the live archive and a later review.
+function hcpSameRound(a,b){try{const x=String(a).split(':')[1],y=String(b).split(':')[1];return !!x&&x!=='0'&&x===y;}catch(e){return false;}}
+function hcpDedupeLog(log){
+  const out=[];(log||[]).forEach(x=>{const hit=out.find(y=>y.id===x.id||hcpSameRound(y.id,x.id));
+    if(!hit){out.push(x);return;}
+    if(/^d/.test(hit.id)&&!/^d/.test(x.id))hit.id=x.id;   // keep the coded name
+    if((x.at||0)>=(hit.at||0)){hit.d=x.d;hit.at=x.at;}});
+  return out;}
+function hcpDedupeAll(){try{Object.keys(S.hcpLog||{}).forEach(k=>{S.hcpLog[k]=hcpDedupeLog(S.hcpLog[k]);});}catch(e){}}
 function hcpDiffFor(entry,mi){
   try{
     const snap=(entry.playersSnap||[])[mi];if(!snap)return null;
@@ -2292,15 +2302,15 @@ function hcpAfterArchive(entry){
       const rk=hcpRoundKey(entry);
       const log=(S.hcpLog[key]=S.hcpLog[key]||[]);
       const at=entry.endedAt||Date.now();
-      const hit=log.find(x=>x.id===rk||x.id===entry.id);
-      if(hit){hit.id=rk;hit.d=d;hit.at=at;}else log.push({id:rk,at,d});
+      const hit=log.find(x=>x.id===rk||x.id===entry.id||hcpSameRound(x.id,rk));
+      if(hit){if(!/^d/.test(rk)||/^d/.test(hit.id))hit.id=rk;hit.d=d;hit.at=at;}else log.push({id:rk,at,d});
       log.sort((a,b)=>(a.at||0)-(b.at||0));
       if(log.length>20)log.splice(0,log.length-20);
       // pid'd players go to the Pi's book — queued, pushed when there's signal
       if(snap.pid){
         if(!S.hcpPending)S.hcpPending=[];
-        const pi=S.hcpPending.findIndex(x=>x.pid===snap.pid&&x.k===rk);
-        const row={pid:snap.pid,k:rk,at,d};
+        const pi=S.hcpPending.findIndex(x=>x.pid===snap.pid&&(x.k===rk||hcpSameRound(x.k,rk)));
+        const row={pid:snap.pid,k:(pi>=0&&/^d/.test(rk)&&!/^d/.test(S.hcpPending[pi].k))?S.hcpPending[pi].k:rk,at,d};
         if(pi>=0)S.hcpPending[pi]=row;else S.hcpPending.push(row);
         if(S.hcpPending.length>200)S.hcpPending.splice(0,S.hcpPending.length-200);
       }
@@ -8065,7 +8075,9 @@ function archiveRound(){
     // a reopened round's DURATION is history too — recomputing it from the
     // review's clocks is how 152 minutes became 480 overnight
     game:S.round.game||S.config.game,courseId:S.course.id,courseName:S.course.name,
-    code:S.share.on?S.share.code:null,thru,
+    // the code is part of the round's identity: a review re-archives with
+    // share OFF, and a code-less key logged Rancho's handicap twice (8/21)
+    code:(prev&&prev.code)||(S.share.on?S.share.code:null),thru,
     mins:(S.round.reopened&&prev&&prev.mins!=null)?prev.mins
       :t0?Math.round(((S.round.myEndedAt||Date.now())-t0)/60000):null,
     players:actIdx().map(i=>S.players[i].name),
@@ -11584,6 +11596,7 @@ function landOnBoot(){
 }
 landOnBoot();
 if(!S.hcpLog)hcpBackfill();   // one-time: the rounds already played set the handicaps
+hcpDedupeAll();   // a round reviewed before 8/22 may be logged twice
 try{setTimeout(()=>hcpSync(true),3500);}catch(e){}   // then reconcile with the Pi's book
 try{if(S.round&&S.round.started)setTimeout(maybeAskPar,2200);}catch(e){}   // resumed on an unconfirmed hole
 render();
