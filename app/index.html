@@ -375,7 +375,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1787434983';
+const BUILD='1787437481';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1569,7 +1569,7 @@ function saveMe(){
   if(em)try{localStorage.setItem('wolfBackupEmail',em);}catch(x2){}
   setTimeout(registerProfile,0);          // the pid exists now — tell the Pi
   set(()=>{
-    S.me={name,index:+((x&&x.value)||10)||10,pid:(S.me&&S.me.pid)||('u'+Date.now().toString(36)+Math.random().toString(36).slice(2,8))};
+    S.me={name,index:parseIdx(x&&x.value,10),pid:(S.me&&S.me.pid)||('u'+Date.now().toString(36)+Math.random().toString(36).slice(2,8))};
     upsertLib({name,index:S.me.index,tee:S.players[0]?S.players[0].tee:undefined,libId:null});
   });
   try{localStorage.setItem('btOnboarded','1');}catch(x3){}
@@ -1599,7 +1599,7 @@ function saveEditMe(){
     // pid-keyed lookup went blind. The display name is the only thing changing.
     const pid=(S.me&&S.me.pid)||('u'+Date.now().toString(36)+Math.random().toString(36).slice(2,8));
     const photo=S.me&&S.me.photo;   // the photo rides through a profile save (8/20: Save wiped it back to initials)
-    S.me={name,index:+((x&&x.value)||S.me.index)||S.me.index,pid};
+    S.me={name,index:parseIdx(x&&x.value,S.me.index),pid};
     if(photo)S.me.photo=photo;
     // my library card — by pid first, old name as the grandfathered fallback
     const e=S.playerLib.find(p=>p.pid===pid)
@@ -2149,7 +2149,7 @@ function saveEditPlayer(){
     const e=S.playerLib.find(p=>p.id===id);
     if(!e)return;
     e.name=name;
-    e.index=+((x&&x.value)||e.index)||e.index;
+    e.index=parseIdx(x&&x.value,e.index);
     S.players.forEach(p=>{if(p.libId===id){p.name=e.name;p.index=e.index;}});
   });
 }
@@ -2158,7 +2158,7 @@ function addManualPlayer(){
   const name=(n&&n.value||'').trim();
   if(!name)return;
   addingPlayer=false;
-  set(()=>{upsertLib({name,index:+((x&&x.value)||10)||10,tee:S.players[0]?S.players[0].tee:undefined,libId:null});});
+  set(()=>{upsertLib({name,index:parseIdx(x&&x.value,10),tee:S.players[0]?S.players[0].tee:undefined,libId:null});});
 }
 function lobbyConnect(){
   if((S.share&&S.share.on)||lobbySock)return;
@@ -5727,6 +5727,7 @@ const MORPH_SKIP_ID={holemap:1,bfmap:1};                     // Leaflet owns the
 function morphAttrs(a,b){
   for(let i=a.attributes.length-1;i>=0;i--){
     const n=a.attributes[i].name;
+    if(n==='open'&&a.tagName==='DETAILS')continue;   // a box the user unfolded stays unfolded (join code, rule cards)
     if(!b.hasAttribute(n))a.removeAttribute(n);
   }
   for(let i=0;i<b.attributes.length;i++){
@@ -5783,6 +5784,7 @@ function morphKids(a,b){
   }
   while(ac){const next=ac.nextSibling;a.removeChild(ac);ac=next;}   // trim leftovers
 }
+function selDefault(sel){try{const o=[...sel.options].find(x=>x.defaultSelected)||sel.options[0];return o?o.value:'';}catch(e){return '';}}
 function render(){
   if(S.screen!=='gate'&&gatePick.timer){clearInterval(gatePick.timer);gatePick.timer=null;gatePick.open=false;}
   const el=$('#app');
@@ -5792,7 +5794,11 @@ function render(){
   // offer. The full disable is Settings>Accessibility>Touch>Shake to Undo>Off.
   if(scr==='hole'||scr==='map'||scr==='standings'){
     const a=document.activeElement;
-    if(a&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA'))try{a.blur();}catch(e){}
+    // ...but a field on THIS screen that someone is typing into (the $/point box
+    // on Standings) is not lingering — a repaint from a remote score must not
+    // drop the keyboard mid-number (8/22 sweep)
+    const onThisScreen=window.__lastScr===scr&&a&&el&&el.contains(a);
+    if(a&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA')&&!onThisScreen)try{a.blur();}catch(e){}
   }
   let html='';
   if(installGateOn()) html=vInstallGate();
@@ -5824,6 +5830,24 @@ function render(){
   // both axes: the Battlefield scorecard scrolls sideways, the shot list scrolls down
   document.querySelectorAll('[data-keepscroll]').forEach(e2=>{if(e2.id)keepScroll[e2.id]={top:e2.scrollTop,left:e2.scrollLeft};});
   const pageY=window.scrollY;
+  // A repaint must never eat what someone is typing. The Players screen
+  // re-renders on every lobby "nearby"/invite message and every handicap pull,
+  // and the positional morph replaces a shifted form wholesale — 8/22:
+  // Blackmamba's name vanished while Nathan typed his index. Snapshot every
+  // field the user has edited (value differs from its markup default), put it
+  // back after the swap if the same field (same default) is still there, and
+  // keep the caret where it was.
+  const keepInput=[],keepOpen=[];let focusId=null,sel=null;
+  try{
+    el.querySelectorAll('input[id],textarea[id],select[id]').forEach(i=>{
+      if(i.type==='checkbox'||i.type==='radio'||i.type==='file')return;
+      if(i.tagName==='SELECT'){const d=selDefault(i);if(i.value!==d)keepInput.push([i.id,i.value,d]);return;}
+      if(i.value!==i.defaultValue)keepInput.push([i.id,i.value,i.defaultValue,i.getAttribute('data-rec')]);});
+    // a folded-open <details> (the join-code box) stays open across the swap
+    el.querySelectorAll('details[id]').forEach(d=>{if(d.open)keepOpen.push(d.id);});
+    const a=document.activeElement;
+    if(a&&a.id&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA')){focusId=a.id;try{sel=[a.selectionStart,a.selectionEnd];}catch(e){}}
+  }catch(e){}
   const sameScreen=window.__lastScr===scr;
   window.__lastScr=scr;
   try{if(window.__a2hsSync)window.__a2hsSync();}catch(e){}
@@ -5839,6 +5863,17 @@ function render(){
       morphKids(el,tmp);
     }else el.innerHTML=full;
   }
+  try{
+    keepOpen.forEach(id=>{const d=document.getElementById(id);if(d&&!d.open)d.open=true;});
+    keepInput.forEach(([id,v,dv,rec])=>{const i=document.getElementById(id);if(!i)return;
+      const d=i.tagName==='SELECT'?selDefault(i):i.defaultValue;
+      // the field being typed in always gets its text back; an idle edited field
+      // only if it still shows the same record (data-rec, else the markup default)
+      const same=rec!=null?i.getAttribute('data-rec')===rec:d===dv;
+      if((id===focusId||same)&&i.value!==v)i.value=v;});
+    if(focusId){const i=document.getElementById(focusId);
+      if(i&&document.activeElement!==i){window.__restoringInput=true;try{i.focus({preventScroll:true});}finally{window.__restoringInput=false;}if(sel&&sel[0]!=null)try{i.setSelectionRange(sel[0],sel[1]);}catch(e){}}}
+  }catch(e){}
   if(sameScreen){
     Object.entries(keepScroll).forEach(([id,pos])=>{const e2=document.getElementById(id);
       if(e2){e2.scrollTop=pos.top;e2.scrollLeft=pos.left;}});
@@ -7061,7 +7096,7 @@ function vStart(){
   const nFilled=S.players.filter(isRealPl).length;
   const back=step==='kind'?'home':'';
   const head=(t,sub)=>topbar(t,sub,'','',`<button class="ghost" onclick="wizBack()">‹ Back</button>`);
-  const codeBox=`<details class="card" style="padding:10px 14px;margin-top:12px"><summary class="tiny" style="cursor:pointer;color:var(--ink3)">Have a round code? Join with it</summary>
+  const codeBox=`<details id="joinDetails" class="card" style="padding:10px 14px;margin-top:12px"><summary class="tiny" style="cursor:pointer;color:var(--ink3)">Have a round code? Join with it</summary>
     <div class="row" style="border:none">
       <input type="text" id="joincode" placeholder="ABCDE" maxlength="8" autocapitalize="characters" style="width:46%;text-transform:uppercase;font-family:Rajdhani,sans-serif;font-size:20px;letter-spacing:3px">
       <button class="ghost sel" style="flex:1" onclick="joinRound()">Join</button></div></details>`;
@@ -7278,7 +7313,7 @@ function vGate(){
     :`<div class="tiny mt">Group's full \u2014 remove someone to make a swap.</div>`}
   </div>
   <div class="card"><h2>\u2694\ufe0f Group name</h2>
-    <input type="text" value="${esc(S.config.groupName||'')}" placeholder="e.g. The Wolf Pack \u2014 optional" oninput="S.config.groupName=this.value;save()" onchange="groupNameCommit(this.value)">
+    <input id="grpName" type="text" value="${esc(S.config.groupName||'')}" placeholder="e.g. The Wolf Pack \u2014 optional" oninput="S.config.groupName=this.value;save()" onchange="groupNameCommit(this.value)">
     ${(()=>{const nm=(S.config.groupName||'').trim();
       if(!nm||(S.groupLib||[]).some(g3=>g3.name.trim().toLowerCase()===nm.toLowerCase()))return '';
       return `<button class="ghost mt" style="width:100%" onclick="openGroupCreate()">\uff0b Create \u201c${esc(nm)}\u201d \u2014 pick the players</button>`;})()}
@@ -7300,7 +7335,7 @@ function vGate(){
       ? `<button class="big" onclick="startGroupFromGate()">👥 Start the group round \u2192</button>
          <div class="tiny mt">Anyone you typed in or picked is already on your card \u2014 you keep their scores. The rest join with the code, or tap the invite when it pops up on their phone.</div>`
       : `<button class="big" onclick="go('pickgame')">Next \u2014 pick your game \u2192</button>`}
-  <details class="card" style="padding:10px 14px;margin-top:12px"><summary class="tiny" style="cursor:pointer;color:var(--ink3)">Join with a code instead</summary>
+  <details id="joinDetails" class="card" style="padding:10px 14px;margin-top:12px"><summary class="tiny" style="cursor:pointer;color:var(--ink3)">Join with a code instead</summary>
     <div class="row" style="border:none">
       <input type="text" id="joincode" placeholder="ABCDE" maxlength="8" autocapitalize="characters" style="width:46%;text-transform:uppercase;font-family:Rajdhani,sans-serif;font-size:20px;letter-spacing:3px">
       <button class="ghost sel" style="flex:1" onclick="joinRound()">Join</button>
@@ -7795,7 +7830,7 @@ function grpEdAddNew(){
   const nEl=document.getElementById('grpNewName'),iEl=document.getElementById('grpNewIdx');
   const nm=((nEl&&nEl.value)||'').trim();
   if(!nm)return;
-  const idx=Math.max(-10,Math.min(54,parseFloat((iEl&&iEl.value)||'')||10));
+  const idx=parseIdx(iEl&&iEl.value,10);
   const low=nm.toLowerCase();
   const t=grpEditTarget;if(!t)return;
   const nmEl=document.getElementById('grpEdName');if(nmEl)t.name=nmEl.value;
@@ -7813,10 +7848,10 @@ function vPlayers(){
       <div class="row" style="background:var(--green-lt);border-radius:10px;padding:9px 12px;border-top:none;margin:2px 0">
         <div style="flex:1">
           <div class="grid2">
-            <div><div class="tiny">Your name</div><input id="meEName" type="text" value="${esc(S.me.name)}"></div>
-            <div><div class="tiny">Handicap index</div><input id="meEIdx" type="text" inputmode="decimal" value="${S.me.index}"></div>
+            <div><div class="tiny">Your name</div><input id="meEName" data-rec="me" type="text" value="${esc(S.me.name)}"></div>
+            <div><div class="tiny">Handicap index</div><input id="meEIdx" data-rec="me" type="text" inputmode="decimal" value="${S.me.index}"></div>
           </div>
-          <div class="mt"><div class="tiny">Email — backups &amp; restore</div><input id="meEEmail" type="text" inputmode="email" autocapitalize="off" placeholder="you@email.com" value="${esc(localStorage.getItem('wolfBackupEmail')||'')}"></div>
+          <div class="mt"><div class="tiny">Email — backups &amp; restore</div><input id="meEEmail" data-rec="me" type="text" inputmode="email" autocapitalize="off" placeholder="you@email.com" value="${esc(localStorage.getItem('wolfBackupEmail')||'')}"></div>
           ${PHOTOS_ON?`<div class="mt" style="display:flex;align-items:center;gap:10px">${avatarHTML(S.me,59)}
             <button class="ghost" onclick="openPhotoPick()">📷 ${S.me.photo?'Change Photo':'Add Photo'}</button>
             ${S.me.photo?`<button class="ghost danger" onclick="removeMyPhoto()">Remove</button>`:''}
@@ -7860,8 +7895,8 @@ function vPlayers(){
     return lib.length?lib.map(e=>editingPlayer===e.id?`
       <div class="row" style="background:var(--green-lt);border-radius:10px;padding:9px 12px;border-top:none;margin:2px 0">
         <div class="grid2" style="flex:1">
-          <div><div class="tiny">Name</div><input id="epName" type="text" value="${esc(e.name)}"></div>
-          <div><div class="tiny">Handicap index</div><input id="epIdx" type="text" inputmode="decimal" value="${e.index}"></div>
+          <div><div class="tiny">Name</div><input id="epName" data-rec="${esc(e.id)}" type="text" value="${esc(e.name)}"></div>
+          <div><div class="tiny">Handicap index</div><input id="epIdx" data-rec="${esc(e.id)}" type="text" inputmode="decimal" value="${e.index}"></div>
         </div>
       </div>
       <div class="row" style="border-top:none;display:block">${stdTeePicker(e.id,e.stdTee||stdTeeOf(e.teeName))}</div>
@@ -8579,16 +8614,16 @@ function vCourse(){
     <div class="scorebar">
       <b class="num" style="width:26px">${i+1}</b>
       <div class="stepper"><button onclick="chPar(${i},-1)">−</button><span class="val num">${h.par}</span><button onclick="chPar(${i},1)">+</button></div>
-      <label class="tiny">SI <input type="number" value="${h.si}" min="1" max="18" style="width:58px" onchange="chSI(${i},this.value)"></label>
+      <label class="tiny">SI <input id="csi${i}" type="number" value="${h.si}" min="1" max="18" style="width:58px" onchange="chSI(${i},this.value)"></label>
     </div>`).join('');
   const tees=c.teeSets.map((t,i)=>`
-    <div class="row"><input type="text" value="${esc(t.name)}" style="width:34%" onchange="chTee(${i},'name',this.value)">
-    <input type="number" value="${t.rating}" step="0.1" style="width:24%" onchange="chTee(${i},'rating',this.value)" title="Rating">
-    <input type="number" value="${t.slope}" style="width:20%" onchange="chTee(${i},'slope',this.value)" title="Slope">
+    <div class="row"><input id="cteeN${i}" type="text" value="${esc(t.name)}" style="width:34%" onchange="chTee(${i},'name',this.value)">
+    <input id="cteeR${i}" type="number" value="${t.rating}" step="0.1" style="width:24%" onchange="chTee(${i},'rating',this.value)" title="Rating">
+    <input id="cteeS${i}" type="number" value="${t.slope}" style="width:20%" onchange="chTee(${i},'slope',this.value)" title="Slope">
     <button class="ghost danger" onclick="delTee(${i})">✕</button></div>`).join('');
   return topbar('Course setup','','courses')+`<main>
   ${c._note?`<div class="banner ${c._noteOk?'ok':'wolf'}">${c._noteOk?'✓ ':''}${esc(c._note)} <button class="ghost" style="margin-left:6px" onclick="set(()=>{delete S.course._note;delete S.course._noteOk;})">Got it</button></div>`:''}
-  <div class="card"><h2>Name</h2><input type="text" value="${esc(c.name)}" onchange="set(()=>S.course.name=this.value)" oninput="S.course.name=this.value;save()">
+  <div class="card"><h2>Name</h2><input id="cname" type="text" value="${esc(c.name)}" onchange="set(()=>S.course.name=this.value)" oninput="S.course.name=this.value;save()">
     ${c.geo?`<button class="ghost mt" id="tilebtn" onclick="preloadCourseTiles(true)">${tilePackFresh()?'✓ Offline maps ready — tap to refresh':'⬇ Download offline hole maps'}</button>
     <div class="tiny mt">Grab the satellite tiles on wifi and every hole opens instantly, even with no signal on the course.</div>
     <button class="ghost mt" onclick="set(()=>{delete S.course.geo;delete S.course.geoReal;})">Clear downloaded hole-map data</button>
@@ -8682,14 +8717,14 @@ function gameOptionsHTML(){
         ${[2,3,4].map(n=>`<button class="ghost ${NP()===n?'sel':''}" onclick="set(()=>S.config.skins.n=${n})">${n}</button>`).join('')}
       </span></div>
     <div class="row"><span class="muted">$ per hole</span>
-      <input type="text" inputmode="decimal" value="${K.amt}" style="width:80px;text-align:right" onchange="set(()=>{S.config.skins.amt=Math.max(0,+this.value||0);if(S.config.skins.per)S.config.skins.per=null;})"></div>
+      <input id="skAmt" type="text" inputmode="decimal" value="${K.amt}" style="width:80px;text-align:right" onchange="set(()=>{S.config.skins.amt=Math.max(0,+this.value||0);if(S.config.skins.per)S.config.skins.per=null;})"></div>
     <div class="row"><span class="muted">Ties carry the pot</span>
       <button class="ghost ${K.carry!==false?'sel':''}" onclick="set(()=>S.config.skins.carry=S.config.skins.carry===false?true:false)">${K.carry!==false?'On':'Off'}</button></div>
     <div class="row"><span class="muted">Custom amount per hole</span>
       <button class="ghost ${K.per?'sel':''}" onclick="set(()=>S.config.skins.per=S.config.skins.per?null:skinsHoleVals())">${K.per?'On':'Off'}</button></div>
     ${K.per?`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:10px">
       ${playOrder().map(h=>`<div style="display:flex;align-items:center;gap:4px"><span class="tiny" style="width:26px;text-align:right">${h+1}</span>
-        <input type="text" inputmode="decimal" value="${K.per[h]}" style="min-width:0;text-align:right;padding:6px" onchange="set(()=>{S.config.skins.per[${h}]=Math.max(0,+this.value||0);})"></div>`).join('')}
+        <input id="skPer${h}" type="text" inputmode="decimal" value="${K.per[h]}" style="min-width:0;text-align:right;padding:6px" onchange="set(()=>{S.config.skins.per[${h}]=Math.max(0,+this.value||0);})"></div>`).join('')}
     </div>`:''}
     <div class="tiny mt">Lowest score takes the hole <b>outright</b> — any tie ${K.carry!==false?'rolls the pot into the next hole':'kills that skin'}. Each skin is collected from every other player. <b>Total on the course: ${fmtMoney(tot)}</b>.</div>
   </div>`;})():''}
@@ -8860,7 +8895,7 @@ function vSetup(){
       <div class="grid2 mt">
         <div><div class="tiny">Name</div><div style="padding:6px 2px;font-weight:700;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:8px">${avatarHTML(p,30)}<span style="min-width:0;overflow:hidden;text-overflow:ellipsis">${esc(p.name)}</span></div></div>
         <div><div class="tiny">Tees</div><select style="width:100%;padding:9px;border:2px solid var(--line);border-radius:8px;font-size:15px;background:var(--card)" onchange="setPl(${i},'tee',this.value)">${teeOpts}</select></div>
-        <div><div class="tiny">Handicap index</div><input type="text" inputmode="decimal" value="${p.index}" onfocus="tapClear(this)" onblur="commitPl(this,${i},'index')"></div>
+        <div><div class="tiny">Handicap index</div><input id="plIdx${i}" data-rec="${esc(p.name)}" type="text" inputmode="decimal" value="${p.index}" onfocus="tapClear(this)" onblur="commitPl(this,${i},'index')"></div>
         <div></div>
       </div>
       <div class="tiny mt">Course hcp <b>${ch[i]}</b> → plays with <b>${st[i]}</b> stroke${st[i]===1?'':'s'} (off the low man). Handicaps adjust themselves as rounds are saved.</div>
@@ -8890,6 +8925,7 @@ function vSetup(){
 // Clear a prefilled field on focus — but give the value BACK if the user
 // leaves without typing (re-focusing a field must never eat your input).
 function tapClear(el){
+  if(window.__restoringInput)return;   // render() handing the text back, not a tap
   el.dataset.prev=el.value;el.value='';
   el.addEventListener('blur',function h(){
     el.removeEventListener('blur',h);
@@ -9323,9 +9359,19 @@ function uniqueRosterName(nm,exceptIdx){
   for(let k=2;k<10;k++){const c=nm+' '+k;if(!taken(c))return c;}
   return nm;
 }
+// A typed handicap index. "0" is a scratch golfer, not a blank — four forms
+// read +v||10 and turned every scratch player into a 10 (8/22 sweep). Commas
+// are decimals ("12,4"), junk falls back, everything clamps to the WHS range.
+function parseIdx(v,fallback){
+  const t=String(v==null?'':v).trim().replace(',','.');
+  if(t==='')return fallback;
+  const x=parseFloat(t);
+  if(!isFinite(x))return fallback;
+  return Math.round(Math.max(-10,Math.min(54,x))*10)/10;
+}
 function setPl(i,k,v){set(()=>{
   if(k==='name')v=uniqueRosterName(v,i);
-  if(k==='index')S.players[i][k]=+v||0;
+  if(k==='index')S.players[i][k]=parseIdx(v,+S.players[i][k]||0);
   else if(k==='chOverride')S.players[i][k]=v===''?null:+v;
   else S.players[i][k]=v;
   if(k==='name'){
@@ -10995,7 +11041,7 @@ function teamNamesHTML(g){
   return `<div class="tiny" style="font-weight:700;margin-top:8px">Team names <span style="font-weight:400">(optional — saved for next time)</span></div>${dl}
   ${T.map((t,k)=>`<div class="row" style="border:none;padding:4px 0;display:flex;gap:8px;align-items:center">
     <span class="tiny" style="flex:none;min-width:104px">${t.map(i=>esc(((S.players[i]&&S.players[i].name)||'').split(' ')[0])).join(' & ')}</span>
-    <input type="text" list="teamlibdl" placeholder="e.g. The Hammers" value="${esc(teamNameFor(t)||'')}" onchange="saveTeamNameUI('${g}',${k},this.value)" style="flex:1;min-width:0">
+    <input id="tmName_${g}_${k}" type="text" list="teamlibdl" placeholder="e.g. The Hammers" value="${esc(teamNameFor(t)||'')}" onchange="saveTeamNameUI('${g}',${k},this.value)" style="flex:1;min-width:0">
   </div>`).join('')}`;
 }
 function matchTeams(g){
@@ -11352,7 +11398,7 @@ function vSettleStack(G){
           <td class="r num" style="font-size:18px;color:${!rate?'var(--ink2)':k===winT?'#7fd49a':'var(--red)'}">${!rate?'—':(k===winT?'+':'')+fmtMoney(k===winT?pot:-pot).replace('$-','-$')}</td></tr>`).join('')}</table>
         ${rate?`<div class="row mt" style="border-top:1px solid var(--line)"><span class="muted">Pot this game</span><b class="num" style="font-size:18px">${fmtMoney(pot)}</b></div>`:''}
         <div class="row mt"><span class="muted">$ per ${unit}</span>
-          <input type="number" step="0.25" min="0" value="${(S.round.rates||{})[g]||''}" placeholder="0" style="width:90px" onchange="setRate('${g}',this.value)"></div>
+          <input id="rate_${g}" type="number" step="0.25" min="0" value="${(S.round.rates||{})[g]||''}" placeholder="0" style="width:90px" onchange="setRate('${g}',this.value)"></div>
         <div class="tiny mt">${ptsTxt(marg)} ${unit} margin${rate?` × ${fmtMoney(rate)} = ${fmtMoney(marg*rate)} from the losing team — ${fmtMoney(half)} each`:''}.</div>
       </div>`;
     }
@@ -11372,7 +11418,7 @@ function vSettleStack(G){
       ${priced?`<div class="row mt" style="border-top:1px solid var(--line)"><span class="muted">Pot this game</span><b class="num" style="font-size:18px">${fmtMoney(pot)}</b></div>`:''}
       ${g==='skins'?'<div class="tiny mt">Already dollars — each skin collects from every other player.</div>'
         :`<div class="row mt"><span class="muted">$ per ${unit}</span>
-          <input type="number" step="0.25" min="0" value="${(S.round.rates||{})[g]||''}" placeholder="0" style="width:90px" onchange="setRate('${g}',this.value)"></div>`}
+          <input id="rate_${g}" type="number" step="0.25" min="0" value="${(S.round.rates||{})[g]||''}" placeholder="0" style="width:90px" onchange="setRate('${g}',this.value)"></div>`}
     </div>`;
   }).join('');
   // combined net + greedy who-pays-whom
@@ -11524,7 +11570,7 @@ function vSettle(){
   return topbar('Settlement','','')+`<main>
     ${chalInviteHTML()}${chalResultsHTML()}
     ${PAIRS_GAMES.includes(gameOn())&&gameOn()!=='skins'&&actIdx().length>1?`<div class="card"><div class="row"><span class="muted">$ per ${['stroke','scramble'].includes(gameOn())?'stroke':gameOn()==='bestball'?'hole':gameOn()==='nassau'?'bet':'point'} (optional)</span>
-      <input type="number" step="0.25" min="0" value="${S.round.dollarPerPt||''}" placeholder="0" style="width:90px" onchange="set(()=>S.round.dollarPerPt=+this.value||0)"></div></div>`:''}
+      <input id="dpp" type="number" step="0.25" min="0" value="${S.round.dollarPerPt||''}" placeholder="0" style="width:90px" onchange="set(()=>S.round.dollarPerPt=+this.value||0)"></div></div>`:''}
     ${blocks}
   </main>`+tabs('settle');
 }
