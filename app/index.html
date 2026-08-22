@@ -234,6 +234,12 @@
   table.st td{padding:11px 6px;border-bottom:1px solid var(--line)}
   table.st tr:last-child td{border-bottom:none}
   table.st td.r,table.st th.r{text-align:right}
+  .rsp{padding:10px 0;border-top:1px solid var(--line)} .rsp:first-of-type{border-top:none;padding-top:4px}
+  .rsg{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:10px}
+  .rsc{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:7px 8px;min-width:0}
+  .rsl{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .rsv{font-size:21px;font-weight:700;line-height:1.15;color:var(--gold)}
+  .rss{font-size:12px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   nav.tabs{position:fixed;bottom:0;left:0;right:0;margin:0 auto;width:100%;max-width:480px;
     background:var(--card);border-top:2px solid var(--green);display:flex;z-index:6;padding-bottom:calc(8px + env(safe-area-inset-bottom))}
   nav.tabs button{flex:1;background:none;border:none;padding:11px 0 9px;font-size:12px;font-weight:600;color:var(--ink3);font-family:inherit}
@@ -375,7 +381,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1787437481';
+const BUILD='1787440194';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -6818,21 +6824,87 @@ function vBfWatch(){
       return `<div class="card"><h2>${gameName(g)}</h2>
         ${order.map(i=>`<div class="row"><span>${esc((S.players[i]||{}).name||'?')}</span><b class="num" style="font-size:24px">${g==='nines'?fmtPts(led[L][i]):led[L][i]}</b></div>`).join('')}
       </div>`;}).join('')}
-    <div class="card"><h2>Round highlights</h2>
-      ${act.map((i,k)=>{
-        const bits=[];
-        if(tally[k].eag)bits.push(tally[k].eag+(tally[k].eag>1?' eagles':' eagle'));
-        if(tally[k].bird)bits.push(tally[k].bird+(tally[k].bird>1?' birdies':' birdie'));
-        if(tally[k].par)bits.push(tally[k].par+(tally[k].par>1?' pars':' par'));
-        if(!tally[k].bird&&tally[k].bog)bits.push(tally[k].bog+(tally[k].bog>1?' bogeys':' bogey'));   // no birdies: bogeys stand in
-        return `<div class="row"><span>${esc((S.players[i]||{}).name||'?')}</span>
-        <span class="tiny">${bits.length?bits.join(' · '):'—'}</span></div>`;}).join('')}
-    </div>
+    ${roundStatsCardHTML(act,S.round.holes,course,meta.shots,S.players,'Round stats')}
     ${wolfBits.length?`<div class="card"><h2>🐺 Lone wolves</h2><div class="tiny">${wolfBits.join('<br>')}</div></div>`:''}
     ${ctps.length?`<div class="card"><h2>🎯 Closest to the pin</h2><div class="tiny">${ctps.join('<br>')}</div></div>`:''}
     ${shotsCard}
     </main>`;
   });
+}
+// ---------- per-player round stats (Battlefield viewer + Past Rounds review) ----------
+// Everything here is read off what the round actually recorded: gross per hole,
+// the per-slot stats block (putts / puttsIn / fw / gir / bunker / chips / pen)
+// and the tracked-shot map. A stat nobody recorded is NOT shown — never a zero.
+function playerRoundStats(i,holes,course,shotMap,players){
+  const hs=(course&&course.holes)||[];const n=hs.length||18;
+  const parAt=h=>((hs[h%n]||{}).par)||4;
+  const done=[];(holes||[]).forEach((r,h)=>{if(r&&r.confirmed&&r.gross&&r.gross[i]!=null)done.push(h);});
+  if(!done.length)return null;
+  let gross=0,par=0,eag=0,bird=0,pars=0,bog=0,dbl=0,front=null,back=null,frontN=0,backN=0;
+  let putts=0,puttHoles=0,one=0,three=0,fwHit=0,fwN=0,girHit=0,girN=0,tracked=false;
+  const extra={bunker:0,chips:0,pen:0};let anyExtra={};
+  let best=null,worst=null;
+  done.forEach(h=>{
+    const r=holes[h],p=parAt(h),g=r.gross[i],d=g-p;
+    gross+=g;par+=p;
+    if(h<9){front=(front||0)+g;frontN++;}else{back=(back||0)+g;backN++;}
+    if(d<=-2)eag++;else if(d===-1)bird++;else if(d===0)pars++;else if(d===1)bog++;else dbl++;
+    if(!best||d<best.d)best={h,d};if(!worst||d>worst.d)worst={h,d};
+    const st=r.stats||{};
+    const fv=st.fw?st.fw[i]:0,gv=st.gir?st.gir[i]:0;
+    if(fv>0||gv>0)tracked=true;
+    if(p>=4){fwN++;if(fv>0)fwHit++;}
+    girN++;if(gv>0)girHit++;
+    if(puttsEntered(r,i)){const pv=(st.putts&&st.putts[i])||0;putts+=pv;puttHoles++;if(pv===1)one++;if(pv>=3)three++;}
+    ['bunker','chips','pen'].forEach(k=>{if(st[k]&&st[k][i]>0){extra[k]+=st[k][i];anyExtra[k]=true;}});
+  });
+  // the player's own longest tracked shot
+  let longShot=null;
+  try{const pl=(players||[])[i]||{};
+    flatShots(shotMap).forEach(x=>{if(!x||!(x.yds>0))return;
+      const mine=x.pk==null||x.pk===pl.pid||x.pk===pl.ownerDev;
+      if(mine&&(!longShot||x.yds>longShot.yds))longShot={yds:x.yds,club:x.club||null,hole:(x.h||0)+1};});}catch(e){}
+  return {holes:done.length,gross,par,toPar:gross-par,eag,bird,pars,bog,dbl,
+    front:frontN?{g:front,n:frontN}:null,back:backN?{g:back,n:backN}:null,
+    putts:puttHoles?{n:putts,holes:puttHoles,full:puttHoles===done.length,one,three}:null,
+    fw:tracked&&fwN?{hit:fwHit,of:fwN}:null,gir:tracked&&girN?{hit:girHit,of:girN}:null,
+    extra:Object.keys(anyExtra).length?extra:null,anyExtra,longShot,best,worst};
+}
+function roundStatsCardHTML(act,holes,course,shotMap,players,title){
+  const blocks=act.map(i=>{
+    const p=(players||[])[i];if(!p)return '';
+    const x=playerRoundStats(i,holes,course,shotMap,players);if(!x)return '';
+    const tp=x.toPar===0?'E':(x.toPar>0?'+':'')+x.toPar;
+    const cell=(l,v,sub)=>`<div class="rsc"><div class="rsl">${l}</div><div class="rsv num">${v}</div>${sub?`<div class="rss">${sub}</div>`:''}</div>`;
+    const cells=[];
+    if(x.putts){
+      if(x.putts.full)cells.push(cell('Putts',x.putts.n,(x.putts.n/x.putts.holes).toFixed(1)+' / hole'));
+      else cells.push(cell('Putts',x.putts.n,`${x.putts.holes} of ${x.holes} holes`));
+      if(x.putts.one||x.putts.three)cells.push(cell('1-putt / 3-putt',`${x.putts.one} / ${x.putts.three}`));
+    }
+    if(x.fw)cells.push(cell('Fairways',Math.round(100*x.fw.hit/x.fw.of)+'%',`${x.fw.hit} of ${x.fw.of}`));
+    if(x.gir)cells.push(cell('Greens',Math.round(100*x.gir.hit/x.gir.of)+'%',`${x.gir.hit} of ${x.gir.of}`));
+    if(x.longShot)cells.push(cell('Longest shot',ydDisp(x.longShot.yds)+uLbl(),`${x.longShot.club?esc(x.longShot.club)+' · ':''}h${x.longShot.hole}`));
+    if(x.extra){[['bunker','Bunkers'],['chips','Chips'],['pen','Penalties']].forEach(([k,l])=>{if(x.anyExtra[k])cells.push(cell(l,x.extra[k]));});}
+    if(x.front&&x.back)cells.push(cell('Front / Back',`${x.front.g} / ${x.back.g}`));
+    if(x.best&&x.holes>1)cells.push(cell('Best hole',`h${x.best.h+1}`,x.best.d===0?'par':(x.best.d>0?'+':'')+x.best.d));
+    const mix=[];
+    if(x.eag)mix.push(`<span style="color:#9fe8b8">◎ ${x.eag}</span>`);
+    if(x.bird)mix.push(`<span style="color:#7fd49a">○ ${x.bird}</span>`);
+    if(x.pars)mix.push(`<span>${x.pars} par${x.pars===1?'':'s'}</span>`);
+    if(x.bog)mix.push(`<span style="color:var(--amber)">□ ${x.bog}</span>`);
+    if(x.dbl)mix.push(`<span style="color:var(--red)">▣ ${x.dbl}</span>`);
+    return `<div class="rsp">
+      <div style="display:flex;align-items:center;gap:10px">${avatarHTML(p,36)}
+        <div style="flex:1;min-width:0"><b style="font-family:Rajdhani,sans-serif;font-size:19px">${esc(p.name)}</b>
+          <div class="tiny">${mix.join(' · ')||'—'}</div></div>
+        <div style="text-align:right"><b class="num" style="font-size:26px">${x.gross}</b> <span class="num" style="font-size:16px;color:${x.toPar<0?'#7fd49a':x.toPar>0?'var(--amber)':'var(--ink3)'}">${tp}</span>
+          <div class="tiny">${x.holes<((course&&course.holes)||[]).length?`thru ${x.holes}`:'18 holes'}</div></div></div>
+      ${cells.length?`<div class="rsg">${cells.join('')}</div>`:''}
+    </div>`;}).filter(Boolean).join('');
+  if(!blocks)return '';
+  return `<div class="card"><h2>${title||'Round stats'}</h2>${blocks}
+    <div class="tiny mt" style="opacity:.75">Putts, fairways and greens only show for players who tracked them.</div></div>`;
 }
 // tiny read-only Leaflet with the tracked lines for the opened hole
 // The Tracked-shots card: only holes with tracked shots earn a row; tapping
@@ -11325,7 +11397,8 @@ function vStandings(){
   // Columns are the union of what anyone tracked; a player who did not track a
   // stat shows a dash rather than a misleading zero.
   const en=trackKeysAny(S.players.slice(0,NP()).map((_,i)=>i));
-  const statsCard=en.length?`<div class="card"><h2>Round stats</h2>
+  const statsCard=isReview()?roundStatsCardHTML(actIdx(),S.round.holes,S.course,shotsForShare(),S.players,'Round stats')
+    :en.length?`<div class="card"><h2>Round stats</h2>
     <table class="st"><tr><th>Player</th>${en.map(([k,l])=>`<th class="r">${l}</th>`).join('')}</tr>
     ${S.players.slice(0,NP()).map((p,i)=>{
       const mine=trackKeysFor(i).map(([k])=>k);
