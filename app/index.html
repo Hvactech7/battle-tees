@@ -148,6 +148,25 @@
   @media (prefers-reduced-motion:reduce){.ydflash{animation:ydflash-static 1.5s forwards}
     @keyframes ydflash-static{0%,80%{opacity:.78}100%{opacity:0}}}
   @keyframes vfFade{from{opacity:0}to{opacity:1}}
+  .cheer{position:fixed;inset:0;z-index:9000;background:rgba(6,10,18,.82);display:flex;align-items:center;justify-content:center;padding:22px;animation:vfFade .25s}
+  .cheer-top{z-index:9200;background:transparent}   /* the card in front of the lightning (9100) */
+  .cheer-card{position:relative;width:min(420px,100%);background:var(--card);border:3px solid var(--gold);border-radius:18px;padding:22px 20px 16px;text-align:center;box-shadow:6px 6px 0 #7a6418,0 0 40px rgba(232,197,82,.35);animation:vfRise .35s}
+  .cheer-kicker{font-family:Cinzel,Rajdhani,serif;font-weight:700;letter-spacing:3px;font-size:15px;color:var(--gold)}
+  .cheer-trophy{font-size:64px;line-height:1.1;margin:6px 0 4px;animation:cheerPop .6s cubic-bezier(.2,1.6,.4,1)}
+  .cheer-who{display:flex;align-items:center;gap:12px;justify-content:center;margin:6px 0 10px;text-align:left}
+  .cheer-name{font-family:Rajdhani,sans-serif;font-weight:700;font-size:24px;line-height:1.05}
+  .cheer-sub{font-size:14px;color:var(--ink3)}
+  .cheer-what{font-size:18px;font-weight:600;color:var(--ink);margin-top:2px}
+  .cheer-nums{display:flex;align-items:baseline;justify-content:center;gap:10px;margin:6px 0 4px}
+  .cheer-nums .num{font-size:48px;font-weight:700;color:#7fd49a;line-height:1}
+  .cheer-vs{font-size:15px;color:var(--ink3)}
+  .cheer-tap{font-size:12px;color:var(--ink3);margin-top:10px;letter-spacing:1px;text-transform:uppercase}
+  .cheer-ratio{font-family:Rajdhani,sans-serif;font-weight:700;font-size:17px;color:var(--gold);margin-top:2px}
+  .cheer-row{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--line)}
+  .cheer-rname{font-family:Rajdhani,sans-serif;font-weight:700;font-size:19px;line-height:1.1}
+  .cheer-rn{font-size:13px;color:var(--ink3);font-weight:400}
+  .cheer-rline{font-size:14px;margin-top:3px}
+  @keyframes cheerPop{from{transform:scale(.3) rotate(-12deg);opacity:0}to{transform:none;opacity:1}}
   @keyframes vfRise{from{opacity:0;transform:translateY(16px) scale(.98)}to{opacity:1;transform:none}}
   @media (prefers-reduced-motion:reduce){.vfWrap,.vfCard{animation:none}}
   /* rules cards render the same sections as battletees.app/rules */
@@ -381,7 +400,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1787440194';
+const BUILD='1787443489';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -992,6 +1011,7 @@ function courseForShare(){
 function groupShare(){return !!(S.share&&S.share.on&&!S.share.bf);}
 function shareMeta(){return {course:courseForShare(),players:S.players,config:S.config,started:S.round.started,dollarPerPt:S.round.dollarPerPt,span:S.round.span,startedAt:S.round.startedAt,games:S.round.games||null,rates:S.round.rates||null,
   shots:shotsForShare(),
+  cheers:(S.round.cheers||[]).slice(-24),
   capEnd:S.round.capEnd||null,
   _ts:S.shareMetaTs||0};}
 function contentKey(k){
@@ -1036,6 +1056,7 @@ function applyOp(k,v,defer){
         });
         S.round.sharedShots=cur;
       }
+      if(Array.isArray(v.cheers))cheerMerge(v.cheers);
       if((v._ts||0)>=(S.shareMetaTs||0)){
         // ...and the mirror: their real map must not end MY amnesia. Keep the
         // blackout, park what they sent so it is there the instant I switch off.
@@ -3669,6 +3690,7 @@ function mapConfirm(){
   maybeBroadcastRound();
   if(closed)askPutts(h,()=>showSplash(h));
   else askPutts(h,null);   // shared round: my rows are in, still ask me
+  try{setTimeout(()=>chalCheerCheck(false),900);}catch(e){}
 }
 function myPlayerIdx(){
   let i=S.players.findIndex(p=>p&&p.ownerDev===devId());
@@ -5511,13 +5533,15 @@ function dismissSplash(){
 function splashLens(){return S.config.lens==='net'?'net':'gross';}
 // ——— team lightning: Team 1 fights under blue, Team 2 under red ————————
 const TEAM_BOLT=['#4aa8ff','#e8604f'];
-function lightningRain(color){
+function lightningRain(color,opts){
   try{
     const old=document.getElementById('boltrain');if(old)old.remove();
+    const pick=Array.isArray(color)?()=>color[Math.floor(Math.random()*color.length)]:()=>color;
+    const Z=(opts&&opts.z)||999;
     const c=document.createElement('canvas');c.id='boltrain';
     const dpr=Math.min(2,window.devicePixelRatio||1),W=innerWidth,H=innerHeight;
     c.width=W*dpr;c.height=H*dpr;
-    c.style.cssText='position:fixed;inset:0;width:100%;height:100%;z-index:999;pointer-events:none;mix-blend-mode:screen';
+    c.style.cssText='position:fixed;inset:0;width:100%;height:100%;z-index:'+Z+';pointer-events:none;mix-blend-mode:screen';
     document.body.appendChild(c);
     const ctx=c.getContext('2d');ctx.scale(dpr,dpr);ctx.lineJoin='round';ctx.lineCap='round';
     const R=Math.random;
@@ -5540,7 +5564,7 @@ function lightningRain(color){
         const bp=[[bx,by]];chan(bx,by,bx+Math.cos(ang)*len,by+Math.sin(ang)*len,len*.3,bp);
         branches.push(bp);
       }
-      return {pts,branches,born:performance.now(),life:big?420+R()*300:260+R()*220,seed:R()*9,big};
+      return {pts,branches,born:performance.now(),life:big?420+R()*300:260+R()*220,seed:R()*9,big,col:pick()};
     };
     // tapered stroke: full width up top, slimming toward the tip
     const strokePts=(pts,lw,style,alpha)=>{
@@ -5565,7 +5589,7 @@ function lightningRain(color){
         const flick=.7+.3*Math.sin(b.seed+p*34);   // restrike shimmer
         const a=Math.pow(1-p,1.35)*flick;
         flash=Math.max(flash,a*(b.big?1:.6));
-        const base=b.big?8.5:5.5;
+        const base=b.big?8.5:5.5,color=b.col;
         strokePts(b.pts,base*4.2,color,a*.28);      // wide soft bloom
         strokePts(b.pts,base*2,color,a*.6);         // inner glow
         strokePts(b.pts,base*.85,'#dff1ff',a*.85);  // hot sheath
@@ -5580,7 +5604,7 @@ function lightningRain(color){
       }
       if(flash>0){                                   // sky lights up from above
         const gr=ctx.createLinearGradient(0,0,0,H);
-        gr.addColorStop(0,color);gr.addColorStop(1,'rgba(0,0,0,0)');
+        gr.addColorStop(0,Array.isArray(color)?color[0]:color);gr.addColorStop(1,'rgba(0,0,0,0)');
         ctx.globalAlpha=flash*.2;ctx.fillStyle=gr;ctx.fillRect(0,0,W,H);
       }
       ctx.globalAlpha=1;
@@ -5857,7 +5881,7 @@ function render(){
   const sameScreen=window.__lastScr===scr;
   window.__lastScr=scr;
   try{if(window.__a2hsSync)window.__a2hsSync();}catch(e){}
-  const full=magBanner()+html+holeSplash()+verifySheetHTML()+teeAskSheetHTML()+joinSpanSheetHTML()+pairsAskSheetHTML()+wolfOrderSheetHTML()+endAskSheetHTML()+mapInviteHTML()+greenClashHTML()+gamePickSheetHTML()+(S.screen!=='map'?puttAskSheetHTML():'')+(S.screen!=='map'?parAskSheetHTML():'')+photoCropHTML();
+  const full=magBanner()+html+holeSplash()+verifySheetHTML()+teeAskSheetHTML()+joinSpanSheetHTML()+pairsAskSheetHTML()+wolfOrderSheetHTML()+endAskSheetHTML()+mapInviteHTML()+greenClashHTML()+gamePickSheetHTML()+(S.screen!=='map'?puttAskSheetHTML():'')+(S.screen!=='map'?parAskSheetHTML():'')+photoCropHTML()+cheerSplashHTML();
   // Four phones syncing means render() fires constantly. Blowing away innerHTML
   // each time repainted the whole screen — that was the flicker on the course.
   // Identical output is a no-op; otherwise patch only the nodes that differ.
@@ -8339,6 +8363,7 @@ function autoEndStaleRound(){
 }
 function endRound(){
   if(!S.round.started){S.screen='home';save();render();return;}
+  try{chalCheerCheck(true);cheerSummaryQueue();}catch(e){}   // the horn: every challenge is settled, then the roll call
   if(!S.round.myEndedAt)S.round.myEndedAt=Date.now();  // clock stops once, forever
   if(!S.round._statFin){S.round._statFin=true;
     const t0=S.round.myStartedAt||S.round.startedAt;
@@ -10389,7 +10414,7 @@ function maybeBroadcastRound(){
     setTimeout(bfBroadcastStart,300);
   }catch(e){}
 }
-function confirmHole(){const h=S.round.cur;if(greensIsMode())greensConsumeTarget();set(()=>{commitStage(h,actIdx());S.round.holes[h].confirmed=true;if(!isReview())advanceToNext();});maybeBroadcastRound();askPutts(h,()=>showSplash(h));}
+function confirmHole(){const h=S.round.cur;if(greensIsMode())greensConsumeTarget();set(()=>{commitStage(h,actIdx());S.round.holes[h].confirmed=true;if(!isReview())advanceToNext();});maybeBroadcastRound();askPutts(h,()=>showSplash(h));try{setTimeout(()=>chalCheerCheck(false),900);}catch(e){}}
 // ----- shared rounds: each phone confirms its own rows, then moves on -----
 function myRows(h){
   // A row is mine to confirm if nobody owns it, my phone owns it, OR I have
@@ -10419,6 +10444,7 @@ function confirmMine(){
   maybeBroadcastRound();
   if(closed)askPutts(h,()=>showSplash(h));
   else askPutts(h,null);   // shared round: my rows are in, still ask me
+  try{setTimeout(()=>chalCheerCheck(false),900);}catch(e){}
 }
 // FW/GIR chips on the scoring screen too — score entry is the moment every
 // player reliably visits every hole, so the stats survive whatever chaos
@@ -11002,6 +11028,99 @@ function chalInviteHTML(){
   </div>`;
 }
 
+// ---------- challenge celebrations ----------
+// A beaten Personal Challenge is the group's news, not one phone's: the moment a
+// goal is hit (pars/birdies live, the rest at the final horn) the achiever's
+// phone files a CHEER on the round doc and every phone in the room — including
+// the achiever's — throws the splash. Cheers are merged by id, so a phone that
+// was asleep catches up in order and nobody sees the same one twice.
+let cheerQueue=[],cheerShown=null,cheerTimer=null;
+function cheerId(pid,k,final){return (pid||devId())+':'+k+(final?':final':'');}
+function chalCheerCheck(final){
+  try{
+    if(!S.round.started||isReview())return;
+    const mi=myPlayerIdx();if(mi<0)return;
+    const me=S.players[mi]||{};const pid=me.pid||S.me.pid||devId();
+    const res=chalResults();if(!res.length)return;
+    if(!S.round.cheers)S.round.cheers=[];
+    let added=false;
+    res.forEach(r=>{
+      if(!r.hit)return;
+      if(!final&&!CHAL_LIVE[r.k])return;           // the rest settle at the horn
+      const id=cheerId(pid,r.k,false);
+      if(S.round.cheers.some(c=>c.id===id))return;
+      const done=S.round.cheers.filter(c=>c.pid===pid&&!c.summary).length+1;
+      S.round.cheers.push({id,pid,name:me.name||S.me.name||'',k:r.k,nm:r.nm,goal:r.goal,got:r.got,
+        thru:r.thru,total:r.total,done,of:res.length,final:!!final,at:Date.now()});
+      added=true;
+    });
+    if(added){S.shareMetaTs=Date.now();cheerMerge([]);save();syncPush();}
+  }catch(e){}
+}
+function cheerMerge(inc){
+  if(!S.round.cheers)S.round.cheers=[];
+  (inc||[]).forEach(c=>{if(c&&c.id&&!S.round.cheers.some(x=>x.id===c.id))S.round.cheers.push(c);});
+  S.round.cheers.sort((a,b)=>(a.at||0)-(b.at||0));
+  if(!S.round._cheersSeen)S.round._cheersSeen={};
+  S.round.cheers.forEach(c=>{
+    if(S.round._cheersSeen[c.id])return;
+    S.round._cheersSeen[c.id]=1;
+    if(!cheerQueue.some(q=>q.id===c.id))cheerQueue.push(c);
+  });
+  cheerNext();
+}
+function cheerNext(){
+  if(cheerShown||!cheerQueue.length)return;
+  cheerShown=cheerQueue.shift();
+  try{if(navigator.vibrate)navigator.vibrate([30,40,30]);}catch(e){}
+  cheerBolts();
+  clearTimeout(cheerTimer);cheerTimer=setTimeout(cheerDismiss,7000);
+  render();
+}
+// red AND blue — the whole battlefield lights up, not one team's sky
+function cheerBolts(){try{lightningRain(TEAM_BOLT,{z:9100});setTimeout(()=>{if(cheerShown)lightningRain(TEAM_BOLT,{z:9100});},2600);}catch(e){}}
+function cheerSummaryQueue(){try{if(S.round._cheerSummaryShown)return;if(!(S.round.cheers||[]).some(c=>c&&!c.summary))return;S.round._cheerSummaryShown=1;cheerQueue.push({summary:true,id:'summary'});cheerNext();}catch(e){}}
+function cheerDismiss(){clearTimeout(cheerTimer);cheerShown=null;try{const c=document.getElementById('boltrain');if(c)c.remove();}catch(e){}render();setTimeout(cheerNext,350);}
+function cheerSplashHTML(){
+  const c=cheerShown;if(!c)return '';
+  if(c.summary)return cheerSummaryHTML();
+  const d=CHAL_DEF(c.k);const fmt=d?d[6]:(v=>String(v));
+  const who=S.players.find(p=>p&&p.pid&&p.pid===c.pid)||{name:c.name};
+  const mine=(S.me&&S.me.pid&&S.me.pid===c.pid);
+  const first=esc((c.name||'').split(' ')[0]||'Someone');
+  const line=d?`${esc(d[1])}`:esc(c.nm||'');
+  return `<div class="cheer" onclick="cheerDismiss()"></div><div class="cheer cheer-top" onclick="cheerDismiss()">
+    <div class="cheer-card">
+      <div class="cheer-kicker">${c.final?'FINAL HORN':'CHALLENGE BEATEN'}</div>
+      <div class="cheer-trophy">🏆</div>
+      <div class="cheer-who">${avatarHTML(who,56)}<div><div class="cheer-name">${esc(c.name||'')}</div>
+        <div class="cheer-sub">${mine?'You did it!':first+' did it!'}${c.thru&&c.total&&!c.final?` · thru ${c.thru}`:''}</div></div></div>
+      <div class="cheer-what">${line} <span class="cheer-vs">· goal ${esc(fmt(c.goal))}</span></div>
+      <div class="cheer-nums"><span class="num">${esc(fmt(c.got))}</span></div>
+      ${c.of?`<div class="cheer-ratio">${c.done} of ${c.of} challenge${c.of===1?'':'s'} beaten</div>`:''}
+      <div class="cheer-tap">tap to continue</div>
+    </div></div>`;
+}
+// The horn's roll call: every challenge anyone beat this round, on every phone.
+function cheerSummaryHTML(){
+  const all=(S.round.cheers||[]).filter(c=>c&&!c.summary);
+  const by={};all.forEach(c=>{(by[c.pid||c.name]=by[c.pid||c.name]||{name:c.name,pid:c.pid,list:[]}).list.push(c);});
+  const rows=Object.values(by).map(g=>{
+    const who=S.players.find(p=>p&&p.pid&&p.pid===g.pid)||{name:g.name};
+    return `<div class="cheer-row">${avatarHTML(who,34)}<div style="flex:1;min-width:0;text-align:left">
+      <div class="cheer-rname">${esc(g.name||'')} <span class="cheer-rn">${g.list.length} of ${g.list[0].of||g.list.length}</span></div>
+      ${g.list.map(c=>{const d=CHAL_DEF(c.k);const fmt=d?d[6]:(v=>String(v));
+        return `<div class="cheer-rline">✓ ${esc(d?d[1]:c.nm||'')} <span class="num" style="color:#7fd49a">${esc(fmt(c.got))}</span><span class="cheer-rn"> · goal ${esc(fmt(c.goal))}</span></div>`;}).join('')}
+    </div></div>`;}).join('');
+  return `<div class="cheer" onclick="cheerDismiss()"></div><div class="cheer cheer-top" onclick="cheerDismiss()">
+    <div class="cheer-card">
+      <div class="cheer-kicker">FINAL HORN</div>
+      <div class="cheer-trophy">🏆</div>
+      <div class="cheer-what" style="margin-bottom:8px">Challenges beaten today</div>
+      ${rows||'<div class="cheer-sub">Nobody beat one today — next time.</div>'}
+      <div class="cheer-tap">tap to continue</div>
+    </div></div>`;
+}
 function chalResultsHTML(){
   const res=chalResults(); if(!res.length)return '';
   const beat=res.filter(r=>r.hit).length;
