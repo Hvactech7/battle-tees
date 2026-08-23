@@ -400,7 +400,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1787443489';
+const BUILD='1787445161';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -8199,6 +8199,8 @@ function archiveRound(){
   // the original end stamp (no reorder, no date change); a live continue gets a
   // fresh end stamp but startedAt still pins the displayed date to day one.
   const prev=(S.history||[]).find(e=>e.id===S.round._histId);
+  // my challenges as they settled — the review shows THIS, never today's goals
+  try{if(!S.round.reopened||!S.round.chalSnap)S.round.chalSnap=chalResults().map(r=>({k:r.k,nm:r.nm,goal:r.goal,got:r.got,hit:!!r.hit,none:!!r.none}));}catch(e){}
   const entry={
     id:S.round._histId,
     startedAt:(prev&&prev.startedAt)||S.round.startedAt||null,
@@ -11008,7 +11010,27 @@ function chalSave(){
 }
 function chalDecline(){ set(()=>{S.chalAsked=1;}); chalUI='declined'; render(); }
 
+// Past Rounds: the challenges as they were that day — mine in full (beaten or
+// not), and everything the rest of the group beat (from the cheers on the doc).
+function reviewChalHTML(){
+  const mine=S.round.chalSnap||[];
+  const cheers=(S.round.cheers||[]).filter(c=>c&&!c.summary&&c.pid!==(S.me&&S.me.pid));
+  if(!mine.length&&!cheers.length)return '';
+  const fmtOf=k=>{const d=CHAL_DEF(k);return d?d[6]:(v=>String(v));};
+  const by={};cheers.forEach(c=>{(by[c.pid||c.name]=by[c.pid||c.name]||{name:c.name,pid:c.pid,list:[]}).list.push(c);});
+  const beat=mine.filter(r=>r.hit).length;
+  return `<div class="card" style="border-color:var(--elec);box-shadow:4px 4px 0 var(--elec-dk)">
+    <h2 style="color:var(--elec-mid)">⛳ Challenges that day</h2>
+    ${mine.length?`<div class="tiny" style="margin-bottom:4px"><b>${esc(S.me.name||'You')}</b> · ${beat} of ${mine.length} beaten</div>
+    ${mine.map(r=>`<div class="row" style="padding:7px 0"><span>${r.hit?'<b style="color:var(--green-mid)">✓</b>':r.none?'<span class="muted">·</span>':'<span style="color:var(--red)">✗</span>'} ${esc(r.nm)}</span>
+      <span class="num" style="color:${r.hit?'var(--green-mid)':'var(--ink2)'}">${r.none?'no data':esc(fmtOf(r.k)(r.got))+' / '+esc(fmtOf(r.k)(r.goal))}</span></div>`).join('')}`:''}
+    ${Object.values(by).map(g=>`<div class="tiny" style="margin:10px 0 2px"><b>${esc(g.name||'')}</b> · ${g.list.length} of ${g.list[0].of||g.list.length} beaten</div>
+      ${g.list.map(c=>`<div class="row" style="padding:7px 0"><span><b style="color:var(--green-mid)">✓</b> ${esc((CHAL_DEF(c.k)||[])[1]||c.nm||'')}</span>
+        <span class="num" style="color:var(--green-mid)">${esc(fmtOf(c.k)(c.got))} / ${esc(fmtOf(c.k)(c.goal))}</span></div>`).join('')}`).join('')}
+  </div>`;
+}
 function chalInviteHTML(){
+  if(isReview())return '';
   if(chalUI==='declined')return `<div class="card">
     <h2>No problem</h2>
     <div style="font-size:17px;line-height:1.35;margin-bottom:8px">You can set Personal Challenges whenever you like.</div>
@@ -11122,6 +11144,7 @@ function cheerSummaryHTML(){
     </div></div>`;
 }
 function chalResultsHTML(){
+  if(isReview())return reviewChalHTML();
   const res=chalResults(); if(!res.length)return '';
   const beat=res.filter(r=>r.hit).length;
   return `<div class="card" style="border-color:var(--elec);box-shadow:4px 4px 0 var(--elec-dk)">
