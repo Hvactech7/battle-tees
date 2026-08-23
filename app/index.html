@@ -400,7 +400,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1787445161';
+const BUILD='1787446547';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -10413,6 +10413,11 @@ function maybeBroadcastRound(){
     if(S.share&&S.share.on&&!S.share.creator)return;
     if(bfScoredHoles()<BF_MIN_HOLES)return;
     S.round._bfSent=true;
+    // the round is REAL now (two holes carded — the same bar the Battlefield
+    // and Past Rounds use): this is what the relay texts Nathan about, not the
+    // tap on Start Round. Captain only, so one text per round.
+    try{stat('round_live',{game:S.round.game,course:S.course.name,holes:S.round.span.count,players:NP(),shared:!!S.share.on,
+      thru:bfScoredHoles(),stack:(S.round.games||[]).join('+')});}catch(e){}
     setTimeout(bfBroadcastStart,300);
   }catch(e){}
 }
