@@ -400,7 +400,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1787537588';
+const BUILD='1787537991';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -3690,7 +3690,7 @@ function mapConfirm(){
     for(let k=1;k<=o.length;k++){const cand=o[(at+k)%o.length];if(!S.round.holes[cand].confirmed){mapHole=cand;break;}}
   });
   maybeBroadcastRound();
-  if(closed)askPutts(h,()=>showSplash(h));
+  if(closed)askPutts(h,()=>showSplash(h,true));
   else askPutts(h,null);   // shared round: my rows are in, still ask me
   try{setTimeout(()=>chalCheerCheck(false),900);}catch(e){}
 }
@@ -5505,9 +5505,12 @@ function puttAskSheetHTML(inner){
   return inner?`<div class="vfWrap" role="dialog" aria-modal="true">${body}</div>`
               :`<div class="vfWrap" role="dialog" aria-modal="true">${body}</div>`;
 }
-function showSplash(h){
+function showSplash(h,mine){
   if(isReview()||!S.round.started)return;
-  splash={h};
+  // mine = THIS phone confirmed the hole. A hole that a buddy's flushed queue
+  // just closed still gets its splash — but it must never move MY map (8/23,
+  // Hiddenbrooke: every reconnect burst bumped Nathan to the next hole, 3-4x).
+  splash={h,mine:!!mine};
   const tw=teamWinInfo(h);
   if(tw)lightningRain(TEAM_BOLT[tw.win]);
   clearTimeout(splashTimer);
@@ -5521,12 +5524,14 @@ function showSplash(h){
   }else render();
 }
 function dismissSplash(){
-  const sh=splash?splash.h:null;
+  const sh=splash?splash.h:null,sMine=!!(splash&&splash.mine);
   splash=null;clearTimeout(splashTimer);
   const ms=document.getElementById('mapsplash');if(ms)ms.remove();
   // if the hole map is open, walk FORWARD from the hole that just finished to
   // the next open one (never backward to an earlier hole still waiting on
-  // someone's confirm)
+  // someone's confirm) — and ONLY when this phone did the confirming: a splash
+  // raised by a remote merge leaves the map exactly where the player put it
+  if(S.screen==='map'&&S.round.started&&!sMine){return;}
   if(S.screen==='map'&&S.round.started){
     const o=playOrder();
     const at=Math.max(0,o.indexOf(sh!=null?sh:mapHole));
@@ -10432,7 +10437,7 @@ function maybeBroadcastRound(){
     setTimeout(bfBroadcastStart,300);
   }catch(e){}
 }
-function confirmHole(){const h=S.round.cur;if(greensIsMode())greensConsumeTarget();set(()=>{commitStage(h,actIdx());S.round.holes[h].confirmed=true;if(!isReview())advanceToNext();});maybeBroadcastRound();askPutts(h,()=>showSplash(h));try{setTimeout(()=>chalCheerCheck(false),900);}catch(e){}}
+function confirmHole(){const h=S.round.cur;if(greensIsMode())greensConsumeTarget();set(()=>{commitStage(h,actIdx());S.round.holes[h].confirmed=true;if(!isReview())advanceToNext();});maybeBroadcastRound();askPutts(h,()=>showSplash(h,true));try{setTimeout(()=>chalCheerCheck(false),900);}catch(e){}}
 // ----- shared rounds: each phone confirms its own rows, then moves on -----
 function myRows(h){
   // A row is mine to confirm if nobody owns it, my phone owns it, OR I have
@@ -10460,7 +10465,7 @@ function confirmMine(){
     if(!isReview())advanceToNext();
   });
   maybeBroadcastRound();
-  if(closed)askPutts(h,()=>showSplash(h));
+  if(closed)askPutts(h,()=>showSplash(h,true));
   else askPutts(h,null);   // shared round: my rows are in, still ask me
   try{setTimeout(()=>chalCheerCheck(false),900);}catch(e){}
 }
