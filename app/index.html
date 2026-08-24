@@ -400,7 +400,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1787446547';
+const BUILD='1787537260';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1708,7 +1708,9 @@ function bfBroadcastEnd(){
     // phone auto-ending a stale round the next morning, used to stamp the
     // room's end — "finished" while the group was still on 12, or an 8-hour
     // round that was really 3½. The captain's capEnd is the round's end.
-    if(!S.share.creator)return;
+    // ...unless the card is COMPLETE (8/23): every hole confirmed is the round
+    // over, whoever says so — and the relay keeps the EARLIEST end it hears.
+    if(!S.share.creator&&!roundComplete())return;
     const endedAt=(S.round.capEnd&&S.round.capEnd.at)||S.round.myEndedAt||Date.now();
     const ws=(sockOpen&&sock)||((lobbySock&&lobbySock.readyState===1)?lobbySock:null);
     if(ws&&ws.readyState===1){
@@ -5222,7 +5224,7 @@ async function initHoleMap(){
   const evPt=e=>LMAP.mouseEventToContainerPoint(e.touches?e.touches[0]:e);
   const cont=LMAP.getContainer();
   cont.addEventListener('pointerdown',e=>{
-    if(!lTaps.length)return;
+    if(!LMAP||!lTaps.length)return;   // a queued tap can land after teardown (h16, 8/23)
     const pt=evPt(e);
     let best=null,bd=Infinity;
     lTaps.forEach(m=>{const d=pt.distanceTo(LMAP.latLngToContainerPoint(m.getLatLng()));if(d<bd){bd=d;best=m;}});
@@ -5232,7 +5234,7 @@ async function initHoleMap(){
     e.preventDefault();e.stopPropagation();
   },{passive:false});
   cont.addEventListener('pointermove',e=>{
-    if(!dragM)return;
+    if(!LMAP||!dragM)return;
     tapMoved=true;
     const ll=LMAP.containerPointToLatLng(evPt(e));
     dragM.setLatLng(ll);refreshTapLine();
@@ -10398,6 +10400,7 @@ function advanceToNext(){
 // room carries exactly one scored hole and should never have been announced.
 // Two confirmed holes is a round somebody is actually playing.
 const BF_MIN_HOLES=2;
+const BF_MIN_HOLES_FB=4;   // a joiner waits two more holes before speaking for the captain
 function bfScoredHoles(){
   try{return (S.round.holes||[]).filter(r=>r&&r.confirmed).length;}catch(e){return 0;}
 }
@@ -10410,14 +10413,17 @@ function maybeBroadcastRound(){
     // Shaun on 8/15 — and the captain's friends never got the email because
     // by the time the captain's phone arrived the room was first=False. In a
     // shared round only the creator opens it; a solo round is its own captain.
-    if(S.share&&S.share.on&&!S.share.creator)return;
-    if(bfScoredHoles()<BF_MIN_HOLES)return;
+    // 8/23, Hiddenbrooke: the captain's phone had no signal ALL DAY — no text,
+    // no emails, no end. A joiner now announces too, two holes later, and the
+    // relay ignores every announce after the first (and keeps the first starter).
+    const fb=S.share&&S.share.on&&!S.share.creator;
+    if(bfScoredHoles()<(fb?BF_MIN_HOLES_FB:BF_MIN_HOLES))return;
     S.round._bfSent=true;
     // the round is REAL now (two holes carded — the same bar the Battlefield
     // and Past Rounds use): this is what the relay texts Nathan about, not the
     // tap on Start Round. Captain only, so one text per round.
     try{stat('round_live',{game:S.round.game,course:S.course.name,holes:S.round.span.count,players:NP(),shared:!!S.share.on,
-      thru:bfScoredHoles(),stack:(S.round.games||[]).join('+')});}catch(e){}
+      code:(S.share&&S.share.code)||null,thru:bfScoredHoles(),stack:(S.round.games||[]).join('+')});}catch(e){}
     setTimeout(bfBroadcastStart,300);
   }catch(e){}
 }
