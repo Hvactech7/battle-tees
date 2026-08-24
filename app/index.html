@@ -400,7 +400,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1787537260';
+const BUILD='1787537588';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -3803,7 +3803,12 @@ function vMap(){
   <button id="mapconfirm" onclick="mapConfirm()" style="position:fixed;right:max(10px,calc(50vw - 230px));bottom:calc(166px + env(safe-area-inset-bottom));z-index:6;width:126px;height:46px;background:${mapScoreState()==='in'?'var(--green-lt)':mapScoreState()==='armed'?'#2b86ec':'rgba(15,21,34,.82)'};border:2px solid ${mapScoreState()==='in'?'var(--green)':mapScoreState()==='armed'?'var(--elec-dk,#1c5eb0)':'var(--line)'};border-radius:12px;color:${mapScoreState()==='in'?'var(--green)':mapScoreState()==='armed'?'#eef6ff':'var(--ink3)'};font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:${mapScoreState()==='in'?'15px':'19px'};box-shadow:2px 2px 0 rgba(0,0,0,.35)">${mapConfirmLabel()}</button>
   <div style="position:fixed;right:max(10px,calc(50vw - 230px));bottom:calc(112px + env(safe-area-inset-bottom));z-index:6;display:flex;align-items:center;background:var(--card);border:2px solid var(--green);border-radius:12px;overflow:hidden;box-shadow:2px 2px 0 rgba(0,0,0,.35)">
     <button onclick="mapChScore(-1)" style="width:42px;height:46px;background:none;border:none;color:var(--elec);font-size:24px;font-weight:800">−</button>
-    <div id="mapsc" class="num" onclick="showMapConfirm()" style="min-width:36px;text-align:center;font-size:26px;cursor:pointer">${(S.round.holes[mapHole]&&S.round.holes[mapHole].gross&&S.round.holes[mapHole].gross[myPlayerIdx()]!=null)?S.round.holes[mapHole].gross[myPlayerIdx()]:hole.par}</div>
+    <div id="mapsc" class="num" onclick="showMapConfirm()" style="min-width:36px;text-align:center;font-size:26px;cursor:pointer">${(()=>{const r=S.round.holes[mapHole];if(!r||!r.gross)return hole.par;
+      // the STAGED score, not the committed one: a GPS auto-frame repaint mid-entry
+      // used to paint par back over the taps (8/23, driving to the green) while the
+      // stage kept counting underneath — the display and the stage must be one
+      const g=isReview()?r.gross[myPlayerIdx()]:stagedG(r,mapHole,myPlayerIdx());
+      return g!=null?g:hole.par;})()}</div>
     <button onclick="mapChScore(1)" style="width:42px;height:46px;background:none;border:none;color:var(--elec);font-size:24px;font-weight:800">+</button>
   </div>
   <div class="mapbar">
