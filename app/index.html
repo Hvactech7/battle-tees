@@ -166,6 +166,9 @@
   .cheer-rname{font-family:Rajdhani,sans-serif;font-weight:700;font-size:19px;line-height:1.1}
   .cheer-rn{font-size:13px;color:var(--ink3);font-weight:400}
   .cheer-rline{font-size:14px;margin-top:3px}
+  .livechip{display:inline-block;background:var(--elec);color:#eef6ff;font:700 11px Rajdhani,sans-serif;letter-spacing:2px;padding:2px 7px 1px;border-radius:99px;vertical-align:2px;margin:0 2px;animation:livePulse 1.6s ease-in-out infinite}
+  .hb-live{border-color:var(--elec)!important;box-shadow:3px 3px 0 var(--elec-dk)!important}
+  @keyframes livePulse{0%,100%{opacity:1}50%{opacity:.45}}
   @keyframes cheerPop{from{transform:scale(.3) rotate(-12deg);opacity:0}to{transform:none;opacity:1}}
   @keyframes vfRise{from{opacity:0;transform:translateY(16px) scale(.98)}to{opacity:1;transform:none}}
   @media (prefers-reduced-motion:reduce){.vfWrap,.vfCard{animation:none}}
@@ -400,7 +403,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1787537991';
+const BUILD='1788306408';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -6307,7 +6310,7 @@ function vHome(){
     <button class="ghost hb" style="padding:12px" onclick="go('stats')">📊 Stats</button>
     <button class="ghost hb" style="padding:12px" onclick="go('history')">🕰 Rounds</button>
   </div>
-  <button class="ghost hb" style="width:100%;padding:12px;margin-bottom:16px" onclick="openBattlefield()">⚔️ Community Battlefield ⚔️</button>
+  ${(bfLivePeek(),bfHomeBtnHTML())}
   `:''}
   ${!S.me.name?`<div class="card"><h2>Your profile</h2>
     <div class="tiny mb">So nearby phones can add you to a round by name.</div>
@@ -6355,7 +6358,7 @@ function vHome(){
     <button class="ghost hb" style="padding:12px" onclick="go('stats')">📊 Stats</button>
     <button class="ghost hb" style="padding:12px" onclick="go('history')">🕰 Rounds</button>
   </div>
-  <button class="ghost hb" style="width:100%;padding:12px;margin-bottom:16px" onclick="openBattlefield()">⚔️ Community Battlefield ⚔️</button>
+  ${(bfLivePeek(),bfHomeBtnHTML())}
   `:''}
   <div class="card"><h2>Games &amp; rules</h2>
     ${gameGridHTML('showRules')}
@@ -6657,6 +6660,28 @@ function bfForget(code){
   const st=bfStore();delete st[code];
   try{localStorage.setItem('btBattles',JSON.stringify(st));}catch(e){}
   openBattlefield();
+}
+// The Home button knows when the community is fighting: a throttled peek at
+// the friend-scoped battle list; any LIVE entry lights the button up.
+let bfLiveInfo={n:0,names:[],at:0,pending:false};
+function bfLivePeek(){
+  try{
+    if(previewSandboxed())return;
+    const now=Date.now();
+    if(bfLiveInfo.pending||now-bfLiveInfo.at<90000)return;
+    bfLiveInfo.pending=true;
+    relayBattle({op:'list',pid:myPid()}).then(r=>{
+      const live=((r&&r.list)||[]).filter(e=>e&&e.live);
+      const changed=live.length!==bfLiveInfo.n;
+      bfLiveInfo={n:live.length,names:live.map(e=>String(e.starter||'').split(' ')[0]).filter(Boolean),at:Date.now(),pending:false};
+      if(changed&&(S.screen==='home'))render();
+    }).catch(()=>{bfLiveInfo.pending=false;bfLiveInfo.at=Date.now();});
+  }catch(e){bfLiveInfo.pending=false;}
+}
+function bfHomeBtnHTML(){
+  const live=bfLiveInfo.n>0;
+  const chip=live?`<span class="livechip">LIVE</span>`:'';
+  return `<button class="ghost hb${live?' hb-live':''}" style="width:100%;padding:12px;margin-bottom:16px" onclick="openBattlefield()">${chip} ⚔️ Community Battlefield ⚔️ ${chip}</button>`;
 }
 function openBattlefield(){
   bfPrunePhantoms();
