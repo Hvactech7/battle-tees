@@ -403,7 +403,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1788306408';
+const BUILD='1788390727';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1079,7 +1079,7 @@ function applyOp(k,v,defer){
         // row, so this is a group — drop the broadcast flag and post the invite
         // so the rest of the group can find it in the nearby list
         try{if(S.share&&S.share.bf&&S.share.creator&&(S.players||[]).some(p=>p&&p.ownerDev&&p.ownerDev!==devId())){
-          delete S.share.bf;postRoomInvite();}}catch(e){}
+          delete S.share.bf;S.share.near=nearFence();postRoomInvite();}}catch(e){}
         S.round.started=v.started;S.round.dollarPerPt=v.dollarPerPt;
         if(v.games)S.round.games=v.games;
         if(v.rates)S.round.rates=v.rates;
@@ -1386,7 +1386,8 @@ function postRoomInvite(){
   try{if(!(S.share&&S.share.on&&S.share.code&&S.share.creator&&!S.share.bf))return;
     if(typeof sockOpen!=='undefined'&&sockOpen&&sock)
       sock.send(JSON.stringify({t:'invite',room:S.share.code,
-        info:{course:S.course.name,players:S.players.map(p=>p.name),group:S.config.groupName||'',ts:Date.now()}}));
+        info:{course:S.course.name,players:S.players.map(p=>p.name),group:S.config.groupName||'',ts:Date.now(),
+          near:(S.share.near&&S.share.near.lat!=null)?S.share.near:null}}));
   }catch(e){}
 }
 // A SOLO round is one tap from a group. Its Battlefield room already has a code
@@ -1394,10 +1395,24 @@ function postRoomInvite(){
 // the room to players: the bf flag drops, the invite goes out so the room is in
 // the nearby Join list, and from then on it is a group round (Nathan, 8/18:
 // "I start out as a single, then join a group soon after we start").
+// Opening a SOLO room is for the people standing around you — not a lobby
+// blast to every friend (Nathan, 9/2: the chip re-posted a join invite to all
+// 11 friends for three hours). The invite carries a fence: my GPS fix and a
+// short radius, or the course itself when there is no fix. The relay shows it
+// only to phones inside the fence.
+function nearFence(){
+  try{
+    if(myCoords&&isFinite(myCoords[0]))return {lat:+myCoords[0],lon:+myCoords[1],km:1.5};
+    const loc=S.course&&S.course.loc;
+    if(loc&&isFinite(loc[0]))return {lat:+loc[0],lon:+loc[1],km:3};
+  }catch(e){}
+  return null;
+}
 function openRoomToFriends(){
   if(!(S.share&&S.share.on&&S.share.code&&S.share.creator))return false;
   if(!S.share.bf)return false;
   delete S.share.bf;
+  S.share.near=nearFence();
   S.round.holes.forEach(r=>{if(!r._ts)r._ts=Date.now();});
   claimMySlot(true);
   S.shareMetaTs=Date.now();
@@ -1410,9 +1425,9 @@ function inviteFromMap(){
   if(S.share.bf){
     openRoomToFriends();
     try{stat('round_share',{side:'host',via:'mapchip',game:S.round.game,thru:S.round.holes.filter(r=>r.confirmed).length,players:NP()});}catch(e){}
-    shotToast('Room open — friends can pick it from Join a round nearby, or enter '+S.share.code);
+    shotToast('Room open — players near you can pick it from Join a round, or anyone can enter '+S.share.code);
     render();
-  }else shotToast('Friends join with '+S.share.code+' — or pick it from Join a round nearby');
+  }else shotToast('Anyone joins with '+S.share.code+' — players near you can pick it from Join a round');
 }
 function shareRound(){
   lobbyClose();
@@ -6347,8 +6362,8 @@ function vHome(){
       ${S.share.creator?`<div class="tiny mt">• <b>Cancel &amp; Close Room</b> kicks everyone out and keeps nothing — for a false start.</div>
       <div class="tiny">• <b>End Round Now</b> finishes and saves the round for everyone.</div>`:''}`
       :S.round.reopened?''
-      :(S.share.on&&S.share.bf&&S.share.creator)?`<button class="ghost mt" style="width:100%" onclick="inviteFromMap();render()">👥 Open Room To Friends — <b class="num" style="letter-spacing:2px">${esc(S.share.code)}</b></button>
-        <div class="tiny mt">Friends pick it from <b>Join a round</b> nearby or enter the code — your scores so far come with you. Typing the code works even before you tap.</div>`
+      :(S.share.on&&S.share.bf&&S.share.creator)?`<button class="ghost mt" style="width:100%" onclick="inviteFromMap();render()">👥 Open Room To Nearby Players — <b class="num" style="letter-spacing:2px">${esc(S.share.code)}</b></button>
+        <div class="tiny mt">Players near you pick it from <b>Join a round</b>; anyone can enter the code — your scores so far come with you. Typing the code works even before you tap.</div>`
       :`<button class="ghost mt" style="width:100%" onclick="goGroup()">👥 Make This A Group Round</button>
         <div class="tiny mt">Get a code your group can join — your scores so far come with you.</div>`}
   </div>`:''}
