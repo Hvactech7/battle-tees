@@ -406,7 +406,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1788410209';
+const BUILD='1788412201';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -888,7 +888,7 @@ function abPayload(){
     // A hand-placed tee is half of every hole a player teaches us; it does not
     // get to be the half that only ever exists on one phone.
     teeFix:S.teeFix||{},
-    shotLog:trimShotLog(S.shotLog),shotLast:S.shotLast||{}};
+    shotLog:trimShotLog(S.shotLog),shotLast:S.shotLast||{},bag:S.bag||null};
 }
 // ...and the same for a newly placed tee: without this the payload would carry
 // teeFix but nothing would ever notice it changed, so the backup would not fire.
@@ -1864,7 +1864,7 @@ async function doBackup(){
     // shot lines were local-only until now: a cleared cache or a new phone lost
     // every tracked shot, including the per-course "last time out" ghost lines
     const r=await relayBackup({op:'save',email:em,data:{me:S.me,playerLib:S.playerLib,courses,history:S.history||[],groups:S.groupLib||[],teams:S.teamLib||[],
-      shotLog:trimShotLog(S.shotLog),shotLast:S.shotLast||{}}});
+      shotLog:trimShotLog(S.shotLog),shotLast:S.shotLast||{},bag:S.bag||null}});
     if(r&&r.ok){const d=abPayload();abStamp(JSON.stringify([d.me,d.playerLib,d.courses,d.history.map(h=>h.id)]));}
     const nh=(S.history||[]).length;
     backupUI.msg=r.ok?`✓ ${S.playerLib.length} player${S.playerLib.length===1?'':'s'} + ${S.courses.length} course${S.courses.length===1?'':'s'}${nh?` + ${nh} round${nh===1?'':'s'}`:''} safely backed up${r.emailed?' — confirmation emailed':''}.`:(r.error||'Backup failed.');
@@ -2131,6 +2131,7 @@ function applyLibrary(d){
       // restore onto a phone that has been out playing keeps both sides
       if(d.shotLog){S.shotLog=S.shotLog||{};
         Object.keys(d.shotLog).forEach(k=>{if(!S.shotLog[k]||!S.shotLog[k].length)S.shotLog[k]=d.shotLog[k];});}
+      if(Array.isArray(d.bag)&&d.bag.length)S.bag=d.bag.map(bagName).filter(Boolean).slice(0,200);
       if(d.shotLast){S.shotLast=S.shotLast||{};
         Object.keys(d.shotLast).forEach(cid=>{
           const mine=S.shotLast[cid]||{},theirs=d.shotLast[cid]||{};
@@ -3471,7 +3472,66 @@ function teardownMap(){
 // distance measured, then tag the club. Shots log locally to S.shotLog keyed
 // by round start (never synced — one player's shots can't clobber another's).
 let trackShot=null,pendingShot=null,trackPin=null;
-const CLUBS=['Dr','3W','5W','Hy','3i','4i','5i','6i','7i','8i','9i','PW','GW','SW','LW','Putt'];
+const CLUBS=['Dr','3W','5W','Hy','3i','4i','5i','6i','7i','8i','9i','PW','GW','SW','LW','Putt'];   // the starter bag
+// ---------- My Bag ----------
+// Every player builds their own bag (Nathan, 9/2): any club from the catalog,
+// custom clubs with any name, placed anywhere in the lineup, no limit. The
+// bag is what the club sheet, the Watch and the stats order use. Per phone,
+// backed up with everything else.
+const CLUB_CATALOG=[
+  ['Woods',['Dr','2W','3W','4W','5W','7W','9W','11W']],
+  ['Hybrids',['Hy','2H','3H','4H','5H','6H','7H']],
+  ['Irons',['DI','1i','2i','3i','4i','5i','6i','7i','8i','9i']],
+  ['Wedges',['PW','GW','AW','SW','LW','48°','50°','52°','54°','56°','58°','60°','62°','64°']],
+  ['Putter',['Putt']]];
+function bagClubs(){try{return (Array.isArray(S.bag)&&S.bag.length)?S.bag.slice():CLUBS.slice();}catch(e){return CLUBS.slice();}}
+function bagName(v){return String(v==null?'':v).replace(/\s+/g,' ').trim().slice(0,14);}
+function bagAdd(name,after){   // after: index to insert after (−1 = top), undefined = end
+  const nm=bagName(name);if(!nm)return false;
+  const b=bagClubs();if(b.includes(nm))return false;
+  if(after===undefined||after===null||after>=b.length-1)b.push(nm);else b.splice(Math.max(0,after+1),0,nm);
+  set(()=>{S.bag=b;});return true;
+}
+function bagRemove(i){const b=bagClubs();if(i<0||i>=b.length)return;b.splice(i,1);set(()=>{S.bag=b;});}
+function bagMove(i,d){const b=bagClubs();const j=i+d;if(i<0||i>=b.length||j<0||j>=b.length)return;const t=b[i];b[i]=b[j];b[j]=t;set(()=>{S.bag=b;});}
+function bagReset(){set(()=>{delete S.bag;});}
+let bagUI={pick:false,custom:false};
+function bagTogglePick(){bagUI.pick=!bagUI.pick;bagUI.custom=false;render();}
+function bagToggleCustom(){bagUI.custom=!bagUI.custom;render();}
+function bagAddCustom(){
+  const n=document.getElementById('bagCustomName'),a=document.getElementById('bagCustomAfter');
+  const nm=bagName(n&&n.value);if(!nm){if(n)n.style.borderColor='var(--red)';return;}
+  const after=a?+a.value:undefined;
+  if(bagAdd(nm,isNaN(after)?undefined:after)){bagUI.custom=false;render();}
+  else shotToast('That club is already in your bag');
+}
+function bagCardHTML(){
+  const b=bagClubs();const inBag=new Set(b);
+  const rows=b.map((c,i)=>`<div class="row" style="padding:7px 0"><b class="num" style="font-size:19px;min-width:64px">${esc(c)}</b>
+      <span class="seg" style="display:inline-flex;gap:6px">
+        <button class="ghost" style="width:40px;padding:6px 0" onclick="bagMove(${i},-1)" ${i===0?'disabled':''}>↑</button>
+        <button class="ghost danger" style="width:40px;padding:6px 0" onclick="bagRemove(${i})">✕</button></span></div>`).join('');
+  const afterOpts=`<option value="-1">Top of the bag</option>${b.map((c,i)=>`<option value="${i}" ${i===b.length-1?'selected':''}>After ${esc(c)}</option>`).join('')}`;
+  const pick=bagUI.pick?`<div class="mt" style="background:var(--bg);border-radius:10px;padding:10px">
+      ${CLUB_CATALOG.map(([g,list])=>`<div class="tiny" style="margin:6px 0 4px;color:var(--ink3)">${g}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">${list.map(c=>inBag.has(c)?`<span class="pill gray" style="padding:6px 10px">${esc(c)} ✓</span>`:`<button class="ghost" style="padding:6px 12px;margin:0" onclick="bagAdd('${esc(c)}');render()">${esc(c)}</button>`).join('')}</div>`).join('')}
+      <div class="tiny mt" style="opacity:.8">Tap to add at the bottom, then move it with the arrows.</div></div>`:'';
+  const custom=bagUI.custom?`<div class="mt" style="background:var(--bg);border-radius:10px;padding:10px">
+      <div class="grid2"><div><div class="tiny">Club name</div><input id="bagCustomName" type="text" placeholder="e.g. 7-wood, Chipper" maxlength="14"></div>
+        <div><div class="tiny">Goes</div><select id="bagCustomAfter" style="width:100%;padding:9px;border:2px solid var(--line);border-radius:8px;font-size:15px;background:var(--card);color:var(--ink)">${afterOpts}</select></div></div>
+      <div class="mt" style="display:flex;gap:6px"><button class="ghost sel" onclick="bagAddCustom()">Add to my bag</button><button class="ghost" onclick="bagToggleCustom()">Cancel</button></div></div>`:'';
+  return `<div class="card" style="border-color:var(--elec);box-shadow:4px 4px 0 var(--elec-dk)">
+    <h2 style="color:var(--elec-mid)">🎒 My Bag</h2>
+    <div class="tiny mb">Your clubs, your order. The club sheet after a tracked shot, your Watch and your club stats all follow this lineup — pick from every club there is, or name your own.</div>
+    ${rows}
+    <div class="mt" style="display:flex;gap:6px;flex-wrap:wrap">
+      <button class="ghost ${bagUI.pick?'sel':''}" onclick="bagTogglePick()">＋ Add a club</button>
+      <button class="ghost ${bagUI.custom?'sel':''}" onclick="bagToggleCustom()">✎ Custom club</button>
+      ${S.bag?`<button class="ghost" onclick="bagReset()">Reset to starter bag</button>`:''}
+    </div>${pick}${custom}
+    <div class="tinier mt">${b.length} club${b.length===1?'':'s'} — no limit.</div>
+  </div>`;
+}
 // A tracked shot is only ever as good as a REAL fix. Falling back to the map
 // centre invented a plausible-looking number from wherever the view happened to
 // sit (an 8/9 field round logged a driver at 77 yds that way) and never said so.
@@ -3518,7 +3578,7 @@ function openClubSheet(yds){
   d.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <b class="num" style="font-size:24px">${ydDisp(yds)}${uLbl()}</b><span class="tiny">what club was that?</span>
       <button class="ghost danger" onclick="cancelMark()">✕</button></div>
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">${CLUBS.map(c=>`<button class="ghost" style="padding:10px 0" onclick="saveShot('${c}')">${c}</button>`).join('')}</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">${bagClubs().map(c=>`<button class="ghost" style="padding:10px 0" onclick="saveShot('${esc(c).replace(/'/g,'&#39;')}')">${esc(c)}</button>`).join('')}</div>
     <button class="ghost mt" style="width:100%" onclick="saveShot(null)">Skip — just log the distance</button>`;
   document.body.appendChild(d);
 }
@@ -6582,13 +6642,14 @@ function vSettings(){
   </div>
   ${trackCardHTML()}
   <div class="card"><h2>📏 Distances</h2>
-    <div class="row"><div style="flex:1;min-width:0"><b>Yards or metres</b>
+    <div class="row"><div style="flex:1;min-width:0"><b>Yards or meters</b>
       <div class="tiny">Changes what you SEE — every distance on the map, the scorecard and your tracked shots. Nothing is converted or re-saved: measurements stay exactly as they were, so you can switch back any time.</div></div>
       <span class="seg" style="display:inline-flex;gap:6px">
         <button class="ghost ${distUnit()==='yd'?'sel':''}" onclick="if(distUnit()!=='yd')toggleUnits()">Yards</button>
-        <button class="ghost ${distUnit()==='m'?'sel':''}" onclick="if(distUnit()!=='m')toggleUnits()">Metres</button>
+        <button class="ghost ${distUnit()==='m'?'sel':''}" onclick="if(distUnit()!=='m')toggleUnits()">Meters</button>
       </span></div>
   </div>
+  ${bagCardHTML()}
   <div class="card"><h2>🌬 Wind</h2>
     <div class="row"><div style="flex:1;min-width:0"><b>Wind on the GPS map</b>
       <div class="tiny">The wind arrows above FW / GIR — tap them to see the sight-line yardages adjusted for the wind. Off hides them on this phone only.</div></div>
@@ -7784,7 +7845,7 @@ function vStats(){
   const shots=Object.values(S.shotLog||{}).reduce((a,b)=>a.concat(b),[]);
   const byClub={};
   shots.forEach(s2=>{const c=s2.club||'untagged';(byClub[c]=byClub[c]||[]).push(s2.yds);});
-  const clubOrder=['Dr','3W','5W','Hy','3i','4i','5i','6i','7i','8i','9i','PW','GW','SW','LW','Putt','untagged'];
+  const clubOrder=bagClubs().concat(CLUBS.filter(c=>!bagClubs().includes(c)),Object.keys(byClub).filter(c=>c!=='untagged'&&!bagClubs().includes(c)&&!CLUBS.includes(c)),['untagged']);
   // last 50 tracked shots, newest first — the receipts behind the averages
   const recent=shots.slice().sort((a,b)=>(b.at||0)-(a.at||0)).slice(0,50);
   const fmtDay=t=>{if(!t)return '';const d=new Date(t);return (d.getMonth()+1)+'/'+d.getDate();};
