@@ -406,7 +406,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1788412201';
+const BUILD='1788414385';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -7172,7 +7172,7 @@ function roundStatsCardHTML(act,holes,course,shotMap,players,title){
     if(x.putts){
       if(x.putts.full)cells.push(cell('Putts',x.putts.n,(x.putts.n/x.putts.holes).toFixed(1)+' / hole'));
       else cells.push(cell('Putts',x.putts.n,`${x.putts.holes} of ${x.holes} holes`));
-      if(x.putts.one||x.putts.three)cells.push(cell('1-putt / 3-putt',`${x.putts.one} / ${x.putts.three}`));
+      if(x.putts.one||x.putts.three)cells.push(cell('1-putt / 3-putt+',`${x.putts.one} / ${x.putts.three}`));
     }
     if(x.fw)cells.push(cell('Fairways',Math.round(100*x.fw.hit/x.fw.of)+'%',`${x.fw.hit} of ${x.fw.of}`));
     if(x.gir)cells.push(cell('Greens',Math.round(100*x.gir.hit/x.gir.of)+'%',`${x.gir.hit} of ${x.gir.of}`));
