@@ -168,6 +168,7 @@
   .cheer-rline{font-size:14px;margin-top:3px}
   #windrose{position:fixed;left:max(28px,calc(50vw - 212px));bottom:calc(204px + env(safe-area-inset-bottom));z-index:6;width:84px;height:98px;cursor:pointer;-webkit-tap-highlight-color:transparent;filter:drop-shadow(0 1px 2px rgba(0,0,0,.55))}
   #windrose.on{filter:drop-shadow(0 1px 2px rgba(0,0,0,.55))}
+  #holemap.windmode .bt-sight{color:#4fd8ff!important}   /* wind mode: the crosshairs wear the arrows' blue */
   .livechip{display:inline-block;background:var(--elec);color:#eef6ff;font:700 11px Rajdhani,sans-serif;letter-spacing:2px;padding:2px 7px 1px;border-radius:99px;vertical-align:2px;margin:0 2px;animation:livePulse 1.6s ease-in-out infinite}
   .hb-live{border-color:var(--elec)!important;box-shadow:3px 3px 0 var(--elec-dk)!important}
   @keyframes livePulse{0%,100%{opacity:1}50%{opacity:.45}}
@@ -405,7 +406,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1788403968';
+const BUILD='1788404324';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -3089,7 +3090,7 @@ function lastLinesFor(h){
 // at every zoom: thin ring, four short sight lines at 45° running in from the
 // ring, a centre dot on the pin. Dark casing so it reads on a light fairway.
 function crosshairHTML(cls){
-  return '<div class="'+(cls||'')+'" style="width:35px;height:35px;position:relative;color:#fff;filter:drop-shadow(0 0 2px rgba(0,0,0,.9)) drop-shadow(0 1px 3px rgba(0,0,0,.6))">'
+  return '<div class="bt-sight '+(cls||'')+'" style="width:35px;height:35px;position:relative;color:#fff;filter:drop-shadow(0 0 2px rgba(0,0,0,.9)) drop-shadow(0 1px 3px rgba(0,0,0,.6))">'
     +'<svg width="35" height="35" viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-linecap="butt">'
     +'<circle cx="13" cy="13" r="11.5" stroke-width="1.2"/>'
     +'<path stroke-width="1.3" transform="rotate(45 13 13)" d="M13 1.5v5.4M13 19.1v5.4M1.5 13h5.4M19.1 13h5.4"/>'
@@ -5216,7 +5217,7 @@ async function initHoleMap(){
     else if(lTapLine){lTapLine.setLatLngs(segs);lTapCase.setLatLngs(segs);}
     else{
       lTapCase=L.polyline(segs,{color:'#0a1220',weight:4,opacity:.45,lineCap:'butt'}).addTo(LMAP);
-      lTapLine=L.polyline(segs,{color:'#ffffff',weight:2,opacity:.95,lineCap:'butt'}).addTo(LMAP);
+      lTapLine=L.polyline(segs,{color:sightColor(),weight:2,opacity:.95,lineCap:'butt'}).addTo(LMAP);
       lTaps.forEach(m=>m.bringToFront&&m.bringToFront());
     }
     // each dot prices its arriving leg
@@ -5224,6 +5225,7 @@ async function initHoleMap(){
     lTaps.forEach((m,i)=>{m.setTooltipContent(legLabel(prev,ts[i]));prev=ts[i];});
     if(endC&&typeof lGreen!=='undefined'&&lGreen)lGreen.setTooltipContent(legLabel(prev,endC,mapMarks.aimC?' 🎯':''));
   };
+  mapMarks.setSightColor=c=>{try{if(lTapLine)lTapLine.setStyle({color:c});}catch(e){}};
   const clearTap=m=>{
     if(m){LMAP.removeLayer(m);lTaps=lTaps.filter(x=>x!==m);}
     else{lTaps.forEach(x=>LMAP.removeLayer(x));lTaps=[];}
@@ -5405,6 +5407,7 @@ function paintWindRose(){
   const active=windMode&&!!w&&w.mph>=1;
   el.style.display='';el.classList.toggle('on',active);
   el.innerHTML=windArrowsSVG(w,mapB,active);
+  paintSightMode();
 }
 // a leg of the sight line: actual yards, or the wind-adjusted number marked (w)
 function legLabel(from,to,suffix){
@@ -5414,12 +5417,15 @@ function legLabel(from,to,suffix){
   return txt+(suffix||'');
 }
 function windSettingToggle(){set(()=>{S.windHide=!S.windHide;if(S.windHide)windMode=false;});}
+function sightColor(){return windMode?'#4fd8ff':'#ffffff';}
+function paintSightMode(){try{const m=document.getElementById('holemap');if(m)m.classList.toggle('windmode',!!windMode);if(mapMarks.setSightColor)mapMarks.setSightColor(sightColor());}catch(e){}}
 function toggleWindMode(){
   if(S.windHide)return;
   const w=windNow();
   if(!w||w.mph<1){windMode=false;paintWindRose();shotToast(w?'Calm — nothing to adjust':'No wind data for this course yet');return;}
   windMode=!windMode;
   try{if(mapMarks.refreshTapLine)mapMarks.refreshTapLine();}catch(e){}
+  paintSightMode();
   paintWindRose();
   shotToast(windMode?'Wind ON':'Wind OFF');
 }
