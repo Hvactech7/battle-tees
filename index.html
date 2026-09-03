@@ -128,6 +128,7 @@ h1,h2,h3,.disp{font-family:var(--disp);margin:0;letter-spacing:.5px}
 /* the GPS beat: copy in a slim column, the phone gets the room and grows */
 .beat.gpsbeat{grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr);gap:44px}
 .beat.gpsbeat .txt p{max-width:400px}
+.beat .txt p+p{margin-top:14px}   /* first beat to run two paragraphs (wind) */
 .beat.gpsbeat .phone{width:min(360px,34vw)}
 .phone img{display:block;width:100%;height:auto;border-radius:38px;border:9px solid #0a0d14;
   box-shadow:0 0 0 1.5px #2a3550,0 30px 70px rgba(0,0,0,.7),0 0 60px rgba(74,168,255,.12);background:#000}
@@ -273,11 +274,12 @@ th{color:var(--muted);font-size:11px;letter-spacing:1.5px;text-transform:upperca
     </div>
 
     <div class="beat off1 gpsbeat">
-      <div class="txt rv l"><div class=eye>GPS hole maps</div>
+      <div class="txt rv l"><div class=eye>GPS hole maps · live wind</div>
         <h2>Know the carry <em>before you pull the club</em></h2>
-        <p>Satellite view with live front · middle · back numbers and a tap-anywhere rangefinder on mapped courses. Then bet on it.</p></div>
+        <p>Satellite view with live front · middle · back numbers and a tap-anywhere rangefinder on mapped courses. Then bet on it.</p>
+        <p>It plays the wind, too. National Weather Service numbers for your course's own grid cell — not an airport down the valley — pulled at the first tee and kept all day. Tap once: 270 into a 14&nbsp;mph south-wester plays 302.</p></div>
       <div class="phone rv r">
-        <img src="/assets/gps-rancho-h1.jpg" alt="Battle Tees GPS map — hole 1 at Rancho Solano GC: satellite view, rangefinder line to the green, front 479 · middle 496 · back 513 yards">
+        <img src="/assets/gps-rancho-h1.jpg" alt="Battle Tees GPS map — hole 1 at Rancho Solano GC: satellite view with a rangefinder line to the green, front 479 · middle 496 · back 513 yards, and wind mode on: two blue arrows showing 14 mph from the south-west, with the two legs of the line playing like 302 and 262 yards into it">
         <div class=pcap><i>RANCHO SOLANO GC</i> · hole 1 · live from the app</div>
       </div>
     </div>
