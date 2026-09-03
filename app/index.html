@@ -406,7 +406,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1788406763';
+const BUILD='1788410209';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -6431,7 +6431,7 @@ function vWelcome(){
       <div><div class="tiny">Your name</div><input type="text" id="meName" onfocus="tapClear(this)" autocomplete="name"></div>
       <div><div class="tiny">Handicap index</div><input type="text" inputmode="decimal" id="meIdx" placeholder="10.0" onfocus="tapClear(this)"></div>
     </div>
-    <div class="mt"><div class="tiny">Email <span style="opacity:.6">(optional)</span></div>
+    <div class="mt"><div class="tiny">Email</div>
       <input type="text" inputmode="email" autocapitalize="off" id="meEmail" placeholder="you@email.com" value="${esc(localStorage.getItem('wolfBackupEmail')||'')}">
       <div class="tiny mt">Your players, courses &amp; round history back up automatically — and you can restore them on any phone.</div></div>
     <div id="meErr" class="tiny mt" style="color:var(--red);font-weight:600"></div>
