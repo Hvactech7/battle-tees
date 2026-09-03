@@ -166,6 +166,8 @@
   .cheer-rname{font-family:Rajdhani,sans-serif;font-weight:700;font-size:19px;line-height:1.1}
   .cheer-rn{font-size:13px;color:var(--ink3);font-weight:400}
   .cheer-rline{font-size:14px;margin-top:3px}
+  #windrose{position:fixed;left:max(28px,calc(50vw - 212px));bottom:calc(204px + env(safe-area-inset-bottom));z-index:6;width:84px;height:98px;cursor:pointer;-webkit-tap-highlight-color:transparent;filter:drop-shadow(0 1px 2px rgba(0,0,0,.55))}
+  #windrose.on{filter:drop-shadow(0 1px 2px rgba(0,0,0,.55))}
   .livechip{display:inline-block;background:var(--elec);color:#eef6ff;font:700 11px Rajdhani,sans-serif;letter-spacing:2px;padding:2px 7px 1px;border-radius:99px;vertical-align:2px;margin:0 2px;animation:livePulse 1.6s ease-in-out infinite}
   .hb-live{border-color:var(--elec)!important;box-shadow:3px 3px 0 var(--elec-dk)!important}
   @keyframes livePulse{0%,100%{opacity:1}50%{opacity:.45}}
@@ -403,7 +405,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1788390727';
+const BUILD='1788403968';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1242,6 +1244,7 @@ function scheduleReconnect(){
 // NOW instead of waiting out the backoff timer.
 function kickSync(){if(S.share&&S.share.on&&!sock){retryMs=1000;syncConnect();}}
 window.addEventListener('online',kickSync);
+window.addEventListener('online',()=>{try{if(S.round&&S.round.started)windFetch();}catch(e){}});
 // KEEP THE SCREEN ON while the app is in front. iOS blanking the display mid-
 // round tore the Leaflet map down and rebuilt it on wake — which, with the
 // restore bug above, is how a green pin disappeared while you were reading the
@@ -3795,6 +3798,7 @@ function vMap(){
         <div style="font-size:10px;font-weight:600;opacity:.85;letter-spacing:.5px">${S.share.bf?'TAP TO INVITE':'JOIN CODE'}</div>
         <div class="num" style="font-size:22px;letter-spacing:3px">${esc(S.share.code)}</div></div>`:''}${gameBadgeHTML()}</div>`)+`
   <div id="holemap"></div>
+  <div id="windrose" onclick="toggleWindMode()" style="display:none"></div>
   ${mapCreditsChipHTML()}
   ${mapStatChipsHTML(hole)}
   <button id="trackbtn" onclick="trackShotTap()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(112px + env(safe-area-inset-bottom));z-index:6;width:120px;height:46px;background:var(--card);border:2px solid ${trackShot&&trackShot.hole===mapHole?'var(--amber-bd)':'var(--green)'};border-radius:12px;color:${trackShot&&trackShot.hole===mapHole?'var(--amber-bd)':'var(--green-mid)'};font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:19px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">${trackShot&&trackShot.hole===mapHole?'Mark It':'Track It'}</button>
@@ -3835,7 +3839,7 @@ function vMap(){
       <button id="shotsbtn" class="ghost" onclick="toggleShots()" style="width:40px;height:40px;padding:0;display:flex;align-items:center;justify-content:center;opacity:${showShots?'1':'.45'};border-color:${showShots?'var(--green)':''}">
         <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><circle cx="4.5" cy="17.5" r="2.4" fill="currentColor"/><path d="M6 16 L16 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><circle cx="17.5" cy="4.5" r="2.4" fill="currentColor"/></svg>
       </button>
-      <div class="center" style="flex:1">
+      <div class="center" style="flex:1;min-width:0">
         <div class="num" id="fmb" style="font-size:29px;white-space:nowrap">—</div>
         <div class="tiny" id="fmbsub" style="max-height:2.7em;overflow:hidden">loading…</div>
         ${amnesiaOn(S.course.id)?`<div class="tiny" style="color:var(--amber-bd,#e0a53a);margin-top:2px">🧠 amnesia on — this phone is ignoring the saved map. <a href="?amnesia=off" style="color:inherit;text-decoration:underline">turn off</a></div>`:''}
@@ -3855,7 +3859,7 @@ function vMapPreview(hole){
   <div class="mapbar">
     <div class="row" style="border:none;padding:2px 0">
       <button class="ghost" onclick="mapPrev()">◀</button>
-      <div class="center" style="flex:1">
+      <div class="center" style="flex:1;min-width:0">
         <div class="num" id="fmb" style="font-size:29px;white-space:nowrap">—</div>
         <div class="tiny" id="fmbsub" style="max-height:2.7em;overflow:hidden">loading…</div>
       </div>
@@ -4867,6 +4871,8 @@ function withTeeFix(geo,h){
 }
 let initHoleMapRun=0;
 async function initHoleMap(){
+  try{if(S.round&&S.round.started&&!coursePreview)windFetch();}catch(e){}   // throttled: a cached day is not refetched
+  try{setTimeout(paintWindRose,50);}catch(e){}
   const el=document.getElementById('holemap');
   if(!el)return;
   // ONE builder at a time. This is async and awaits geo/Leaflet after the
@@ -4950,6 +4956,7 @@ async function initHoleMap(){
     // degrees from where the auto-frame put it; only that counts as yours.
     LMAP._btAutoBearing=null;
     LMAP.on('rotate',()=>{
+      try{paintWindRose();}catch(e){}
       if(!LMAP._btAutoRot){
         const now=LMAP.getBearing?LMAP.getBearing():0;
         const base=(LMAP._btAutoBearing==null)?now:LMAP._btAutoBearing;
@@ -5006,7 +5013,7 @@ async function initHoleMap(){
         mapMarks.ref=[t.lat,t.lng];
         try{updateFMB([t.lat,t.lng],'yards from the tee');}catch(e){}
         try{teeMk.setTooltipContent(teeSay());}catch(e){}
-        if(lGreen)try{lGreen.setTooltipContent(yd(mDist([t.lat,t.lng],mapMarks.greenC||pathEnd))+uLbl());}catch(e){}
+        if(lGreen)try{lGreen.setTooltipContent(legLabel([t.lat,t.lng],mapMarks.greenC||pathEnd));}catch(e){}
       };
       let teeDragged=false;
       teeMk.on('drag',()=>{teeDragged=true;teeRedraw();});
@@ -5044,7 +5051,7 @@ async function initHoleMap(){
     // tap it afterwards to snap back to the green center (aimC rides separately
     // from greenC so F/M/B always speaks for the real green)
     var lGreen=L.marker(greenC,{draggable:true,icon:crosshairIcon('aimdot')}).addTo(LMAP);
-    lGreen.bindTooltip(hasPath?yd(mDist(geo.path[0],greenC))+uLbl():'green',{permanent:true,direction:'top',offset:[0,-18],className:'maplbl'});
+    lGreen.bindTooltip(hasPath?legLabel(geo.path[0],greenC):'green',{permanent:true,direction:'top',offset:[0,-18],className:'maplbl'});
     const aimHome=greenC.slice();
     let aimJustDragged=false;
     const aimPaint=()=>{
@@ -5178,7 +5185,7 @@ async function initHoleMap(){
     [lTapLine,lTapCase].forEach(o=>{if(o)LMAP.removeLayer(o);});
     lTapLine=lTapCase=null;
     if((mapMarks.aimC||mapMarks.greenC)&&typeof lGreen!=='undefined'&&lGreen&&mapMarks.ref)
-      lGreen.setTooltipContent(yd(mDist(mapMarks.ref,mapMarks.aimC||mapMarks.greenC))+uLbl()+(mapMarks.aimC?' 🎯':''));
+      lGreen.setTooltipContent(legLabel(mapMarks.ref,mapMarks.aimC||mapMarks.greenC,mapMarks.aimC?' 🎯':''));
   };
   // the sight ring's outer edge in screen pixels (35px icon, r=11.5 of 26 + stroke)
   const RETICLE_PX=16.5;
@@ -5214,8 +5221,8 @@ async function initHoleMap(){
     }
     // each dot prices its arriving leg
     let prev=from;
-    lTaps.forEach((m,i)=>{m.setTooltipContent(yd(mDist(prev,ts[i]))+uLbl());prev=ts[i];});
-    if(endC&&typeof lGreen!=='undefined'&&lGreen)lGreen.setTooltipContent(yd(mDist(prev,endC))+uLbl()+(mapMarks.aimC?' 🎯':''));
+    lTaps.forEach((m,i)=>{m.setTooltipContent(legLabel(prev,ts[i]));prev=ts[i];});
+    if(endC&&typeof lGreen!=='undefined'&&lGreen)lGreen.setTooltipContent(legLabel(prev,endC,mapMarks.aimC?' 🎯':''));
   };
   const clearTap=m=>{
     if(m){LMAP.removeLayer(m);lTaps=lTaps.filter(x=>x!==m);}
@@ -5280,6 +5287,142 @@ async function initHoleMap(){
   }
   LMAP.on('click',e=>{if(mapMarks._suppress&&mapMarks._suppress())return;mapTapAt([e.latlng.lat,e.latlng.lng]);});
 }
+// ---------- wind: NWS observation + hourly forecast → "plays like" ----------
+// Wind comes from the National Weather Service (free, public domain, US): the
+// nearest airport anemometer for what is blowing NOW, the hourly forecast for
+// the course's own coordinates for the rest of the round. Fetched at Start
+// Round (the parking lot has signal; Hiddenbrooke does not) and cached on the
+// phone for the day. The number shown is TrackMan's rule of thumb — +1% of the
+// shot per mph into the wind, −½% per mph behind — measured against the
+// sight line, so aiming at a bailout changes it. Crosswind is an aim hint.
+let WIND_ON=true;          // kill switch
+let windOpen=false;        // the chip's detail fold
+const COMPASS={N:0,NNE:22.5,NE:45,ENE:67.5,E:90,ESE:112.5,SE:135,SSE:157.5,S:180,SSW:202.5,SW:225,WSW:247.5,W:270,WNW:292.5,NW:315,NNW:337.5};
+function compassToDeg(s){if(s==null)return null;const t=String(s).trim().toUpperCase();if(t in COMPASS)return COMPASS[t];const n=parseFloat(t);return isFinite(n)?((n%360)+360)%360:null;}
+function bearingDeg(a,b){const p1=a[0]*Math.PI/180,p2=b[0]*Math.PI/180,dl=(b[1]-a[1])*Math.PI/180;
+  const y=Math.sin(dl)*Math.cos(p2),x=Math.cos(p1)*Math.sin(p2)-Math.sin(p1)*Math.cos(p2)*Math.cos(dl);
+  return (Math.atan2(y,x)*180/Math.PI+360)%360;}
+function windCourseLoc(){try{const loc=S.course&&S.course.loc;if(loc&&isFinite(loc[0])&&isFinite(loc[1]))return [+loc[0],+loc[1]];}catch(e){}
+  return (myCoords&&isFinite(myCoords[0]))?[+myCoords[0],+myCoords[1]]:null;}
+function windKey(){return (S.course&&S.course.id)||'x';}
+async function windFetch(force){
+  try{
+    if(!WIND_ON||previewSandboxed())return;
+    const loc=windCourseLoc();if(!loc)return;
+    const key=windKey();
+    const W=(S.wx&&S.wx.key===key)?S.wx:null;
+    if(!force&&W&&Date.now()-(W.fetchedAt||0)<45*60000)return;
+    if(typeof navigator!=='undefined'&&navigator.onLine===false)return;
+    if(windFetch._busy)return;windFetch._busy=true;
+    const j=async u=>{const r=await fetch(u,{headers:{'Accept':'application/geo+json'}});if(!r.ok)throw new Error('nws '+r.status);return r.json();};
+    let pts=W&&W.pts;
+    if(!pts||!pts.hourly){const p=await j(`https://api.weather.gov/points/${loc[0].toFixed(4)},${loc[1].toFixed(4)}`);const pr=p.properties||{};
+      pts={hourly:pr.forecastHourly,stations:pr.observationStations};}
+    let obs=W&&W.obs||null;
+    try{
+      let sid=pts.stationId,sname=pts.stationName;
+      if(!sid&&pts.stations){const st=await j(pts.stations);const f=(st.features||[])[0];sid=f&&f.properties&&f.properties.stationIdentifier;sname=f&&f.properties&&f.properties.name;
+        if(sid){pts.stationId=sid;pts.stationName=sname;
+          try{const c=f.geometry&&f.geometry.coordinates;if(c)pts.stationKm=Math.round(kmBetween(loc[0],loc[1],+c[1],+c[0])*10)/10;}catch(e){}}}
+      if(sid){const o=await j(`https://api.weather.gov/stations/${sid}/observations/latest`);const q=o.properties||{};
+        const kmh=q.windSpeed&&q.windSpeed.value,g=q.windGust&&q.windGust.value,d=q.windDirection&&q.windDirection.value;
+        if(kmh!=null&&d!=null)obs={mph:Math.round(kmh*0.621371),dir:+d,gust:g!=null?Math.round(g*0.621371):null,at:Date.parse(q.timestamp)||Date.now(),station:sname||sid,km:pts.stationKm!=null?pts.stationKm:null};}
+    }catch(e){}
+    let hourly=W&&W.hourly||[];
+    try{if(pts.hourly){const f=await j(pts.hourly);
+      hourly=((f.properties||{}).periods||[]).slice(0,36).map(p=>({t:Date.parse(p.startTime),mph:parseInt(String(p.windSpeed||'0'))||0,dir:compassToDeg(p.windDirection),temp:p.temperature})).filter(p=>p.t&&p.dir!=null);}}catch(e){}
+    S.wx={key,pts,obs,hourly,fetchedAt:Date.now()};save();
+    try{stat('wind',{src:obs?'obs':'fc',mph:(obs||hourly[0]||{}).mph,station:obs&&obs.station});}catch(e){}
+    if(S.screen==='map')try{updateFMB(mapMarks.mePos||mapMarks.ref,'');paintWindRose();}catch(e){}
+  }catch(e){}finally{windFetch._busy=false;}
+}
+// What is blowing right now. The NWS hourly forecast is computed for the
+// course's OWN 2.5 km grid cell, so it is the default; an airport anemometer
+// only outranks it when it is close enough to be the same air (Nut Tree is
+// 2.5 mi from Cypress Lakes; Travis is 15 mi from Hiddenbrooke — 9/2).
+const WIND_STATION_KM=8;
+function windNow(){
+  const W=S.wx;if(!WIND_ON||!W||W.key!==windKey())return null;
+  const now=Date.now();
+  const hs=(W.hourly||[]);let h=null;hs.forEach(p=>{if(p.t<=now)h=p;});if(!h&&hs.length&&hs[0].t-now<3*3600000)h=hs[0];
+  const fc=(h&&now-h.t<6*3600000)?{mph:h.mph,dir:h.dir,gust:null,src:'fc',at:h.t,station:null}:null;
+  const o=W.obs;
+  const near=o&&o.dir!=null&&now-(o.at||0)<90*60000&&o.km!=null&&o.km<=WIND_STATION_KM;
+  if(near)return {mph:o.mph,dir:o.dir,gust:o.gust,src:'obs',at:o.at,station:o.station};
+  if(fc)return fc;
+  // no forecast hour at all: a fresh reading from a farther station beats nothing
+  if(o&&o.dir!=null&&now-(o.at||0)<90*60000)return {mph:o.mph,dir:o.dir,gust:o.gust,src:'obs',at:o.at,station:o.station};
+  return null;
+}
+// the shot: dir is where the wind blows FROM (meteorological). rel 0 = dead
+// into it, ±180 = straight behind; cross > 0 = from the right → aim right.
+function windOnShot(w,from,to,yds){
+  const brg=bearingDeg(from,to);
+  const rel=((w.dir-brg)+540)%360-180;
+  const rad=rel*Math.PI/180;
+  const head=w.mph*Math.cos(rad),cross=w.mph*Math.sin(rad);
+  const factor=head>=0?1+0.01*Math.min(head,30):1-0.005*Math.min(-head,30);
+  const base=Math.round(yds),plays=Math.round(yds*factor);
+  return {brg,rel:Math.round(rel),head:Math.round(head),cross:Math.round(cross),plays,delta:plays-base,
+    drift:Math.round(yds*0.008*Math.abs(cross)),aim:cross>0.5?'right':cross<-0.5?'left':''};
+}
+function windAgeLbl(at){const m=Math.round((Date.now()-at)/60000);return m<2?'just now':m<60?m+' min ago':Math.round(m/60)+' h ago';}
+// ---- the wind rose: a tap-able graphic on the map. Eight directions (in the
+// map's own frame, so the arrow flies the way the wind really goes on THIS
+// hole), four strengths. Tapping it swaps every yardage on the sight line —
+// the leg pills and the green — for the wind-adjusted number, marked (w).
+// The F/M/B numbers at the bottom are ALWAYS the actual yardages.
+let windMode=false;
+function windLevel(mph){return mph<8?1:mph<15?2:3;}   // arrows: 1 for 0–7, 2 for 8–14, 3 for 15+ (average, not gusts)
+// Wavy wind arrows (Nathan's reference art): one wave per level, gradient tail
+// to a bright head, a dark halo under everything so satellite imagery never
+// hides it. Rotated in the map's frame so they fly the way the wind goes on
+// the hole in view; snapped to eight directions so they do not twitch.
+function windArrowsSVG(w,mapB,active){
+  const mph=w?w.mph:0,lvl=windLevel(mph);
+  let ang=0;
+  if(w&&w.dir!=null&&mph>=1){const scr=(((w.dir+180)-(mapB||0))%360+360)%360;ang=(Math.round(scr/45)*45)%360;}
+  // a SQUARE, arrows inside its inscribed circle: any rotation stays in the box
+  const rows={1:[66],2:[54,78],3:[48,66,84]}[lvl];
+  const wave=y=>`M14 ${y} C 26 ${y-9}, 38 ${y+9}, 50 ${y} S 68 ${y-8}, 72 ${y}`;
+  const head=y=>`72,${y-10} 88,${y} 72,${y+10} 77,${y}`;
+  // solid (Nathan, 9/2): one flat colour, no gradient, no glow — just a hairline
+  // white edge so the arrows stay crisp over dark trees
+  const hc='#4fd8ff';   // always blue (Nathan, 9/2) — the w badge alone says the line is wind-adjusted
+  const edge=rows.map(y=>`<path d="${wave(y)}" fill="none" stroke="#ffffff" stroke-width="8" stroke-linecap="round"/><polygon points="${head(y)}" fill="#ffffff" stroke="#ffffff" stroke-width="2" stroke-linejoin="round"/>`).join('');
+  const bright=rows.map(y=>`<path d="${wave(y)}" fill="none" stroke="${hc}" stroke-width="6" stroke-linecap="round"/><polygon points="${head(y)}" fill="${hc}"/>`).join('');
+  const calm=mph<1?'opacity=".55"':'';
+  return `<svg viewBox="0 0 96 112" width="84" height="98" style="overflow:visible">
+    <g transform="rotate(${ang-90} 48 66)" ${calm}>${edge}${bright}</g>
+    ${w?`<g><rect x="20" y="0" rx="7" ry="7" width="56" height="19" fill="rgba(4,10,22,.88)"/><text x="48" y="14.2" text-anchor="middle" font-family="Rajdhani,Inter,sans-serif" font-weight="700" font-size="14.4" fill="#bff6ff">${mph<1?'calm':mph+' mph'}</text></g>`:''}
+  </svg>`;
+}
+function paintWindRose(){
+  const el=document.getElementById('windrose');if(!el)return;
+  if(coursePreview||!WIND_ON||S.windHide){el.style.display='none';return;}
+  const w=windNow();
+  let mapB=0;try{mapB=(LMAP&&LMAP.getBearing)?(LMAP.getBearing()||0):0;}catch(e){}
+  const active=windMode&&!!w&&w.mph>=1;
+  el.style.display='';el.classList.toggle('on',active);
+  el.innerHTML=windArrowsSVG(w,mapB,active);
+}
+// a leg of the sight line: actual yards, or the wind-adjusted number marked (w)
+function legLabel(from,to,suffix){
+  let txt=yd(mDist(from,to))+uLbl();
+  // adjusted: ~ before the number, in the arrows' blue — that IS the signal (Nathan, 9/2)
+  try{if(windMode){const w=windNow();if(w&&w.mph>=1){const x=windOnShot(w,from,to,mDist(from,to)*1.09361);txt=`<span style="color:#4fd8ff">~${ydDisp(x.plays)}${uLbl()}</span>`;}}}catch(e){}
+  return txt+(suffix||'');
+}
+function windSettingToggle(){set(()=>{S.windHide=!S.windHide;if(S.windHide)windMode=false;});}
+function toggleWindMode(){
+  if(S.windHide)return;
+  const w=windNow();
+  if(!w||w.mph<1){windMode=false;paintWindRose();shotToast(w?'Calm — nothing to adjust':'No wind data for this course yet');return;}
+  windMode=!windMode;
+  try{if(mapMarks.refreshTapLine)mapMarks.refreshTapLine();}catch(e){}
+  paintWindRose();
+  shotToast(windMode?'Wind ON':'Wind OFF');
+}
 function updateFMB(pos,label){
   const el=document.getElementById('fmb'),s2=document.getElementById('fmbsub');
   if(!el||!pos)return;
@@ -5295,6 +5438,7 @@ function updateFMB(pos,label){
     ?`<span style="color:var(--ink2);font-size:16px">F</span> ${yd(r.f)} <span style="color:var(--ink2);font-size:16px">M</span> ${yd(r.m)} <span style="color:var(--ink2);font-size:16px">B</span> ${yd(r.b)}`
     :`${yd(r.m)}${uLbl()} to green`;
   if(s2)s2.textContent='';  // label dropped by design — F/M/B speaks for itself
+  try{paintWindRose();}catch(e){}
 }
 
 // ---------- rendering ----------
@@ -6438,6 +6582,11 @@ function vSettings(){
         <button class="ghost ${distUnit()==='yd'?'sel':''}" onclick="if(distUnit()!=='yd')toggleUnits()">Yards</button>
         <button class="ghost ${distUnit()==='m'?'sel':''}" onclick="if(distUnit()!=='m')toggleUnits()">Metres</button>
       </span></div>
+  </div>
+  <div class="card"><h2>🌬 Wind</h2>
+    <div class="row"><div style="flex:1;min-width:0"><b>Wind on the GPS map</b>
+      <div class="tiny">The wind arrows above FW / GIR — tap them to see the sight-line yardages adjusted for the wind. Off hides them on this phone only.</div></div>
+    <button class="ghost ${S.windHide?'':'sel'}" onclick="windSettingToggle()">${S.windHide?'Off':'On'}</button></div>
   </div>
   <div class="card"><h2>☀️ Screen</h2>
     <div class="row"><div style="flex:1;min-width:0"><b>Keep the screen awake</b>
@@ -9887,6 +10036,7 @@ function startRound(){
     // user-initiated so it keeps measuring people CHOOSING the map, not landing
     // on it. closeMap still drops back to the score screen.
     S.round.cur=playOrder()[0];mapHole=S.round.cur;S.screen='map';clearStage();
+    try{windFetch(true);}catch(e){}   // the parking lot has signal — grab the day's wind now
     try{setTimeout(maybeAskPar,900);}catch(e){}
     if(S.config.game!=='wolf')prefillNines(S.round.cur);});
   S.round._sharedAtStart=!!S.share.on;
