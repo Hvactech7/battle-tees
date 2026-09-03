@@ -406,7 +406,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1788414385';
+const BUILD='1788415534';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -7047,6 +7047,10 @@ function withDoc(doc,fn){
     S.course=keep.course;S.players=keep.players;S.config=keep.config;S.round=keep.round;
   }
 }
+// the handicap index a player CARRIED INTO the round — the roster the room doc
+// holds is the roster as it stood; the book's later adjustment never touches it
+function idxLbl(p){try{const v=p&&p.index;if(v==null||v==='')return '';const x=+v;if(!isFinite(x))return '';
+  return `<span class="tiny" style="color:var(--ink3);font-weight:400;margin-left:6px">${x%1?x.toFixed(1):x} hcp</span>`;}catch(e){return '';}}
 function vBfWatch(){
   const W=bfWatch||{};
   const doc=W.doc,e=W.entry||{};
@@ -7114,7 +7118,7 @@ function vBfWatch(){
     ${games.map(g=>{const led=ledgers[g];if(!led)return '';
       const order=act.slice().sort((a,b)=>['stroke','stableford'].includes(g)?(led[L][a]-led[L][b]):(led[L][b]-led[L][a]));
       return `<div class="card"><h2>${gameName(g)}</h2>
-        ${order.map(i=>`<div class="row"><span>${esc((S.players[i]||{}).name||'?')}</span><b class="num" style="font-size:24px">${g==='nines'?fmtPts(led[L][i]):led[L][i]}</b></div>`).join('')}
+        ${order.map(i=>`<div class="row"><span>${esc((S.players[i]||{}).name||'?')}${idxLbl(S.players[i])}</span><b class="num" style="font-size:24px">${g==='nines'?fmtPts(led[L][i]):led[L][i]}</b></div>`).join('')}
       </div>`;}).join('')}
     ${roundStatsCardHTML(act,S.round.holes,course,meta.shots,S.players,'Round stats')}
     ${wolfBits.length?`<div class="card"><h2>🐺 Lone wolves</h2><div class="tiny">${wolfBits.join('<br>')}</div></div>`:''}
@@ -7188,7 +7192,7 @@ function roundStatsCardHTML(act,holes,course,shotMap,players,title){
     if(x.dbl)mix.push(`<span style="color:var(--red)">▣ ${x.dbl}</span>`);
     return `<div class="rsp">
       <div style="display:flex;align-items:center;gap:10px">${avatarHTML(p,36)}
-        <div style="flex:1;min-width:0"><b style="font-family:Rajdhani,sans-serif;font-size:19px">${esc(p.name)}</b>
+        <div style="flex:1;min-width:0"><b style="font-family:Rajdhani,sans-serif;font-size:19px">${esc(p.name)}</b>${idxLbl(p)}
           <div class="tiny">${mix.join(' · ')||'—'}</div></div>
         <div style="text-align:right"><b class="num" style="font-size:26px">${x.gross}</b> <span class="num" style="font-size:16px;color:${x.toPar<0?'#7fd49a':x.toPar>0?'var(--amber)':'var(--ink3)'}">${tp}</span>
           <div class="tiny">${x.holes<((course&&course.holes)||[]).length?`thru ${x.holes}`:'18 holes'}</div></div></div>
