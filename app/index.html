@@ -406,7 +406,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1788493322';
+const BUILD='1788499112';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -6597,6 +6597,7 @@ function vHome(){
   <div class="center" style="margin:0 0 14px">
     <button class="ghost" onclick="go('settings')">⚙️ Settings</button>
   </div>
+  <div class="tiny center" style="color:var(--ink3);margin:0 0 10px;line-height:1.35">Course data © OpenStreetMap contributors (ODbL 1.0) via OpenGolfAPI · Imagery © Esri, Maxar</div>
   </main>`;
 }
 // ---------- Start Over: full reset of phone + cloud backup ----------
@@ -6680,6 +6681,11 @@ function vSettings(){
     <button class="big mt" style="background:var(--red);border-color:var(--red)" onclick="soGo()">Are you sure? Erase it all</button>
     <button class="ghost mt" style="width:100%" onclick="soCancel()">Cancel</button>`
     :`<div class="tiny" style="color:var(--green-mid);font-weight:600">${esc(soMsg)}</div>`}
+  </div>
+  <div class="card"><h2>📜 Data credits</h2>
+    <div class="tiny">Scorecards and course listings: <b>© OpenStreetMap contributors (ODbL 1.0) via OpenGolfAPI</b>, plus licensed scorecard data from GolfCourseAPI.</div>
+    <div class="tiny mt">Hole maps: course geometry © OpenStreetMap contributors (ODbL 1.0), hand-mapped by players where OSM had none · Imagery © Esri, Maxar.</div>
+    <div class="tiny mt" style="color:var(--ink3)">Battle Tees build ${BUILD}</div>
   </div>
   </main>`;
 }
