@@ -406,7 +406,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1788560249';
+const BUILD='1788561365';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -3167,6 +3167,32 @@ function lastLinesFor(h){
 // and any midpoints. Fixed SCREEN size (35px) so it stays a sight, never a blob,
 // at every zoom: thin ring, four short sight lines at 45° running in from the
 // ring, a centre dot on the pin. Dark casing so it reads on a light fairway.
+// TOUCH GESTURES ON THE HOLE MAP — one rule for every dot (Rancho h11, 9/4).
+//  TAP   = down → up with the finger inside moveTol (Android reports a pixel or
+//          two of jitter on almost every tap; the old code called that a drag,
+//          so NateBall's tap crosshair "would NOT go away").
+//  DRAG  = moved past moveTol. Tap spots drag at once; the aim dot only after a
+//          HOLD (still for holdMs), so a brushed finger can no longer move the
+//          green target by accident.
+//  Timestamp-driven and Leaflet-free, so the harness can test it.
+const AIM_HOLD_MS=350, DOT_MOVE_TOL=8, DOT_HIT_PX=26;
+function makePressTracker(o){
+  const holdMs=(o&&o.holdMs)||0, tol=(o&&o.moveTol)||DOT_MOVE_TOL, needHold=!!(o&&o.needHold);
+  let st=null;
+  return {
+    down(pt,t){st={x:pt.x,y:pt.y,t,held:!needHold,moved:false,dead:false};return 'down';},
+    tick(t){if(!st||st.dead||st.moved||st.held)return null;if(t-st.t>=holdMs){st.held=true;return 'hold';}return null;},
+    move(pt,t){
+      if(!st||st.dead)return null;
+      const d=Math.hypot(pt.x-st.x,pt.y-st.y);
+      if(!st.moved&&d<tol)return null;          // jitter: still a tap
+      if(!st.held){st.dead=true;return 'cancel';} // moved before the hold: not ours
+      st.moved=true;return 'drag';
+    },
+    up(){if(!st)return null;const x=st;st=null;if(x.dead)return 'cancel';if(x.moved)return 'end';return (x.held&&needHold)?'held-tap':'tap';},
+    active(){return !!st&&!st.dead;}
+  };
+}
 function crosshairHTML(cls){
   return '<div class="bt-sight '+(cls||'')+'" style="width:35px;height:35px;position:relative;color:#fff;filter:drop-shadow(0 0 2px rgba(0,0,0,.9)) drop-shadow(0 1px 3px rgba(0,0,0,.6))">'
     +'<svg width="35" height="35" viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-linecap="butt">'
@@ -5188,41 +5214,24 @@ async function initHoleMap(){
     // the gold dot is a DRAGGABLE aim point: hold + drag to measure anywhere,
     // tap it afterwards to snap back to the green center (aimC rides separately
     // from greenC so F/M/B always speaks for the real green)
-    var lGreen=L.marker(greenC,{draggable:true,icon:crosshairIcon('aimdot')}).addTo(LMAP);
+    var lGreen=L.marker(greenC,{interactive:false,icon:crosshairIcon('aimdot')}).addTo(LMAP);
     lGreen.bindTooltip(hasPath?legLabel(geo.path[0],greenC):'green',{permanent:true,direction:'top',offset:[0,-18],className:'maplbl'});
-    const aimHome=greenC.slice();
-    let aimJustDragged=false;
-    const aimPaint=()=>{
+    // HOLD the dot (still for AIM_HOLD_MS) to unlock it, then drag to measure
+    // anywhere; tap it afterwards to snap back to the green centre. aimC rides
+    // separately from greenC so F/M/B always speaks for the real green. The
+    // gesture itself lives in the container handlers below with the tap spots.
+    var aimHome=greenC.slice();
+    var aimPaint=()=>{
       const d2=lGreen.getElement()&&lGreen.getElement().querySelector('.aimdot');
       if(d2)d2.style.color=mapMarks.aimC?'#ff8a3d':'#ffffff';   // orange once dragged off the green centre
     };
-    lGreen.on('drag',()=>{
-      const p=lGreen.getLatLng();
-      mapMarks.aimC=[p.lat,p.lng];
-      if(typeof refreshTapLine==='function')refreshTapLine();
-    });
-    lGreen.on('dragend',()=>{
-      const p=lGreen.getLatLng();
-      mapMarks.aimC=mDist([p.lat,p.lng],aimHome)>4?[p.lat,p.lng]:null;
-      if(!mapMarks.aimC)lGreen.setLatLng(aimHome);
-      aimJustDragged=true;setTimeout(()=>{aimJustDragged=false;},300);
-      aimPaint();refreshTapLine();
-    });
-    lGreen.on('click',()=>{
-      if(aimJustDragged)return;
-      if(mapMarks.aimC){
-        mapMarks.aimC=null;
-        lGreen.setLatLng(aimHome);
-        aimPaint();refreshTapLine();
-      }
-    });
     LMAP.fitBounds(L.latLngBounds((hasPath?geo.path:[]).concat(greenPoly||[greenC])),{padding:[36,36]});
     if(!hasPath){try{LMAP.setZoom(Math.min(LMAP.getZoom(),18));}catch(e){}}
     // Green-up: rotate so the tee sits at the bottom, green at the top, and set
     // the camera so the whole hole fills the screen. (Needs a tee — green-only
     // holes stay north-up.)
     if(hasPath&&canRotate)orientGreenUp(geo.path[0],greenC,greenPoly,geo.path,el);
-    mapMarks={greenC,greenPoly,ref:hasPath?geo.path[0]:greenC,mePos:null,aimC:null};
+    mapMarks={greenC,greenPoly,ref:hasPath?geo.path[0]:greenC,mePos:null,aimC:null,aimHome,aimPaint};
     // EVERY hole re-frames as you walk now, not just the green-only ones: your
     // dot stays at the bottom, the green at the top, until you are inside 100
     // yards. A mapped hole used to frame once off the tee and then sit still,
@@ -5388,36 +5397,71 @@ async function initHoleMap(){
     }
     refreshTapLine();
   };
-  // drag a spot to re-price its legs live; a plain tap on a dot clears just that dot
-  let dragM=null,tapMoved=false,suppressClick=false;
+  // Dots on the map: a plain tap on a tap spot clears it, a drag re-prices its
+  // legs live; the aim dot needs a HOLD before it moves, a tap snaps it home.
+  let gest=null,suppressClick=false;
   const evPt=e=>LMAP.mouseEventToContainerPoint(e.touches?e.touches[0]:e);
   const cont=LMAP.getContainer();
+  const aimDot=()=>(typeof lGreen!=='undefined'&&lGreen&&mapMarks.aimHome)?lGreen:null;
+  const aimUnlock=()=>{
+    try{if(navigator.vibrate)navigator.vibrate(12);}catch(e){}
+    shotToast('Aim point unlocked \u2014 drag it. Tap it later to snap back.');
+  };
+  const aimSettle=()=>{
+    const g=aimDot();if(!g)return;
+    const p=g.getLatLng();
+    mapMarks.aimC=mDist([p.lat,p.lng],mapMarks.aimHome)>4?[p.lat,p.lng]:null;
+    if(!mapMarks.aimC)g.setLatLng(mapMarks.aimHome);
+    mapMarks.aimPaint();refreshTapLine();
+  };
+  const aimSnapHome=()=>{
+    const g=aimDot();if(!g)return;
+    mapMarks.aimC=null;g.setLatLng(mapMarks.aimHome);mapMarks.aimPaint();refreshTapLine();
+  };
+  cont.addEventListener('contextmenu',e=>{e.preventDefault();});   // a hold must never open the browser's menu
   cont.addEventListener('pointerdown',e=>{
-    if(!LMAP||!lTaps.length)return;   // a queued tap can land after teardown (h16, 8/23)
+    if(!LMAP)return;   // a queued tap can land after teardown (h16, 8/23)
     const pt=evPt(e);
-    let best=null,bd=Infinity;
+    let best=null,bd=Infinity,kind=null;
     lTaps.forEach(m=>{const d=pt.distanceTo(LMAP.latLngToContainerPoint(m.getLatLng()));if(d<bd){bd=d;best=m;}});
-    if(bd>24)return;
-    dragM=best;tapMoved=false;
+    if(best&&bd<=DOT_HIT_PX)kind='tap';
+    const g=aimDot();
+    if(g){const da=pt.distanceTo(LMAP.latLngToContainerPoint(g.getLatLng()));if(da<=DOT_HIT_PX&&da<bd){kind='aim';best=g;}}
+    if(!kind)return;
+    const tr=makePressTracker(kind==='aim'?{holdMs:AIM_HOLD_MS,moveTol:DOT_MOVE_TOL,needHold:true}:{moveTol:DOT_MOVE_TOL});
+    tr.down({x:pt.x,y:pt.y},Date.now());
+    gest={kind,m:best,tr,timer:null};
+    if(kind==='aim')gest.timer=setTimeout(()=>{if(gest&&gest.tr===tr&&tr.tick(Date.now())==='hold')aimUnlock();},AIM_HOLD_MS);
     LMAP.dragging.disable();
     e.preventDefault();e.stopPropagation();
   },{passive:false});
   cont.addEventListener('pointermove',e=>{
-    if(!LMAP||!dragM)return;
-    tapMoved=true;
-    const ll=LMAP.containerPointToLatLng(evPt(e));
-    dragM.setLatLng(ll);refreshTapLine();
+    if(!LMAP||!gest)return;
+    const pt=evPt(e);
+    const r=gest.tr.move({x:pt.x,y:pt.y},Date.now());
+    if(r==='cancel'){clearTimeout(gest.timer);gest=null;LMAP.dragging.enable();return;}   // moved before the hold: not ours
+    if(r!=='drag')return;
+    const ll=LMAP.containerPointToLatLng(pt);
+    gest.m.setLatLng(ll);
+    if(gest.kind==='aim')mapMarks.aimC=[ll.lat,ll.lng];
+    refreshTapLine();
     e.preventDefault();
   },{passive:false});
-  const endDrag=()=>{
-    if(!dragM)return;
-    const m=dragM;dragM=null;
+  const endGest=()=>{
+    if(!gest)return;
+    const g=gest;gest=null;clearTimeout(g.timer);
     LMAP.dragging.enable();
     suppressClick=true;setTimeout(()=>{suppressClick=false;},250);
-    if(!tapMoved)clearTap(m);
+    const r=g.tr.up();
+    if(g.kind==='tap'){if(r==='tap')clearTap(g.m);return;}
+    if(r==='end')aimSettle();
+    else if(r==='tap'||r==='held-tap'){
+      if(mapMarks.aimC)aimSnapHome();
+      else if(r==='tap')shotToast('Hold the dot to move the aim point');
+    }
   };
-  cont.addEventListener('pointerup',endDrag);
-  cont.addEventListener('pointercancel',endDrag);
+  cont.addEventListener('pointerup',endGest);
+  cont.addEventListener('pointercancel',endGest);
   mapMarks._suppress=()=>suppressClick;
   startMapGps();
   if(!coursePreview){
