@@ -406,7 +406,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1788499112';
+const BUILD='1788560249';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1201,12 +1201,13 @@ function applyOp(k,v,defer){
   }finally{applyingRemote=false;}
   // an incoming meta can carry a players array stamped before our slot claim —
   // re-claim so a simultaneous join can't erase row ownership
-  if(!defer){if(k==='meta')claimMySlot(false);save();syncPush();render();
+  if(!defer){if(k==='meta'){claimMySlot(false);if(joinCarry)applyJoinCarry();}save();syncPush();render();
     if(k!=='meta')try{askPuttsOwed();}catch(e){}}   // my row carded from another phone: ask ME my putts
 }
 function onStateDoc(doc){
   Object.entries(doc||{}).forEach(([k,v])=>applyOp(k,v,true));
   claimMySlot(true);
+  if(joinCarry)applyJoinCarry();                   // seated now: my earlier holes land in my row
   save();syncPush();render();
   try{setTimeout(askPuttsOwed,300);}catch(e){}       // rejoined mid-round: anything owed, oldest first
 }
@@ -1460,13 +1461,72 @@ function joinRound(){
   joinRoundCode(code);
 }
 let armJoinSwap=null,armJoinTimer=null;
+// JOINERS KEEP THEIR HOLES. Joining a code mid-round used to END the local
+// round and start blank in the room: NateBall re-typed holes 1–5 at Rancho
+// (9/4) after the relay came back. Now the second tap first snapshots MY
+// scores (my slot only) and, once the room's state doc seats me, drops them
+// into my row wherever the room has nothing for that hole. Nothing of anyone
+// else's is touched; a different course carries nothing.
+let joinCarry=null;
+function myLocalSlot(){
+  const me=myPid();
+  let q=(S.players||[]).findIndex(p=>p&&((me&&p.pid===me)||p.ownerDev===devId()));
+  if(q<0&&S.me&&S.me.name){const nm=S.me.name.trim().toLowerCase();q=(S.players||[]).findIndex(p=>p&&(p.name||'').trim().toLowerCase()===nm);}
+  return q;
+}
+function captureJoinCarry(){
+  try{
+    if(!S.round||!S.round.started||!S.course)return null;
+    const q=myLocalSlot();if(q<0)return null;
+    const holes=[];
+    S.round.holes.forEach((r,i)=>{
+      const g=r.gross&&r.gross[q];if(g==null||!isFinite(+g))return;
+      const stats={};Object.keys(r.stats||{}).forEach(k=>{const a=r.stats[k];if(Array.isArray(a)&&a[q])stats[k]=a[q];});
+      holes.push({i,gross:+g,gts:(r.gts||[])[q]||0,sts:(r.sts||[])[q]||0,cfts:(r.cfts||[])[q]||0,confirmed:!!r.confirmed,stats});
+    });
+    if(!holes.length)return null;
+    const real=(S.players||[]).filter(isRealPl).length;
+    return {courseId:S.course.id,holes,solo:real<=1,at:Date.now(),histBefore:(S.history||[]).map(e=>e.id)};
+  }catch(e){return null;}
+}
+function applyJoinCarry(){
+  const c=joinCarry;if(!c||!S.share||!S.share.on)return;
+  if(Date.now()-c.at>30*60000){joinCarry=null;return;}
+  if(!S.course||S.course.id!==c.courseId){joinCarry=null;setTimeout(()=>shotToast('Different course \u2014 your earlier holes stayed in Past Rounds'),400);return;}
+  const q=(S.players||[]).findIndex(p=>p&&p.ownerDev===devId());
+  if(q<0)return;                                   // not seated yet — a later meta seats me and calls again
+  let n=0;
+  c.holes.forEach(h=>{
+    const r=S.round.holes[h.i];if(!r)return;
+    r.gross=r.gross||[null,null,null,null];r.gts=r.gts||[0,0,0,0];r.sts=r.sts||[0,0,0,0];
+    if(r.gross[q]!=null)return;                    // the room already has my score for this hole
+    r.gross[q]=h.gross;r.gts[q]=h.gts||Date.now();
+    Object.keys(h.stats||{}).forEach(k=>{const a=statArr(r,k);if(!a[q])a[q]=h.stats[k];});
+    if(h.sts)r.sts[q]=Math.max(r.sts[q]||0,h.sts);
+    if(h.confirmed){r.cfts=r.cfts||[0,0,0,0];r.cfts[q]=h.cfts>0?h.cfts:Date.now();}
+    n++;
+  });
+  joinCarry=null;
+  if(!n)return;
+  try{stampChanges();}catch(e){}
+  // the solo stub this join archived is now fully inside the room: a short
+  // solo stub (under 9 holes, no handicap posting) is deleted rather than
+  // left as a phantom round in Past Rounds
+  if(c.solo&&c.histId&&c.holes.length<9&&n===c.holes.length)S.history=(S.history||[]).filter(e=>e.id!==c.histId);
+  save();syncPush();
+  setTimeout(()=>shotToast(`Your ${n} scored hole${n===1?'':'s'} came with you`),400);
+}
 function guardedJoin(code){
   if(S.round.started&&!isReview()&&armJoinSwap!==code){
     armJoinSwap=code;clearTimeout(armJoinTimer);
     armJoinTimer=setTimeout(()=>{armJoinSwap=null;render();},4000);
     render();return false;
   }
-  if(S.round.started&&!isReview())endRound();   // second tap: current round ends first
+  if(S.round.started&&!isReview()){
+    joinCarry=captureJoinCarry();
+    endRound();   // second tap: current round ends first (its scores travel in joinCarry)
+    if(joinCarry){const ids=new Set(joinCarry.histBefore);const stub=(S.history||[]).find(e=>!ids.has(e.id));joinCarry.histId=stub?stub.id:null;}
+  }
   armJoinSwap=null;clearTimeout(armJoinTimer);
   return true;
 }
@@ -1512,6 +1572,21 @@ function leaveShare(){
 }
 // ---- lobby: invitations + nearby-player presence ----
 let lobbySock=null,invites=[],nearby=[],nbShown=[];
+// When the relay path is dead (Pi 9/4: Tailscale dropped overnight, nothing
+// reached the relay for 11 hours) every screen just said "Connecting…" and
+// Nathan and NateBall spent four holes suspecting their phones. Now the first
+// connect attempt starts a clock; after 8 s with no open socket the nearby
+// list, the join screen and Setup say plainly that the RELAY can't be reached,
+// that scoring on this phone still works, and offer a retry.
+let lobbyDownSince=0;
+function relayUp(){return !!((sockOpen&&sock)||(lobbySock&&lobbySock.readyState===1));}
+function relayStatusHTML(scanning){
+  if(relayUp())return scanning;
+  if(lobbyDownSince&&Date.now()-lobbyDownSince>8000)
+    return `<div class="tiny" style="color:var(--amber-bd,#e0a53a)"><b>Can't reach the Battle Tees relay right now.</b> Nearby phones and join codes need it. Scoring on this phone works as usual — sharing catches up the moment it's back.<div><button class="ghost" style="margin-top:8px" onclick="lobbyRetry()">Try again</button></div></div>`;
+  return 'Connecting…';
+}
+function lobbyRetry(){lobbyDownSince=Date.now()-1;lobbyClose();lobbyConnect();render();}
 // Last known location, persisted — presence reuses it so the app never fires
 // a GPS permission prompt on launch. Fresh fixes only on explicit map/search
 // actions (iOS web apps re-prompt daily; ask only when it makes sense).
@@ -2215,7 +2290,9 @@ function addManualPlayer(){
 function lobbyConnect(){
   if((S.share&&S.share.on)||lobbySock)return;
   try{lobbySock=new WebSocket(RELAY);}catch(e){lobbySock=null;setTimeout(lobbyConnect,10000);return;}
-  lobbySock.onopen=()=>{try{lobbySock.send('{"t":"lobby"}');}catch(e){}sendHello();statFlush();registerProfile();loadMarkNotes();};
+  if(!lobbyDownSince)lobbyDownSince=Date.now();
+  setTimeout(()=>{if(!relayUp()&&lobbyDownSince)render();},8500);   // flip "Connecting…" into the plain warning
+  lobbySock.onopen=()=>{const wasDown=!!lobbyDownSince;lobbyDownSince=0;try{lobbySock.send('{"t":"lobby"}');}catch(e){}sendHello();statFlush();registerProfile();loadMarkNotes();if(wasDown)render();};
   lobbySock.onmessage=ev=>{
     let m;try{m=JSON.parse(ev.data);}catch(e){return;}
     if(m.t==='invites'){invites=m.list||[];render();}
@@ -7524,7 +7601,7 @@ function vStart(){
         <button class="ghost ${addMode==='nearby'?'sel':''}" onclick="setAddMode('nearby')">📍 Nearby</button>
         <button class="ghost ${addMode==='lib'?'sel':''}" onclick="setAddMode('lib')">👥 Saved</button>
         <button class="ghost ${addMode==='type'?'sel':''}" onclick="setAddMode('type')">⌨️ Type a name</button></div>
-      ${addMode==='nearby'?`<div class="mt">${nearbyRows||`<div class="tiny">${(lobbySock&&lobbySock.readyState===1)?'Scanning\u2026 anyone nearby with Battle Tees open shows up here.':'Connecting\u2026'}</div>`}
+      ${addMode==='nearby'?`<div class="mt">${nearbyRows||`<div class="tiny">${relayStatusHTML('Scanning\u2026 anyone nearby with Battle Tees open shows up here.')}</div>`}
         <div class="tiny mt">Can't see someone? They can join with the round code once you've started.</div></div>`:''}
       ${addMode==='lib'?`<div class="mt">${libRows||'<div class="tiny">Everyone you\'ve saved is already in.</div>'}</div>`:''}
       ${addMode==='type'?`<div class="grid2 mt">
@@ -7561,7 +7638,7 @@ function vStart(){
       <div class="mb"><b>${esc(inv.course||'Shared round')}</b><div class="tiny">${(inv.players||[]).map(esc).join(' \u00b7 ')}</div></div>
       <button class="big warn" style="margin:0" onclick="joinFromInvite('${esc(inv.code)}')">${armJoinSwap===inv.code?'\u26a0\ufe0f Tap again \u2014 ends current round':'\u26a4 Join this round'}</button></div>`).join('');
     return head('Join a round','Rounds started near you')+`<main>
-    ${rows||`<div class="card"><div class="tiny">${(lobbySock&&lobbySock.readyState===1)?'Looking for rounds near you\u2026 the captain\'s round shows up here once they start it.':'Connecting\u2026'}</div></div>`}
+    ${rows||`<div class="card"><div class="tiny">${relayStatusHTML('Looking for rounds near you\u2026 the captain\'s round shows up here once they start it.')}</div></div>`}
     <div class="card"><h2>Or type the code</h2>
       <div class="row" style="border:none">
         <input type="text" id="joincode" placeholder="ABCDE" maxlength="8" autocapitalize="characters" style="width:46%;text-transform:uppercase;font-family:Rajdhani,sans-serif;font-size:20px;letter-spacing:3px">
@@ -7675,7 +7752,7 @@ function vGate(){
         <button class="ghost ${addMode==='lib'?'sel':''}" onclick="setAddMode('lib')">👥 Saved</button>
         <button class="ghost ${addMode==='type'?'sel':''}" onclick="setAddMode('type')">⌨️ Type a name</button>
       </div>
-      ${addMode==='nearby'?`<div class="mt">${nearbyRows||`<div class="tiny">${(lobbySock&&lobbySock.readyState===1)?'Scanning\u2026 anyone nearby with Battle Tees open shows up here.':'Connecting\u2026'}</div>`}
+      ${addMode==='nearby'?`<div class="mt">${nearbyRows||`<div class="tiny">${relayStatusHTML('Scanning\u2026 anyone nearby with Battle Tees open shows up here.')}</div>`}
         <div class="tiny mt">Can't see someone? Your invite pops up on their phone anyway when you start — or they join with the round code.</div></div>`:''}
       ${addMode==='lib'?`<div class="mt">${libRows||'<div class="tiny">Everyone you\'ve saved is already in the group.</div>'}</div>`:''}
       ${addMode==='type'?`<div class="grid2 mt">
