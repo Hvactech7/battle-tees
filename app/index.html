@@ -406,7 +406,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1788561365';
+const BUILD='1788575663';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -5869,13 +5869,14 @@ function showSplash(h,mine){
     // overlay the live map directly — a full render would rebuild Leaflet mid-splash
     let el=document.getElementById('mapsplash');
     if(!el){el=document.createElement('div');el.id='mapsplash';document.body.appendChild(el);}
-    el.innerHTML=holeSplash();
+    el.innerHTML=holeSplash(true);
   }else render();
 }
 function dismissSplash(){
   const sh=splash?splash.h:null,sMine=!!(splash&&splash.mine);
   splash=null;clearTimeout(splashTimer);
   const ms=document.getElementById('mapsplash');if(ms)ms.remove();
+  try{document.querySelectorAll('#app .splash').forEach(x=>x.remove());}catch(e){}   // never leave a stale copy behind
   // if the hole map is open, walk FORWARD from the hole that just finished to
   // the next open one (never backward to an earlier hole still waiting on
   // someone's confirm) — and ONLY when this phone did the confirming: a splash
@@ -5999,8 +6000,14 @@ function teamWinInfo(h){
     return null;
   }catch(e){return null;}
 }
-function holeSplash(){
+function holeSplash(force){
   if(!splash)return '';
+  // On the map the splash lives in the #mapsplash overlay ONLY. A render() on the
+  // map while the splash was up (the buddy's meta doc lands 100 ms after their
+  // hole doc) used to paint a SECOND copy inside #app; dismissing a remote
+  // splash skips the re-render on purpose, so that copy stayed — full screen,
+  // tap-proof, restart-only (Rancho, 9/4: the first confirmer's phone every hole).
+  if(S.screen==='map'&&!force)return '';
   const h=splash.h,rec=S.round.holes[h];
   if(!rec||!rec.confirmed)return '';
   const G=gamesOn().filter(x=>x!=='scramble'||gamesOn().length===1);
