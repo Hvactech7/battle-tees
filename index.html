@@ -215,6 +215,28 @@ th{color:var(--muted);font-size:11px;letter-spacing:1.5px;text-transform:upperca
 .wolfband .sndbtn{top:auto;bottom:20px;right:20px}
 @media(max-width:560px){.sndbtn{width:36px;height:36px;top:10px;right:10px}
   .wolfband .sndbtn{bottom:12px;right:12px}}
+/* your own wind — four real screens: the dial, then one hand-set wind carried
+   onto holes 3, 4 and 7. The wind stays put; the holes turn under it. */
+.windhead{max-width:780px;margin:0 auto;text-align:center}
+.windhead h2{font-size:clamp(28px,3.9vw,46px);line-height:1.06;margin:10px 0 14px}
+.windhead h2 em{font-style:normal;color:var(--gold)}
+.windhead p{color:var(--muted);font-size:16.5px;max-width:640px;margin:0 auto}
+.windstrip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:28px;margin-top:48px;align-items:start}
+.windstrip .phone{width:100%;max-width:270px;justify-self:center}
+.windstrip .phone:nth-child(odd){transform:rotate(-1.2deg)}
+.windstrip .phone:nth-child(even){transform:rotate(1.2deg)}
+.windstrip .phone:hover{transform:rotate(0) scale(1.02)}
+.windstrip .pcap{font-size:13px;letter-spacing:1.2px;line-height:1.5}
+.windkick{margin:44px auto 0;text-align:center;font-family:var(--disp);font-weight:700;
+  font-size:clamp(20px,2.6vw,30px);letter-spacing:.4px;color:var(--ink)}
+.windkick em{font-style:normal;color:var(--gold)}
+@media(max-width:880px){.windstrip{grid-template-columns:repeat(2,minmax(0,1fr));gap:22px}}
+@media(max-width:560px){
+  /* a swipe strip on phones — four stacked phones is a lot of thumb */
+  .windstrip{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;gap:16px;
+    margin-left:-24px;margin-right:-24px;padding:0 24px 12px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+  .windstrip::-webkit-scrollbar{display:none}
+  .windstrip .phone{flex:0 0 74vw;max-width:none;scroll-snap-align:center;transform:none}}
 </style><script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","name":"Battle Tees Golf App","alternateName":["Battle Tees","BattleTees"],"url":"https://battletees.app/","description":"13 golf betting games plus the Hammer modifier, scored live across every phone in the group."}</script>
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"Battle Tees Golf App","alternateName":["Battle Tees","BattleTees"],"url":"https://battletees.app/","logo":"https://battletees.app/icon-512.png"}</script>
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"ItemList","name":"Golf betting games","itemListElement":[{"@type":"ListItem","position":1,"name":"Wolf","url":"https://battletees.app/rules/wolf/"},{"@type":"ListItem","position":2,"name":"9's","url":"https://battletees.app/rules/nines/"},{"@type":"ListItem","position":3,"name":"Vegas","url":"https://battletees.app/rules/vegas/"},{"@type":"ListItem","position":4,"name":"Stroke","url":"https://battletees.app/rules/stroke/"},{"@type":"ListItem","position":5,"name":"Best Ball","url":"https://battletees.app/rules/best-ball/"},{"@type":"ListItem","position":6,"name":"Scramble","url":"https://battletees.app/rules/scramble/"},{"@type":"ListItem","position":7,"name":"Sixes","url":"https://battletees.app/rules/sixes/"},{"@type":"ListItem","position":8,"name":"Umbrella","url":"https://battletees.app/rules/umbrella/"},{"@type":"ListItem","position":9,"name":"Quota","url":"https://battletees.app/rules/quota/"},{"@type":"ListItem","position":10,"name":"Stableford","url":"https://battletees.app/rules/stableford/"},{"@type":"ListItem","position":11,"name":"Bingo Bango Bongo","url":"https://battletees.app/rules/bingo-bango-bongo/"},{"@type":"ListItem","position":12,"name":"Nassau","url":"https://battletees.app/rules/nassau/"},{"@type":"ListItem","position":13,"name":"Skins","url":"https://battletees.app/rules/skins/"},{"@type":"ListItem","position":14,"name":"Hammer","url":"https://battletees.app/rules/hammer/"}]}</script>
@@ -292,6 +314,29 @@ th{color:var(--muted);font-size:11px;letter-spacing:1.5px;text-transform:upperca
         <div class=cap><i>VEGAS</i> · one of thirteen, all on the same card</div></div>
     </div>
 
+  </div>
+</div>
+
+<div class=stage style="padding:100px 0 90px">
+  <div class=wrap>
+    <div class="windhead rv"><div class=eye>Your own wind</div>
+      <h2>The forecast says 5. <em>Your hat says 15.</em></h2>
+      <p>Hold the arrows, tap where it's blowing, set the speed. Your wind beats the forecast for the rest of the round — and it's a real compass wind, so when the 4th turns back into it, so does the number.</p></div>
+    <div class="windstrip rv">
+      <div class=phone>
+        <img src="/assets/wind-dial.jpg" alt="Battle Tees wind dial on hole 3 at Rancho Solano: a ring of eight direction buttons around the green, the arrow set toward the green, 15 mph on the stepper, with buttons to keep the 5 mph forecast or set your own wind">
+        <div class=pcap><i>YOUR WIND</i> · hold the arrows · tap where it blows</div></div>
+      <div class=phone>
+        <img src="/assets/wind-h3.jpg" alt="Hole 3: three blue wind arrows flying up the hole toward the green, marked 15 mph with a pencil, the sight line reading ~349 yards against a middle of 378">
+        <div class=pcap><i>HOLE 3</i> · helping · 378 plays ~349</div></div>
+      <div class=phone>
+        <img src="/assets/wind-h4.jpg" alt="Hole 4 under the same 15 mph wind: the arrows now fly down the screen at the player, and the sight line reads ~431 yards against a middle of 376">
+        <div class=pcap><i>HOLE 4</i> · same wind, dead into you · 376 plays ~431</div></div>
+      <div class=phone>
+        <img src="/assets/wind-h5.jpg" alt="Hole 5 under the same 15 mph wind: the arrows come diagonally across the hole into the player, and the sight line reads ~211 yards against a middle of 191">
+        <div class=pcap><i>HOLE 5</i> · same wind, quartering in · 191 plays ~211</div></div>
+    </div>
+    <div class="windkick rv">Set it once on the 3rd tee. <em>The holes turn under it.</em></div>
   </div>
 </div>
 
