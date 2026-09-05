@@ -416,7 +416,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1788599404';
+const BUILD='1788646082';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -7162,8 +7162,24 @@ function registerProfile(force){
     const sig=pid+'|'+nm+'|'+em;
     if(!force&&pidSent===sig)return;      // nothing changed since the last one
     pidSent=sig;
-    relayBattle({op:'profile',pid,name:nm,email:em||undefined}).catch(()=>{pidSent='';});
+    relayBattle({op:'profile',pid,name:nm,email:em||undefined}).then(r=>{
+      // the relay may HAND this phone a verified address Nathan set for it on
+      // the Pi (Brian, 9/5) - only when the phone has none. Adopting it turns
+      // backups on with no code step, exactly as if the code had been entered.
+      try{ if(r&&r.ok&&r.email&&r.verified&&!(localStorage.getItem('wolfBackupEmail')||'').trim()) adoptHandedEmail(r.email); }catch(e){}
+    }).catch(()=>{pidSent='';});
   }catch(e){}
+}
+function adoptHandedEmail(email){
+  const e=String(email||'').trim().toLowerCase();
+  if(!/^\S+@\S+\.\S+$/.test(e))return false;
+  localStorage.setItem('wolfBackupEmail',e);
+  localStorage.setItem('btEmailOk',e);
+  if(S.autoBackup===undefined)S.autoBackup=true;
+  pidSent='';
+  try{shotToast(`Backups on for ${e}`);}catch(x){}
+  try{save();}catch(x){}                 // save() runs autoBackupCheck -> first backup in 8 s
+  return true;
 }
 let friendMap=null;           // {pid:{name,friend}} for names in MY library
 function loadFriends(force){
