@@ -220,6 +220,8 @@ th{color:var(--muted);font-size:11px;letter-spacing:1.5px;text-transform:upperca
 .windhead{max-width:780px;margin:0 auto;text-align:center}
 .windhead h2{font-size:clamp(28px,3.9vw,46px);line-height:1.06;margin:10px 0 14px}
 .windhead h2 em{font-style:normal;color:var(--gold)}
+.windhead .windsub{font-family:var(--disp);font-weight:700;font-size:clamp(20px,2.6vw,30px);letter-spacing:.3px;color:var(--ink);margin:-2px 0 18px}
+.windhead .windsub em{font-style:normal;color:var(--gold)}
 .windhead p{color:var(--muted);font-size:16.5px;max-width:640px;margin:0 auto}
 .windstrip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:28px;margin-top:48px;align-items:start}
 .windstrip .phone{width:100%;max-width:270px;justify-self:center}
@@ -320,7 +322,8 @@ th{color:var(--muted);font-size:11px;letter-spacing:1.5px;text-transform:upperca
 <div class=stage style="padding:100px 0 90px">
   <div class=wrap>
     <div class="windhead rv"><div class=eye>Your own wind</div>
-      <h2>The forecast says 5. <em>Your hat says 15.</em></h2>
+      <h2>The forecast says 5mph from the West</h2>
+      <div class=windsub>Things change…<em>so should your distance calculations!</em></div>
       <p>Hold the arrows, tap where it's blowing, set the speed. Your wind beats the forecast for the rest of the round — and it's a real compass wind, so when the 4th turns back into it, so does the number.</p></div>
     <div class="windstrip rv">
       <div class=phone>
