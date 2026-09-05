@@ -411,7 +411,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1788584206';
+const BUILD='1788584369';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -5689,7 +5689,7 @@ function windDialHTML(){
       <b class="num" style="font-size:30px;min-width:120px;text-align:center">${d.mph} mph</b>
       <button class="ghost" style="width:56px;font-size:24px" onclick="windDialMph(1)">+</button></div>
     <div class="row" style="gap:8px;border:none;padding-top:6px">
-      <button class="ghost" style="flex:1" onclick="windDialForecast()">${S.round.windSet?'Back to forecast':'Keep forecast'}${fc?` (${fc.mph<1?'calm':fc.mph+' mph'})`:''}</button>
+      <button class="ghost" style="flex:1" onclick="windDialForecast()">${S.round.windSet?'Revert to forecast':'Keep forecast'}${fc?` (${fc.mph<1?'calm':fc.mph+' mph'})`:''}</button>
       <button class="big" style="flex:1;margin:0" onclick="windDialDone()">Set wind</button></div>
   </div></div>`;
 }
