@@ -406,7 +406,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1788575663';
+const BUILD='1788578761';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1227,6 +1227,7 @@ function syncConnect(){
     sock.send(JSON.stringify({t:'join',room:S.share.code}));
     postRoomInvite();
     syncPush();  // catch-up: anything edited while offline goes out immediately
+    bfReannounce();   // a round the Battlefield never acknowledged goes out now
     render();
   };
   sock.onmessage=ev=>{
@@ -1788,10 +1789,29 @@ function bfBroadcastStart(){
     // the ROUND's start time rides along: the announce can reach the relay
     // long after the first tee (no signal at Paradise Valley until hole 3,
     // 8/18 — 20 minutes lost from the Battlefield clock)
+    // DURABLE ANNOUNCE (Rancho 9/4): the relay was down for the first hour,
+    // the one announce was refused, and _bfSent stayed true — the round never
+    // reached the Battlefield. Now the ACK sets the flag; a refusal leaves it
+    // clear so the next confirm, the next socket open, or the radio coming
+    // back re-announces. The relay ignores repeats and keeps the first clock.
+    const startedAt=S.round.startedAt||null;
+    if(S.round._bfTry&&Date.now()-S.round._bfTry<8000)return;   // one attempt in flight at a time
+    S.round._bfTry=Date.now();
     relayBattle({op:'start',code:S.share.code,
       starter:(S.me&&S.me.name)||'A Friend',starterPid:(S.me&&S.me.pid)||'',
       course:S.course.name,game:gameName(S.round.game),pids,names,
-      startedAt:S.round.startedAt||null}).catch(()=>{});
+      startedAt}).then(r=>{
+        if(!S.round.started||S.round.startedAt!==startedAt)return;   // a different round by now
+        S.round._bfSent=true;S.round._bfTry=0;save();
+      }).catch(()=>{try{if(S.round.started)S.round._bfTry=0;}catch(e){}});
+  }catch(e){}
+}
+// Re-announce whenever a relay socket opens while a real round (2+ holes) has
+// not been acknowledged yet — the reconnect after a dead zone or an outage.
+function bfReannounce(){
+  try{
+    if(!S.round.started||S.round._bfSent||!S.round._bfLive||isReview())return;
+    setTimeout(bfBroadcastStart,400);
   }catch(e){}
 }
 // MUST send on the socket we already hold, synchronously: endRound() calls
@@ -2292,7 +2312,7 @@ function lobbyConnect(){
   try{lobbySock=new WebSocket(RELAY);}catch(e){lobbySock=null;setTimeout(lobbyConnect,10000);return;}
   if(!lobbyDownSince)lobbyDownSince=Date.now();
   setTimeout(()=>{if(!relayUp()&&lobbyDownSince)render();},8500);   // flip "Connecting…" into the plain warning
-  lobbySock.onopen=()=>{const wasDown=!!lobbyDownSince;lobbyDownSince=0;try{lobbySock.send('{"t":"lobby"}');}catch(e){}sendHello();statFlush();registerProfile();loadMarkNotes();if(wasDown)render();};
+  lobbySock.onopen=()=>{const wasDown=!!lobbyDownSince;lobbyDownSince=0;try{lobbySock.send('{"t":"lobby"}');}catch(e){}sendHello();statFlush();registerProfile();loadMarkNotes();bfReannounce();if(wasDown)render();};
   lobbySock.onmessage=ev=>{
     let m;try{m=JSON.parse(ev.data);}catch(e){return;}
     if(m.t==='invites'){invites=m.list||[];render();}
@@ -5426,7 +5446,11 @@ async function initHoleMap(){
     lTaps.forEach(m=>{const d=pt.distanceTo(LMAP.latLngToContainerPoint(m.getLatLng()));if(d<bd){bd=d;best=m;}});
     if(best&&bd<=DOT_HIT_PX)kind='tap';
     const g=aimDot();
-    if(g){const da=pt.distanceTo(LMAP.latLngToContainerPoint(g.getLatLng()));if(da<=DOT_HIT_PX&&da<bd){kind='aim';best=g;}}
+    // the aim dot only takes a touch that a tap spot could also claim when it
+    // has actually been moved (so a tap can snap it home); resting on the green
+    // it yields, and the line crosshair clears with ONE tap (Rancho h11, 9/4)
+    if(g){const da=pt.distanceTo(LMAP.latLngToContainerPoint(g.getLatLng()));
+      if(da<=DOT_HIT_PX&&(kind!=='tap'||(mapMarks.aimC&&da<bd))){kind='aim';best=g;}}
     if(!kind)return;
     const tr=makePressTracker(kind==='aim'?{holdMs:AIM_HOLD_MS,moveTol:DOT_MOVE_TOL,needHold:true}:{moveTol:DOT_MOVE_TOL});
     tr.down({x:pt.x,y:pt.y},Date.now());
@@ -10823,12 +10847,16 @@ function maybeBroadcastRound(){
     // relay ignores every announce after the first (and keeps the first starter).
     const fb=S.share&&S.share.on&&!S.share.creator;
     if(bfScoredHoles()<(fb?BF_MIN_HOLES_FB:BF_MIN_HOLES))return;
-    S.round._bfSent=true;
     // the round is REAL now (two holes carded — the same bar the Battlefield
     // and Past Rounds use): this is what the relay texts Nathan about, not the
-    // tap on Start Round. Captain only, so one text per round.
-    try{stat('round_live',{game:S.round.game,course:S.course.name,holes:S.round.span.count,players:NP(),shared:!!S.share.on,
-      code:(S.share&&S.share.code)||null,thru:bfScoredHoles(),stack:(S.round.games||[]).join('+')});}catch(e){}
+    // tap on Start Round. Captain only, so one text per round. The stat goes
+    // once (it queues on the phone until the relay answers); the announce
+    // repeats until the relay ACKS it (_bfSent is set by the ack, not here).
+    if(!S.round._bfLive){
+      S.round._bfLive=true;
+      try{stat('round_live',{game:S.round.game,course:S.course.name,holes:S.round.span.count,players:NP(),shared:!!S.share.on,
+        code:(S.share&&S.share.code)||null,thru:bfScoredHoles(),stack:(S.round.games||[]).join('+')});}catch(e){}
+    }
     setTimeout(bfBroadcastStart,300);
   }catch(e){}
 }
