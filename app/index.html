@@ -406,7 +406,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1788578761';
+const BUILD='1788580844';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -5588,7 +5588,13 @@ function windLevel(mph){return mph<8?1:mph<15?2:3;}   // arrows: 1 for 0–7, 2 
 function windArrowsSVG(w,mapB,active){
   const mph=w?w.mph:0,lvl=windLevel(mph);
   let ang=0;
-  if(w&&w.dir!=null&&mph>=1){const scr=(((w.dir+180)-(mapB||0))%360+360)%360;ang=(Math.round(scr/45)*45)%360;}
+  // leaflet-rotate's bearing is the NEGATIVE of the compass heading at the top
+  // of the screen (greenUpCamera returns -heading). The wind blows TOWARD
+  // dir+180; on screen that is (dir+180) - headingAtTop = (dir+180) + mapB.
+  // It was written with a minus, which REFLECTED the arrows on every rotated
+  // hole — Rancho h10 (9/4): a westerly drawn straight down while the yardage
+  // correctly played shorter. North-up maps (mapB 0) never showed it.
+  if(w&&w.dir!=null&&mph>=1){const scr=(((w.dir+180)+(mapB||0))%360+360)%360;ang=(Math.round(scr/45)*45)%360;}
   // a SQUARE, arrows inside its inscribed circle: any rotation stays in the box
   const rows={1:[66],2:[54,78],3:[48,66,84]}[lvl];
   const wave=y=>`M14 ${y} C 26 ${y-9}, 38 ${y+9}, 50 ${y} S 68 ${y-8}, 72 ${y}`;
