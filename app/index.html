@@ -168,6 +168,11 @@
   .cheer-rline{font-size:14px;margin-top:3px}
   #windrose{position:fixed;left:max(28px,calc(50vw - 212px));bottom:calc(204px + env(safe-area-inset-bottom));z-index:6;width:84px;height:98px;cursor:pointer;-webkit-tap-highlight-color:transparent;filter:drop-shadow(0 1px 2px rgba(0,0,0,.55))}
   #windrose.on{filter:drop-shadow(0 1px 2px rgba(0,0,0,.55))}
+  .wdial{position:relative;width:164px;height:164px;margin:14px auto 8px;border-radius:50%;border:2px solid var(--line)}
+  .wdial .wdir{position:absolute;width:36px;height:36px;border-radius:50%;border:2px solid var(--green);background:var(--card);color:var(--green);font-size:15px;line-height:1;padding:0;margin:0;display:flex;align-items:center;justify-content:center}
+  .wdial .wdir.on{background:#4fd8ff;border-color:#4fd8ff;color:#06101c}
+  .wdial .wdarrow{position:absolute;left:50%;top:50%;width:56px;height:56px;margin:-28px 0 0 -28px;transition:transform .15s}
+  .wdial .wdgreen{position:absolute;left:50%;top:-11px;transform:translateX(-50%);font-size:15px;line-height:1;background:var(--card);padding:0 3px}
   #holemap.windmode .bt-sight{color:#4fd8ff!important}   /* wind mode: the crosshairs wear the arrows' blue */
   .livechip{display:inline-block;background:var(--elec);color:#eef6ff;font:700 11px Rajdhani,sans-serif;letter-spacing:2px;padding:2px 7px 1px;border-radius:99px;vertical-align:2px;margin:0 2px;animation:livePulse 1.6s ease-in-out infinite}
   .hb-live{border-color:var(--elec)!important;box-shadow:3px 3px 0 var(--elec-dk)!important}
@@ -406,7 +411,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1788580844';
+const BUILD='1788582776';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -3982,7 +3987,7 @@ function vMap(){
         <div style="font-size:10px;font-weight:600;opacity:.85;letter-spacing:.5px">${S.share.bf?'TAP TO INVITE':'JOIN CODE'}</div>
         <div class="num" style="font-size:22px;letter-spacing:3px">${esc(S.share.code)}</div></div>`:''}${gameBadgeHTML()}</div>`)+`
   <div id="holemap"></div>
-  <div id="windrose" onclick="toggleWindMode()" style="display:none"></div>
+  <div id="windrose" onclick="toggleWindMode()" onpointerdown="windRosePD(event)" onpointerup="windRosePU()" onpointercancel="windRosePU()" oncontextmenu="return false" style="display:none"></div>
   ${mapCreditsChipHTML()}
   ${mapStatChipsHTML(hole)}
   <button id="trackbtn" onclick="trackShotTap()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(112px + env(safe-area-inset-bottom));z-index:6;width:120px;height:46px;background:var(--card);border:2px solid ${trackShot&&trackShot.hole===mapHole?'var(--amber-bd)':'var(--green)'};border-radius:12px;color:${trackShot&&trackShot.hole===mapHole?'var(--amber-bd)':'var(--green-mid)'};font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:19px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">${trackShot&&trackShot.hole===mapHole?'Mark It':'Track It'}</button>
@@ -5548,7 +5553,16 @@ async function windFetch(force){
 // only outranks it when it is close enough to be the same air (Nut Tree is
 // 2.5 mi from Cypress Lakes; Travis is 15 mi from Hiddenbrooke — 9/2).
 const WIND_STATION_KM=8;
+// YOUR OWN WIND (Nathan, 9/4): the forecast is a starting point; the golfer on
+// the tee knows what the flag is doing. A wind set by hand lives on the round
+// (S.round.windSet: mph + compass FROM) and beats the forecast until it is
+// cleared, the round ends, or a new round starts.
 function windNow(){
+  try{const m=S.round&&S.round.started&&S.round.windSet;
+    if(WIND_ON&&m&&m.mph!=null&&m.dir!=null)return {mph:+m.mph,dir:+m.dir,gust:null,src:'manual',at:m.at||Date.now(),station:null};}catch(e){}
+  return windForecast();
+}
+function windForecast(){
   const W=S.wx;if(!WIND_ON||!W||W.key!==windKey())return null;
   const now=Date.now();
   const hs=(W.hourly||[]);let h=null;hs.forEach(p=>{if(p.t<=now)h=p;});if(!h&&hs.length&&hs[0].t-now<3*3600000)h=hs[0];
@@ -5607,7 +5621,7 @@ function windArrowsSVG(w,mapB,active){
   const calm=mph<1?'opacity=".55"':'';
   return `<svg viewBox="0 0 96 112" width="84" height="98" style="overflow:visible">
     <g transform="rotate(${ang-90} 48 66)" ${calm}>${edge}${bright}</g>
-    ${w?`<g><rect x="20" y="0" rx="7" ry="7" width="56" height="19" fill="rgba(4,10,22,.88)"/><text x="48" y="14.2" text-anchor="middle" font-family="Rajdhani,Inter,sans-serif" font-weight="700" font-size="14.4" fill="#bff6ff">${mph<1?'calm':mph+' mph'}</text></g>`:''}
+    ${w?`<g><rect x="${w.src==='manual'?12:20}" y="0" rx="7" ry="7" width="${w.src==='manual'?72:56}" height="19" fill="rgba(4,10,22,.88)"/><text x="48" y="14.2" text-anchor="middle" font-family="Rajdhani,Inter,sans-serif" font-weight="700" font-size="14.4" fill="#bff6ff">${mph<1?'calm':mph+' mph'}${w.src==='manual'?' \u270e':''}</text></g>`:''}
   </svg>`;
 }
 function paintWindRose(){
@@ -5629,11 +5643,85 @@ function legLabel(from,to,suffix){
 }
 function windSettingToggle(){set(()=>{S.windHide=!S.windHide;if(S.windHide)windMode=false;});}
 function sightColor(){return windMode?'#4fd8ff':'#ffffff';}
+// ---- your own wind: HOLD the arrows → a dial in the hole's own frame ----------
+// Tap where the wind is blowing TO (green at the top, like the map), set the
+// mph, Set wind. Stored as a compass direction so a later map rotation, or the
+// next hole, keeps it physically right. "Use forecast" clears it.
+let windRoseTr=null,windRoseTimer=null,windRoseHeld=false,windDial=null;
+function windRosePD(e){
+  try{
+    if(S.windHide||!S.round||!S.round.started||coursePreview)return;
+    const tr=makePressTracker({holdMs:AIM_HOLD_MS,moveTol:14,needHold:true});
+    tr.down({x:e.clientX||0,y:e.clientY||0},Date.now());windRoseTr=tr;
+    clearTimeout(windRoseTimer);
+    windRoseTimer=setTimeout(()=>{if(windRoseTr===tr&&tr.tick(Date.now())==='hold'){windRoseHeld=true;try{if(navigator.vibrate)navigator.vibrate(12);}catch(x){}windDialOpen();}},AIM_HOLD_MS);
+  }catch(x){}
+}
+function windRosePU(){clearTimeout(windRoseTimer);windRoseTr=null;}
+function windTopHeading(){let mapB=0;try{mapB=(LMAP&&LMAP.getBearing)?(LMAP.getBearing()||0):0;}catch(e){}return ((-mapB)%360+360)%360;}
+function windDialOpen(){
+  const w=windNow(),U=windTopHeading();
+  let a=null,mph=8;
+  if(w&&w.dir!=null){a=(Math.round(((((w.dir+180)-U)%360+360)%360)/45)*45)%360;mph=w.mph;}
+  windDial={a,mph,U};
+  windDialPaint();
+}
+function windDialPaint(){
+  let el=document.getElementById('winddial');
+  if(!windDial){if(el)el.remove();return;}
+  if(!el){el=document.createElement('div');el.id='winddial';document.body.appendChild(el);}
+  el.innerHTML=windDialHTML();
+}
+function windDialHTML(){
+  const d=windDial;if(!d)return '';
+  const fc=windForecast();
+  const R=64,C=82;
+  const btns=[0,45,90,135,180,225,270,315].map(a=>{
+    const x=C+R*Math.sin(a*Math.PI/180),y=C-R*Math.cos(a*Math.PI/180);
+    return `<button class="wdir${d.a===a?' on':''}" style="left:${(x-18).toFixed(1)}px;top:${(y-18).toFixed(1)}px;transform:rotate(${a}deg)" onclick="windDialDir(${a})" aria-label="blowing toward ${a} degrees on screen">&#9650;</button>`;}).join('');
+  return `<div class="vfWrap" role="dialog" aria-modal="true" onclick="if(event.target===this)windDialClose()"><div class="vfCard" style="width:min(380px,100%)">
+    <h2 class="vfTitle">Your wind</h2>
+    <div class="tiny mb">Tap where it's blowing <b>to</b> — green at the top, like the map. Your wind replaces the forecast for the rest of the round.</div>
+    <div class="wdial"><span class="wdgreen">\u26f3</span>${btns}
+      <svg class="wdarrow" viewBox="0 0 40 40" style="transform:rotate(${d.a==null?0:d.a}deg);opacity:${d.a==null?.25:1}"><path d="M20 34 V10" stroke="#4fd8ff" stroke-width="5" stroke-linecap="round"/><polygon points="9,15 20,3 31,15" fill="#4fd8ff"/></svg></div>
+    <div class="row" style="justify-content:center;gap:16px;border:none;padding:4px 0">
+      <button class="ghost" style="width:56px;font-size:24px" onclick="windDialMph(-1)">&#8722;</button>
+      <b class="num" style="font-size:30px;min-width:120px;text-align:center">${d.mph} mph</b>
+      <button class="ghost" style="width:56px;font-size:24px" onclick="windDialMph(1)">+</button></div>
+    <div class="row" style="gap:8px;border:none;padding-top:6px">
+      <button class="ghost" style="flex:1" onclick="windDialForecast()">${S.round.windSet?'Back to forecast':'Keep forecast'}${fc?` (${fc.mph<1?'calm':fc.mph+' mph'})`:''}</button>
+      <button class="big" style="flex:1;margin:0" onclick="windDialDone()">Set wind</button></div>
+  </div></div>`;
+}
+function windDialDir(a){if(!windDial)return;windDial.a=a;windDialPaint();}
+function windDialMph(dm){if(!windDial)return;windDial.mph=Math.max(0,Math.min(40,windDial.mph+dm));windDialPaint();}
+function windDialClose(){windDial=null;windDialPaint();}
+function windRepaint(){try{paintWindRose();}catch(e){}try{if(mapMarks&&mapMarks.refreshTapLine)mapMarks.refreshTapLine();}catch(e){}try{paintSightMode();}catch(e){}}
+function windDialDone(){
+  const d=windDial;if(!d)return;
+  if(d.a==null){shotToast('Tap a direction first');return;}
+  const blowTo=((d.a+d.U)%360+360)%360, dir=(blowTo+180)%360;   // compass FROM, the way the forecast speaks
+  S.round.windSet={mph:d.mph,dir,at:Date.now()};
+  try{save();}catch(e){}
+  windDial=null;windDialPaint();
+  if(d.mph>=1)windMode=true;
+  windRepaint();
+  shotToast(d.mph>=1?`Your wind: ${d.mph} mph`:'Your wind: calm');
+  try{stat('wind_set',{mph:d.mph,dir});}catch(e){}
+}
+function windDialForecast(){
+  const had=!!(S.round&&S.round.windSet);
+  if(had){delete S.round.windSet;try{save();}catch(e){}}
+  windDial=null;windDialPaint();
+  windRepaint();
+  if(had)shotToast('Back to the forecast');
+}
 function paintSightMode(){try{const m=document.getElementById('holemap');if(m)m.classList.toggle('windmode',!!windMode);if(mapMarks.setSightColor)mapMarks.setSightColor(sightColor());}catch(e){}}
 function toggleWindMode(){
   if(S.windHide)return;
+  if(windRoseHeld){windRoseHeld=false;return;}   // the click after a hold: the dial already opened
   const w=windNow();
-  if(!w||w.mph<1){windMode=false;paintWindRose();shotToast(w?'Calm — nothing to adjust':'No wind data for this course yet');return;}
+  if(!w||w.mph<1){windMode=false;paintWindRose();shotToast(w?'Calm — hold the arrows to set your own wind':'No forecast for this course — hold the arrows to set your own wind');return;}
   windMode=!windMode;
   try{if(mapMarks.refreshTapLine)mapMarks.refreshTapLine();}catch(e){}
   paintSightMode();
