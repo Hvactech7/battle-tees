@@ -168,6 +168,11 @@
   .cheer-rline{font-size:14px;margin-top:3px}
   #windrose{position:fixed;left:max(28px,calc(50vw - 212px));bottom:calc(204px + env(safe-area-inset-bottom));z-index:6;width:84px;height:98px;cursor:pointer;-webkit-tap-highlight-color:transparent;filter:drop-shadow(0 1px 2px rgba(0,0,0,.55))}
   #windrose.on{filter:drop-shadow(0 1px 2px rgba(0,0,0,.55))}
+  details.faq{border-top:1px solid var(--line);padding:2px 0}
+  details.faq summary{cursor:pointer;list-style:none;padding:10px 26px 10px 0;font-weight:600;font-size:16px;position:relative;line-height:1.3}
+  details.faq summary::-webkit-details-marker{display:none}
+  details.faq summary::after{content:'+';position:absolute;right:4px;top:8px;color:var(--ink3);font-weight:700;font-size:18px}
+  details.faq[open] summary::after{content:'\2212'}
   .wdial{position:relative;width:164px;height:164px;margin:14px auto 8px;border-radius:50%;border:2px solid var(--line)}
   .wdial .wdir{position:absolute;width:36px;height:36px;border-radius:50%;border:2px solid var(--green);background:var(--card);color:var(--green);font-size:15px;line-height:1;padding:0;margin:0;display:flex;align-items:center;justify-content:center}
   .wdial .wdir.on{background:#4fd8ff;border-color:#4fd8ff;color:#06101c}
@@ -411,7 +416,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1788584713';
+const BUILD='1788588608';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -6867,6 +6872,98 @@ async function soGo(){
              :'✓ Fresh start on this phone. Your library will save once your email is confirmed.';
   render();
 }
+// ---------- FAQ: how to use Battle Tees (Settings) ----------
+// Every <b>label</b> below is a real button or card name in this file — the faq
+// suite cross-checks them, so the help cannot drift away from the app.
+const FAQ=[
+ ['Getting started',[
+  ['Put Battle Tees on your home screen',
+   'On iPhone tap <b>Share</b>, then <b>Add to Home Screen</b>. On Android open the browser menu and tap <b>Add to Home screen</b> (or Install). Open it from the icon from then on: the browser and the installed app keep separate saves, so set up your profile in the installed one.'],
+  ['Create your profile',
+   'Your name is all that is required; it is how nearby phones add you to a round. Add your handicap index and your email. The email is what your backups and Battlefield mail are tied to.'],
+  ['Back up and move to a new phone',
+   'Your players, courses and round history back up automatically once your email is verified. On a new phone, create the same profile and tap <b>Restore it</b> under <i>Already have a backup?</i>'],
+  ['Get a friend on the app',
+   'Settings › <b>Share Battle Tees</b> shows a QR code they can scan, or tap <b>Send the link instead</b>. Installs from the code and the link are counted separately.'],
+  ['Add a photo',
+   'Go to <b>Players</b>, tap your own name, and use <b>Add Photo</b>. It shows on your rows and on the Battlefield.'],
+ ]],
+ ['Playing a round',[
+  ['Start a round',
+   'From Home choose <b>Just me</b>, <b>Multi-player</b> (you are the captain) or <b>Join an existing round</b>. As captain, add the group with <b>Nearby</b>, <b>Saved</b> or <b>Type a name</b>, then <b>Move on to pick the game</b> and <b>Start Round</b>.'],
+  ['Get everyone into the same round',
+   'Phones with Battle Tees open near you appear under <b>Nearby</b>. Anyone you could not add can <b>Join an existing round</b> from their Home screen and type the round code shown at the top of your screen. Joining mid-round is fine: the holes they already scored come with them.'],
+  ['Pick and stack games',
+   'Choose a game when you set up the round, and stack several in one round: Stroke, Stableford, Quota, Skins, Nassau, Wolf, 9’s, Vegas, Sixes, Umbrella, Bingo Bango Bongo, Best Ball and Scramble. Tap any card under <b>Games &amp; rules</b> on Home to read how a game works.'],
+  ['Score a hole',
+   'Enter scores on the score screen. In a group, each phone confirms its own rows with <b>Confirm my score</b>; the hole closes when everyone has confirmed, and the winner splash pops up on every phone. Tap any hole on the card strip to go back and fix one.'],
+  ['Putts, bunkers, chips and penalties',
+   'Settings › <b>Track extras</b> turns these on for you. With <b>Putts</b> on, a quick 0–4+ prompt appears the moment you confirm a hole; the others add a stepper on the score and GPS screens. Each player turns their own on from their own phone.'],
+  ['No signal on the course',
+   'Keep scoring. Everything you enter is kept on your phone and syncs to the group the moment the signal returns. If the app cannot reach the Battle Tees relay it says so on the Nearby and Join screens; scoring on your phone still works.'],
+  ['End the round',
+   'When the last hole is confirmed the standings settle every game you played. You can also end early from the standings screen. The round lands in <b>Rounds</b> with its card, stats and any challenges you hit.'],
+ ]],
+ ['The GPS map',[
+  ['Read the map',
+   'Open the map from the score screen. The green sits at the top and the map turns as you walk. The numbers at the bottom, <b>F</b>, <b>M</b> and <b>B</b>, are always the real yardages to the front, middle and back of the green from where you stand.'],
+  ['Measure a layup or any spot',
+   'Tap the map to drop a crosshair; each leg of the line shows its yardage. Drag a crosshair to move it, tap it to remove it. A second tap adds a second crosshair; with two placed, a new tap moves the nearer one.'],
+  ['Move the aim point on the green',
+   'The gold dot on the green is your aim point. Hold it still for a moment until it unlocks, then drag it anywhere to measure to that spot. Tap it to snap back to the green centre. A quick brush across it does nothing.'],
+  ['A hole with no map',
+   'You see a gold ring at the card yardage instead of a line. When you are standing on the hole, tap <b>Map this hole</b> to mark the tee and the green in about ten seconds. Your marks are saved with the course.'],
+  ['Track a shot',
+   'On the map tap <b>Track It</b> at your ball, hit, walk to where it finished and tap <b>Mark It</b>. The app measures the shot and asks which club you hit. Build your own club list under Settings › <b>My Bag</b>, including custom clubs and their order.'],
+ ]],
+ ['Wind',[
+  ['What the wind arrows show',
+   'The wavy arrows above <b>FW</b> and <b>GIR</b> are the National Weather Service forecast for the course, turned to fly the way the wind really blows on the hole in view. One arrow is under 8 mph, two up to 14, three above. The speed sits above them.'],
+  ['See wind-adjusted yardages',
+   'Tap the arrows. The sight line turns blue and every number on it becomes the plays-like yardage, marked with ~. Tap again for the real yardages. The F, M and B numbers at the bottom never change.'],
+  ['Set your own wind',
+   'The forecast is a starting point. Hold the arrows for a moment and a dial opens: tap where the wind is blowing to, with the green at the top like the map, set the mph, then <b>Set wind</b>. Your wind stays for the rest of the round and follows you hole to hole as the holes change direction. It is yours alone; other phones keep theirs. <b>Keep forecast</b> leaves the forecast in charge, and once you have set a wind the same button reverts to it.'],
+  ['Hide the wind',
+   'Settings › <b>Wind</b> hides the arrows on this phone.'],
+ ]],
+ ['Stats, handicap and challenges',[
+  ['Fairways, greens and your stats',
+   'Tap <b>FW</b> or <b>GIR</b> on the map or the score screen as you play. <b>Stats</b> on Home shows your scoring, fairways, greens and putting across every round; each past round has its own stats card under <b>Rounds</b>.'],
+  ['Your handicap',
+   'Battle Tees keeps an index from your rounds the way the World Handicap System does: the average of your best 8 of the last 20 score differentials, seeded until you have 20. A nine-hole round counts too. On the Battlefield the index each player started the round with shows as <i>hcp</i> next to their name.'],
+  ['Personal Challenges',
+   'Go to <b>Players</b>, tap your own name and choose <b>Personal Challenges</b>: pars, birdies, putts, fairways, greens or longest drive per round. Battle Tees tracks them every round, and when you beat one the whole group gets the celebration. Your challenge results are kept with the round under <b>Rounds</b>.'],
+ ]],
+ ['The Battlefield and friends',[
+  ['Watch friends play',
+   '<b>Community Battlefield</b> on Home lists your friends’ rounds. When one is on the course right now the button lights up with LIVE on both sides; tap in to watch it hole by hole, scores and tracked shots included. Rounds you have watched stay on this phone.'],
+  ['Announcements and emails',
+   'Settings › <b>Battlefield</b> has two switches: <b>Announce my rounds</b> emails your Battle friends a watch link once your round is two holes in, and <b>Email me when friends play</b> sends you theirs. One email per round, from Battle Tees, never from a personal address.'],
+  ['Who counts as a friend',
+   'Anyone you have shared a round with. Sharing a round links you both, so the more you play together the wider your Battlefield gets.'],
+ ]],
+ ['Settings and your data',[
+  ['Yards or meters',
+   'Settings › <b>Distances</b> switches every yardage in the app to <b>Meters</b> and back.'],
+  ['Keep the screen on',
+   'Settings › <b>Screen</b>: <b>Keep the screen awake</b> holds the display on while the app is in front. iPhones grant this only after you have touched the screen, so it arms on your first tap.'],
+  ['Practice on an unmapped course',
+   'Settings › <b>Course Amnesia</b>: <b>Ignore saved course maps</b> plays a course you have already mapped as if it were your first time, so you can practise mapping a hole. Nothing is deleted.'],
+  ['Start over',
+   'Settings › <b>Start Over</b> wipes this phone’s Battle Tees library and replaces your cloud backup with the empty one. Your name, email and Battlefield archive are kept. It cannot be undone.'],
+  ['Where the course data comes from',
+   'Settings › <b>Data credits</b> lists every source: scorecards from OpenGolfAPI and GolfCourseAPI, hole maps from OpenStreetMap contributors plus players’ own marks, and imagery from Esri and Maxar.'],
+ ]],
+];
+function faqHTML(){
+  let k=0;
+  const groups=FAQ.map(([g,qs])=>`<div class="tiny" style="color:var(--gold,var(--green));font-weight:700;letter-spacing:.4px;margin:12px 0 2px;text-transform:uppercase">${esc(g)}</div>`+
+    qs.map(([q,a])=>{k++;return `<details id="faq-${k}" class="faq"><summary>${esc(q)}</summary><div class="tiny" style="padding:6px 0 10px 2px;line-height:1.4">${a}</div></details>`;}).join('')).join('');
+  return `<div class="card" id="faqcard"><h2>❓ FAQ</h2>
+    <div class="tiny">How to get the most out of Battle Tees. Tap a question.</div>
+    ${groups}
+  </div>`;
+}
 function vSettings(){
   const bf=S.config.bf||{broadcast:true,emails:true};
   const row=(label,sub,key)=>`<div class="row"><div style="flex:1;min-width:0"><b>${label}</b>
@@ -6882,6 +6979,7 @@ function vSettings(){
         <div class="tiny mt">Installs from this code are counted separately from the email one, so we learn where new players actually come from.</div>
         <button class="ghost mt" style="width:100%" onclick="shareAppLink()">Send the link instead</button></div></div>
   </div>
+  ${faqHTML()}
   <div class="card"><h2>⚔️ Battlefield</h2>
     ${row('Announce my rounds','Starting a round emails your Battle Friends a watch link and puts the round on the Community Battlefield.','broadcast')}
     ${row('Email me when friends play','Get the “Battlefield is set” email when someone who has you in their library tees off.','emails')}
