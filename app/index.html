@@ -416,7 +416,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1788738196';
+const BUILD='1788739006';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -8037,6 +8037,14 @@ function wizCount(n){
   try{openGatePick();}catch(e){}          // start the nearby scan the moment the card opens
   addMode='nearby';render();
 }
+function wizPickGroup(id){
+  const g2=(S.groupLib||[]).find(x=>x.id===id);
+  if(!g2)return;
+  loadGroup(id);                                   // me + the members, ids seeded from the library
+  try{if(!S.share.on)shareRound();}catch(e){}      // the room and its invitation, exactly like "Start the group round"
+  wiz.n=Math.min(4,Math.max(2,(S.players||[]).filter(isRealPl).length));
+  wizToGame();
+}
 function wizToGame(){
   try{gatePick.open=false;clearInterval(gatePick.timer);}catch(e){}
   set(()=>syncGroupCounts());
@@ -8115,7 +8123,14 @@ function vStart(){
         <div><b>${esc(e.name)}</b><div class="tiny">Index ${e.index}${e.teeName?` · ${esc(e.teeName)}`:''}</div></div>
         <span class="pill wolf">+ add</span></div>`).join('');
     const want=wiz.n||4, full=nFilled>=want;
+    // SAVED GROUPS BELONG HERE TOO (Apple Mountain 9/6): Nathan walked 18 → multiplayer →
+    // 4 players → this screen, and The Boyz! was not on it — the chips lived only on
+    // the group screen. One tap seats the group, opens the room and sends the invitation.
+    const grpChips=(S.groupLib&&S.groupLib.length&&!S.share.on)?`<div class="card" style="border-color:var(--amber)"><h2 style="color:var(--amber)">👥 Your groups</h2>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">${S.groupLib.map(g2=>`<button class="ghost sel" onclick="wizPickGroup('${g2.id}')">👥 ${esc(g2.name)} <span class="tiny">· ${g2.members.length}</span></button>`).join('')}</div>
+      <div class="tiny mt">Tap one — everyone is seated and the invitation goes to their phones the moment you start.</div></div>`:'';
     return head('Who\'s playing?',`${nFilled} of ${want} — the rest can join with the code`)+`<main>
+    ${grpChips}
     <div class="card">${slotRows}
       ${!full?`<div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
         <button class="ghost ${addMode==='nearby'?'sel':''}" onclick="setAddMode('nearby')">📍 Nearby</button>
