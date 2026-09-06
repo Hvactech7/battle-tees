@@ -416,7 +416,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1788673340';
+const BUILD='1788673548';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -2321,6 +2321,15 @@ function applyLibrary(d){
   let cAdded=0, hAdded=0;
     let added=0,updated=0;
     set(()=>{
+      // tombstones FIRST: a removal recorded in the backup (or on this phone) means
+      // nothing below may add that friend, course or round back. The Pi keeps its
+      // copy as an archive; the tombstone only stops a restore from resurrecting it.
+      if(d.tomb&&typeof d.tomb==='object'){
+        const T=tomb();
+        Object.keys(d.tomb.players||{}).forEach(k=>{if(!S.playerLib.some(x=>tombName(x.name)===k))T.players[k]=Math.max(T.players[k]||0,+d.tomb.players[k]||0);});
+        Object.keys(d.tomb.courses||{}).forEach(k=>{if(!(S.courses||[]).some(x=>x&&x.id===k))T.courses[k]=Math.max(T.courses[k]||0,+d.tomb.courses[k]||0);});
+        Object.keys(d.tomb.rounds||{}).forEach(k=>{if(!(S.history||[]).some(x=>x&&x.id===k))T.rounds[k]=Math.max(T.rounds[k]||0,+d.tomb.rounds[k]||0);});
+      }
       if(d.chal&&typeof d.chal==='object'){
         const C=chalAll();
         // rendering the home card creates every key as {on:false} — 'missing' alone matched nothing (9/5). A challenge you have ON keeps your goal; anything off or absent takes the backup's.
@@ -2338,12 +2347,6 @@ function applyLibrary(d){
         else if(tombHas('players',tombName(e.name))){/* you removed this one — stays removed */}
         else{S.playerLib.push({id:e.id||('pl'+Date.now()+Math.floor(Math.random()*1e4)),name:e.name,index:e.index,teeName:e.teeName,pid:e.pid||undefined});added++;}
       });
-      if(d.tomb&&typeof d.tomb==='object'){
-        const T=tomb();
-        Object.keys(d.tomb.players||{}).forEach(k=>{if(!S.playerLib.some(x=>tombName(x.name)===k))T.players[k]=Math.max(T.players[k]||0,+d.tomb.players[k]||0);});
-        Object.keys(d.tomb.courses||{}).forEach(k=>{if(!(S.courses||[]).some(x=>x&&x.id===k))T.courses[k]=Math.max(T.courses[k]||0,+d.tomb.courses[k]||0);});
-        Object.keys(d.tomb.rounds||{}).forEach(k=>{if(!(S.history||[]).some(x=>x&&x.id===k))T.rounds[k]=Math.max(T.rounds[k]||0,+d.tomb.rounds[k]||0);});
-      }
       if(!S.me.name&&d.me&&d.me.name)S.me=d.me;
       // Restoring YOUR OWN backup restores your identity: the pid friends and the
       // Pi's handicap book know you by. 9/5: a fresh install adopted a stray
