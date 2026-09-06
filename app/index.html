@@ -416,7 +416,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1788672825';
+const BUILD='1788673340';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -941,7 +941,8 @@ function abPayload(){
     // A hand-placed tee is half of every hole a player teaches us; it does not
     // get to be the half that only ever exists on one phone.
     teeFix:S.teeFix||{},
-    chal:S.chal||{},          // Personal Challenges were in NO backup at all (9/5 wipe took Nathan's)
+    chal:S.chal||{},
+    tomb:S.tomb||{},          // Personal Challenges were in NO backup at all (9/5 wipe took Nathan's)
     shotLog:trimShotLog(S.shotLog),shotLast:S.shotLast||{},bag:S.bag||null};
 }
 // ...and the same for a newly placed tee: without this the payload would carry
@@ -2334,8 +2335,15 @@ function applyLibrary(d){
         // restore and the duplicate came straight back. Never overwrite a pid
         // this phone already holds — the local one was confirmed on this device.
         if(ex){ex.index=e.index;if(e.teeName)ex.teeName=e.teeName;if(e.pid&&!ex.pid)ex.pid=e.pid;updated++;}
+        else if(tombHas('players',tombName(e.name))){/* you removed this one — stays removed */}
         else{S.playerLib.push({id:e.id||('pl'+Date.now()+Math.floor(Math.random()*1e4)),name:e.name,index:e.index,teeName:e.teeName,pid:e.pid||undefined});added++;}
       });
+      if(d.tomb&&typeof d.tomb==='object'){
+        const T=tomb();
+        Object.keys(d.tomb.players||{}).forEach(k=>{if(!S.playerLib.some(x=>tombName(x.name)===k))T.players[k]=Math.max(T.players[k]||0,+d.tomb.players[k]||0);});
+        Object.keys(d.tomb.courses||{}).forEach(k=>{if(!(S.courses||[]).some(x=>x&&x.id===k))T.courses[k]=Math.max(T.courses[k]||0,+d.tomb.courses[k]||0);});
+        Object.keys(d.tomb.rounds||{}).forEach(k=>{if(!(S.history||[]).some(x=>x&&x.id===k))T.rounds[k]=Math.max(T.rounds[k]||0,+d.tomb.rounds[k]||0);});
+      }
       if(!S.me.name&&d.me&&d.me.name)S.me=d.me;
       // Restoring YOUR OWN backup restores your identity: the pid friends and the
       // Pi's handicap book know you by. 9/5: a fresh install adopted a stray
@@ -2349,12 +2357,14 @@ function applyLibrary(d){
         const i=S.courses.findIndex(x=>x.id===c.id);
         normalizeNine(c);
         if(i>=0){if(S.courses[i].geo&&!c.geo)c.geo=S.courses[i].geo;S.courses[i]=c;}
+        else if(tombHas('courses',c.id)){/* removed on this phone — stays removed */}
         else{S.courses.push(c);cAdded++;}
       });
       
       let hAdded=0;
       (d.history||[]).forEach(e=>{
         if(!e||!e.id)return;
+        if(tombHas('rounds',e.id))return;
         if(!(S.history||[]).some(x=>x.id===e.id)){(S.history=S.history||[]).push(e);hAdded++;}
       });
       if(hAdded){S.history.sort((a,b)=>(b.endedAt||0)-(a.endedAt||0));S.history=S.history.slice(0,30);}
@@ -2421,7 +2431,7 @@ function savePresencePlayer(j){
   if(!n)return;
   set(()=>{
     let e=S.playerLib.find(x=>x.name.trim().toLowerCase()===n.name.trim().toLowerCase());
-    if(!e){e={id:'pl'+Date.now()+Math.floor(Math.random()*1e4)};S.playerLib.push(e);}
+    if(!e){e={id:'pl'+Date.now()+Math.floor(Math.random()*1e4)};S.playerLib.push(e);tombLift('players',tombName(nm));}
     e.name=n.name;
     e.index=+n.index||10;
     if(n.tee)e.teeName=n.tee;
@@ -7291,6 +7301,15 @@ function registerProfile(force){
     }).catch(()=>{pidSent='';});
   }catch(e){}
 }
+// TOMBSTONES (9/5): a removal is a fact worth keeping. Without one, the relay's
+// merge and any restore quietly brought back every friend, course or round you
+// had deleted (five duplicate friends came back the same night they were cut).
+// Adding the same thing again lifts its tombstone.
+function tomb(){if(!S.tomb||typeof S.tomb!=='object')S.tomb={};['players','courses','rounds'].forEach(k=>{if(!S.tomb[k]||typeof S.tomb[k]!=='object')S.tomb[k]={};});return S.tomb;}
+const tombName=n=>String(n||'').trim().toLowerCase();
+function tombAdd(kind,key){if(!key)return;tomb()[kind][key]=Date.now();}
+function tombLift(kind,key){if(!key)return;delete tomb()[kind][key];}
+function tombHas(kind,key){return !!(key&&tomb()[kind][key]);}
 function adoptPid(oldPid,newPid){
   if(!newPid||oldPid===newPid)return false;
   if(S.me&&S.me.pid===oldPid)S.me.pid=newPid;
@@ -8643,6 +8662,7 @@ async function natUse(id){
     set(()=>{
       const i=S.courses.findIndex(c=>c.id===course.id);
       if(i>=0)S.courses[i]=clone(course);else S.courses.push(clone(course));
+      tombLift('courses',course.id);
       S.course=clone(course);
     });
     finder={status:'idle',choices:[],error:''};
@@ -9259,7 +9279,7 @@ function delHist(id){
   // dropping a round from YOUR library takes it off your friends' Battlefield.
   // It survives for anyone else who played it and still keeps their copy.
   if(e&&e.code&&myPid())relayBattle({op:'forget',code:e.code,pid:myPid()}).catch(()=>{});
-  set(()=>{S.history=S.history.filter(x=>x.id!==id);});
+  set(()=>{tombAdd('rounds',id);S.history=S.history.filter(x=>x.id!==id);});
 }
 function pickCourse(i){set(()=>{
   syncLib();
@@ -9276,6 +9296,7 @@ function delCourse(i){
   armDelCourse=-1;
   set(()=>{
     const wasActive=S.courses[i].id===S.course.id;
+    tombAdd('courses',S.courses[i].id);
     S.courses.splice(i,1);
     if(!S.courses.length)S.courses=builtinCourses();
     if(wasActive){
@@ -10217,7 +10238,7 @@ function upsertLib(p){
   let e=p.libId?S.playerLib.find(x=>x.id===p.libId):null;
   if(!e&&p.pid){e=S.playerLib.find(x=>x.pid===p.pid);if(e)p.libId=e.id;}
   if(!e){e=S.playerLib.find(x=>x.name.trim().toLowerCase()===nm.toLowerCase());if(e)p.libId=e.id;}
-  if(!e){e={id:'pl'+Date.now()+Math.floor(Math.random()*1e4)};S.playerLib.push(e);p.libId=e.id;}
+  if(!e){e={id:'pl'+Date.now()+Math.floor(Math.random()*1e4)};S.playerLib.push(e);p.libId=e.id;tombLift('players',tombName(p.name));}
   if(!(/\s\d+$/.test(nm)&&nm.replace(/\s\d+$/,'')===e.name))e.name=nm;
   e.index=p.index;
   const _t=teeOf(p);
@@ -10263,6 +10284,7 @@ function delPlayer(libId){
   }
   armDelPlayer=null;
   set(()=>{
+    (S.playerLib.filter(x=>x.id===libId)).forEach(x=>tombAdd('players',tombName(x.name)));
     S.playerLib=S.playerLib.filter(x=>x.id!==libId);
     S.players.forEach(p=>{if(p.libId===libId)delete p.libId;});
   });
