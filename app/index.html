@@ -416,7 +416,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1788646082';
+const BUILD='1788662255';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -476,7 +476,7 @@ function courseWildhorse(){return {id:"wildhorse",name:"Wildhorse GC",loc:[38.56
   teeSets:[{id:"wh-red",name:"Red",rating:72.8,slope:134},{id:"wh-black",name:"Black",rating:70,slope:128},{id:"wh-blue",name:"Blue",rating:68.4,slope:123},{id:"wh-blue-white-c",name:"Blue/White Combo",rating:67.1,slope:117},{id:"wh-white",name:"White",rating:65.8,slope:110},{id:"wh-white-gold-c",name:"White/Gold Combo",rating:64.2,slope:107},{id:"wh-gold",name:"Gold",rating:62.7,slope:101},{id:"wh-black-w",name:"Black (W)",rating:76,slope:141}],
   holes:[{par:4,si:9},{par:4,si:15},{par:4,si:1},{par:3,si:7},{par:5,si:3},{par:3,si:17},{par:5,si:11},{par:4,si:5},{par:4,si:13},
          {par:4,si:18},{par:4,si:16},{par:3,si:10},{par:5,si:8},{par:3,si:14},{par:4,si:4},{par:4,si:12},{par:5,si:6},{par:4,si:2}]};}
-function courseWildWings(){return {id:"wild-wings",name:"Wild Wings GC",loc:[38.6789,-121.875],
+function courseWildWings(){return {id:"wild-wings",name:"Wild Wings GC",loc:[38.6736,-121.8839],
   teeSets:[{id:"ww-blue",name:"Blue",rating:69.4,slope:125},{id:"ww-blue-white",name:"Blue/White",rating:68.2,slope:121},{id:"ww-white",name:"White",rating:67,slope:116},{id:"ww-gold",name:"Gold",rating:64.6,slope:110},{id:"ww-green",name:"Green",rating:59.6,slope:96},{id:"ww-blue-w",name:"Blue (W)",rating:75.4,slope:130},{id:"ww-blue-white-w",name:"Blue/White (W)",rating:74,slope:127},{id:"ww-white-w",name:"WHITE (W)",rating:72.6,slope:124}],
   holes:[{par:4,si:11},{par:3,si:17},{par:4,si:7},{par:5,si:1},{par:4,si:3},{par:5,si:9},{par:3,si:13},{par:5,si:5},{par:3,si:15},
          {par:4,si:12},{par:3,si:18},{par:4,si:8},{par:5,si:2},{par:4,si:4},{par:5,si:10},{par:3,si:14},{par:5,si:6},{par:3,si:16}]};}
@@ -806,6 +806,17 @@ function load(){
         const c=s.courses.find(x=>x.id===fc.id);
         if(c&&!c.loc)c.loc=fc.loc;
         if(s.course.id===fc.id&&!s.course.loc)s.course.loc=fc.loc;
+      });
+      // Wild Wings (Woodland) is a NINE-hole course; v1 of its hosted map was the
+      // 18 hole lines of the Yolo Fliers Club next door (OSM tags that private
+      // course with Wild Wings' name), and its loc sat on that course too. Nate's
+      // 9/5 round opened on a 533-yard 'hole 1' half a mile from where he stood.
+      // A cached map is kept forever, so drop any copy that isn't the 9-hole file
+      // and move the pin — the next map open refetches v2.
+      [...s.courses,s.course].forEach(c=>{
+        if(!c||c.id!=='wild-wings')return;
+        c.loc=[38.6736,-121.8839];
+        if(c.geo&&!(c.geo.holes&&Object.keys(c.geo.holes).length===9))delete c.geo;
       });
       // hand-made lookalikes of builtins (created before the builtin shipped) shadow
       // them in the list and miss hosted geo — drop any non-builtin whose normalized
@@ -4132,7 +4143,7 @@ function splinePath(path){
 // Courses with hand-reviewed geodata hosted on battletees.app (OSM lines and
 // greens, Nathan's traces where OSM was thin — Golfbert was dropped 7/24 and
 // canceled 9/3; nothing here comes from it). Fetched once, cached like OSM.
-const HOSTED_GEO={'rancho-solano':'/geo/rancho-solano.json?v=4','lake-chabot':'/geo/lake-chabot.json?v=1','paradise-valley':'/geo/paradise-valley.json?v=1','teal-bend':'/geo/teal-bend.json?v=1','hiddenbrooke':'/geo/hiddenbrooke.json?v=1','green-valley':'/geo/green-valley.json?v=1','silverado-north':'/geo/silverado-north.json?v=1','davis':'/geo/davis.json?v=1','el-macero':'/geo/el-macero.json?v=1','wildhorse':'/geo/wildhorse.json?v=1','wild-wings':'/geo/wild-wings.json?v=1','diablo-creek':'/geo/diablo-creek.json?v=1','bartley-cavanaugh':'/geo/bartley-cavanaugh.json?v=1','yocha-dehe':'/geo/yocha-dehe.json?v=1','franklin-canyon':'/geo/franklin-canyon.json?v=1','boundary-oak':'/geo/boundary-oak.json?v=1','cypress-lakes':'/geo/cypress-lakes.json?v=1','stonetree':'/geo/stonetree.json?v=2','tilden-park':'/geo/tilden-park.json?v=2','valley-hi':'/geo/valley-hi.json?v=2'};
+const HOSTED_GEO={'rancho-solano':'/geo/rancho-solano.json?v=4','lake-chabot':'/geo/lake-chabot.json?v=1','paradise-valley':'/geo/paradise-valley.json?v=1','teal-bend':'/geo/teal-bend.json?v=1','hiddenbrooke':'/geo/hiddenbrooke.json?v=1','green-valley':'/geo/green-valley.json?v=1','silverado-north':'/geo/silverado-north.json?v=1','davis':'/geo/davis.json?v=1','el-macero':'/geo/el-macero.json?v=1','wildhorse':'/geo/wildhorse.json?v=1','wild-wings':'/geo/wild-wings.json?v=2','diablo-creek':'/geo/diablo-creek.json?v=1','bartley-cavanaugh':'/geo/bartley-cavanaugh.json?v=1','yocha-dehe':'/geo/yocha-dehe.json?v=1','franklin-canyon':'/geo/franklin-canyon.json?v=1','boundary-oak':'/geo/boundary-oak.json?v=1','cypress-lakes':'/geo/cypress-lakes.json?v=1','stonetree':'/geo/stonetree.json?v=2','tilden-park':'/geo/tilden-park.json?v=2','valley-hi':'/geo/valley-hi.json?v=2'};
 // ---------- offline tile pack ----------
 // Pre-downloads the satellite tiles for every hole view into the SW's bt-tiles
 // cache, so each hole opens instantly even with no signal on the course.
