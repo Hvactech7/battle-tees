@@ -416,7 +416,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1788679243';
+const BUILD='1788683483';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1479,7 +1479,13 @@ function postRoomInvite(){
     if(typeof sockOpen!=='undefined'&&sockOpen&&sock)
       sock.send(JSON.stringify({t:'invite',room:S.share.code,
         info:{course:S.course.name,players:S.players.map(p=>p.name),group:S.config.groupName||'',ts:Date.now(),
-          near:(S.share.near&&S.share.near.lat!=null)?S.share.near:null}}));
+          near:(S.share.near&&S.share.near.lat!=null)?S.share.near:null,
+          // TARGETED (9/6): the people ON THIS CARD get the invitation wherever
+          // they stand — no GPS fix, a stale fix from home, the parking lot.
+          // The fence still gates everyone else. Names are matched to verified
+          // profiles on the relay; addresses never travel.
+          to:{pids:S.players.filter(p=>p&&p.pid&&p.pid!==(S.me&&S.me.pid)).map(p=>p.pid),
+              names:S.players.filter(p=>p&&isRealPl(p)&&(p.name||'').trim().toLowerCase()!==(S.me&&S.me.name||'').trim().toLowerCase()).map(p=>p.name.trim())}}}));
   }catch(e){}
 }
 // A SOLO round is one tap from a group. Its Battlefield room already has a code
@@ -1861,7 +1867,7 @@ function bfBroadcastStart(){
       S.share={on:true,code:makeCode(),creator:true,bf:true};   // bf: broadcast-only, no lobby invite
       S.shareMetaTs=Date.now();
       S.round.holes.forEach(r=>{if(!r._ts)r._ts=Date.now();});
-      save();syncConnect();
+      save();try{sendHello();}catch(e){}syncConnect();
     }
     // THE ROUND'S roster, not the whole library. Sending the library made the
     // relay treat every saved player as "on the tee with you" — so they were
@@ -10558,10 +10564,28 @@ function dismissInvite(code){dismissedInvites.add(code);render();}
 // An invite to a round THIS phone already played and ended is dead on arrival —
 // it is the one round it cannot possibly need to join. Belt for the relay's
 // braces: if the uninvite broadcast was missed, the card still never shows.
+// THE PHONE DECIDES WHAT IT CAN SEE (9/6). The relay used to filter fenced
+// invitations by the position it had for this phone — which it only has after
+// a named hello with a GPS fix. A group member whose phone had not announced
+// itself yet, or had no fix, never saw "Accept round invitation". Now every
+// live invitation arrives and this phone keeps it if: it is on the card (name
+// or id), or the invitation is unfenced, or its own fix is inside the fence.
+function inviteForMe(i){
+  try{
+    const to=i.to||{}; const me=(S.me&&S.me.name||'').trim().toLowerCase();
+    if(S.me&&S.me.pid&&(to.pids||[]).includes(S.me.pid))return true;
+    if(me&&(to.names||[]).some(n=>String(n).trim().toLowerCase()===me))return true;
+    const near=i.near; if(!near||near.lat==null)return true;
+    if(!myCoords||!isFinite(myCoords[0]))return false;
+    return kmBetween(+near.lat,+near.lon,+myCoords[0],+myCoords[1])<=(+near.km||1.5);
+  }catch(e){return false;}
+}
 function liveInvites(){
   const mine=new Set((S.history||[]).map(e=>e&&e.code).filter(Boolean));
   const cur=(S.share&&S.share.on&&S.share.code)||null;
-  return (invites||[]).filter(i=>!dismissedInvites.has(i.code)&&!(mine.has(i.code)&&i.code!==cur));
+  // newest first: a round that never sent its end can sit on the relay for its
+  // 6-hour TTL, and the card on top must be the one the group just opened
+  return (invites||[]).filter(i=>inviteForMe(i)&&!dismissedInvites.has(i.code)&&!(mine.has(i.code)&&i.code!==cur)).sort((a,b)=>(b.ts||0)-(a.ts||0));
 }
 function setAddMode(m){addMode=addMode===m?null:m;if(addMode==='nearby'&&!gatePick.open)openGatePick();render();}
 function isRealPl(p){return p&&p.name&&!/^Player \d$/.test(p.name);}
