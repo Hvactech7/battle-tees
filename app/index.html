@@ -416,7 +416,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1788669542';
+const BUILD='1788671801';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -729,10 +729,33 @@ try{
     try{save();}catch(e){}
   }
 }catch(e){}
+// 9/5 WIPE: a migration below referenced a const declared 3,500 lines later,
+// threw inside this try, and the catch handed every phone a fresh install —
+// which the next save() wrote over the real library. Rules now:
+//   * a parse failure QUARANTINES the raw text (never overwritten, recoverable)
+//   * a migration failure returns the parsed state as-is — never a fresh one
+let loadFailure='';
 function load(){
+  let s=null;
   try{
     const raw=localStorage.getItem(LS_KEY);
-    if(raw){const s=JSON.parse(raw); if(s&&s.course&&s.players&&s.round){
+    if(raw){
+      try{s=JSON.parse(raw);}
+      catch(pe){
+        loadFailure='parse: '+pe.message;
+        try{if(!localStorage.getItem(LS_KEY+'.quarantine'))localStorage.setItem(LS_KEY+'.quarantine',raw);}catch(qe){}
+        s=null;
+      }
+    }
+  }catch(e){loadFailure='read: '+e.message;}
+  if(s&&s.course&&s.players&&s.round){
+    try{return migrateState(s);}
+    catch(me){loadFailure='migrate: '+me.message;return s;}   // the library beats a clean migration, every time
+  }
+  return freshState();
+}
+function migrateState(s){
+    {
       if(!s.config._v){s.config._v=2;s.config.carryTies=false;}
       if(!s.config.track)s.config.track={bunker:false,chips:false,pen:false};
       // track flags moved config -> player. Seed each player from the old shared
@@ -887,8 +910,9 @@ function load(){
         });
       }
       return s;
-    }}
-  }catch(e){}
+    }
+}
+function freshState(){
   return {screen:'home',course:defaultCourse(),courses:builtinCourses(),playerLib:[],groupLib:[],teamLib:[],config:defaultConfig(),players:defaultPlayers(),round:blankRound(),share:{on:false,code:null},me:{name:'',index:10},theme:'dark',history:[],autoBackup:true,units:'yd'};
 }
 function syncLib(){
@@ -917,6 +941,7 @@ function abPayload(){
     // A hand-placed tee is half of every hole a player teaches us; it does not
     // get to be the half that only ever exists on one phone.
     teeFix:S.teeFix||{},
+    chal:S.chal||{},          // Personal Challenges were in NO backup at all (9/5 wipe took Nathan's)
     shotLog:trimShotLog(S.shotLog),shotLast:S.shotLast||{},bag:S.bag||null};
 }
 // ...and the same for a newly placed tee: without this the payload would carry
@@ -935,21 +960,49 @@ function emailVerified(){
   const em=(localStorage.getItem('wolfBackupEmail')||'').trim().toLowerCase();
   return !!em && (localStorage.getItem('btEmailOk')||'').trim().toLowerCase()===em;
 }
+// 9/5: every phone had gone silent since 8/23 without a trace. The old check
+// fired only after 8 quiet seconds with the relay up, and a missed window was
+// never retried until the NEXT change. Now: a pending change can wait at most
+// 45 s however busy the app is, failures retry with backoff, launch/foreground/
+// reconnect re-check, and every skip or failure is a stat the Pi can see.
+let abFirstPending=0,abRetryTimer=null,abRetryMs=30000,abSkipSaid='';
+function abFingerprint(){const d=abPayload();return JSON.stringify([d.me,d.playerLib,d.courses,d.history.map(h=>h.id),d.groups,d.teams,shotFp(),teeFixFp()]);}
 function autoBackupCheck(){
-  if(!S.autoBackup)return;
+  let why='';
   const em=(localStorage.getItem('wolfBackupEmail')||'').trim();
-  if(!em||!S.playerLib.length)return;   // never auto-save an empty library over a good backup
-  if(!emailVerified())return;           // nothing is saved until the address is confirmed
-  const data=abPayload();
-  const fp=JSON.stringify([data.me,data.playerLib,data.courses,data.history.map(h=>h.id),data.groups,data.teams,shotFp(),teeFixFp()]);
-  if(fp===abFp)return;
+  if(!S.autoBackup)why='off';
+  else if(!em)why='no-email';
+  else if(!S.playerLib.length)why='empty-library';   // never auto-save an empty library over a good backup
+  else if(!emailVerified())why='unverified';          // nothing is saved until the address is confirmed
+  if(why){
+    if(abSkipSaid!==why){abSkipSaid=why;try{stat('backup_skip',{why});}catch(e){}}
+    return;
+  }
+  let fp;try{fp=abFingerprint();}catch(e){try{stat('backup_fail',{why:'fingerprint: '+e.message});}catch(x){}return;}
+  if(fp===abFp){abFirstPending=0;return;}
+  const now=Date.now();
+  if(!abFirstPending)abFirstPending=now;
   clearTimeout(abTimer);
-  abTimer=setTimeout(async()=>{
-    try{
-      const r=await relayBackup({op:'save',email:em,data:abPayload(),quiet:true});
-      if(r&&r.ok){abStamp(fp);if(S.screen==='players'||S.screen==='courses')render();}
-    }catch(e){}
-  },8000);
+  const wait=(now-abFirstPending>45000)?0:8000;   // busy app: at most 45 s from the first pending change
+  abTimer=setTimeout(()=>abSend(em),wait);
+}
+async function abSend(em){
+  clearTimeout(abRetryTimer);abRetryTimer=null;
+  try{
+    const data=abPayload();
+    const fp=abFingerprint();
+    const r=await relayBackup({op:'save',email:em,data,quiet:true});
+    if(r&&r.ok){
+      abStamp(fp);abFirstPending=0;abRetryMs=30000;
+      try{stat('backup_ok',{rounds:(data.history||[]).length,players:(data.playerLib||[]).length});}catch(e){}
+      if(S.screen==='players'||S.screen==='courses')render();
+      return;
+    }
+    try{stat('backup_fail',{why:(r&&r.error)||'refused'});}catch(e){}
+    if(r&&r.needVerify)return;   // a stale verified flag: no point retrying until the address is confirmed again
+  }catch(e){try{stat('backup_fail',{why:e&&e.message||'error'});}catch(x){}}
+  abRetryTimer=setTimeout(()=>{abRetryTimer=null;autoBackupCheck();},abRetryMs);
+  abRetryMs=Math.min(abRetryMs*2,300000);
 }
 function toggleAutoBackup(){set(()=>{S.autoBackup=!S.autoBackup;});}
 function agoTxt(ts){
@@ -1346,7 +1399,7 @@ function justResumed(){return Date.now()-cameBackAt<800;}
 document.addEventListener('visibilitychange',()=>{
   if(document.hidden){wakeLock=null;return;}   // the OS already released it
   cameBackAt=Date.now();
-  wakeOn();autoEndStaleRound();kickSync();statFlush();
+  wakeOn();autoEndStaleRound();kickSync();statFlush();try{autoBackupCheck();}catch(e){}
 });
 wakeOn();
 // In a shared round, each phone claims the player slot matching its profile
@@ -1999,7 +2052,7 @@ async function backupNow(){
   try{
     syncLib();
     const r=await relayBackup({op:'save',email:em,data:abPayload(),quiet:true});
-    if(r&&r.ok){const d=abPayload();abStamp(JSON.stringify([d.me,d.playerLib,d.courses,d.history.map(h=>h.id),d.groups,d.teams]));return true;}
+    if(r&&r.ok){abStamp(abFingerprint());abFirstPending=0;return true;}
   }catch(e){}
   return false;
 }
@@ -2267,6 +2320,11 @@ function applyLibrary(d){
   let cAdded=0, hAdded=0;
     let added=0,updated=0;
     set(()=>{
+      if(d.chal&&typeof d.chal==='object'){
+        const C=chalAll();
+        Object.keys(d.chal).forEach(key=>{ if(CHAL_DEF(key)&&!C[key]&&d.chal[key]&&typeof d.chal[key]==='object')C[key]={on:!!d.chal[key].on,val:+d.chal[key].val||CHAL_DEF(key)[7]}; });
+      }
+
       (d.playerLib||[]).forEach(e=>{
         if(!e||!e.name)return;
         const ex=S.playerLib.find(x=>x.name.trim().toLowerCase()===String(e.name).trim().toLowerCase());
@@ -2292,7 +2350,7 @@ function applyLibrary(d){
         if(!e||!e.id)return;
         if(!(S.history||[]).some(x=>x.id===e.id)){(S.history=S.history||[]).push(e);hAdded++;}
       });
-      if(hAdded){S.history.sort((a,b)=>(b.endedAt||0)-(a.endedAt||0));S.history=S.history.slice(0,12);}
+      if(hAdded){S.history.sort((a,b)=>(b.endedAt||0)-(a.endedAt||0));S.history=S.history.slice(0,30);}
       // tee corrections — merge per course+hole; a value already on this phone
       // wins, because it was placed by someone standing on that tee
       if(d.teeFix){
@@ -2391,7 +2449,7 @@ function lobbyConnect(){
   try{lobbySock=new WebSocket(RELAY);}catch(e){lobbySock=null;setTimeout(lobbyConnect,10000);return;}
   if(!lobbyDownSince)lobbyDownSince=Date.now();
   setTimeout(()=>{if(!relayUp()&&lobbyDownSince)render();},8500);   // flip "Connecting…" into the plain warning
-  lobbySock.onopen=()=>{const wasDown=!!lobbyDownSince;lobbyDownSince=0;try{lobbySock.send('{"t":"lobby"}');}catch(e){}sendHello();statFlush();registerProfile();loadMarkNotes();bfReannounce();if(wasDown)render();};
+  lobbySock.onopen=()=>{const wasDown=!!lobbyDownSince;lobbyDownSince=0;try{lobbySock.send('{"t":"lobby"}');}catch(e){}sendHello();statFlush();try{autoBackupCheck();}catch(e){}registerProfile();loadMarkNotes();bfReannounce();if(wasDown)render();};
   lobbySock.onmessage=ev=>{
     let m;try{m=JSON.parse(ev.data);}catch(e){return;}
     if(m.t==='invites'){invites=m.list||[];render();}
@@ -8967,7 +9025,7 @@ function archiveRound(){
   S.history=(S.history||[]).filter(e=>e.id!==entry.id);
   S.history.unshift(entry);
   histSort();
-  S.history=S.history.slice(0,12);
+  S.history=S.history.slice(0,30);
   hcpAfterArchive(entry);   // the round now speaks for everyone's handicap
   try{setTimeout(()=>hcpSync(true),1500);}catch(e){}
 }
@@ -12606,7 +12664,9 @@ applyTheme();
 healUnfinishedRound();   // rescue a round stranded between _finished and archive
 try{if(S.round&&S.round.started&&!isReview())shellRound('started',shellRoundInfo());}catch(e){}   // relaunch mid-round: the shell's round service comes back
 autoEndStaleRound();
-setTimeout(refreshStaleGeo,4000);   // corrected map files reach phones that cached the old ones
+setTimeout(refreshStaleGeo,4000);
+setTimeout(()=>{try{autoBackupCheck();}catch(e){}},6000);   // a change that never got backed up (missed window, closed app) goes on the next launch
+if(loadFailure){try{stat('js_error',{msg:'load: '+loadFailure,line:0,screen:'boot',hole:0});}catch(e){}}   // corrected map files reach phones that cached the old ones
 // A cold relaunch on the GPS screen — iOS killed the app while you were in
 // another one and brought it back from scratch (Paradise Valley 8/18, twice) —
 // came back on HOLE 1: mapHole lives in memory, not in S, and the map read it
