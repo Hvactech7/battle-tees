@@ -416,7 +416,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1788672108';
+const BUILD='1788672825';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -2337,6 +2337,12 @@ function applyLibrary(d){
         else{S.playerLib.push({id:e.id||('pl'+Date.now()+Math.floor(Math.random()*1e4)),name:e.name,index:e.index,teeName:e.teeName,pid:e.pid||undefined});added++;}
       });
       if(!S.me.name&&d.me&&d.me.name)S.me=d.me;
+      // Restoring YOUR OWN backup restores your identity: the pid friends and the
+      // Pi's handicap book know you by. 9/5: a fresh install adopted a stray
+      // pid from another device's copy and showed that book's index (11.7, not 13.7).
+      else if(d.me&&d.me.pid&&S.me&&(S.me.name||'').trim().toLowerCase()===String(d.me.name||'').trim().toLowerCase()&&S.me.pid!==d.me.pid){
+        S.me.pid=d.me.pid; if(typeof d.me.index==='number')S.me.index=d.me.index;
+      }
       let cAdded=0;
       (d.courses||[]).forEach(c=>{
         if(!c||!c.id||!c.holes)return;
@@ -7279,8 +7285,22 @@ function registerProfile(force){
       // the Pi (Brian, 9/5) - only when the phone has none. Adopting it turns
       // backups on with no code step, exactly as if the code had been entered.
       try{ if(r&&r.ok&&r.email&&r.verified&&!(localStorage.getItem('wolfBackupEmail')||'').trim()) adoptHandedEmail(r.email); }catch(e){}
+      // ONE GOLFER, ONE ID (9/5): the relay retired this pid and handed back the
+      // real one — switch to it everywhere this phone keeps it, then re-announce.
+      try{ if(r&&r.ok&&r.adopt&&r.pid&&r.retired===pid&&r.pid!==pid) adoptPid(pid,r.pid); }catch(e){}
     }).catch(()=>{pidSent='';});
   }catch(e){}
+}
+function adoptPid(oldPid,newPid){
+  if(!newPid||oldPid===newPid)return false;
+  if(S.me&&S.me.pid===oldPid)S.me.pid=newPid;
+  (S.playerLib||[]).forEach(e=>{if(e&&e.pid===oldPid)e.pid=newPid;});
+  (S.players||[]).forEach(p=>{if(p&&p.pid===oldPid)p.pid=newPid;});
+  pidSent='';
+  try{save();}catch(e){}
+  try{setTimeout(()=>hcpSync(true),500);}catch(e){}
+  try{stat('pid_adopt',{});}catch(e){}
+  return true;
 }
 function adoptHandedEmail(email){
   const e=String(email||'').trim().toLowerCase();
