@@ -416,7 +416,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1788683483';
+const BUILD='1788683954';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -8606,15 +8606,9 @@ function backupBlockHTML(){
             <button class="ghost sel" style="flex:1" onclick="doBackup()">Back up now</button>
             <button class="ghost" onclick="closeBackup()">Close</button></div>`
         :backupUI.stage===0
-          ?`<div class="tiny mt" style="opacity:.8">Already have a sign-in link? Paste the whole thing here &mdash; this is the one that works once the app is on your home screen.</div>
-            <input id="bkLink" class="mt" type="text" inputmode="url" autocapitalize="off" placeholder="https://battletees.app/app/?k=..." style="margin-top:6px">
-            <button class="ghost sel mt" style="width:100%" onclick="pasteRestore()">Restore from link</button>
-            <div class="tiny mt" style="text-align:center;opacity:.6">or</div>
-            <div class="mt" style="display:flex;gap:6px">
-              <button class="ghost" style="flex:1" onclick="requestRestoreLink()">Email me a link</button>
-              <button class="ghost" onclick="closeBackup()">Close</button></div>
-            <div class="tiny mt" style="text-align:center;opacity:.75">
-              <span onclick="requestRestoreCode()" style="text-decoration:underline;cursor:pointer">Send a 6-digit code instead</span></div>`
+          ?`<div class="mt" style="display:flex;gap:6px">
+              <button class="ghost sel" style="flex:1" onclick="requestRestoreCode()">Email me a 6-digit code</button>
+              <button class="ghost" onclick="closeBackup()">Close</button></div>`
           :`<input id="bkCode" class="mt" type="text" inputmode="numeric" placeholder="6-digit code" maxlength="6" style="letter-spacing:5px;font-family:Rajdhani,sans-serif;font-size:20px;margin-top:8px">
             <div class="mt" style="display:flex;gap:6px">
               <button class="ghost sel" style="flex:1" onclick="doRestore()">Restore library</button>
