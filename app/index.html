@@ -416,7 +416,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1788673548';
+const BUILD='1788679243';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1116,13 +1116,14 @@ function stampChanges(){
     const c=contentKey(k);
     if(localContent[k]===c)return;
     localContent[k]=c;
-    if(k==='meta')S.shareMetaTs=Date.now();
+    if(k==='meta'){if(S.share.awaitDoc&&!S.share.creator)return;S.shareMetaTs=Date.now();}   // a joiner's own stamp must wait for the room's doc
     else S.round.holes[+k.slice(1)]._ts=Date.now();
   });
 }
 function syncPush(){
   if(!S.share||!S.share.on||!sockOpen||applyingRemote)return;
   SYNC_KEYS.forEach(k=>{
+    if(k==='meta'&&S.share.awaitDoc&&!S.share.creator)return;   // the room's doc first, always
     const c=contentKey(k);
     if(sentCache[k]===c)return;
     sentCache[k]=c;
@@ -1289,6 +1290,7 @@ function applyOp(k,v,defer){
 }
 function onStateDoc(doc){
   Object.entries(doc||{}).forEach(([k,v])=>applyOp(k,v,true));
+  if(S.share)delete S.share.awaitDoc;   // seated on the real round now — meta may flow
   claimMySlot(true);
   if(joinCarry)applyJoinCarry();                   // seated now: my earlier holes land in my row
   save();syncPush();render();
@@ -1438,6 +1440,7 @@ function claimMySlot(steal){
     let free=-1;
     for(let i=0;i<4;i++)if(!taken(i)&&!scored(i)){free=i;break;}
     if(free>=0){
+      if(!S.players[free])S.players[free]={name:'Player '+(free+1),index:10,chOverride:null};   // a short roster (sim 9/6) must not throw the joiner off the round
       const p=S.players[free];
       p.name=S.me.name.trim();p.index=S.me.index!=null?+S.me.index:p.index;
       if(S.me.pid)p.pid=S.me.pid;
@@ -1618,7 +1621,7 @@ function joinFromInvite(code){if(!guardedJoin(code))return;joinRoundCode(code);}
 function joinRoundCode(code){
   lobbyClose();
   stat('round_share',{side:'joiner'});
-  S.share={on:true,code,creator:false};
+  S.share={on:true,code,creator:false,awaitDoc:true};   // no meta leaves this phone until the room's doc has landed (9/6 sim: a joiner's stale meta flipped the whole group to its old course, started:false)
   S.round.myStartedAt=Date.now();
   S.shareMetaTs=0;
   S.round.holes.forEach(r=>{r._ts=0;});
