@@ -416,7 +416,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1788683954';
+const BUILD='1788738196';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -844,6 +844,19 @@ function migrateState(s){
         c.tier='card';
         if(c.geo&&!c.geo.none)delete c.geo;
       });
+      // 9/6 library repair: my own pid filed under another name (Justin's phone
+      // held "NateBall" = his own pid after the Apple Mountain roster race), and
+      // any pid that sits on two names — the second copy loses it.
+      try{
+        const mep=s.me&&s.me.pid, men=(s.me&&s.me.name||'').trim().toLowerCase(); const seenPid={};
+        (s.playerLib||[]).forEach(e=>{
+          if(!e||!e.pid)return;
+          const n=(e.name||'').trim().toLowerCase();
+          if(mep&&e.pid===mep&&n!==men){delete e.pid;return;}
+          if(seenPid[e.pid]&&seenPid[e.pid]!==n){delete e.pid;return;}
+          seenPid[e.pid]=n;
+        });
+      }catch(e){}
       [...s.courses,s.course].forEach(c=>{
         if(!c||c.id!=='wild-wings')return;
         c.loc=[38.6736,-121.8839];
@@ -1413,6 +1426,16 @@ function claimMySlot(steal){
   let changed=false;
   // If any row already carries my pid, the NAME plays no part — a renamed
   // player must never be re-seated by an old name still on some other row.
+  // REPAIR (9/6): my pid sitting on a row that is NOT my name while a row with my
+  // name exists — a reorder/merge race moved a name off its identity. Put my pid
+  // back on my name and strip it from the impostor row before anything matches.
+  try{
+    if(S.me.pid){
+      const wrong=S.players.find(p=>p&&p.pid===S.me.pid&&(p.name||'').trim().toLowerCase()!==me);
+      const right=S.players.find(p=>p&&(p.name||'').trim().toLowerCase()===me);
+      if(wrong&&right&&wrong!==right){delete wrong.pid;if(wrong.ownerDev===devId())delete wrong.ownerDev;right.pid=S.me.pid;changed=true;}
+    }
+  }catch(e){}
   const pidSeated=!!(S.me.pid&&S.players.some(p=>p&&p.pid===S.me.pid));
   S.players.forEach(p=>{
     const pidMatch=!!(S.me.pid&&p.pid===S.me.pid);
@@ -10241,11 +10264,13 @@ function upsertLib(p){
   if(!S.playerLib)return;
   const nm=(p.name||'').trim();
   if(!nm||/^Player \d$/.test(nm))return;
+  if(p.pid&&S.me&&S.me.pid&&p.pid===S.me.pid&&nm.toLowerCase()!==(S.me.name||'').trim().toLowerCase()){p=Object.assign({},p);delete p.pid;}   // my own pid belongs to my name only (9/6)
   let e=p.libId?S.playerLib.find(x=>x.id===p.libId):null;
   if(!e&&p.pid){e=S.playerLib.find(x=>x.pid===p.pid);if(e)p.libId=e.id;}
   if(!e){e=S.playerLib.find(x=>x.name.trim().toLowerCase()===nm.toLowerCase());if(e)p.libId=e.id;}
   if(!e){e={id:'pl'+Date.now()+Math.floor(Math.random()*1e4)};S.playerLib.push(e);p.libId=e.id;tombLift('players',tombName(p.name));}
   if(!(/\s\d+$/.test(nm)&&nm.replace(/\s\d+$/,'')===e.name))e.name=nm;
+  if(e.pid&&S.me&&S.me.pid&&e.pid===S.me.pid&&nm.toLowerCase()!==(S.me.name||'').trim().toLowerCase())delete e.pid;   // an entry already filed under another name with my pid loses it (9/6)
   e.index=p.index;
   const _t=teeOf(p);
   e.teeName=_t.name;
@@ -10436,7 +10461,12 @@ function loadGroup(id){
     list.slice(0,4).forEach((m,i)=>{
       const pl=S.players[i];if(!pl)return;
       if(i===0&&mine)return;                       // my row stays my profile
-      pl.name=m.name;pl.index=m.index;pl.chOverride=null;delete pl.nearby;delete pl.ownerDev;
+      // IDENTITY TRAVELS WITH THE NAME, never with the slot (Apple Mountain 9/6:
+      // the row named NateBall carried Justin's pid, so Nate's phone claimed a
+      // row that was Justin's and the handicap book credited Justin with Nate's
+      // 112). Clear every identity field, then seed the pid from the library.
+      pl.name=m.name;pl.index=m.index;pl.chOverride=null;delete pl.nearby;delete pl.ownerDev;delete pl.pid;delete pl.libId;
+      try{const lib=(S.playerLib||[]).find(x=>x&&x.pid&&(x.name||'').trim().toLowerCase()===m.name.trim().toLowerCase());if(lib)pl.pid=lib.pid;}catch(e){}
       if(m.tee&&S.course.teeSets.some(t=>t.id===m.tee))pl.tee=m.tee;
       pl.scorer=devId();                            // I add them; their phones claim on join
       upsertLib(Object.assign({},pl));
