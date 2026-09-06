@@ -416,7 +416,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1788671801';
+const BUILD='1788672108';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -2322,7 +2322,8 @@ function applyLibrary(d){
     set(()=>{
       if(d.chal&&typeof d.chal==='object'){
         const C=chalAll();
-        Object.keys(d.chal).forEach(key=>{ if(CHAL_DEF(key)&&!C[key]&&d.chal[key]&&typeof d.chal[key]==='object')C[key]={on:!!d.chal[key].on,val:+d.chal[key].val||CHAL_DEF(key)[7]}; });
+        // rendering the home card creates every key as {on:false} — 'missing' alone matched nothing (9/5). A challenge you have ON keeps your goal; anything off or absent takes the backup's.
+        Object.keys(d.chal).forEach(key=>{ const b=d.chal[key]; if(CHAL_DEF(key)&&b&&typeof b==='object'&&b.on&&!(C[key]&&C[key].on))C[key]={on:true,val:+b.val||CHAL_DEF(key)[7]}; });
       }
 
       (d.playerLib||[]).forEach(e=>{
