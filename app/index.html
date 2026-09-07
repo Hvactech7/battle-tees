@@ -416,7 +416,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1788749144';
+const BUILD='1788750401';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -4132,6 +4132,7 @@ function mapConfirm(){
   // stray tap can never card a hole you had not looked at.
   if(!mapScoreArmed()){showMapConfirm();return;}
   const h=mapHole;
+  if(wolfPickGate(h,mapConfirm))return;
   let closed=false;
   if(greensIsMode())greensConsumeTarget();
   // The lock no longer waits for this. Placing the green IS the confirmation —
@@ -10969,18 +10970,12 @@ function vHole(){
   }).join('');
   let body='';
   if(!rec.mode){
-    // pick phase — one tap decides
-    const order=[1,2,3].map(k=>(rec.wolfAt+k)%4);
-    body=`<div class="card">
-      <button class="big warn" onclick="pickBlind()">Blind lone wolf — before drives (${S.config.pts.blindWin} pts)</button>
-      <button class="big" onclick="pickLone()">Lone wolf — no partner (${S.config.pts.loneWin} pts)</button>
-      <div class="tiny center mt mb">…or after the drives, tap the wolf's pick:</div>
-      ${order.map(i=>`<div class="pickcard active" onclick="pickTake(${i})">
-          <div><b>${esc(names[i])}</b>
-            <div class="tiny">${dots(i)>0?`<span class="dots">${'●'.repeat(dots(i))}</span> gets ${dots(i)===2?'2 strokes':'a stroke'} here`:'no stroke here'}</div></div>
-          <span class="pill wolf">take</span>
-        </div>`).join('')}
-    </div>${reorderHTML()}`;
+    // pick phase — one tap decides, and ONLY on the wolf's phone (Nathan, 9/6:
+    // the buttons were live on every phone; a partner's tap picked for the wolf)
+    body=(wolfPickMine(h)?`<div class="card">${wolfPickButtonsHTML(h)}</div>`
+      :`<div class="card center"><div style="font-size:17px"><b>${esc(names[rec.wolfAt])}</b> is the Wolf — waiting for the pick.</div>
+        <div class="tiny mt">Blind, lone, or a partner: it's ${esc((names[rec.wolfAt]||'').split(' ')[0])}'s call on ${esc((names[rec.wolfAt]||'').split(' ')[0])}'s phone. Scores confirm once it's in.</div></div>`)
+      +reorderHTML();
   }else{
     // score phase
     const modeLbl=rec.mode==='blind'?'Blind lone wolf':rec.mode==='lone'?'Lone wolf':'';
@@ -11037,7 +11032,7 @@ function vHole(){
     <div class="wolfcard">
       <div style="flex:1;min-width:0"><b>${esc(names[rec.wolfAt??wolf])} is the Wolf</b>
       <div class="tiny">hits first · ${dots(rec.wolfAt??wolf)>0?`<span class="dots">${'●'.repeat(dots(rec.wolfAt??wolf))}</span> gets ${dots(rec.wolfAt??wolf)===2?'2 strokes':'a stroke'} here`:'no stroke here'}${h>=16&&S.config.last2LastPlace?' · last place picks up the wolf here':''}</div>
-      ${rec.mode&&!isReview()?`<button class="ghost" style="margin-top:7px;padding:5px 14px" onclick="redoPick()">Redo pick</button>`:''}</div>
+      ${rec.mode&&!isReview()&&wolfPickMine(h)?`<button class="ghost" style="margin-top:7px;padding:5px 14px" onclick="redoPick()">Redo pick</button>`:''}</div>
       <img class="wolf-art" src="${art('/wolf.png')}" alt="" onerror="this.style.display='none'"></div>
     ${carryNote}
     ${body}
@@ -11054,11 +11049,82 @@ function howlSound(){
     howlAudio.play();
   }catch(e){}
 }
-function pickBlind(){set(()=>{const r=S.round.holes[S.round.cur];r.mode='blind';prefill(r);});}
-function pickTake(i){set(()=>{const r=S.round.holes[S.round.cur];r.mode='partner';r.partner=i;prefill(r);});}
-function pickLone(){set(()=>{const r=S.round.holes[S.round.cur];r.mode='lone';prefill(r);});}
-function prefill(r){const par=S.course.holes[S.round.cur].par;if(!r.gts)r.gts=[0,0,0,0];r.gross=r.gross.map((g,i)=>{if(g==null){r.gts[i]=r.gts[i]||1;return par;}return g;});}
-function redoPick(){set(()=>{const r=S.round.holes[S.round.cur];r.mode=null;r.partner=null;});}
+function pickBlind(){wolfSetPick(S.round.cur,'blind',null);}
+function pickTake(i){wolfSetPick(S.round.cur,'partner',i);}
+function pickLone(){wolfSetPick(S.round.cur,'lone',null);}
+function wolfSetPick(h,mode,partner){
+  if(!wolfPickMine(h))return;
+  set(()=>{const r=S.round.holes[h];if(r.wolfAt==null)r.wolfAt=wolfOf(h);r.mode=mode;r.partner=mode==='partner'?partner:null;prefillAt(h,r);});
+}
+function wolfOf(h){const r=S.round.holes[h];if(r&&r.wolfAt!=null)return r.wolfAt;try{return computeAll().perHole[h].wolf;}catch(e){return 0;}}
+// May THIS phone make the wolf's pick on hole h? The wolf's own phone, the
+// phone that scores the wolf (an offline row), or any phone when nothing is
+// shared. A partner's phone never picks for the wolf (Apple Mountain, 9/6).
+function wolfPickMine(h){
+  if(isReview())return true;
+  if(!S.share||!S.share.on)return true;
+  const lk=rowLock(h,wolfOf(h));
+  return lk===''||lk==='mine'||lk==='ended';
+}
+function wolfPickButtonsHTML(h,fromAsk){
+  const rec=S.round.holes[h],w=wolfOf(h),names=S.players.map(p=>p.name);
+  const dots=i=>dotsOn(i,h);
+  const order=[1,2,3].map(k=>(w+k)%4);
+  const call=fromAsk?(m,i)=>`wolfPickAnswer('${m}',${i==null?'null':i})`:(m,i)=>m==='blind'?'pickBlind()':m==='lone'?'pickLone()':`pickTake(${i})`;
+  return `<button class="big warn" onclick="${call('blind')}">Blind lone wolf — before drives (${S.config.pts.blindWin} pts)</button>
+      <button class="big" onclick="${call('lone')}">Lone wolf — no partner (${S.config.pts.loneWin} pts)</button>
+      <div class="tiny center mt mb">…or after the drives, tap the wolf's pick:</div>
+      ${order.map(i=>`<div class="pickcard active" onclick="${call('partner',i)}">
+          <div><b>${esc(names[i])}</b>
+            <div class="tiny">${dots(i)>0?`<span class="dots">${'●'.repeat(dots(i))}</span> gets ${dots(i)===2?'2 strokes':'a stroke'} here`:'no stroke here'}</div></div>
+          <span class="pill wolf">take</span>
+        </div>`).join('')}`;
+}
+// THE PICK COMES BEFORE THE SCORE. Every confirm path (score screen, the map's
+// Score button) stops here while the wolf's pick is open: the wolf's phone gets
+// the pick buttons and the confirm goes through the moment one is tapped;
+// any other phone is told whose call it is. Painted straight into the DOM so
+// the map (which never re-renders) shows it too.
+let wolfAsk=null;   // {h,then}
+function wolfPickOpen(h){
+  try{
+    if(!S.round.started||isReview())return false;
+    if(gameOn()!=='wolf')return false;   // only the wolf hole screen has a pick phase
+    const r=S.round.holes[h];return !!(r&&!r.confirmed&&!r.mode);
+  }catch(e){return false;}
+}
+function wolfPickGate(h,then){
+  if(!wolfPickOpen(h))return false;
+  wolfAsk={h,then:then||null};
+  paintWolfAsk();
+  return true;
+}
+function wolfAskSheetHTML(){
+  if(!wolfAsk)return '';
+  const h=wolfAsk.h,w=wolfOf(h),nm=(S.players[w]||{}).name||'The wolf',first=nm.split(' ')[0];
+  const mine=wolfPickMine(h);
+  return `<div class="vfWrap" role="dialog" aria-modal="true"><div class="vfCard" style="max-width:430px">
+    <h2 class="vfTitle">🐺 Wolf pick first</h2>
+    <div class="tiny mb">Hole ${h+1} · <b>${esc(nm)}</b> is the Wolf${mine?' — make the pick, then your score confirms.':' and hasn\'t picked yet. Your score confirms once the pick is in — it\'s on '+esc(first)+'\'s phone.'}</div>
+    ${mine?wolfPickButtonsHTML(h,true):''}
+    <button class="ghost mt" style="width:100%" onclick="wolfAskClose()">${mine?'Not yet':'OK'}</button>
+  </div></div>`;
+}
+function paintWolfAsk(){
+  let el=document.getElementById('wolfask');
+  if(!el){el=document.createElement('div');el.id='wolfask';document.body.appendChild(el);}
+  el.innerHTML=wolfAskSheetHTML();
+}
+function wolfAskClose(){wolfAsk=null;const el=document.getElementById('wolfask');if(el)el.innerHTML='';}
+function wolfPickAnswer(mode,i){
+  const a=wolfAsk;if(!a)return;
+  wolfAskClose();
+  wolfSetPick(a.h,mode,i);
+  if(a.then)setTimeout(a.then,0);
+}
+function prefill(r){prefillAt(S.round.cur,r);}
+function prefillAt(h,r){const par=S.course.holes[h].par;if(!r.gts)r.gts=[0,0,0,0];r.gross=r.gross.map((g,i)=>{if(g==null){r.gts[i]=r.gts[i]||1;return par;}return g;});}
+function redoPick(){if(!wolfPickMine(S.round.cur))return;set(()=>{const r=S.round.holes[S.round.cur];r.mode=null;r.partner=null;});}
 // ---- staged scores ----------------------------------------------------------
 // A score is not real until CONFIRM. The steppers used to write gross[] and
 // broadcast on every press, so the group watched each other dial 4->5->6 and
@@ -11513,7 +11579,7 @@ function maybeBroadcastRound(){
     setTimeout(bfBroadcastStart,300);
   }catch(e){}
 }
-function confirmHole(){const h=S.round.cur;if(greensIsMode())greensConsumeTarget();set(()=>{commitStage(h,actIdx());S.round.holes[h].confirmed=true;if(!isReview())advanceToNext();});maybeBroadcastRound();askPutts(h,()=>showSplash(h,true));try{setTimeout(()=>chalCheerCheck(false),900);}catch(e){}}
+function confirmHole(){const h=S.round.cur;if(wolfPickGate(h,confirmHole))return;if(greensIsMode())greensConsumeTarget();set(()=>{commitStage(h,actIdx());S.round.holes[h].confirmed=true;if(!isReview())advanceToNext();});maybeBroadcastRound();askPutts(h,()=>showSplash(h,true));try{setTimeout(()=>chalCheerCheck(false),900);}catch(e){}}
 // ----- shared rounds: each phone confirms its own rows, then moves on -----
 function myRows(h){
   // A row is mine to confirm if nobody owns it, my phone owns it, OR I have
@@ -11531,6 +11597,7 @@ function myRows(h){
 function cfOn(rec,i){return !!(rec&&rec.cfts&&rec.cfts[i]>0);}
 function confirmMine(){
   const h=S.round.cur;
+  if(wolfPickGate(h,confirmMine))return;
   let closed=false;
   set(()=>{
     const rec=S.round.holes[h];
