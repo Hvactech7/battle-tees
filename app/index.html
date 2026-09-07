@@ -416,7 +416,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1788739903';
+const BUILD='1788741895';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -7605,7 +7605,12 @@ function openBfWatch(code){
 function bfPoll(){
   if(!bfWatch||S.screen!=='bfwatch'){clearInterval(bfTimer);bfTimer=null;return;}
   const finished=bfDocFinal(bfWatch.entry&&bfWatch.entry.endedAt,bfWatch.doc,bfWatch.docAt);
-  if(finished){clearInterval(bfTimer);bfTimer=null;return;}   // archive is final — stop polling
+  // A final archive stops the 20-second polling, but opening it still peeks ONCE:
+  // Apple Mountain 9/6 — the copy cached at the moment the round ended carried a
+  // phone's reset roster ("NateBall / Player 2 / 3 / 4") over four real players'
+  // scores, and "final" meant this phone would have kept it forever.
+  if(finished&&bfWatch._peeked){clearInterval(bfTimer);bfTimer=null;return;}
+  bfWatch._peeked=true;
   relayBattle({op:'peek',code:bfWatch.code}).then(r=>{
     if(!bfWatch)return;
     if(r&&r.doc&&r.doc.meta){
@@ -7645,7 +7650,8 @@ function withDoc(doc,fn){
   S.players=players;
   S.config=Object.assign({},S.config,meta.config||{});
   S.round=Object.assign(blankRound(),{started:true,game:(meta.games&&meta.games[0])||(meta.config&&meta.config.game)||'stroke',
-    games:meta.games||null,span:meta.span||{count:18,start:0},startedAt:meta.startedAt||0,holes});
+    games:meta.games||null,span:meta.span||{count:18,start:0},startedAt:meta.startedAt||0,holes,
+    dollarPerPt:meta.dollarPerPt||0,rates:meta.rates||{}});
   try{return fn();}finally{
     S.course=keep.course;S.players=keep.players;S.config=keep.config;S.round=keep.round;
   }
@@ -7709,6 +7715,12 @@ function vBfWatch(){
         <h2>Scorecard · ${L==='net'?'net':'gross'}${is9?'':' <span class="tiny" style="font-weight:400">— swipe for the back nine</span>'}</h2>
         ${sc}</div>`;
     }
+    let holeCard='';
+    try{
+      const allG=computeGame();
+      const rows=holeHistoryRowsHTML(allG,L,false);
+      if(rows)holeCard=`<div class="card"><h2>${gameName(gameOn())} · hole by hole</h2>${rows}</div>`;
+    }catch(err){}
     return topbar(esc(e.starter||'Battle'),`${esc(course.name)} · ${games.map(g=>gameName(g)).join(' + ')}`,'bfield')+`<main>
     ${scCard}
     <div class="card" style="padding:10px 14px"><div class="row" style="border-top:none">
@@ -7726,6 +7738,7 @@ function vBfWatch(){
     ${roundStatsCardHTML(act,S.round.holes,course,meta.shots,S.players,'Round stats')}
     ${wolfBits.length?`<div class="card"><h2>🐺 Lone wolves</h2><div class="tiny">${wolfBits.join('<br>')}</div></div>`:''}
     ${ctps.length?`<div class="card"><h2>🎯 Closest to the pin</h2><div class="tiny">${ctps.join('<br>')}</div></div>`:''}
+    ${holeCard}
     ${shotsCard}
     </main>`;
   });
@@ -12238,6 +12251,39 @@ function teamPickerRow(g){
   wrap('computeStroke','stroke');wrap('computeStableford','stableford');
   wrap('computeMatch','bestball');
 })();
+// Hole-by-hole results for the primary game (who was Wolf, lone/blind, who won
+// the hole, 9's shares, Vegas numbers). Shared by Standings/Past Rounds (tap to
+// edit) and the Battlefield (read-only) — Nathan, 9/6: the Wolf results were
+// only in Past Rounds.
+function holeHistoryRowsHTML(all,prim,clickable){
+  if(all==null||!all.perHole)return '';
+  return S.round.holes.map((r,h)=>{
+    if(!r.confirmed)return '';
+    const info=all.perHole[h];
+    if(!info)return '';               // confirmed hole outside the current span
+    const res=info.results[prim];
+    if(gameOn()==='nines'){
+      if(!res)return '';
+      const parts=actIdx().sort((a,b)=>res.share[b]-res.share[a]).map(i=>`${esc(S.players[i].name)} ${fmtPts(res.share[i])}`).join(' · ');
+      return `<div class="row" ${clickable?`onclick="jumpAndGo(${h})" style="cursor:pointer"`:``}>
+        <span><b class="num">${h+1}</b>${res.blitz?' ⚡':''}</span>
+        <span class="muted" style="text-align:right">${parts}</span></div>`;
+    }
+    if(gameOn()==='vegas'){
+      if(!res)return '';
+      const T=info.teams;
+      const out=res.winner==null?'push':`${esc(S.players[T[res.winner][0]].name)}/${esc(S.players[T[res.winner][1]].name)} +${res.diff}`;
+      return `<div class="row" ${clickable?`onclick="jumpAndGo(${h})" style="cursor:pointer"`:``}>
+        <span><b class="num">${h+1}</b> · <span class="num">${res.nums[0]} v ${res.nums[1]}</span>${res.flips.some(Boolean)?' 🔄':''}</span>
+        <span class="muted">${out}</span></div>`;
+    }
+    const modeLbl=r.mode==='blind'?'blind lone':r.mode==='lone'?'lone':r.partner!=null?`+ ${esc(S.players[r.partner].name)}`:'';
+    let out=res?(res.tie?'pushed':`${res.wolfWon?'wolf side':'field'} +${res.per*res.mult}`):'';
+    return `<div class="row" ${clickable?`onclick="jumpAndGo(${h})" style="cursor:pointer"`:``}>
+      <span><b class="num">${h+1}</b> · 🐺 ${r.wolfAt!=null?esc(S.players[r.wolfAt].name):'—'} ${modeLbl}</span>
+      <span class="muted">${out}${S.course.holes[h].par===3&&r.ctp!=null&&r.ctp>=0?` · CTP ${esc(S.players[r.ctp].name)}`:''}</span></div>`;
+  }).join('');
+}
 function vStandings(){
   const g=S.round.game||S.config.game||'wolf';
   stView=null;                 // no bench view any more; kept so resets stay valid
@@ -12448,32 +12494,7 @@ function vStandings(){
   // In a review, the way OUT sits above everything — the hole screens carry
   // this banner and Standings stranded you without it.
   const tables=reviewBanner()+gamePickCardHTML()+stackOrder.map(x=>cardFor(x)).join('');
-  const hist=(all==null||!all.perHole)?'':S.round.holes.map((r,h)=>{
-    if(!r.confirmed)return '';
-    const info=all.perHole[h];
-    if(!info)return '';               // confirmed hole outside the current span
-    const res=info.results[prim];
-    if(gameOn()==='nines'){
-      if(!res)return '';
-      const parts=actIdx().sort((a,b)=>res.share[b]-res.share[a]).map(i=>`${esc(S.players[i].name)} ${fmtPts(res.share[i])}`).join(' · ');
-      return `<div class="row" onclick="jumpAndGo(${h})" style="cursor:pointer">
-        <span><b class="num">${h+1}</b>${res.blitz?' ⚡':''}</span>
-        <span class="muted" style="text-align:right">${parts}</span></div>`;
-    }
-    if(gameOn()==='vegas'){
-      if(!res)return '';
-      const T=info.teams;
-      const out=res.winner==null?'push':`${esc(S.players[T[res.winner][0]].name)}/${esc(S.players[T[res.winner][1]].name)} +${res.diff}`;
-      return `<div class="row" onclick="jumpAndGo(${h})" style="cursor:pointer">
-        <span><b class="num">${h+1}</b> · <span class="num">${res.nums[0]} v ${res.nums[1]}</span>${res.flips.some(Boolean)?' 🔄':''}</span>
-        <span class="muted">${out}</span></div>`;
-    }
-    const modeLbl=r.mode==='blind'?'blind lone':r.mode==='lone'?'lone':r.partner!=null?`+ ${esc(S.players[r.partner].name)}`:'';
-    let out=res?(res.tie?'pushed':`${res.wolfWon?'wolf side':'field'} +${res.per*res.mult}`):'';
-    return `<div class="row" onclick="jumpAndGo(${h})" style="cursor:pointer">
-      <span><b class="num">${h+1}</b> · 🐺 ${r.wolfAt!=null?esc(S.players[r.wolfAt].name):'—'} ${modeLbl}</span>
-      <span class="muted">${out}${S.course.holes[h].par===3&&r.ctp!=null&&r.ctp>=0?` · CTP ${esc(S.players[r.ctp].name)}`:''}</span></div>`;
-  }).join('');
+  const hist=holeHistoryRowsHTML(all,prim,true);
   // Columns are the union of what anyone tracked; a player who did not track a
   // stat shows a dash rather than a misleading zero.
   const en=trackKeysAny(S.players.slice(0,NP()).map((_,i)=>i));
