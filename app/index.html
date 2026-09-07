@@ -416,7 +416,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1788743094';
+const BUILD='1788743439';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -7000,7 +7000,7 @@ function vHome(){
   ${(!inRound&&S.share&&S.share.on&&S.share.creator&&S.share.code)?`<div class="card" style="border-color:var(--amber)">
     <h2 style="color:var(--amber)">Room open · code ${esc(S.share.code)}</h2>
     <div class="tiny mb">${esc(S.config.groupName||'Your group')} has been invited but the round hasn't started. Pick it back up, or close the room to take the invitation off their phones.</div>
-    <div style="display:flex;gap:6px"><button class="big" style="flex:1" onclick="resumeOpenRoom()">Continue setup →</button><button class="ghost danger" onclick="leaveShare();render()">Close room</button></div></div>`:''}
+    <div style="display:flex;gap:6px;align-items:stretch"><button class="big" style="flex:1;margin:0" onclick="resumeOpenRoom()">Continue setup →</button><button class="ghost danger" style="flex:0 0 auto;margin:0;height:auto;align-self:stretch;display:flex;align-items:center" onclick="leaveShare();render()">Close room</button></div></div>`:''}
   ${!inRound?`
   <button class="big hb" style="font-family:Cinzel,Rajdhani,Inter,serif;font-weight:700;font-size:26px;letter-spacing:2px;text-shadow:0 1px 0 rgba(0,0,0,.35);padding:20px 0" onclick="startWizard()">⚔️ START ROUND ⚔️</button>
   <div style="height:14px"></div>
