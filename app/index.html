@@ -416,7 +416,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1788741895';
+const BUILD='1788742445';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -543,7 +543,7 @@ function defaultConfig(){
     lens:'both', allowance:100, carryTies:false, last2LastPlace:true, _v:4,
     bf:{broadcast:true,emails:true},
     game:'wolf',
-    pts:{partnerWin:1, fieldBeatsPartners:2, loneWin:2, fieldBeatsLone:1, blindWin:3, fieldBeatsBlind:1, ctp:1},
+    pts:{partnerWin:1, fieldBeatsPartners:2, loneWin:2, fieldBeatsLone:1, blindWin:3, fieldBeatsBlind:2, ctp:1},   // field beats blind: 2 (Nathan, 9/6)
     ctpAll:true,   // offer a closest-to-pin pick on every par 3, whatever the game
     ctpMoney:{amt:0,carry:false},   // side bet on those picks; carry rolls an unclaimed par 3
 
@@ -880,6 +880,12 @@ function migrateState(s){
           }
           return false;
         });
+      }
+      if((s.config._v||2)<5){
+        s.config._v=Math.max(5,s.config._v||2);
+        // Field beats a blind lone wolf now pays 2 (Nathan, 9/6). Phones still on
+        // the old default of 1 move with it; a hand-set value stays.
+        try{if(s.config.pts&&+s.config.pts.fieldBeatsBlind===1)s.config.pts.fieldBeatsBlind=2;}catch(e){}
       }
       if((s.config._v||2)<4){
         s.config._v=4;
