@@ -416,7 +416,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1788739006';
+const BUILD='1788739903';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -2486,7 +2486,7 @@ function saveEditPlayer(){
     if(!e)return;
     e.name=name;
     e.index=parseIdx(x&&x.value,e.index);
-    S.players.forEach(p=>{if(p.libId===id){p.name=e.name;p.index=e.index;}});
+    S.players.forEach(p=>{if(p.libId===id&&!ownedElsewhere(p)){p.name=e.name;p.index=e.index;}});
   });
 }
 function addManualPlayer(){
@@ -9881,7 +9881,9 @@ function vSetup(){
       <div class="grid2 mt">
         <div><div class="tiny">Name</div><div style="padding:6px 2px;font-weight:700;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:8px">${avatarHTML(p,30)}<span style="min-width:0;overflow:hidden;text-overflow:ellipsis">${esc(p.name)}</span></div></div>
         <div><div class="tiny">Tees</div><select style="width:100%;padding:9px;border:2px solid var(--line);border-radius:8px;font-size:15px;background:var(--card)" onchange="setPl(${i},'tee',this.value)">${teeOpts}</select></div>
-        <div><div class="tiny">Handicap index</div><input id="plIdx${i}" data-rec="${esc(p.name)}" type="text" inputmode="decimal" value="${p.index}" onfocus="tapClear(this)" onblur="commitPl(this,${i},'index')"></div>
+        <div><div class="tiny">Handicap index</div>${ownedElsewhere(p)
+          ?`<div style="padding:9px 2px;font-weight:700;font-size:17px">${esc(String(p.index))} <span class="tiny muted">🔒 set on their phone</span></div>`
+          :`<input id="plIdx${i}" data-rec="${esc(p.name)}" type="text" inputmode="decimal" value="${p.index}" onfocus="tapClear(this)" onblur="commitPl(this,${i},'index')">`}</div>
         <div></div>
       </div>
       <div class="tiny mt">Course hcp <b>${ch[i]}</b> → plays with <b>${st[i]}</b> stroke${st[i]===1?'':'s'} (off the low man). Handicaps adjust themselves as rounds are saved.</div>
@@ -10358,7 +10360,15 @@ function parseIdx(v,fallback){
   if(!isFinite(x))return fallback;
   return Math.round(Math.max(-10,Math.min(54,x))*10)/10;
 }
+// A golfer who joined on their own phone owns their handicap (Nathan, 9/6).
+// Their phone re-asserts it on every sync anyway; this stops the host's edit
+// from being offered, taken, and silently undone.
+function ownedElsewhere(p){return !!(p&&p.ownerDev&&p.ownerDev!==devId());}
 function setPl(i,k,v){set(()=>{
+  if((k==='index'||k==='chOverride')&&ownedElsewhere(S.players[i])){
+    try{shotToast(`${S.players[i].name} sets their own handicap on their phone`);}catch(e){}
+    return;
+  }
   if(k==='name')v=uniqueRosterName(v,i);
   if(k==='index')S.players[i][k]=parseIdx(v,+S.players[i][k]||0);
   else if(k==='chOverride')S.players[i][k]=v===''?null:+v;
