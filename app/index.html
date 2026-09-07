@@ -416,7 +416,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1788742445';
+const BUILD='1788743094';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -6997,6 +6997,10 @@ function vHome(){
   return `<main>
   ${markNotesHTML()}
   <div class="center" style="margin:10px 0 18px"><img src="${art('/banner.jpg')}" alt="Battle Tees" style="width:100%;aspect-ratio:1200/509;display:block;border-radius:14px;border:2px solid var(--green);box-shadow:4px 4px 0 var(--green)" onerror="this.outerHTML='<h1 style=&quot;color:var(--green);font-size:20px&quot;>Battle Tees</h1>'"></div>
+  ${(!inRound&&S.share&&S.share.on&&S.share.creator&&S.share.code)?`<div class="card" style="border-color:var(--amber)">
+    <h2 style="color:var(--amber)">Room open · code ${esc(S.share.code)}</h2>
+    <div class="tiny mb">${esc(S.config.groupName||'Your group')} has been invited but the round hasn't started. Pick it back up, or close the room to take the invitation off their phones.</div>
+    <div style="display:flex;gap:6px"><button class="big" style="flex:1" onclick="resumeOpenRoom()">Continue setup →</button><button class="ghost danger" onclick="leaveShare();render()">Close room</button></div></div>`:''}
   ${!inRound?`
   <button class="big hb" style="font-family:Cinzel,Rajdhani,Inter,serif;font-weight:700;font-size:26px;letter-spacing:2px;text-shadow:0 1px 0 rgba(0,0,0,.35);padding:20px 0" onclick="startWizard()">⚔️ START ROUND ⚔️</button>
   <div style="height:14px"></div>
@@ -8035,6 +8039,7 @@ function startOwnSetup(){set(()=>{S.screen='pickgame';});}
 // step: 'kind' | 'count' | 'who' | 'game' | 'course' | 'join'
 let wiz=null;
 function startWizard(){
+  if(S.share&&S.share.on&&S.share.creator&&!S.round.started){resumeOpenRoom();return;}
   primeGeo();
   if(!S.round.started)resetRoster();
   wiz={step:'span',n:4};
@@ -8055,6 +8060,14 @@ function wizCount(n){
   ensureMeFirst();
   try{openGatePick();}catch(e){}          // start the nearby scan the moment the card opens
   addMode='nearby';render();
+}
+// A room opened from the group tap and then abandoned (Nathan 9/6 18:00: backed
+// out of the wizard, the invitation stayed on three phones and his phone kept
+// re-posting it on every reconnect). Start Round resumes it instead of opening a
+// second room; the home card offers Close.
+function resumeOpenRoom(){
+  wiz={step:'game',n:Math.min(4,Math.max(2,(S.players||[]).filter(isRealPl).length))};
+  S.screen='start';render();
 }
 function wizPickGroup(id){
   const g2=(S.groupLib||[]).find(x=>x.id===id);
