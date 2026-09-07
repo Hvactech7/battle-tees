@@ -416,7 +416,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1788743439';
+const BUILD='1788749144';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1308,6 +1308,9 @@ function applyOp(k,v,defer){
     if(k!=='meta')try{askPuttsOwed();}catch(e){}}   // my row carded from another phone: ask ME my putts
 }
 function onStateDoc(doc){
+  // a joiner and a doc with no meta: nobody opened this code. Keep awaitDoc so
+  // nothing of mine is pushed into the empty room; joinRoundCode's tick decides.
+  if(S.share&&S.share.awaitDoc&&!S.share.creator&&!(doc&&doc.meta)){S.share.noDoc=Date.now();render();return;}
   Object.entries(doc||{}).forEach(([k,v])=>applyOp(k,v,true));
   if(S.share)delete S.share.awaitDoc;   // seated on the real round now — meta may flow
   claimMySlot(true);
@@ -1337,7 +1340,10 @@ function syncConnect(){
   sock.onmessage=ev=>{
     let m;try{m=JSON.parse(ev.data);}catch(e){return;}
     if(m.t==='state')onStateDoc(m.doc);
-    else if(m.t==='op')applyOp(m.k,m.v,false);
+    else if(m.t==='op'){
+      if(m.k==='meta'&&m.v&&S.share&&S.share.awaitDoc&&!S.share.creator){onStateDoc({meta:m.v});return;}
+      applyOp(m.k,m.v,false);
+    }
     else if(m.t==='courseResult'||m.t==='backupResult'||m.t==='battleResult')handleCourseResult(m);
   };
   sock.onclose=()=>{sockOpen=false;sock=null;render();scheduleReconnect();};
@@ -1505,10 +1511,12 @@ function startGroupFromGate(){shareRound();go('home');}
 // becomes one (below).
 function postRoomInvite(){
   try{if(!(S.share&&S.share.on&&S.share.code&&S.share.creator&&!S.share.bf))return;
+    if(!S.share.since)S.share.since=Date.now();
     if(typeof sockOpen!=='undefined'&&sockOpen&&sock)
       sock.send(JSON.stringify({t:'invite',room:S.share.code,
-        info:{course:S.course.name,players:S.players.map(p=>p.name),group:S.config.groupName||'',ts:Date.now(),
+        info:{course:S.course.name,players:S.players.map(p=>p.name),group:S.config.groupName||'',ts:S.share.since,   // when the room opened: the relay's 6 h / 30 min limits count from here, however often this phone reconnects
           near:(S.share.near&&S.share.near.lat!=null)?S.share.near:null,
+          at:nearFence(),   // where the room opened: a NAME on the card only matches a phone within 25 km of it
           // TARGETED (9/6): the people ON THIS CARD get the invitation wherever
           // they stand — no GPS fix, a stale fix from home, the parking lot.
           // The fence still gates everyone else. Names are matched to verified
@@ -1665,15 +1673,73 @@ function joinRoundCode(code){
   // opened on the Score screen at Teal Bend (8/15) because only startRound()
   // landed on the map
   mapHole=S.round.cur||0;S.screen='map';
+  // A socket still bound to an earlier room (a mistyped code, 9/6 fresh-user
+  // sim) never sends the new join — syncConnect keeps any open socket. Drop it
+  // so this code gets its own join and its own state doc.
+  if(sock){const s0=sock;sock=null;sockOpen=false;try{s0.onclose=null;s0.onmessage=null;s0.close();}catch(e){}}
+  joinErr='';
   save();syncConnect();render();
   try{setTimeout(maybeAskPar,1600);}catch(e){}
-  // the host's course arrives with the room — ask which tees, then which card
-  setTimeout(()=>{
-    if(!S.share.on)return;
+  // the host's course arrives with the room — ask which tees, then which card.
+  // Only once the room's doc has landed: a code nobody opened answers with an
+  // EMPTY doc, and the tee sheet used to open on the joiner's own last course
+  // as if he were in (9/6 sim: 'Which tees are you playing? Teal Bend' for a
+  // wrong code, no message, and the right code afterwards never seated him).
+  const t0=Date.now();
+  const tick=()=>{
+    if(!S.share.on||S.share.code!==code||S.share.creator)return;
+    if(S.share.awaitDoc){
+      // the relay answered with nothing under this code (and 3 s more brought no meta): wrong code
+      if(S.share.noDoc&&Date.now()-S.share.noDoc>3000){joinNoRoom(code);return;}
+      setTimeout(tick,400);return;   // otherwise keep waiting — the join card shows the relay state
+    }
+    // seated? Four phones already own the four rows and none is mine: the room
+    // is full (a fifth phone typing the code, 9/6 sim, got the tee sheet and
+    // sat unseated with no word). Give a late meta 6 s to make room, then say so.
+    if(!S.players.some(p=>p&&p.ownerDev===devId())){
+      if(Date.now()-t0<12000){setTimeout(tick,400);return;}
+      joinFull(code);return;
+    }
     if(S.course&&(S.course.teeSets||[]).length)
       askTee(()=>askJoinSpan(),'Which tees are you playing?',S.course.name);
     else askJoinSpan();
-  },900);
+  };
+  setTimeout(tick,600);
+}
+// The code names no round (nothing on the relay under it after 6 s): back to
+// the code box, say so, and leave nothing behind — no tee sheet, no ghost room.
+let joinErr='';
+function joinFull(code){
+  try{stat('round_share',{side:'joiner',full:code});}catch(e){}
+  joinBail(code,'Round '+code+' already has four golfers — ask the captain to drop a seat, or start your own.');
+}
+function joinNoRoom(code){
+  try{stat('round_share',{side:'joiner',noRoom:code});}catch(e){}
+  joinBail(code,'No round with code '+code+' — check it with the captain (letters and numbers only, no O or I).');
+}
+function joinCancelWait(){joinBail((S.share&&S.share.code)||'','');}
+// While a joiner waits for the room's doc there is nothing to show but his own
+// old course on the map (9/6 sim: the joiner sat on 'Teal Bend, hole 1' for
+// 12 s with the relay down). This card says what is happening instead.
+function joinWaitSheetHTML(){
+  if(!(S.share&&S.share.on&&!S.share.creator&&S.share.awaitDoc))return '';
+  const up=relayUp();
+  const long=lobbyDownSince||(S.round&&S.round.myStartedAt&&Date.now()-S.round.myStartedAt>8000);
+  return `<div class="vfWrap" role="dialog" aria-modal="true"><div class="vfCard" style="max-width:430px">
+    <h2 class="vfTitle">Joining ${esc(S.share.code)}…</h2>
+    <div class="tiny mb">${up?'Connected — waiting for the captain\'s round to come over.':(long?'<b>Can\'t reach the Battle Tees relay right now.</b> Keeps trying on its own — you\'ll be seated the moment it answers.':'Connecting to the relay…')}</div>
+    <button class="ghost" style="width:100%" onclick="joinCancelWait()">Cancel</button>
+  </div></div>`;
+}
+function joinBail(code,msg){
+  S.share={on:false,code:null};
+  if(sock){const s0=sock;sock=null;sockOpen=false;try{s0.onclose=null;s0.onmessage=null;s0.close();}catch(e){}}
+  teeAsk=null;joinSpanAsk=null;
+  // the room's doc may have landed on this phone: a joiner never keeps it
+  if(!S.round.started||S.players.every(p=>!p||p.ownerDev!==devId())){S.round=blankRound();resetRoster();}
+  joinErr=msg;
+  wiz={step:'join',n:4};S.screen='start';
+  save();render();lobbyConnect();sendHello();grabCoords();
 }
 function leaveShare(){
   // The creator's invite comes down with the room. It used to ride the sync
@@ -1713,7 +1779,8 @@ function lobbyRetry(){lobbyDownSince=Date.now()-1;lobbyClose();lobbyConnect();re
 // a GPS permission prompt on launch. Fresh fixes only on explicit map/search
 // actions (iOS web apps re-prompt daily; ask only when it makes sense).
 let myCoords=(()=>{try{const v=JSON.parse(localStorage.getItem('wolfLastCoords'));return (v&&v.c)||null;}catch(e){return null;}})();
-function cacheCoords(c){myCoords=c;try{localStorage.setItem('wolfLastCoords',JSON.stringify({c,ts:Date.now()}));}catch(e){}}
+let myCoordsAt=0;
+function cacheCoords(c){myCoords=c;myCoordsAt=Date.now();try{localStorage.setItem('wolfLastCoords',JSON.stringify({c,ts:Date.now()}));}catch(e){}}
 // Usage telemetry: tiny fire-and-forget events to the relay (buffered offline).
 // Installed to the home screen, or still a browser tab? The single most useful
 // beta signal there is: a golfer who never installed it will not have it with
@@ -1816,7 +1883,7 @@ function saveMe(){
   setTimeout(registerProfile,0);          // the pid exists now — tell the Pi
   set(()=>{
     S.me={name,index:parseIdx(x&&x.value,10),pid:(S.me&&S.me.pid)||('u'+Date.now().toString(36)+Math.random().toString(36).slice(2,8))};
-    upsertLib({name,index:S.me.index,tee:S.players[0]?S.players[0].tee:undefined,libId:null});
+    upsertLib({name,index:S.me.index,libId:null});   // no tee yet: the first tee sheet decides, not the default course's tips
   });
   try{localStorage.setItem('btOnboarded','1');}catch(x3){}
   stat('profile',{name,email:em||localStorage.getItem('wolfBackupEmail')||''});
@@ -2510,10 +2577,10 @@ function lobbyConnect(){
   lobbySock.onopen=()=>{const wasDown=!!lobbyDownSince;lobbyDownSince=0;try{lobbySock.send('{"t":"lobby"}');}catch(e){}sendHello();statFlush();try{autoBackupCheck();}catch(e){}registerProfile();loadMarkNotes();bfReannounce();if(wasDown)render();};
   lobbySock.onmessage=ev=>{
     let m;try{m=JSON.parse(ev.data);}catch(e){return;}
-    if(m.t==='invites'){invites=m.list||[];render();}
-    else if(m.t==='invite'){invites=invites.filter(i=>i.code!==m.info.code).concat([m.info]);render();}
+    if(m.t==='invites'){invites=m.list||[];inviteFixCheck();render();}
+    else if(m.t==='invite'){invites=invites.filter(i=>i.code!==m.info.code).concat([m.info]);inviteFixCheck();render();}
     else if(m.t==='uninvite'){invites=invites.filter(i=>i.code!==m.code);render();}
-    else if(m.t==='nearby'){nearby=(m.list||[]).filter(p=>p.id!==devId());if(S.screen==='home'||S.screen==='players'||S.screen==='setup'||S.screen==='gate')render();}
+    else if(m.t==='nearby'){nearby=(m.list||[]).filter(p=>p.id!==devId());if(S.screen==='home'||S.screen==='players'||S.screen==='setup'||S.screen==='gate'||S.screen==='start')render();}
     else if(m.t==='courseResult'||m.t==='backupResult'||m.t==='battleResult')handleCourseResult(m);
   };
   lobbySock.onclose=()=>{lobbySock=null;nearby=[];if(!(S.share&&S.share.on))setTimeout(lobbyConnect,10000);};
@@ -6592,7 +6659,7 @@ function render(){
   const sameScreen=window.__lastScr===scr;
   window.__lastScr=scr;
   try{if(window.__a2hsSync)window.__a2hsSync();}catch(e){}
-  const full=magBanner()+html+holeSplash()+verifySheetHTML()+teeAskSheetHTML()+joinSpanSheetHTML()+pairsAskSheetHTML()+wolfOrderSheetHTML()+endAskSheetHTML()+mapInviteHTML()+greenClashHTML()+gamePickSheetHTML()+(S.screen!=='map'?puttAskSheetHTML():'')+(S.screen!=='map'?parAskSheetHTML():'')+photoCropHTML()+cheerSplashHTML();
+  const full=magBanner()+html+holeSplash()+verifySheetHTML()+joinWaitSheetHTML()+teeAskSheetHTML()+joinSpanSheetHTML()+pairsAskSheetHTML()+wolfOrderSheetHTML()+endAskSheetHTML()+mapInviteHTML()+greenClashHTML()+gamePickSheetHTML()+(S.screen!=='map'?puttAskSheetHTML():'')+(S.screen!=='map'?parAskSheetHTML():'')+photoCropHTML()+cheerSplashHTML();
   // Four phones syncing means render() fires constantly. Blowing away innerHTML
   // each time repainted the whole screen — that was the flicker on the course.
   // Identical output is a no-op; otherwise patch only the nodes that differ.
@@ -6981,6 +7048,19 @@ function welcomeRestore(){
   openRestore();
   go('players');
 }
+// The invitation cards. They used to sit BELOW Start Round, Courses/Players/
+// Stats/Rounds and the Battlefield button: a first-time joiner saw the giant
+// Start Round first, tapped it, and became the captain of a second round (9/6
+// fresh-user sim). Now they lead the home screen and the first wizard step.
+function inviteCardsHTML(){
+  if(S.share&&S.share.on)return '';
+  return liveInvites().map(inv=>`<div class="card" style="border-color:var(--amber);background:#fffcf7">
+    <h2 style="color:var(--amber)">${inv.group?`“${esc(inv.group)}”`:'Round invitation'}</h2>
+    <div class="mb"><b>${esc(inv.course||'Shared round')}</b>
+      <div class="tiny">${(inv.players||[]).map(esc).join(' · ')}</div></div>
+    <button class="big warn" onclick="joinFromInvite('${esc(inv.code)}')">${armJoinSwap===inv.code?'⚠️ Tap again — ends your current round':'🐺 Accept round invitation'}</button>
+  </div>`).join('');
+}
 // ----- home -----
 function vHome(){
   const inRound=S.round.started;
@@ -7001,6 +7081,7 @@ function vHome(){
     <h2 style="color:var(--amber)">Room open · code ${esc(S.share.code)}</h2>
     <div class="tiny mb">${esc(S.config.groupName||'Your group')} has been invited but the round hasn't started. Pick it back up, or close the room to take the invitation off their phones.</div>
     <div style="display:flex;gap:6px;align-items:stretch"><button class="big" style="flex:1;margin:0" onclick="resumeOpenRoom()">Continue setup →</button><button class="ghost danger" style="flex:0 0 auto;margin:0;height:auto;align-self:stretch;display:flex;align-items:center" onclick="leaveShare();render()">Close room</button></div></div>`:''}
+  ${inviteCardsHTML()}
   ${!inRound?`
   <button class="big hb" style="font-family:Cinzel,Rajdhani,Inter,serif;font-weight:700;font-size:26px;letter-spacing:2px;text-shadow:0 1px 0 rgba(0,0,0,.35);padding:20px 0" onclick="startWizard()">⚔️ START ROUND ⚔️</button>
   <div style="height:14px"></div>
@@ -7023,12 +7104,6 @@ function vHome(){
     <div id="meErr" class="tiny mt" style="color:var(--red);font-weight:600"></div>
     <button class="big mt" onclick="saveMe()">Save profile</button>
   </div>`:''}
-  ${!S.share.on?liveInvites().map(inv=>`<div class="card" style="border-color:var(--amber);background:#fffcf7">
-    <h2 style="color:var(--amber)">${inv.group?`“${esc(inv.group)}”`:'Round invitation'}</h2>
-    <div class="mb"><b>${esc(inv.course||'Shared round')}</b>
-      <div class="tiny">${(inv.players||[]).map(esc).join(' · ')}</div></div>
-    <button class="big warn" onclick="joinFromInvite('${esc(inv.code)}')">${armJoinSwap===inv.code?'⚠️ Tap again — ends your current round':'🐺 Accept round invitation'}</button>
-  </div>`).join(''):''}
   ${inRound?`<div class="card"><h2>${S.round.reopened?'Past round open':'Round in progress'}</h2>
     <div class="muted mb">${gameName()} · ${esc(S.course.name)} · thru ${S.round.holes.filter(r=>r.confirmed).length} holes</div>
     ${S.round.reopened?`
@@ -8116,6 +8191,7 @@ function vStart(){
     const sp=S.config.span||{count:18,start:0};
     const first=sp.count===18?0:(sp.start<9?0:9), n=sp.count===18?18:9;
     return head('Start a round','How many holes?')+`<main>
+    ${inviteCardsHTML()}
     <div style="display:flex;gap:8px">
       <button class="big ${sp.count===18?'':'ghost'}" style="flex:1;margin:0${sp.count===18?'':';background:var(--card)'}" onclick="setSpan(18,0);render()">All 18</button>
       <button class="big ${sp.count===9&&sp.start<9?'':'ghost'}" style="flex:1;margin:0${sp.count===9&&sp.start<9?'':';background:var(--card)'}" onclick="setSpan(9,0);render()">Front 9</button>
@@ -8125,6 +8201,7 @@ function vStart(){
         ${Array.from({length:n},(_,k)=>first+k).map(h=>`<option value="${h}" ${sp.start===h?'selected':''}>Hole ${h+1}</option>`).join('')}</select></div>
       <div class="tiny">Start from any tee — play wraps around.</div></div>
     <button class="big" onclick="wiz.step=wiz.preGame?'count':'kind';render()">Next \u2192</button>
+    <button class="ghost mt" style="width:100%" onclick="wizKind('join')">👥 Joining someone else's round? Find it or type the code</button>
     </main>`;
   }
 
@@ -8210,6 +8287,7 @@ function vStart(){
       <div class="row" style="border:none">
         <input type="text" id="joincode" placeholder="ABCDE" maxlength="8" autocapitalize="characters" style="width:46%;text-transform:uppercase;font-family:Rajdhani,sans-serif;font-size:20px;letter-spacing:3px">
         <button class="ghost sel" style="flex:1" onclick="joinRound()">Join</button></div>
+      ${joinErr?`<div class="tiny mt" style="color:var(--red);font-weight:600">${esc(joinErr)}</div>`:''}
       <div class="tiny mt">Ask the captain \u2014 it's on their Setup screen.</div></div>
     </main>`;
   }
@@ -9988,8 +10066,8 @@ function isWomensTee(name){return /\((?:w|women|ladies|lady)\)\s*$/i.test(String
 function courseHasStdTees(course){
   return (course&&course.teeSets||[]).some(t=>stdTeeOf(t.name));
 }
-// Which tee should this library player get on this course?
-function teeForPlayer(lib,course){
+// The tee this library player has actually chosen for this course, or null.
+function libTeePref(lib,course){
   const sets=(course&&course.teeSets)||[];
   if(!sets.length)return null;
   const saved=lib&&lib.teeByCourse&&lib.teeByCourse[course.id];
@@ -10003,7 +10081,13 @@ function teeForPlayer(lib,course){
     const t=sets.find(ts=>ts.name.toLowerCase()===String(lib.teeName).toLowerCase());
     if(t)return t.id;
   }
-  return sets[Math.min(1,sets.length-1)].id;
+  return null;
+}
+// Which tee should this library player get on this course?
+function teeForPlayer(lib,course){
+  const sets=(course&&course.teeSets)||[];
+  if(!sets.length)return null;
+  return libTeePref(lib,course)||sets[Math.min(1,sets.length-1)].id;
 }
 function libOf(pl){
   if(!pl||!S.playerLib)return null;
@@ -10064,6 +10148,8 @@ function teeAskPick(id){
   });
 }
 function teeAskDone(){
+  // 'Play from X' is a choice even without a tap on X: write it to my row
+  try{const d=teeAskDefault();const me=S.players[myPlayerIdx()]||S.players[0];if(d&&me&&me.tee!==d)teeAskPick(d);}catch(e){}
   const fn=teeAsk&&teeAsk.then;teeAsk=null;
   if(fn)fn(); else render();
 }
@@ -10168,11 +10254,27 @@ function joinSpanSheetHTML(){
     <button class="big mt" style="width:100%" onclick="joinSpanDone()">✓ &nbsp;That's my card</button>
   </div></div>`;
 }
+// What the tee sheet preselects. The row's tee used to decide, and a fresh row
+// carries teeSets[0] — the tips. Four first-timers at Apple Mountain all
+// tapped 'Play from Black' (9/6 sim). A saved preference wins; else a joiner
+// starts on the captain's tee; else the middle set.
+function teeAskDefault(){
+  const sets=(S.course&&S.course.teeSets)||[];if(!sets.length)return null;
+  const me=S.players[myPlayerIdx()]||S.players[0]||{};
+  let pref=null;try{pref=libTeePref(libOf(me),S.course);}catch(e){}
+  if(pref&&sets.some(t=>t.id===pref))return pref;
+  if(S.share&&S.share.on&&!S.share.creator){const cap=(S.players[0]||{}).tee;if(cap&&sets.some(t=>t.id===cap))return cap;}
+  if(sets.length<3)return (me.tee&&sets.some(t=>t.id===me.tee))?me.tee:sets[0].id;
+  // the regular men's set: White where the course has one, else the middle of the men's sets
+  const men=sets.filter(t=>!isWomensTee(t.name));const pool=men.length?men:sets;
+  const white=pool.find(t=>stdTeeOf(t.name)==='White');
+  return (white||pool[Math.floor((pool.length-1)/2)]).id;
+}
 function teeAskSheetHTML(){
   if(!teeAsk)return '';
   const sets=(S.course&&S.course.teeSets)||[];
   const me=S.players[myPlayerIdx()]||S.players[0]||{};
-  const cur=me.tee;
+  const cur=teeAskDefault();
   const tot=t=>{const y=(t.yds&&t.yds.length)?t.yds.reduce((a,b)=>a+(+b||0),0):0;return y?y+' yds':'';};
   return `<div class="vfWrap" role="dialog" aria-modal="true" aria-labelledby="taTitle">
     <div class="vfCard">
@@ -10321,13 +10423,17 @@ function upsertLib(p){
   if(!(/\s\d+$/.test(nm)&&nm.replace(/\s\d+$/,'')===e.name))e.name=nm;
   if(e.pid&&S.me&&S.me.pid&&e.pid===S.me.pid&&nm.toLowerCase()!==(S.me.name||'').trim().toLowerCase())delete e.pid;   // an entry already filed under another name with my pid loses it (9/6)
   e.index=p.index;
-  const _t=teeOf(p);
-  e.teeName=_t.name;
-  const _std=stdTeeOf(_t.name);
-  if(_std)e.stdTee=_std;                       // last standard tee used — the sticky one
-  if(S.course&&S.course.id){                   // and exactly what they played here
-    e.teeByCourse=e.teeByCourse||{};
-    e.teeByCourse[S.course.id]=_t.id;
+  // a tee is recorded only when the row carries one; a row with no tee used to
+  // file the course's first set (the tips) as the player's sticky preference
+  const _t=(p.tee!=null&&(S.course&&S.course.teeSets||[]).some(t=>t.id===p.tee))?teeOf(p):null;   // a tee from another course is not a choice here
+  if(_t){
+    e.teeName=_t.name;
+    const _std=stdTeeOf(_t.name);
+    if(_std)e.stdTee=_std;                       // last standard tee used — the sticky one
+    if(S.course&&S.course.id){                   // and exactly what they played here
+      e.teeByCourse=e.teeByCourse||{};
+      e.teeByCourse[S.course.id]=_t.id;
+    }
   }
   // The live roster is authoritative for who this player IS right now, so this
   // is last-write-wins on purpose: a reinstall that mints a new pid self-heals
@@ -10655,11 +10761,32 @@ function inviteForMe(i){
   try{
     const to=i.to||{}; const me=(S.me&&S.me.name||'').trim().toLowerCase();
     if(S.me&&S.me.pid&&(to.pids||[]).includes(S.me.pid))return true;
-    if(me&&(to.names||[]).some(n=>String(n).trim().toLowerCase()===me))return true;
+    if(me&&(to.names||[]).some(n=>String(n).trim().toLowerCase()===me)){
+      // a typed name is not an identity: every 'Justin' in the country would
+      // see this card. With a fix on both ends, the name has to be within
+      // 25 km of where the room opened (Nathan, 9/6); no fix on either side
+      // still shows it. inviteFixCheck refreshes a fix older than 10 min first,
+      // so a stale fix from home never hides a card at the course.
+      const at=i.at;
+      if(!at||at.lat==null||!myCoords||!isFinite(myCoords[0]))return true;
+      return kmBetween(+at.lat,+at.lon,+myCoords[0],+myCoords[1])<=25;
+    }
     const near=i.near; if(!near||near.lat==null)return true;
     if(!myCoords||!isFinite(myCoords[0]))return false;
     return kmBetween(+near.lat,+near.lon,+myCoords[0],+myCoords[1])<=(+near.km||1.5);
   }catch(e){return false;}
+}
+// A card that matches me by NAME only (no pid) on a phone with no fix: get a
+// fix, then re-render — a same-name stranger with location on drops the card
+// once he is more than 100 km from where the room opened.
+function inviteFixCheck(){
+  try{
+    if(myCoords&&isFinite(myCoords[0])&&Date.now()-myCoordsAt<10*60000)return;   // a fresh fix: nothing to do
+    const me=(S.me&&S.me.name||'').trim().toLowerCase();if(!me)return;
+    const byName=(invites||[]).some(i=>i.at&&i.at.lat!=null&&!((i.to||{}).pids||[]).includes(S.me&&S.me.pid)&&((i.to||{}).names||[]).some(n=>String(n).trim().toLowerCase()===me));
+    if(!byName||!navigator.geolocation)return;
+    navigator.geolocation.getCurrentPosition(p=>{cacheCoords([p.coords.latitude,p.coords.longitude]);sendHello();render();},()=>{},{timeout:8000,maximumAge:60000});
+  }catch(e){}
 }
 function liveInvites(){
   const mine=new Set((S.history||[]).map(e=>e&&e.code).filter(Boolean));
