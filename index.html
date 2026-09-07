@@ -111,7 +111,7 @@ h1,h2,h3,.disp{font-family:var(--disp);margin:0;letter-spacing:.5px}
 .beat:nth-child(even) .txt{order:2}
 .beat.off1{transform:translateX(3.5%)}
 .beat.off2{transform:translateX(-3%)}
-.eye{font-family:var(--disp);letter-spacing:3px;font-size:12px;color:var(--elec);text-transform:uppercase}
+.eye{font-family:var(--disp);font-weight:700;letter-spacing:3.5px;font-size:clamp(17px,1.6vw,21px);color:var(--elec);text-transform:uppercase}
 .beat h2{font-size:clamp(28px,3.9vw,46px);line-height:1.06;margin:10px 0 14px}
 .beat h2 em{font-style:normal;color:var(--gold)}
 .beat p{color:var(--muted);font-size:16.5px;max-width:520px;margin:0}
@@ -232,6 +232,9 @@ th{color:var(--muted);font-size:11px;letter-spacing:1.5px;text-transform:upperca
 .windkick{margin:44px auto 0;text-align:center;font-family:var(--disp);font-weight:700;
   font-size:clamp(20px,2.6vw,30px);letter-spacing:.4px;color:var(--ink)}
 .windkick em{font-style:normal;color:var(--gold)}
+.windstrip.three{grid-template-columns:repeat(3,minmax(0,1fr));max-width:920px;margin-left:auto;margin-right:auto}
+.windstrip.three .phone{max-width:280px}
+@media(max-width:880px){.windstrip.three{grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;max-width:none}}
 @media(max-width:880px){.windstrip{grid-template-columns:repeat(2,minmax(0,1fr));gap:22px}}
 @media(max-width:560px){
   /* a swipe strip on phones — four stacked phones is a lot of thumb */
@@ -316,6 +319,48 @@ th{color:var(--muted);font-size:11px;letter-spacing:1.5px;text-transform:upperca
         <div class=cap><i>VEGAS</i> · one of thirteen, all on the same card</div></div>
     </div>
 
+  </div>
+</div>
+
+<div class=stage style="padding:100px 0 90px">
+  <div class=wrap>
+    <div class="windhead rv"><div class=eye>Your table, your points</div>
+      <h2>Your group's rules, <em>down to the point</em></h2>
+      <div class=windsub>A lone wolf is worth <em>whatever you say it's worth.</em></div>
+      <p>Tap any number in setup and it's yours: seven Wolf payouts, the whole Stableford and Quota tables, a different skin on every hole. Every game takes your dollar a point.</p></div>
+    <div class="windstrip three rv">
+      <div class=phone>
+        <img src="/assets/pts-wolf.jpg" alt="Battle Tees round setup, Wolf: a Points (per player) card with seven steppers — wolf + partner win 1, field beats wolf team 2, lone wolf wins 2, field beats lone wolf 1, blind lone wolf wins 3, field beats blind wolf 2, closest to pin 1 — and a Rules card with ties carry over and last place is wolf on 17–18">
+        <div class=pcap><i>WOLF</i> · seven payouts · every one a stepper</div></div>
+      <div class=phone>
+        <img src="/assets/pts-stableford.jpg" alt="Round setup, Stableford card: steppers for birdie 3, par 2, bogey 1, double bogey or worse 0, eagle 4, albatross 5, with a note that negative values are allowed for modified Stableford">
+        <div class=pcap><i>STABLEFORD</i> · your table · minus points allowed</div></div>
+      <div class=phone>
+        <img src="/assets/pts-skins.jpg" alt="Round setup, Skins card: $2 a hole, ties carry the pot, custom amount per hole switched on with eighteen editable boxes — $5 on the par 3s and $10 on the 18th — and the total on the course reading $56">
+        <div class=pcap><i>SKINS</i> · $5 on the par 3s · $10 on 18</div></div>
+    </div>
+    <div class="windkick rv">Ten bucks on the last hole? <em>Type it. Every phone agrees.</em></div>
+  </div>
+</div>
+
+<div class=stage style="padding:100px 0 90px">
+  <div class=wrap>
+    <div class="windhead rv"><div class=eye>Mystery partners</div>
+      <h2>You won't know your partner <em>until the round is over</em></h2>
+      <div class=windsub>Everyone plays their own ball. <em>Nobody knows whose side they're on.</em></div>
+      <p>Flip it on for Vegas, Best Ball, Umbrella or a 2v2 Nassau. Eighteen holes of playing for yourself, then one tap draws the teams and scores the whole card backwards.</p></div>
+    <div class="windstrip three rv">
+      <div class=phone>
+        <img src="/assets/myst-setup.jpg" alt="Round setup, Vegas teams card: Mystery partners switched on — hidden until the draw at the end of the round — with a button to cancel and pick partners now, plus the Vegas options for swapping partners, birdie flips and closest to pin">
+        <div class=pcap><i>SETUP</i> · one tap seals the teams</div></div>
+      <div class=phone>
+        <img src="/assets/myst-locked.jpg" alt="Standings after 18 holes at Rancho Solano: the Vegas card shows a dice, Mystery partners, the line that nobody knows who they're with and the draw scores the whole card retroactively, and a blue Reveal partners button">
+        <div class=pcap><i>18TH GREEN</i> · the reveal unlocks</div></div>
+      <div class=phone>
+        <img src="/assets/myst-reveal.jpg" alt="Standings after the draw: Vegas thru 18 with Nate &amp; Tyler against Nathan &amp; Justin, the drawn pairing highlighted, and the note that partners were drawn at the end and were random">
+        <div class=pcap><i>THE DRAW</i> · Nathan &amp; Justin, it turns out</div></div>
+    </div>
+    <div class="windkick rv">Root for everybody. <em>Then find out who you were rooting for.</em></div>
   </div>
 </div>
 
