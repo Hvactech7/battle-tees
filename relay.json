@@ -1,5 +1,5 @@
 {
-  "url": "wss://raspi5.tail734d97.ts.net/battletees",
-  "note": "Live round-sync relay endpoint. Change this file to move the relay — every client picks it up on next launch without an app update.",
-  "updated": "2026-07-26"
+  "url": "wss://relay.vexcomllc.com/battletees",
+  "note": "Live round-sync relay endpoint. Change this file to move the relay — every client picks it up within 30 minutes without an app update. Cut over from the Pi (wss://raspi5.tail734d97.ts.net/battletees, kept running as the rollback) on 2026-09-06 23:05.",
+  "updated": "2026-09-06"
 }

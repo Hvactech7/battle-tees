@@ -416,7 +416,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1788751647';
+const BUILD='1788761138';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1060,9 +1060,14 @@ async function discoverRelay(){
     if(!r.ok)return;
     const j=await r.json();
     if(!j||typeof j.url!=='string'||!/^wss:\/\//.test(j.url))return;
-    if(j.url===RELAY)return;
-    localStorage.setItem('btRelayCfg',j.url);
-    RELAY=j.url;
+    // PHASE 4 (9/6): relay.json may carry {beta:{url, pids:[...]}} — the profiles listed
+    // move to the cloud relay while everyone else stays put; an empty list moves nobody
+    let url=j.url;
+    try{const b=j.beta;const me=(typeof S!=='undefined'&&S&&S.me&&S.me.pid)||localStorage.getItem('btPid')||'';
+      if(b&&typeof b.url==='string'&&/^wss:\/\//.test(b.url)&&Array.isArray(b.pids)&&me&&b.pids.includes(me))url=b.url;}catch(e){}
+    if(url===RELAY)return;
+    localStorage.setItem('btRelayCfg',url);
+    RELAY=url;
     // drop existing sockets so the next tick reconnects to the new endpoint
     try{if(typeof sock!=='undefined'&&sock)sock.close();}catch(e){}
     try{if(typeof lobbySock!=='undefined'&&lobbySock)lobbySock.close();}catch(e){}
@@ -1328,7 +1333,7 @@ function previewSandboxed(){
 function syncConnect(){
   if(!S.share||!S.share.on||sock)return;
   if(previewSandboxed())return;
-  try{sock=new WebSocket(RELAY);}catch(e){sock=null;scheduleReconnect();return;}
+  try{sock=new WebSocket(RELAY+(RELAY.includes('?')?'&':'?')+'room='+encodeURIComponent(S.share.code||''));}catch(e){sock=null;scheduleReconnect();return;}
   sock.onopen=()=>{
     sockOpen=true;retryMs=1000;
     sock.send(JSON.stringify({t:'join',room:S.share.code}));
@@ -7346,6 +7351,7 @@ function vSettings(){
   ${faqHTML()}
   <div class="card"><h2>⚔️ Battlefield</h2>
     ${row('Announce my rounds','Starting a round emails your Battle Friends a watch link and puts the round on the Community Battlefield.','broadcast')}
+    <div class="tiny mt" style="color:var(--ink3)">Relay: <b>${/relay\.vexcomllc\.com|workers\.dev/.test(RELAY)?'Cloud':/raspi5/.test(RELAY)?'Pi':'custom'}</b> · ${relayUp()?'connected':'not connected'}${localStorage.getItem('wolfRelay')?' · manual override':''}</div>
     ${row('Email me when friends play','Get the “Battlefield is set” email when someone who has you in their library tees off.','emails')}
     <div class="tiny mt">Announcements go out once per round, from Battle Tees — never from a personal address.</div>
   </div>
