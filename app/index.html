@@ -416,7 +416,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1788750401';
+const BUILD='1788751647';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -2574,13 +2574,14 @@ function lobbyConnect(){
   try{lobbySock=new WebSocket(RELAY);}catch(e){lobbySock=null;setTimeout(lobbyConnect,10000);return;}
   if(!lobbyDownSince)lobbyDownSince=Date.now();
   setTimeout(()=>{if(!relayUp()&&lobbyDownSince)render();},8500);   // flip "Connecting…" into the plain warning
-  lobbySock.onopen=()=>{const wasDown=!!lobbyDownSince;lobbyDownSince=0;try{lobbySock.send('{"t":"lobby"}');}catch(e){}sendHello();statFlush();try{autoBackupCheck();}catch(e){}registerProfile();loadMarkNotes();bfReannounce();if(wasDown)render();};
+  lobbySock.onopen=()=>{const wasDown=!!lobbyDownSince;lobbyDownSince=0;try{lobbySock.send('{"t":"lobby"}');}catch(e){}sendHello();statFlush();try{autoBackupCheck();}catch(e){}registerProfile();loadMarkNotes();bfReannounce();libWhois();if(wasDown)render();};
   lobbySock.onmessage=ev=>{
     let m;try{m=JSON.parse(ev.data);}catch(e){return;}
     if(m.t==='invites'){invites=m.list||[];inviteFixCheck();render();}
     else if(m.t==='invite'){invites=invites.filter(i=>i.code!==m.info.code).concat([m.info]);inviteFixCheck();render();}
     else if(m.t==='uninvite'){invites=invites.filter(i=>i.code!==m.code);render();}
     else if(m.t==='nearby'){nearby=(m.list||[]).filter(p=>p.id!==devId());if(S.screen==='home'||S.screen==='players'||S.screen==='setup'||S.screen==='gate'||S.screen==='start')render();}
+    else if(m.t==='whois')libWhoisApply(m);
     else if(m.t==='courseResult'||m.t==='backupResult'||m.t==='battleResult')handleCourseResult(m);
   };
   lobbySock.onclose=()=>{lobbySock=null;nearby=[];if(!(S.share&&S.share.on))setTimeout(lobbyConnect,10000);};
@@ -2600,6 +2601,65 @@ function pickPlayerOpt(i,v){
       upsertLib(p);
     });
   }
+}
+// ---- library repair against the relay's profile book (9/6) ----------------
+// A library entry's pid is an identity the phone picked up from a roster, and a
+// roster race can file it under the wrong name (Nathan's phone: NateBall = Justin's
+// pid; every group load re-seeded the room with it). On each lobby connect the
+// phone asks the relay who its pids are, and which single registered profile
+// carries each of its names. Names only travel; the relay never returns an address.
+// Rules, in order: my own pid belongs to my name only; a pid whose registered
+// name is a DIFFERENT entry's name moves to that entry; a pid whose registered
+// name matches no entry at all is dropped only if the entry's own name is a
+// registered profile of someone else; an entry with no pid whose name is exactly
+// one registered profile gets that pid.
+function libWhois(){
+  try{
+    if(!lobbySock||lobbySock.readyState!==1||!S.playerLib||!S.playerLib.length)return;
+    const pids=[...new Set(S.playerLib.filter(e=>e&&e.pid).map(e=>e.pid))].slice(0,64);
+    const names=[...new Set(S.playerLib.filter(e=>e&&e.name).map(e=>e.name.trim()))].slice(0,64);
+    if(!pids.length&&!names.length)return;
+    lobbySock.send(JSON.stringify({t:'whois',pids,names}));
+  }catch(e){}
+}
+function libWhoisApply(m){
+  try{
+    const byPid=m.pids||{},byName=m.names||{};
+    if(!S.playerLib||!S.playerLib.length)return;
+    const low=x=>String(x||'').trim().toLowerCase();
+    const me=low(S.me&&S.me.name),mep=S.me&&S.me.pid;
+    const byNameLow={};Object.keys(byName).forEach(n=>{byNameLow[low(n)]=byName[n];});
+    const entry=n=>S.playerLib.find(e=>e&&low(e.name)===low(n));
+    let changed=0;const log=[];
+    S.playerLib.forEach(e=>{
+      if(!e||!e.pid)return;
+      const reg=byPid[e.pid];if(!reg)return;                         // unknown to the relay: leave it
+      if(low(reg)===low(e.name))return;                               // filed right
+      if(mep&&e.pid===mep&&low(e.name)!==me){delete e.pid;changed++;log.push(e.name+': my pid removed');return;}
+      const home=entry(reg);
+      if(home&&home!==e){
+        // the book's word for THIS pid outranks whatever the home entry holds unless the book confirms that one too
+        if(!home.pid||low(byPid[home.pid]||'')!==low(home.name)){home.pid=e.pid;log.push(reg+': took pid from '+e.name);}
+        delete e.pid;changed++;log.push(e.name+': pid was '+reg+"'s");return;
+      }
+      const own=byNameLow[low(e.name)];
+      if(own&&own!==e.pid){delete e.pid;changed++;log.push(e.name+': pid was '+reg+"'s, dropped");}
+    });
+    S.playerLib.forEach(e=>{
+      if(!e||e.pid||!e.name)return;
+      if(low(e.name)===me)return;
+      const pid=byNameLow[low(e.name)];if(!pid)return;
+      const holder=S.playerLib.find(x=>x&&x.pid===pid);
+      if(holder&&low(holder.name)===low(e.name))return;
+      if(holder){if(mep&&pid===mep)return;delete holder.pid;log.push(holder.name+': pid was '+e.name+"'s");}   // the book says this pid is THIS name's
+      e.pid=pid;changed++;log.push(e.name+': pid filled from the book');
+    });
+    if(changed){
+      save();
+      try{stat('lib_repair',{n:changed,log:log.slice(0,8)});}catch(e){}
+      if(S.screen==='players')render();
+    }
+  }catch(e){}
 }
 function lobbyClose(){
   invites=[];
@@ -2945,7 +3005,11 @@ function runningTotalsCard(){
     const lead=rows[0].v;
     const back=v=>g==='skins'?`−${fmtMoney(lead-v)}`:f(v-lead);
     const tiedAll=rows.every(r=>r.v===lead);
-    tiles=rows.map((r,ri)=>tile(r.label,f(r.v),tiedAll?'all square':(ri===0?(rows.length>1&&rows[1].v===lead?'tied lead':'leader'):`${back(r.v)} back`),tiedAll?3:ri,sgnCol(r.v))).join('');
+    // everyone on the lead score is a leader: gold tile, 'tied lead' when there is
+    // more than one (Nathan, 9/6: the second of two tied leaders read '0 back')
+    const tiedLead=rows.filter(r=>r.v===lead).length>1;
+    const rank=r=>rows.filter(x=>x.v>r.v).length;
+    tiles=rows.map(r=>tile(r.label,f(r.v),tiedAll?'all square':(r.v===lead?(tiedLead?'tied lead':'leader'):`${back(r.v)} back`),tiedAll?3:rank(r),sgnCol(r.v))).join('');
     if(g==='sixes'){const T=sixesTeamsFor(S.round.cur);
       foot=`<b style="color:${TEAM_BOLT[0]}">\u26a1 ${teamLbl(T[0])}</b> v <b style="color:${TEAM_BOLT[1]}">\u26a1 ${teamLbl(T[1])}</b>`;}
     else if(g==='nassau'){const sgn=x=>x===0?'AS':(x>0?'+':'')+x;
@@ -11032,7 +11096,9 @@ function vHole(){
     <div class="wolfcard">
       <div style="flex:1;min-width:0"><b>${esc(names[rec.wolfAt??wolf])} is the Wolf</b>
       <div class="tiny">hits first · ${dots(rec.wolfAt??wolf)>0?`<span class="dots">${'●'.repeat(dots(rec.wolfAt??wolf))}</span> gets ${dots(rec.wolfAt??wolf)===2?'2 strokes':'a stroke'} here`:'no stroke here'}${h>=16&&S.config.last2LastPlace?' · last place picks up the wolf here':''}</div>
-      ${rec.mode&&!isReview()&&wolfPickMine(h)?`<button class="ghost" style="margin-top:7px;padding:5px 14px" onclick="redoPick()">Redo pick</button>`:''}</div>
+      ${rec.mode&&!isReview()?(wolfPickMine(h)
+          ?`<button class="ghost" style="margin-top:7px;padding:5px 14px" onclick="redoPick()">Redo pick</button>`
+          :`<button class="ghost" style="margin-top:7px;padding:5px 14px" onclick="redoPickArm(${h})">${redoArm===h?'⚠️ Tap again — you\'ll pick for '+esc((names[rec.wolfAt]||'').split(' ')[0]):'Redo pick'}</button>`):''}</div>
       <img class="wolf-art" src="${art('/wolf.png')}" alt="" onerror="this.style.display='none'"></div>
     ${carryNote}
     ${body}
@@ -11055,6 +11121,7 @@ function pickLone(){wolfSetPick(S.round.cur,'lone',null);}
 function wolfSetPick(h,mode,partner){
   if(!wolfPickMine(h))return;
   set(()=>{const r=S.round.holes[h];if(r.wolfAt==null)r.wolfAt=wolfOf(h);r.mode=mode;r.partner=mode==='partner'?partner:null;prefillAt(h,r);});
+  delete wolfOverride[h];
 }
 function wolfOf(h){const r=S.round.holes[h];if(r&&r.wolfAt!=null)return r.wolfAt;try{return computeAll().perHole[h].wolf;}catch(e){return 0;}}
 // May THIS phone make the wolf's pick on hole h? The wolf's own phone, the
@@ -11062,6 +11129,7 @@ function wolfOf(h){const r=S.round.holes[h];if(r&&r.wolfAt!=null)return r.wolfAt
 // shared. A partner's phone never picks for the wolf (Apple Mountain, 9/6).
 function wolfPickMine(h){
   if(isReview())return true;
+  if(wolfOverride[h])return true;
   if(!S.share||!S.share.on)return true;
   const lk=rowLock(h,wolfOf(h));
   return lk===''||lk==='mine'||lk==='ended';
@@ -11106,7 +11174,7 @@ function wolfAskSheetHTML(){
   return `<div class="vfWrap" role="dialog" aria-modal="true"><div class="vfCard" style="max-width:430px">
     <h2 class="vfTitle">🐺 Wolf pick first</h2>
     <div class="tiny mb">Hole ${h+1} · <b>${esc(nm)}</b> is the Wolf${mine?' — make the pick, then your score confirms.':' and hasn\'t picked yet. Your score confirms once the pick is in — it\'s on '+esc(first)+'\'s phone.'}</div>
-    ${mine?wolfPickButtonsHTML(h,true):''}
+    ${mine?wolfPickButtonsHTML(h,true):`<button class="ghost" style="width:100%" onclick="wolfTakeOver(${h})">${esc(first)}'s phone isn't handy? Pick for ${esc(first)}</button>`}
     <button class="ghost mt" style="width:100%" onclick="wolfAskClose()">${mine?'Not yet':'OK'}</button>
   </div></div>`;
 }
@@ -11124,7 +11192,26 @@ function wolfPickAnswer(mode,i){
 }
 function prefill(r){prefillAt(S.round.cur,r);}
 function prefillAt(h,r){const par=S.course.holes[h].par;if(!r.gts)r.gts=[0,0,0,0];r.gross=r.gross.map((g,i)=>{if(g==null){r.gts[i]=r.gts[i]||1;return par;}return g;});}
-function redoPick(){if(!wolfPickMine(S.round.cur))return;set(()=>{const r=S.round.holes[S.round.cur];r.mode=null;r.partner=null;});}
+// THERE IS ALWAYS A WAY TO REDO THE PICK (Nathan, 9/6: someone will press the
+// wrong player). The wolf's phone redoes in one tap, even after the hole was
+// confirmed (the hole reopens first). Any other phone can take the pick over
+// with a second tap — the wolf's phone may be in the cart or out of signal —
+// and then holds it for this hole only.
+let wolfOverride={},redoArm=-1,redoArmTimer=null;
+function redoPick(h){
+  if(h==null)h=S.round.cur;
+  if(!wolfPickMine(h))return;
+  set(()=>{const r=S.round.holes[h];
+    if(r.confirmed){r.confirmed=false;r.cfts=[-Date.now(),-Date.now(),-Date.now(),-Date.now()];}
+    r.mode=null;r.partner=null;});
+}
+function redoPickArm(h){
+  if(redoArm!==h){redoArm=h;clearTimeout(redoArmTimer);redoArmTimer=setTimeout(()=>{redoArm=-1;render();},4000);render();return;}
+  redoArm=-1;clearTimeout(redoArmTimer);
+  wolfOverride[h]=true;
+  redoPick(h);
+}
+function wolfTakeOver(h){wolfOverride[h]=true;const a=wolfAsk;if(a){paintWolfAsk();}else render();}
 // ---- staged scores ----------------------------------------------------------
 // A score is not real until CONFIRM. The steppers used to write gross[] and
 // broadcast on every press, so the group watched each other dial 4->5->6 and
