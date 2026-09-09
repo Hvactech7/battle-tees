@@ -416,7 +416,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1788910106';
+const BUILD='1788912625';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -4408,7 +4408,7 @@ function splinePath(path){
 // kept forever, so at load (online only, never mid-round) any hosted map fetched
 // before this stamp is re-fetched in the background and swapped in on success —
 // the old one stays if the fetch fails, so a no-signal round never loses its map.
-const GEO_STAMP=1788910102729;   // 2026-09-08: 261 recovered holes on 183 courses (card-verified), see ~/battletees-national/scorecard
+const GEO_STAMP=1788912624158;   // 2026-09-08: 284 recovered holes on 202 courses (card-verified), see ~/battletees-national/scorecard
 async function refreshStaleGeo(){
   try{
     if(typeof navigator!=='undefined'&&navigator.onLine===false)return;
