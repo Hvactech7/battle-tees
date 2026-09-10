@@ -416,7 +416,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789078947';
+const BUILD='1789079854';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -8814,8 +8814,10 @@ function vHistory(){
       <b style="font-family:Rajdhani,sans-serif;font-size:20px">${gameName(e.game)} · ${esc(e.courseName)}</b>
       <div class="tiny">${when} · thru ${e.thru} · ${e.mins!=null?e.mins+' min':''}${e.code?' · shared '+esc(e.code):''}</div>
       <div class="tiny">${(e.players||[]).map(esc).join(' · ')}</div>
-      <div style="display:flex;gap:8px;margin-top:10px">
-        <button class="ghost sel" style="flex:1;margin:0;white-space:nowrap" onclick="reopenRound('${e.id}')">Review</button>
+      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+        <button class="ghost sel" style="flex:1 1 40%;margin:0;white-space:nowrap" onclick="reopenRound('${e.id}')">Review</button>
+        <button class="ghost" style="flex:1 1 auto;margin:0;white-space:nowrap" onclick="exOpen('download','${e.id}')">⬇️ Data</button>
+        <button class="ghost" style="flex:1 1 auto;margin:0;white-space:nowrap" onclick="exOpen('email','${e.id}')">✉️ Email</button>
         <button class="ghost danger" style="flex:none;width:46px;margin:0" onclick="delHist('${e.id}')">${armDelHist===e.id?'Del?':'✕'}</button>
       </div>
     </div>`;}).join('')
@@ -8915,103 +8917,121 @@ function exDay(t){if(!t)return '';const d=new Date(t);
 function exTime(t){if(!t)return '';return new Date(t).toISOString();}
 // Every round this phone holds for you: the archive, plus the one you are
 // playing right now if it has any confirmed holes in it.
-function exRounds(){
+function exRounds(only){
   const out=(S.history||[]).map(e=>({e,live:false}));
-  try{
-    if(S.round&&S.round.started&&!isReview()){
-      const live={id:'live',startedAt:S.round.startedAt,endedAt:null,
-        game:S.round.game||S.config.game,courseId:S.course.id,courseName:S.course.name,
-        players:actIdx().map(i=>S.players[i].name),round:S.round,
-        playersSnap:S.players,courseSnap:S.course,mins:null};
-      if((S.round.holes||[]).some(r=>r&&r.confirmed))out.unshift({e:live,live:true});
-    }
-  }catch(err){}
-  return out;
+  return only?out.filter(x=>String(x.e.id)===String(only)):out;
 }
-function exportTables(){
-  const R=[['Date','Course','Tees','Game','Status','Holes scored','Gross','Par','To par','Front 9','Back 9',
-            'Putts','1-putts','3-putts','Fairways hit','Fairway holes','Greens in reg','GIR holes',
-            'Bunker shots','Chips','Penalties','Closest to pin','Minutes','Started','Ended','Round ID']];
+function exportTables(only){
+  const R=[['Date','Course','Tees','Tee rating','Tee slope','Game','Games played','Holes span','First hole',
+            'Shared code','Playing partners','Handicap index','Status',
+            'Holes scored','Gross','Net','Par','To par','Result','Front 9','Back 9',
+            'Eagles or better','Birdies','Pars','Bogeys','Doubles or worse',
+            'Putts','1-putts','3-putts','Holes with putts recorded',
+            'Fairways hit','Fairway holes','Greens in reg','GIR holes',
+            'Bunker shots','Chips','Penalties','Closest to pin',
+            'Longest shot (yds)','Longest shot club','Round minutes','Started','Ended','Round ID']];
   const H=[['Date','Course','Round ID','Hole','Par','Stroke index','Yards','Gross','To par',
             'Putts','Fairway','Green in reg','Bunker','Chips','Penalties','Closest to pin',
-            'Wolf mode','Wolf partner','Confirmed']];
+            'Wolf mode','Wolf partner','Wolf passes','Hole finished','Minutes on hole','Confirmed']];
   const SH=[['Date','Course','Round ID','Hole','Club','Yards','From lat','From lon','To lat','To lon','Time']];
-  exRounds().forEach(({e,live})=>{
+  const PA=[['Date','Course','Round ID','Hole','Player','Par','Gross','To par']];
+  exRounds(only).forEach(({e,live})=>{
     const mi=exMyIdx(e); if(mi<0)return;
     const cs=e.courseSnap||S.courses.find(c=>c.id===e.courseId)||S.course||{};
     const chs=cs.holes||[];
-    const me=(e.playersSnap||[])[mi]||{};
+    const snap=e.playersSnap||[];
+    const me=snap[mi]||{};
     const tee=(cs.teeSets||[]).find(t=>t.id===me.tee)||null;
     const day=exDay(e.startedAt||e.endedAt);
     const rid=String(e.id||'');
+    const cname=cs.name||e.courseName||'';
     const holes=((e.round&&e.round.holes)||[]);
+    const sum=e.sum||null;
     let g=0,par=0,n=0,f9=0,f9n=0,b9=0,b9n=0,putts=0,puttH=0,one=0,three=0;
-    let fwHit=0,fwN=0,girHit=0,girN=0,bunk=0,chip=0,pen=0,ctp=0,anyPutt=false,anyFwGir=false,anyX=false;
+    let fwHit=0,fwN=0,girHit=0,girN=0,bunk=0,chip=0,pen=0,ctp=0;
+    let eag=0,bird=0,prs=0,bog=0,dbl=0;
+    let anyPutt=false,anyFwGir=false,anyX=false,lastFinish=null;
     holes.forEach((r,h)=>{
       if(!r||!r.confirmed||!r.gross||r.gross[mi]==null)return;
       const hole=chs[h]||{}, p=hole.par||4, gross=r.gross[mi], st=r.stats||{};
       const yds=tee&&tee.yds?tee.yds[h]:null;
-      const pv=(st.putts&&st.putts[mi]!=null)?st.putts[mi]:null;
+      // a putts answer of 0 is a chip-in, NOT "never recorded" — puttsEntered is
+      // the only thing that tells them apart, so it decides blank versus zero
+      const answered=puttsEntered(r,mi);
+      const pv=answered?((st.putts&&st.putts[mi])||0):null;
       const fv=(st.fw&&st.fw[mi])?1:0, gv=(st.gir&&st.gir[mi])?1:0;
       const bv=(st.bunker&&st.bunker[mi])||0, cv=(st.chips&&st.chips[mi])||0, xv=(st.pen&&st.pen[mi])||0;
       const isCtp=(r.ctp===mi);
+      // when the hole was ratified: that is the only per-hole clock the round keeps
+      const fin=(r.cfts&&r.cfts[mi]>1)?r.cfts[mi]:((r.gts&&r.gts[mi]>1)?r.gts[mi]:null);
+      const prev=lastFinish||e.startedAt||null;
+      const mins=(fin&&prev&&fin>prev)?Math.round((fin-prev)/6000)/10:null;
+      if(fin)lastFinish=fin;
+      const d=gross-p;
+      if(d<=-2)eag++;else if(d===-1)bird++;else if(d===0)prs++;else if(d===1)bog++;else dbl++;
       n++;g+=gross;par+=p;
       if(h<9){f9+=gross;f9n++;}else{b9+=gross;b9n++;}
       if(p>=4){fwN++;if(fv)fwHit++;}
       girN++;if(gv)girHit++;
       if(fv||gv)anyFwGir=true;
-      if(pv!=null&&pv>0){putts+=pv;puttH++;anyPutt=true;if(pv===1)one++;if(pv>=3)three++;}
+      if(answered){putts+=pv;puttH++;anyPutt=true;if(pv===1)one++;if(pv>=3)three++;}
       if(bv||cv||xv)anyX=true;
       bunk+=bv;chip+=cv;pen+=xv;
       if(isCtp)ctp++;
-      H.push([day,cs.name||e.courseName||'',rid,h+1,p,hole.si!=null?hole.si:'',yds||'',gross,gross-p,
+      H.push([day,cname,rid,h+1,p,hole.si!=null?hole.si:'',yds||'',gross,d,
               pv!=null?pv:'',(p>=4)?(fv?'Y':'N'):'',gv?'Y':'N',bv||'',cv||'',xv||'',isCtp?'Y':'',
-              r.mode||'',(r.partner!=null&&(e.playersSnap||[])[r.partner])?((e.playersSnap[r.partner]||{}).name||''):'',
-              r.confirmed?'Y':'N']);
+              r.mode||'',(r.partner!=null&&snap[r.partner])?((snap[r.partner]||{}).name||''):'',
+              Array.isArray(r.passes)?r.passes.length:'',
+              fin?exTime(fin):'',mins!=null?mins:'',r.confirmed?'Y':'N']);
+      // everyone else on the card, so the round exports as it was actually played
+      snap.forEach((pl,q)=>{
+        if(q===mi||!pl||!pl.name||r.gross[q]==null)return;
+        PA.push([day,cname,rid,h+1,pl.name,p,r.gross[q],r.gross[q]-p]);
+      });
     });
     if(!n)return;
-    R.push([day,cs.name||e.courseName||'',tee?tee.name:'',gameName(e.game||'')||e.game||'',
-            live?'In progress':'Final',n,g,par,g-par,
+    const partners=snap.map((pl,q)=>(q!==mi&&pl&&pl.name)?pl.name:null).filter(Boolean).join(' · ');
+    const span=(e.round&&e.round.span)||null;
+    const games=(e.round&&e.round.games&&e.round.games.length)?e.round.games.map(x=>gameName(x)||x).join(' + '):'';
+    R.push([day,cname,tee?tee.name:'',tee&&tee.rating!=null?tee.rating:'',tee&&tee.slope!=null?tee.slope:'',
+            gameName(e.game||'')||e.game||'',games,
+            span?span.count:'',span?span.start+1:'',
+            e.code||'',partners,me.index!=null?me.index:'',live?'In progress':'Final',
+            n,g,(sum&&sum.net!=null)?sum.net:'',par,g-par,(sum&&sum.result)||'',
             f9n?f9:'',b9n?b9:'',
-            anyPutt?putts:'',anyPutt?one:'',anyPutt?three:'',
+            eag,bird,prs,bog,dbl,
+            anyPutt?putts:'',anyPutt?one:'',anyPutt?three:'',anyPutt?puttH:'',
             anyFwGir?fwHit:'',anyFwGir?fwN:'',anyFwGir?girHit:'',anyFwGir?girN:'',
             anyX?bunk:'',anyX?chip:'',anyX?pen:'',ctp||'',
+            (sum&&sum.longShot&&sum.longShot.yds)?Math.round(sum.longShot.yds):'',
+            (sum&&sum.longShot&&sum.longShot.club)||'',
             e.mins!=null?e.mins:'',exTime(e.startedAt),exTime(e.endedAt),rid]);
-    // tracked shots are logged per round start, not inside the round record
     try{
       const log=(S.shotLog||{})['s'+(e.startedAt||0)]||[];
       log.forEach(x=>{
-        SH.push([day,cs.name||e.courseName||'',rid,(x.h!=null?x.h+1:''),x.club||'',
+        SH.push([day,cname,rid,(x.h!=null?x.h+1:''),x.club||'',
                  x.yds!=null?Math.round(x.yds):'',
                  x.a&&x.a[0]!=null?x.a[0]:'',x.a&&x.a[1]!=null?x.a[1]:'',
                  x.b&&x.b[0]!=null?x.b[0]:'',x.b&&x.b[1]!=null?x.b[1]:'',exTime(x.at)]);
       });
     }catch(err){}
   });
-  return {rounds:R,holes:H,shots:SH};
+  return {rounds:R,holes:H,shots:SH,partners:PA};
 }
-// CSV holds exactly ONE table, which is why the workbook exists — but every
-// stat tracker on earth imports CSV, so offer the same three tables that way
-// too and let the golfer pick. RFC4180 quoting: wrap anything with a comma,
-// quote or newline, and double the quotes inside.
-function csvCell(v){
-  if(v==null||v==='')return '';
-  const t=String(v);
-  return /[",\n\r]/.test(t)?'"'+t.replace(/"/g,'""')+'"':t;
+function exSlug(t){return String(t||'').trim().replace(/[^A-Za-z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();}
+function exportFileName(only){
+  const nm=exSlug((S.me&&S.me.name)||'golfer')||'golfer';
+  if(only){
+    const e=(exRounds(only)[0]||{}).e;
+    if(e)return `battle-tees-${nm}-${exDay(e.startedAt||e.endedAt)}-${exSlug(e.courseName||'round')}.xlsx`;
+  }
+  return `battle-tees-${nm}-${exDay(Date.now())}.xlsx`;
 }
-function csvText(rows){return rows.map(r=>r.map(csvCell).join(',')).join('\r\n')+'\r\n';}
-function exportCsvBlobs(){
-  const t=exportTables(), base=exportFileName().replace(/\.xlsx$/,'');
-  return [['rounds',t.rounds],['holes',t.holes],['shots',t.shots]]
-    .map(([nm,rows])=>({name:`${base}-${nm}.csv`,text:csvText(rows),rows:rows.length-1}));
-}
-function exportFileName(){
-  const nm=((S.me&&S.me.name)||'golfer').trim().replace(/[^A-Za-z0-9]+/g,'-').replace(/^-|-$/g,'')||'golfer';
-  return `battle-tees-${nm.toLowerCase()}-${exDay(Date.now())}.xlsx`;
-}
-function exportBuild(){
-  const t=exportTables();
-  return {blob:xlsxBlob([{name:'Rounds',rows:t.rounds},{name:'Holes',rows:t.holes},{name:'Shots',rows:t.shots}]),
+function exportBuild(only){
+  const t=exportTables(only);
+  const sheets=[{name:'Round',rows:t.rounds},{name:'Holes',rows:t.holes},{name:'Shots',rows:t.shots}];
+  if(t.partners&&t.partners.length>1)sheets.push({name:'Playing partners',rows:t.partners});
+  return {blob:xlsxBlob(sheets),
           counts:{rounds:t.rounds.length-1,holes:t.holes.length-1,shots:t.shots.length-1}};
 }
 // Delivery. CSV is the default because it is what stat trackers actually
@@ -9019,18 +9039,18 @@ function exportBuild(){
 // all three tables in a single file. iOS in a standalone PWA does nothing
 // useful with <a download>, so share the files where that exists and fall back
 // to a plain download everywhere else.
-let exBusy='',exMsg='',exSheet='';
+let exBusy='',exMsg='',exSheet='',exScope=null;   // exScope: a round id, or null for everything
 const exPl=(n,w)=>`${n} ${w}${n===1?'':'s'}`;
 const exCount=c=>`${exPl(c.rounds,'round')} · ${exPl(c.holes,'hole')} · ${exPl(c.shots,'shot')}`;
-function exOpen(which){exSheet=which;exMsg='';render();
+function exOpen(which,only){exSheet=which;exScope=only||null;exMsg='';render();
   if(which==='email')setTimeout(()=>{const el=document.getElementById('exMail');if(el)try{el.focus();}catch(e){}},60);}
-function exClose(){exSheet='';exMsg='';render();}
+function exClose(){exSheet='';exScope=null;exMsg='';render();}
 function exFiles(fmt){
   if(fmt==='xlsx'){
-    const {blob}=exportBuild();
-    return [new File([blob],exportFileName(),{type:blob.type})];
+    const {blob}=exportBuild(exScope);
+    return [new File([blob],exportFileName(exScope),{type:blob.type})];
   }
-  return exportCsvBlobs().map(f=>new File([f.text],f.name,{type:'text/csv'}));
+  return exportCsvBlobs(exScope).map(f=>new File([f.text],f.name,{type:'text/csv'}));
 }
 async function exportSave(fmt){
   if(exBusy)return;
@@ -9068,7 +9088,7 @@ async function exportEmail(fmt){
     const out=[];
     for(const f of files)out.push({filename:f.name,content:b64FromBuf(await f.arrayBuffer())});
     let counts={rounds:0,holes:0,shots:0};
-    try{const t=exportTables();counts={rounds:t.rounds.length-1,holes:t.holes.length-1,shots:t.shots.length-1};}catch(e){}
+    try{const t=exportTables(exScope);counts={rounds:t.rounds.length-1,holes:t.holes.length-1,shots:t.shots.length-1};}catch(e){}
     const r=await relayBattle({op:'export',to,files:out,counts,fmt:fmt||'csv',who:((S.me&&S.me.name)||'')});
     if(r&&r.ok){
       try{localStorage.setItem('wolfBackupEmail',to);}catch(e){}
@@ -9084,9 +9104,11 @@ function exSmallBtn(label,onclick){
 function exportSheetHTML(){
   if(!exSheet)return '';
   let c={rounds:0,holes:0,shots:0};
-  try{const t=exportTables();c={rounds:t.rounds.length-1,holes:t.holes.length-1,shots:t.shots.length-1};}catch(e){}
-  const lead=`<div class="tiny mb">Three tables \u2014 <b>${exPl(c.rounds,'round')}</b>, <b>${exPl(c.holes,'hole')}</b>
-    and <b>${exPl(c.shots,'tracked shot')}</b>, one row each. CSV is what most stat trackers import.</div>`;
+  try{const t=exportTables(exScope);c={rounds:t.rounds.length-1,holes:t.holes.length-1,shots:t.shots.length-1};}catch(e){}
+  const one=(exRounds(exScope)[0]||{}).e||null;
+  const lead=`<div class="tiny mb"><b>${esc((one&&one.courseName)||'This round')}</b>${one?` \u2014 ${esc(exDay(one.startedAt||one.endedAt))}`:''}:
+    <b>${exPl(c.holes,'hole')}</b> and <b>${exPl(c.shots,'tracked shot')}</b>, one row each, on three tables \u2014 the round, its holes and its shots.
+    CSV is what most stat trackers import.</div>`;
   const err=exMsg?`<div class="tiny mb" style="font-weight:600;color:var(--green-mid)">${esc(exMsg)}</div>`:'';
   if(exSheet==='download')return `<div class="vfWrap" role="dialog" aria-modal="true" aria-labelledby="exDT"><div class="vfCard" style="max-width:430px">
     <h2 id="exDT" class="vfTitle">Download your data</h2>
@@ -9105,20 +9127,6 @@ function exportSheetHTML(){
     ${exSmallBtn('Send one Excel workbook (.xlsx) instead',"exportEmail('xlsx')")}
     <button class="big mt" style="background:var(--card);color:var(--ink2);border-color:var(--line);box-shadow:3px 3px 0 var(--line)" onclick="exClose()">Cancel</button>
   </div></div>`;
-}
-function exportCardHTML(){
-  let c={rounds:0,holes:0,shots:0};
-  try{const t=exportTables();c={rounds:t.rounds.length-1,holes:t.holes.length-1,shots:t.shots.length-1};}catch(e){}
-  if(!c.rounds&&!c.shots)return `<div class="card"><h2>\ud83d\udce4 Your data</h2>
-    <div class="tiny">Once you have finished a round, everything this phone recorded can be exported here as a spreadsheet.</div></div>`;
-  return `<div class="card"><h2>\ud83d\udce4 Your data</h2>
-    <div class="tiny mb">Everything this phone has recorded for you \u2014 <b>${exPl(c.rounds,'round')}</b>, <b>${exPl(c.holes,'hole')}</b>
-      and <b>${exPl(c.shots,'tracked shot')}</b>, one row each. Take it to any stat tracker.</div>
-    <button class="big" onclick="exOpen('download')" ${exBusy?'disabled':''}>\u2b07\ufe0f &nbsp;Download Spreadsheet</button>
-    <button class="big mt" style="background:var(--card);color:var(--green-mid);border-color:var(--green)" onclick="exOpen('email')" ${exBusy?'disabled':''}>\u2709\ufe0f &nbsp;Email Spreadsheet</button>
-    ${(!exSheet&&exMsg)?`<div class="tiny mt" style="font-weight:600;color:var(--green-mid)">${esc(exMsg)}</div>`:''}
-    <div class="tiny mt">Blank cells mean the stat was never recorded \u2014 they are not zeros.</div>
-  </div>`;
 }
 function vStats(){
   const meNm=(S.me&&S.me.name||'').trim().toLowerCase();
@@ -9240,7 +9248,6 @@ function vStats(){
     <div id="shotlist" data-keepscroll style="max-height:280px;overflow-y:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line);border-radius:12px;padding:0 12px;margin-top:6px">${recentRows}</div>
     <div class="tiny mt">From Track It on the map — GPS-measured, tagged by club.</div>`
     :'<div class="tiny">Use <b>Track It</b> on the hole map: tap at your ball, tap where it lands, tag the club. Your real distances build here.</div>'}</div>
-  ${exportCardHTML()}
   </main>`;
 }
 function vRules(){
