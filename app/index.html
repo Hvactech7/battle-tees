@@ -416,7 +416,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789018359';
+const BUILD='1789020501';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -4258,7 +4258,7 @@ function mapStatToggle(k){reviewTouch();
     b.textContent=(on?'✓ ':'')+(k==='fw'?'FW':'GIR');}
 }
 function mapStatChipsHTML(hole){
-  if(!S.round.started)return '';
+  if(!S.round.started||gpsOnly())return '';   // rangefinder mode keeps no stats
   const rec=S.round.holes[mapHole]||{};
   const mi=myPlayerIdx();
   const chip=(k,label)=>{
@@ -4303,23 +4303,34 @@ function vMap(){
       const mine=(r.cfts&&r.cfts[mi]>0)||(r.gts&&r.gts[mi]>1)||r.confirmed;
       if(mine){myTot+=r.gross[mi];myPar+=(S.course.holes[hh]||{par:4}).par;}});
   }
+  // The left column stacks Track It (bottom 112) → FW/GIR (166) → Manual
+  // (220, 46 tall, so up to 266). The wind rose sits at 204: clear of the chips,
+  // but buried under the Manual button on any UNMAPPED hole — and that is true
+  // in a normal round as much as in rangefinder mode (Nathan, 9/9). Lift the
+  // rose clear of the whole stack whenever that button is on screen.
+  let manualShown=false;
+  try{
+    const gg=amnesiaOn(S.course.id)?null:(S.course.geo&&S.course.geo.holes&&S.course.geo.holes[physHole(mapHole)+1]);
+    manualShown=!(gg&&gg.green&&gg.green.length>2);
+  }catch(e){}
   const d=myTot-myPar;
-  const myScore=myPar>0?`<div style="text-align:center;flex:none;margin:0 14px 0 10px">
+  const myScore=(myPar>0&&!gpsOnly())?`<div style="text-align:center;flex:none;margin:0 14px 0 10px">
     <div class="num" style="font-size:38px;line-height:1;font-weight:700;color:${d<0?'#7fd49a':d>0?'var(--amber-bd)':'var(--ink)'};text-shadow:0 0 10px rgba(0,0,0,.5)">${d===0?'E':(d>0?'+':'')+d}</div>
     <div class="tiny" style="color:var(--ink2);white-space:nowrap;font-size:12px">${myTot} strokes</div></div>`:'';
-  return topbar(`Hole ${mapHole+1} · Par ${hole.par}${(S.round.holes[mapHole]||{}).confirmed?' ✓':''}`,
-    `Handicap ${hole.si}${(S.round.holes[mapHole]||{}).confirmed?' · scored':' · NOT scored yet'}`,'','hero maphero',
+  return topbar(`Hole ${mapHole+1} · Par ${hole.par}${(!gpsOnly()&&(S.round.holes[mapHole]||{}).confirmed)?' ✓':''}`,
+    gpsOnly()?`Handicap ${hole.si} · rangefinder`
+             :`Handicap ${hole.si}${(S.round.holes[mapHole]||{}).confirmed?' · scored':' · NOT scored yet'}`,'','hero maphero',
     `<div style="display:flex;align-items:center;margin-left:auto;gap:10px">${myScore}${
       (S.share&&S.share.on&&S.share.creator&&S.share.code)?`<div onclick="inviteFromMap()" style="text-align:center;flex:none;margin-right:20px;color:var(--gold,#e8c552);font-family:Rajdhani,Inter,sans-serif;font-weight:700;line-height:1.05;cursor:pointer">
         <div style="font-size:10px;font-weight:600;opacity:.85;letter-spacing:.5px">${S.share.bf?'TAP TO INVITE':'JOIN CODE'}</div>
         <div class="num" style="font-size:22px;letter-spacing:3px">${esc(S.share.code)}</div></div>`:''}${gameBadgeHTML()}</div>`)+`
   <div id="holemap"></div>
-  <div id="windrose" onclick="toggleWindMode()" onpointerdown="windRosePD(event)" onpointerup="windRosePU()" onpointercancel="windRosePU()" oncontextmenu="return false" style="display:none"></div>
+  <div id="windrose" onclick="toggleWindMode()" onpointerdown="windRosePD(event)" onpointerup="windRosePU()" onpointercancel="windRosePU()" oncontextmenu="return false" style="display:none${manualShown?';bottom:calc(276px + env(safe-area-inset-bottom))':''}"></div>
   ${mapCreditsChipHTML()}
   ${mapStatChipsHTML(hole)}
-  <button id="trackbtn" onclick="trackShotTap()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(112px + env(safe-area-inset-bottom));z-index:6;width:120px;height:46px;background:var(--card);border:2px solid ${trackShot&&trackShot.hole===mapHole?'var(--amber-bd)':'var(--green)'};border-radius:12px;color:${trackShot&&trackShot.hole===mapHole?'var(--amber-bd)':'var(--green-mid)'};font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:19px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">${trackShot&&trackShot.hole===mapHole?'Mark It':'Track It'}</button>
-  ${trackShot&&trackShot.hole===mapHole?`<button id="trackxbtn" onclick="clearTrackStart()" style="position:fixed;left:max(138px,calc(50vw - 102px));bottom:calc(112px + env(safe-area-inset-bottom));z-index:6;width:46px;height:46px;background:var(--card);border:2px solid var(--red,#c0392b);border-radius:12px;color:var(--red,#c0392b);font-size:22px;font-weight:800;box-shadow:2px 2px 0 rgba(0,0,0,.35)">✕</button>`:''}
-  ${undoTrackHTML()}
+  ${gpsOnly()?'':`<button id="trackbtn" onclick="trackShotTap()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(112px + env(safe-area-inset-bottom));z-index:6;width:120px;height:46px;background:var(--card);border:2px solid ${trackShot&&trackShot.hole===mapHole?'var(--amber-bd)':'var(--green)'};border-radius:12px;color:${trackShot&&trackShot.hole===mapHole?'var(--amber-bd)':'var(--green-mid)'};font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:19px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">${trackShot&&trackShot.hole===mapHole?'Mark It':'Track It'}</button>`}
+  ${gpsOnly()?'':(trackShot&&trackShot.hole===mapHole?`<button id="trackxbtn" onclick="clearTrackStart()" style="position:fixed;left:max(138px,calc(50vw - 102px));bottom:calc(112px + env(safe-area-inset-bottom));z-index:6;width:46px;height:46px;background:var(--card);border:2px solid var(--red,#c0392b);border-radius:12px;color:var(--red,#c0392b);font-size:22px;font-weight:800;box-shadow:2px 2px 0 rgba(0,0,0,.35)">✕</button>`:'')}
+  ${gpsOnly()?'':undoTrackHTML()}
   ${(()=>{try{
       // Under amnesia the hole is unmapped BY DEFINITION. This runs during
       // render, BEFORE initHoleMap parks the real map — so reading geo here hid
@@ -4337,8 +4348,8 @@ function vMap(){
       const lbl=(manualOn||started)?'🔄 Manual':'📍 Map this hole';
       return `<button id="manualbtn" onclick="manualModeTap()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(220px + env(safe-area-inset-bottom));z-index:6;height:46px;padding:0 14px;background:var(--card);border:2px solid var(--elec,#2b86ec);border-radius:12px;color:var(--elec,#2b86ec);font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:17px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">${lbl}</button>`;
     }catch(e){return '';}})()}
-  <button onclick="go('hole')" style="position:fixed;right:max(10px,calc(50vw - 230px));top:calc(100px + env(safe-area-inset-top));z-index:6;background:rgba(15,21,34,.82);border:1.5px solid var(--line);border-radius:12px;color:#fff;padding:10px 17px;font-size:17px;font-weight:600;font-family:inherit">Back</button>
-  <button id="mapconfirm" onclick="mapConfirm()" style="position:fixed;right:max(10px,calc(50vw - 230px));bottom:calc(166px + env(safe-area-inset-bottom));z-index:6;width:126px;height:46px;background:${mapScoreState()==='in'?'var(--green-lt)':mapScoreState()==='armed'?'#2b86ec':'rgba(15,21,34,.82)'};border:2px solid ${mapScoreState()==='in'?'var(--green)':mapScoreState()==='armed'?'var(--elec-dk,#1c5eb0)':'var(--line)'};border-radius:12px;color:${mapScoreState()==='in'?'var(--green)':mapScoreState()==='armed'?'#eef6ff':'var(--ink3)'};font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:${mapScoreState()==='in'?'15px':'19px'};box-shadow:2px 2px 0 rgba(0,0,0,.35)">${mapConfirmLabel()}</button>
+  <button onclick="go(gpsOnly()?'setup':'hole')" style="position:fixed;right:max(10px,calc(50vw - 230px));top:calc(100px + env(safe-area-inset-top));z-index:6;background:rgba(15,21,34,.82);border:1.5px solid var(--line);border-radius:12px;color:#fff;padding:10px 17px;font-size:17px;font-weight:600;font-family:inherit">Back</button>
+  ${gpsOnly()?'':`<button id="mapconfirm" onclick="mapConfirm()" style="position:fixed;right:max(10px,calc(50vw - 230px));bottom:calc(166px + env(safe-area-inset-bottom));z-index:6;width:126px;height:46px;background:${mapScoreState()==='in'?'var(--green-lt)':mapScoreState()==='armed'?'#2b86ec':'rgba(15,21,34,.82)'};border:2px solid ${mapScoreState()==='in'?'var(--green)':mapScoreState()==='armed'?'var(--elec-dk,#1c5eb0)':'var(--line)'};border-radius:12px;color:${mapScoreState()==='in'?'var(--green)':mapScoreState()==='armed'?'#eef6ff':'var(--ink3)'};font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:${mapScoreState()==='in'?'15px':'19px'};box-shadow:2px 2px 0 rgba(0,0,0,.35)">${mapConfirmLabel()}</button>
   <div style="position:fixed;right:max(10px,calc(50vw - 230px));bottom:calc(112px + env(safe-area-inset-bottom));z-index:6;display:flex;align-items:center;background:var(--card);border:2px solid var(--green);border-radius:12px;overflow:hidden;box-shadow:2px 2px 0 rgba(0,0,0,.35)">
     <button onclick="mapChScore(-1)" style="width:42px;height:46px;background:none;border:none;color:var(--elec);font-size:24px;font-weight:800">−</button>
     <div id="mapsc" class="num" onclick="showMapConfirm()" style="min-width:36px;text-align:center;font-size:26px;cursor:pointer">${(()=>{const r=S.round.holes[mapHole];if(!r||!r.gross)return hole.par;
@@ -4348,13 +4359,13 @@ function vMap(){
       const g=isReview()?r.gross[myPlayerIdx()]:stagedG(r,mapHole,myPlayerIdx());
       return g!=null?g:hole.par;})()}</div>
     <button onclick="mapChScore(1)" style="width:42px;height:46px;background:none;border:none;color:var(--elec);font-size:24px;font-weight:800">+</button>
-  </div>
+  </div>`}
   <div class="mapbar">
     <div class="row" style="border:none;padding:2px 0">
       <button class="ghost" onclick="mapPrev()">◀</button>
-      <button id="shotsbtn" class="ghost" onclick="toggleShots()" style="width:40px;height:40px;padding:0;display:flex;align-items:center;justify-content:center;opacity:${showShots?'1':'.45'};border-color:${showShots?'var(--green)':''}">
+      ${gpsOnly()?'':`<button id="shotsbtn" class="ghost" onclick="toggleShots()" style="width:40px;height:40px;padding:0;display:flex;align-items:center;justify-content:center;opacity:${showShots?'1':'.45'};border-color:${showShots?'var(--green)':''}">
         <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><circle cx="4.5" cy="17.5" r="2.4" fill="currentColor"/><path d="M6 16 L16 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><circle cx="17.5" cy="4.5" r="2.4" fill="currentColor"/></svg>
-      </button>
+      </button>`}
       <div class="center" style="flex:1;min-width:0">
         <div class="num" id="fmb" style="font-size:29px;white-space:nowrap">—</div>
         <div class="tiny" id="fmbsub" style="max-height:2.7em;overflow:hidden">loading…</div>
@@ -6732,7 +6743,7 @@ function render(){
   else if(scr==='history') html=vHistory();
   else if(scr==='pickcourse') html=vPickCourse();
   else if(scr==='course') html=vCourse();
-  else if(scr==='setup') html=vSetup();
+  else if(scr==='setup') html=gpsOnly()?vGpsSetup():vSetup();
   else if(scr==='roundopts') html=vRoundOpts();
   else if(scr==='chal') html=vChal();
   else if(scr==='settings') html=vSettings();
@@ -6847,7 +6858,7 @@ function gdTag(k){return gridDeco?(' '+gridDeco.tag(k)):'';}
 function gameArtFile(g){return {wolf:'/wolf.png',nines:'/nine.png',vegas:'/vegas.png',quota:'/quota.png',sixes:'/sixes.png',umbrella:'/umbrella.png',bbb:'/bbb.png',stroke:'/stroke.png',stableford:'/stableford.png',bestball:'/bestball.png',scramble:'/scramble.png',nassau:'/nassau.png',skins:'/skins.png'}[g];}
 
 function gameBadgeHTML(){
-  if(!S.round.started)return '';
+  if(!S.round.started||gpsOnly())return '';   // rangefinder mode has no game
   // lead with THIS phone's main game (per-phone choice); the +N counts the rest
   const G=gamesOn(), g=(S.round.game&&(G.includes(S.round.game)||true))?S.round.game:G[0];
   if(!g)return '';
@@ -7204,6 +7215,7 @@ function vHome(){
     <button class="ghost hb" style="padding:12px" onclick="go('stats')">📊 Stats</button>
     <button class="ghost hb" style="padding:12px" onclick="go('history')">🕰 Rounds</button>
   </div>
+  <button class="ghost hb" style="width:100%;padding:12px;margin-bottom:10px" onclick="startRangefinder()">\ud83d\udccd GPS Rangefinder Only</button>
   ${(bfLivePeek(),bfHomeBtnHTML())}
   `:''}
   ${!S.me.name?`<div class="card"><h2>Your profile</h2>
@@ -8281,6 +8293,47 @@ function preCourseHTML(){
   if(!p||!S.course||S.course.id!==p.id)return '';
   return `<div class="tiny mb" style="color:var(--green);font-weight:700">📍 Nearest — ${esc(p.name)}, ${preMi(p.mi)}. Pick another below to change it.</div>`;
 }
+// ── GPS RANGEFINDER ONLY ────────────────────────────────────────────────────
+// A round with no game and no card: yardages, the map and the wind, nothing to
+// score. It starts at the course picker (already hunting the nearest course),
+// opens the map on hole 1, and Back goes to its own small setup card rather than
+// the scorecard. Everything here is gated on S.round.gpsOnly so not one pixel of
+// a normal round changes.
+function gpsOnly(){return !!(S.round&&S.round.gpsOnly);}
+function startRangefinder(){
+  primeGeo();
+  if(!S.round.started)resetRoster();
+  set(()=>{ensureMeFirst();});
+  pickingCourse=true;
+  finder={status:'idle',choices:[],error:''};
+  wiz={step:'course',n:1,solo:true,gpsOnly:true};
+  preCourseStart();                       // AFTER wiz exists — a fresh fix resolves synchronously
+  S.screen='start';save();render();
+}
+// Nothing was scored, so there is nothing to archive: end it and go home. A
+// normal round still goes through askEndRound() and its history/settle path.
+let endGpsArm=false;
+function endRangefinder(){
+  if(!endGpsArm){endGpsArm=true;render();setTimeout(()=>{if(endGpsArm){endGpsArm=false;render();}},4000);return;}
+  endGpsArm=false;
+  set(()=>{S.round=blankRound();S.screen='home';});
+}
+// Back from the map lands here: carry on, stop, or hand the phone over to a
+// real round with other people in it.
+function vGpsSetup(){
+  return topbar('GPS rangefinder',esc(S.course.name||''),'home')+`<main>
+  <div class="card"><h2>Rangefinder</h2>
+    <div class="tiny mb">Yardages, the map and the wind. No game, no card \u2014 nothing is being scored.</div>
+    <button class="big" onclick="go('map')">\ud83d\udccd Back to the GPS</button>
+    <button class="ghost mt" style="width:100%" onclick="pickingCourse=true;finder={status:'idle',choices:[],error:''};go('pickcourse')">\u26f3 Change course</button>
+  </div>
+  <div class="card"><h2>Playing with others?</h2>
+    <div class="tiny mb">Joining a round ends the rangefinder and puts you on their card.</div>
+    <button class="big" style="background:var(--card);color:var(--green-mid);border-color:var(--green)" onclick="set(()=>{S.round=blankRound();});wiz={step:'join',n:4};S.screen='start';render()">\ud83d\udc65 Join an existing round</button>
+  </div>
+  <button class="big danger mt" onclick="endRangefinder()">${endGpsArm?'\u26a0\ufe0f Tap again \u2014 end the rangefinder':'End rangefinder'}</button>
+  </main>`;
+}
 function startWizard(){
   if(S.share&&S.share.on&&S.share.creator&&!S.round.started){resumeOpenRoom();return;}
   primeGeo();
@@ -8437,12 +8490,14 @@ function vStart(){
     <button class="big" onclick="wizOptsDone()">Next \u2014 pick the course \u2192</button>
     </main>`;
 
-  if(step==='course')return head('Where are you playing?',`${gameName(S.config.game)} · ${actIdx().filter(i=>isRealPl(S.players[i])).map(i=>esc((S.players[i].name||'').split(' ')[0])).join(', ')}`)+`<main>
+  if(step==='course')return head('Where are you playing?',
+    (wiz&&wiz.gpsOnly)?'Rangefinder \u2014 no game, no card'
+    :`${gameName(S.config.game)} · ${actIdx().filter(i=>isRealPl(S.players[i])).map(i=>esc((S.players[i].name||'').split(' ')[0])).join(', ')}`)+`<main>
     <div class="card"><h2>Pick the course</h2>
       ${preCourseHTML()}
       ${finder.status==='idle'?courseListHTML(true):''}
       ${courseFinderHTML(true)}</div>
-    <button class="big mt" style="width:100%" onclick="wiz=null;startRound()">Start Round \u2014 ${esc(S.course.name)}</button>
+    <button class="big mt" style="width:100%" onclick="startRound()">${wiz&&wiz.gpsOnly?'\ud83d\udccd Start GPS':'Start Round'} \u2014 ${esc(S.course.name)}</button>
     <div class="tiny mt center">The round opens on the GPS map of hole 1.</div>
     </main>`;
 
@@ -11047,10 +11102,14 @@ function pairGroups(){
 }
 function startRound(){
   primeGeo();   // iOS may re-ask each session — get it over with here, not on hole 1
+  // rangefinder mode is meant to be one tap from the home screen to the map, and
+  // nothing in it is scored off a tee — so it skips the tee-confirm sheet and
+  // takes whatever applyTeePrefs() already chose
+  const gpsOnlyRound=!!(wiz&&wiz.gpsOnly);
   // Confirm tees against this course before the first hole. The flag means
   // "already confirmed" and is set by the callback, not before it — setting it
   // early made the sheet reopen itself forever.
-  if(!startRound._confirmed){
+  if(!startRound._confirmed&&!gpsOnlyRound){
     return askTee(()=>{startRound._confirmed=true;startRound();},'Confirm your tees',S.course.name);
   }
   // The 2v2 partner sheet no longer fires HERE — at start the seats may be
@@ -11073,7 +11132,7 @@ function startRound(){
   // went out for a round nobody played. The announcement now waits for the first
   // CONFIRMED hole, so a round has to be real before anyone hears about it.
   // (See maybeBroadcastRound, called from every confirm path.)
-  set(()=>{S.round=blankRound();S.round.started=true;S.round.game=S.config.game;
+  set(()=>{S.round=blankRound();S.round.started=true;S.round.gpsOnly=gpsOnlyRound;S.round.game=S.config.game;
     S.round.games=(S.config.games&&S.config.games.length?S.config.games.slice():[S.config.game]).filter((g,i,a)=>a.indexOf(g)===i);
     S.round.rates=S.round.rates||{};
     // flexible stacked games play with the full roster
@@ -11619,7 +11678,7 @@ function endAskSheetHTML(){
         <div class="tiny mb">You have scored <b>${thru} of ${total}</b>. Still blank: <b>${list}</b>.
           Blank holes stay blank — they are left out of your totals and your stats.</div>
         <button class="big mt" onclick="endAskScore()">✎ &nbsp;Let me finish scoring</button>
-        <button class="ghost mt" style="width:100%" onclick="endAskAnyway()">End the round anyway</button>
+        <button class="big mt" style="background:var(--card);color:var(--ink2);border-color:var(--line);box-shadow:3px 3px 0 var(--line)" onclick="endAskAnyway()">End the round anyway</button>
       </div></div>`;
   }
   // Same prompt whether you finished the card or are walking in early — only the
@@ -11633,7 +11692,7 @@ function endAskSheetHTML(){
       <div class="tiny mb">${lead} Ending stops your clock,
         saves the round to your history and unlinks you from the group. Everyone else keeps playing.</div>
       <button class="big mt" onclick="endAskYes()">⚔️ &nbsp;Yes — my round is over</button>
-      <button class="ghost mt" style="width:100%" onclick="endAskNo()">Not yet — keep me in</button>
+      <button class="big mt" style="background:var(--card);color:var(--ink2);border-color:var(--line);box-shadow:3px 3px 0 var(--line)" onclick="endAskNo()">Not yet — keep me in</button>
     </div></div>`;
 }
 function finishMyRound(){
