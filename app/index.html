@@ -416,7 +416,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789079854';
+const BUILD='1789081770';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -8844,8 +8844,19 @@ function xSheetXML(rows){
     }).join('');
     return `<row r="${r+1}">${cells}</row>`;
   }).join('');
+  // Without <cols> a viewer falls back to ~8 characters, and a 10-character date
+  // spills into the course name (Nathan, on the phone). Size every column to its
+  // widest cell instead, clamped so one long course name cannot push the rest of
+  // the sheet off screen.
+  const w=[];
+  rows.forEach(row=>row.forEach((v,c)=>{
+    const len=(v==null?0:String(v).length);
+    if(len>(w[c]||0))w[c]=len;
+  }));
+  const cols=w.length?`<cols>${w.map((len,c)=>
+    `<col min="${c+1}" max="${c+1}" width="${Math.min(38,Math.max(9,len+2))}" customWidth="1"/>`).join('')}</cols>`:'';
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${body}</sheetData></worksheet>`;
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${cols}<sheetData>${body}</sheetData></worksheet>`;
 }
 let _crcT=null;
 function crc32(u8){
