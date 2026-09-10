@@ -416,7 +416,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789000684';
+const BUILD='1789018031';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -8227,11 +8227,66 @@ function startOwnSetup(){set(()=>{S.screen='pickgame';});}
 // ---- the start-round wizard: one card at a time ---------------------------------
 // step: 'kind' | 'count' | 'who' | 'game' | 'course' | 'join'
 let wiz=null;
+// ── PRE-PICK THE NEAREST COURSE ─────────────────────────────────────────────
+// Start Round kicks off a GPS fix and a nearest-course lookup at once, so by the
+// time the wizard asks "Where are you playing?" the answer is already filled in.
+// THE NEAREST COURSE WINS, full stop — in your list or not. It is a pre-pick and
+// never a confirmation: the course step is still there to tap through, and the
+// moment you pick a course yourself we stop touching it (wiz.courseTouched).
+let preCourse=null;
+const PRE_MAX_MI=25;   // a sanity bound, not a filter: past this you are nowhere near golf
+function preCourseStart(){
+  preCourse={status:'looking',pick:null};
+  if(myCoords&&isFinite(myCoords[0])&&Date.now()-myCoordsAt<300000){preCourseResolve();return;}
+  if(!navigator.geolocation){preCourse={status:'none',pick:null};return;}
+  navigator.geolocation.getCurrentPosition(
+    p=>{cacheCoords([p.coords.latitude,p.coords.longitude]);preCourseResolve();},
+    ()=>{preCourse={status:'none',pick:null};},
+    {enableHighAccuracy:true,timeout:12000,maximumAge:120000});
+}
+function preMi(mi){return mi<0.1?'right here':mi<10?mi.toFixed(1)+' mi':Math.round(mi)+' mi';}
+async function preCourseResolve(){
+  if(!preCourse||!myCoords)return;
+  const mi=(a,b)=>kmBetween(myCoords[0],myCoords[1],a,b)*0.621371;
+  // your own courses first — no network, so there is an answer straight away
+  let best=null;
+  S.courses.forEach((c,i)=>{
+    if(!c||!c.loc)return;
+    const d=mi(c.loc[0],c.loc[1]);
+    if(!best||d<best.mi)best={kind:'saved',i,id:c.id,name:c.name,mi:d};
+  });
+  if(best&&best.mi<=PRE_MAX_MI){preCourse={status:'ok',pick:best};preCourseApply();}
+  // then the whole index, in case the course you are standing on is one you have
+  // never added. Nearest still wins; being on your list earns it nothing.
+  try{
+    if(!window.__natIdx){const r=await fetch('/courses-index.json');if(r.ok)window.__natIdx=await r.json();}
+    let nb=null;
+    (window.__natIdx||[]).forEach(c=>{const d=mi(c[3],c[4]);if(!nb||d<nb.mi)nb={kind:'nat',id:c[0],name:c[1],mi:d};});
+    if(nb&&nb.mi<=PRE_MAX_MI&&(!best||nb.mi<best.mi)){preCourse={status:'ok',pick:nb};preCourseApply();return;}
+  }catch(e){}
+  if(!best||best.mi>PRE_MAX_MI){preCourse={status:'none',pick:null};render();}
+}
+function preCourseApply(){
+  const p=preCourse&&preCourse.pick;
+  if(!p||!wiz||wiz.courseTouched)return;          // you chose one yourself: hands off
+  if(S.round&&S.round.started)return;             // mid-round resume keeps its course
+  if(S.course&&S.course.id===p.id){render();return;}
+  if(p.kind==='saved')pickCourse(p.i);            // set() renders for us
+  else natUse(p.id,true);                         // fetch the record and make it current
+}
+function preCourseHTML(){
+  if(!preCourse||(wiz&&wiz.courseTouched))return '';
+  if(preCourse.status==='looking')return `<div class="tiny mb">📍 Finding the nearest course…</div>`;
+  const p=preCourse.pick;
+  if(!p||!S.course||S.course.id!==p.id)return '';
+  return `<div class="tiny mb" style="color:var(--green);font-weight:700">📍 Nearest — ${esc(p.name)}, ${preMi(p.mi)}. Pick another below to change it.</div>`;
+}
 function startWizard(){
   if(S.share&&S.share.on&&S.share.creator&&!S.round.started){resumeOpenRoom();return;}
   primeGeo();
   if(!S.round.started)resetRoster();
   wiz={step:'span',n:4};
+  preCourseStart();                       // AFTER wiz exists: a fresh fix resolves synchronously
   addMode='nearby';                       // the who-card scans nearby automatically
   S.screen='start';save();render();
 }
@@ -8384,6 +8439,7 @@ function vStart(){
 
   if(step==='course')return head('Where are you playing?',`${gameName(S.config.game)} · ${actIdx().filter(i=>isRealPl(S.players[i])).map(i=>esc((S.players[i].name||'').split(' ')[0])).join(', ')}`)+`<main>
     <div class="card"><h2>Pick the course</h2>
+      ${preCourseHTML()}
       ${finder.status==='idle'?courseListHTML(true):''}
       ${courseFinderHTML(true)}</div>
     <button class="big mt" style="width:100%" onclick="wiz=null;startRound()">Start Round \u2014 ${esc(S.course.name)}</button>
@@ -8598,11 +8654,13 @@ function startWithGame(g){
   primeGeo();
   if(!S.round.started)resetRoster();
   wiz={step:'span',n:4,preGame:g};
+  preCourseStart();                       // AFTER wiz exists, as in startWizard
   addMode='nearby';S.screen='start';save();render();
 }
 function vPickCourse(){
   return topbar(`Where are you playing?`,`${gameName(S.config.game)} · ${actIdx().map(i=>esc((S.players[i].name||'').split(' ')[0])).join(', ')}`,'setup')+`<main>
   <div class="card"><h2>Pick the course</h2>
+    ${preCourseHTML()}
     ${finder.status==='idle'?courseListHTML(true):''}
     ${courseFinderHTML(true)}
   </div>
@@ -8916,8 +8974,11 @@ function natFilter(raw){
     if(el){try{el.focus();const p=caret==null?el.value.length:caret;el.setSelectionRange(p,p);}catch(e){}}
   }
 }
-async function natUse(id){
-  finder={status:'fetching'};render();
+async function natUse(id,auto){
+  if(!auto){
+    if(wiz)wiz.courseTouched=true;        // you searched one out yourself
+    finder={status:'fetching'};render();
+  }
   try{
     const r=await fetch('/courses/'+id+'.json');
     if(!r.ok)throw new Error('record '+r.status);
@@ -8933,10 +8994,10 @@ async function natUse(id){
       tombLift('courses',course.id);
       S.course=clone(course);
     });
-    finder={status:'idle',choices:[],error:''};
+    if(!auto)finder={status:'idle',choices:[],error:''};
     ensureCourseGeo();
     render();
-  }catch(e){finder={status:'error',error:'Could not load that course — check your signal.'};render();}
+  }catch(e){if(!auto){finder={status:'error',error:'Could not load that course — check your signal.'};render();}}
 }
 // Our index ships ~7k courses; USGA/GHIN reaches a few we don't (mostly resort
 // and destination tracks). That's a second pass off the SAME box, not a second
@@ -9550,6 +9611,7 @@ function delHist(id){
   set(()=>{tombAdd('rounds',id);S.history=S.history.filter(x=>x.id!==id);});
 }
 function pickCourse(i){set(()=>{
+  if(wiz&&preCourse&&!(preCourse.pick&&S.courses[i]&&S.courses[i].id===preCourse.pick.id))wiz.courseTouched=true;
   syncLib();
   S.course=clone(S.courses[i]);
   applyTeePrefs();
