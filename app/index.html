@@ -416,7 +416,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1788912625';
+const BUILD='1789000684';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -5336,6 +5336,7 @@ function initGreensMap(el){
   greensState=greensLoad();
   const pts=greensPts();
   LMAP=L.map(el,{zoomControl:false,attributionControl:false});
+  camBegin();
   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
     {maxZoom:20,maxNativeZoom:19}).addTo(LMAP);
   LMAP.fitBounds(L.latLngBounds(pts).pad(0.12));
@@ -5380,6 +5381,9 @@ function initGreensMap(el){
     updateDist();
   }};
   paint();updateDist();startMapGps();
+  camRestore(LMAP);   // greens mode rebuilds on render too — keep the user's frame
+  camArm(LMAP);
+  camEnd();
 }
 // ---------- tee corrections ----------
 // The tee is the weakest number we ship. On courses whose geometry we
@@ -5418,6 +5422,41 @@ function withTeeFix(geo,h){
   if(!f)return geo;
   const p=geo.path.slice();p[0]=f.slice();
   return Object.assign({},geo,{path:p});
+}
+// ── THE USER'S CAMERA WINS ───────────────────────────────────────────────────
+// initHoleMap() tears the Leaflet map down and rebuilds it on EVERY render, and
+// every rebuild re-framed the hole from scratch — so a zoom or a pan was thrown
+// away seconds after you made it. On an unmapped hole it snapped back to zoom 15
+// again and again (Nathan, Rio Vista 9/9). The renders are ordinary: onStateDoc
+// renders on every incoming sync doc, so in a shared round a partner entering a
+// score reset everyone's map; a relay that cannot connect renders on each retry.
+// Bearing has been protected this way since 8/16 (_btUserRot) — zoom and centre
+// never were. Ownership is keyed to course+hole and dropped the moment either
+// changes, so a new hole always gets its proper frame.
+let camOwn=null;      // {key,center,zoom} once the user has framed it themselves
+let camProgUntil=0;   // WE are moving the map until this moment: our moves are not "yours"
+// A DEADLINE, not a counter. initHoleMap() has 20-odd early returns after the
+// map exists (stale build, screen changed, no Leaflet); a counter that a return
+// skipped would stay raised for ever and silently swallow every gesture after.
+function camKey(){try{return (S.course&&S.course.id)+'#'+physHole(mapHole)+(greensIsMode()?'g':'');}catch(e){return null;}}
+function camBegin(){camProgUntil=Date.now()+4000;}   // a build never takes this long; it expires on its own
+function camEnd(){camProgUntil=Date.now()+250;}      // our own zoomend/moveend land first
+function camArm(map){
+  if(!map)return;
+  const note=()=>{
+    if(Date.now()<camProgUntil)return;       // a frame WE set is not a frame you chose
+    try{const c=map.getCenter();camOwn={key:camKey(),center:[c.lat,c.lng],zoom:map.getZoom()};}catch(e){}
+  };
+  map.on('zoomend',note);map.on('dragend',note);
+}
+function camRestore(map){
+  try{
+    const k=camKey();
+    if(!camOwn||!k)return false;
+    if(camOwn.key!==k){camOwn=null;return false;}   // different hole: re-frame it properly
+    map.setView(camOwn.center,camOwn.zoom,{animate:false});
+    return true;
+  }catch(e){return false;}
 }
 let initHoleMapRun=0;
 async function initHoleMap(){
@@ -5481,6 +5520,7 @@ async function initHoleMap(){
   const canRotate=!!L.Map.prototype.setBearing;
   // no Leaflet attribution banner — the ⓘ chip in vMap carries the credits
   LMAP=L.map(el,canRotate?{zoomControl:false,attributionControl:false,rotate:true,rotateControl:false,touchRotate:false,zoomSnap:0}:{zoomControl:false,attributionControl:false});
+  camBegin();   // everything this builder frames is OURS, not the user's
   const sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
     {maxZoom:20,maxNativeZoom:19}).addTo(LMAP);   // credits live on the ⓘ chip
   // ROTATED CORNERS. leaflet-rotate widens the tile bounds for the current
@@ -5859,6 +5899,9 @@ async function initHoleMap(){
     drawShotLines();                 // residual shot lines — geo or no geo
   }
   LMAP.on('click',e=>{if(mapMarks._suppress&&mapMarks._suppress())return;mapTapAt([e.latlng.lat,e.latlng.lng]);});
+  camRestore(LMAP);   // you framed this hole yourself: put it back exactly
+  camArm(LMAP);
+  camEnd();
 }
 // ---------- wind: NWS observation + hourly forecast → "plays like" ----------
 // Wind comes from the National Weather Service (free, public domain, US): the
