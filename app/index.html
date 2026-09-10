@@ -416,7 +416,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789082991';
+const BUILD='1789083300';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -8951,18 +8951,18 @@ function exFullStrokes(e,cs,me){
 }
 function exportTables(only){
   const R=[['Date','Course','Tees','Tee rating','Tee slope','Game','Games played','Holes span','First hole',
-            'Shared code','Playing partners','Handicap index','Status',
+            'Playing partners','Handicap index','Status',
             'Holes scored','Gross','Net','Par','To par','Result','Front 9','Back 9',
             'Eagles or better','Birdies','Pars','Bogeys','Doubles or worse',
             'Putts','1-putts','3-putts','Holes with putts recorded',
             'Fairways hit','Fairway holes','Greens in reg','GIR holes',
             'Bunker shots','Chips','Penalties','Closest to pin',
-            'Longest shot (yds)','Longest shot club','Round minutes','Started','Ended','Round ID']];
-  const H=[['Date','Course','Round ID','Hole','Par','Stroke index','Yards','Gross','To par',
+            'Longest shot (yds)','Longest shot club','Round minutes','Started','Ended']];
+  const H=[['Date','Course','Hole','Par','Stroke index','Yards','Gross','To par',
             'Putts','Fairway','Green in reg','Bunker','Chips','Penalties','Closest to pin',
             'Wolf mode','Wolf partner','Wolf passes','Hole finished','Minutes on hole','Confirmed']];
-  const SH=[['Date','Course','Round ID','Hole','Club','Yards','From lat','From lon','To lat','To lon','Time']];
-  const PA=[['Date','Course','Round ID','Hole','Player','Par','Gross','To par']];
+  const SH=[['Date','Course','Hole','Club','Yards','From lat','From lon','To lat','To lon','Time']];
+  const PA=[['Date','Course','Hole','Player','Par','Gross','To par']];
   exRounds(only).forEach(({e,live})=>{
     const mi=exMyIdx(e); if(mi<0)return;
     const cs=e.courseSnap||S.courses.find(c=>c.id===e.courseId)||S.course||{};
@@ -8971,7 +8971,6 @@ function exportTables(only){
     const me=snap[mi]||{};
     const tee=(cs.teeSets||[]).find(t=>t.id===me.tee)||null;
     const day=exDay(e.startedAt||e.endedAt);
-    const rid=String(e.id||'');
     const cname=cs.name||e.courseName||'';
     const holes=((e.round&&e.round.holes)||[]);
     const sum=e.sum||null;
@@ -9012,7 +9011,7 @@ function exportTables(only){
       if(bv||cv||xv)anyX=true;
       bunk+=bv;chip+=cv;pen+=xv;
       if(isCtp)ctp++;
-      H.push([day,cname,rid,h+1,p,hole.si!=null?hole.si:'',yds||'',gross,d,
+      H.push([day,cname,h+1,p,hole.si!=null?hole.si:'',yds||'',gross,d,
               pv!=null?pv:'',(p>=4)?(fv?'Y':'N'):'',gv?'Y':'N',bv||'',cv||'',xv||'',isCtp?'Y':'',
               r.mode||'',(r.partner!=null&&snap[r.partner])?((snap[r.partner]||{}).name||''):'',
               Array.isArray(r.passes)?r.passes.length:'',
@@ -9020,7 +9019,7 @@ function exportTables(only){
       // everyone else on the card, so the round exports as it was actually played
       snap.forEach((pl,q)=>{
         if(q===mi||!pl||!pl.name||r.gross[q]==null)return;
-        PA.push([day,cname,rid,h+1,pl.name,p,r.gross[q],r.gross[q]-p]);
+        PA.push([day,cname,h+1,pl.name,p,r.gross[q],r.gross[q]-p]);
       });
     });
     if(!n)return;
@@ -9030,7 +9029,7 @@ function exportTables(only){
     R.push([day,cname,tee?tee.name:'',tee&&tee.rating!=null?tee.rating:'',tee&&tee.slope!=null?tee.slope:'',
             gameName(e.game||'')||e.game||'',games,
             span?span.count:'',span?span.start+1:'',
-            e.code||'',partners,me.index!=null?me.index:'',live?'In progress':'Final',
+            partners,me.index!=null?me.index:'',live?'In progress':'Final',
             n,g,netOk?net:((sum&&sum.net!=null)?sum.net:''),par,g-par,(sum&&sum.result)||'',
             f9n?f9:'',b9n?b9:'',
             eag,bird,prs,bog,dbl,
@@ -9039,11 +9038,11 @@ function exportTables(only){
             anyX?bunk:'',anyX?chip:'',anyX?pen:'',ctp||'',
             (sum&&sum.longShot&&sum.longShot.yds)?Math.round(sum.longShot.yds):'',
             (sum&&sum.longShot&&sum.longShot.club)||'',
-            e.mins!=null?e.mins:'',exTime(e.startedAt),exTime(e.endedAt),rid]);
+            e.mins!=null?e.mins:'',exTime(e.startedAt),exTime(e.endedAt)]);
     try{
       const log=(S.shotLog||{})['s'+(e.startedAt||0)]||[];
       log.forEach(x=>{
-        SH.push([day,cname,rid,(x.h!=null?x.h+1:''),x.club||'',
+        SH.push([day,cname,(x.h!=null?x.h+1:''),x.club||'',
                  x.yds!=null?Math.round(x.yds):'',
                  x.a&&x.a[0]!=null?x.a[0]:'',x.a&&x.a[1]!=null?x.a[1]:'',
                  x.b&&x.b[0]!=null?x.b[0]:'',x.b&&x.b[1]!=null?x.b[1]:'',exTime(x.at)]);
