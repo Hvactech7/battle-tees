@@ -416,7 +416,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789018031';
+const BUILD='1789018359';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -8370,7 +8370,7 @@ function vStart(){
         ${Array.from({length:n},(_,k)=>first+k).map(h=>`<option value="${h}" ${sp.start===h?'selected':''}>Hole ${h+1}</option>`).join('')}</select></div>
       <div class="tiny">Start from any tee — play wraps around.</div></div>
     <button class="big" onclick="wiz.step=wiz.preGame?'count':'kind';render()">Next \u2192</button>
-    <button class="ghost mt" style="width:100%" onclick="wizKind('join')">👥 Joining someone else's round? Find it or type the code</button>
+    <button class="big mt" style="background:var(--card);color:var(--green-mid);border-color:var(--green)" onclick="wizKind('join')">👥 Join an existing round</button>
     </main>`;
   }
 
