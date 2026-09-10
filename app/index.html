@@ -416,7 +416,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789082575';
+const BUILD='1789082991';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -9079,6 +9079,23 @@ const exCount=c=>`${exPl(c.rounds,'round')} · ${exPl(c.holes,'hole')} · ${exPl
 function exOpen(which,only){exSheet=which;exScope=only||null;exMsg='';render();
   if(which==='email')setTimeout(()=>{const el=document.getElementById('exMail');if(el)try{el.focus();}catch(e){}},60);}
 function exClose(){exSheet='';exScope=null;exMsg='';render();}
+// CSV holds exactly ONE table, which is why the workbook exists — but every
+// stat tracker on earth imports CSV, so offer the same tables that way too and
+// let the golfer pick. RFC4180 quoting: wrap anything with a comma, quote or
+// newline, and double the quotes inside.
+function csvCell(v){
+  if(v==null||v==='')return '';
+  const t=String(v);
+  return /[",\n\r]/.test(t)?'"'+t.replace(/"/g,'""')+'"':t;
+}
+function csvText(rows){return rows.map(r=>r.map(csvCell).join(',')).join('\r\n')+'\r\n';}
+function exportCsvBlobs(only){
+  const t=exportTables(only), base=exportFileName(only).replace(/\.xlsx$/,'');
+  const parts=[['round',t.rounds],['holes',t.holes],['shots',t.shots]];
+  // a solo round has no partners table to write
+  if(t.partners&&t.partners.length>1)parts.push(['partners',t.partners]);
+  return parts.map(([nm,rows])=>({name:`${base}-${nm}.csv`,text:csvText(rows),rows:rows.length-1}));
+}
 function exFiles(fmt){
   if(fmt==='xlsx'){
     const {blob}=exportBuild(exScope);
@@ -9091,9 +9108,9 @@ async function exportSave(fmt){
   exBusy='save';exMsg='';render();
   try{
     const files=exFiles(fmt);
-    const what=(fmt==='xlsx')?'the workbook':'three CSV files';
+    const what=(fmt==='xlsx')?'the workbook':(files.length+' CSV files');
     if(navigator.canShare&&navigator.canShare({files})&&navigator.share){
-      await navigator.share({files,title:'Battle Tees data'});
+      await navigator.share({files});
       exMsg='Shared '+what+'.';exSheet='';
     }else{
       files.forEach((f,i)=>setTimeout(()=>{
