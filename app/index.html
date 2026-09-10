@@ -416,7 +416,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789081770';
+const BUILD='1789082575';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -8932,6 +8932,23 @@ function exRounds(only){
   const out=(S.history||[]).map(e=>({e,live:false}));
   return only?out.filter(x=>String(x.e.id)===String(only)):out;
 }
+// The player's FULL course-handicap strokes for an archived round, from that
+// round's own snapshot — the same arithmetic as courseHandicaps()/fullStrokes(),
+// but off stored data so a past round is not re-scored against today's index,
+// today's tees or today's allowance.
+function exFullStrokes(e,cs,me){
+  try{
+    const holes=(cs&&cs.holes)||[];
+    if(!holes.length||me.index==null)return null;
+    const parTot=holes.reduce((a,h)=>a+((h&&h.par)||0),0);
+    const ts=cs.teeSets||[];
+    const tee=ts.find(t=>t.id===me.tee)||ts[0]||null;
+    const slope=(tee&&+tee.slope)||113, rating=(tee&&+tee.rating)||parTot;
+    const ch=Math.round((+me.index)*(slope/113)+(rating-parTot));
+    const allow=(e.config&&e.config.allowance!=null)?+e.config.allowance:100;
+    return Math.max(0,Math.round(ch*allow/100));
+  }catch(err){return null;}
+}
 function exportTables(only){
   const R=[['Date','Course','Tees','Tee rating','Tee slope','Game','Games played','Holes span','First hole',
             'Shared code','Playing partners','Handicap index','Status',
@@ -8962,6 +8979,8 @@ function exportTables(only){
     let fwHit=0,fwN=0,girHit=0,girN=0,bunk=0,chip=0,pen=0,ctp=0;
     let eag=0,bird=0,prs=0,bog=0,dbl=0;
     let anyPutt=false,anyFwGir=false,anyX=false,lastFinish=null;
+    const fullSt=exFullStrokes(e,cs,me);
+    let net=0,netOk=(fullSt!=null);
     holes.forEach((r,h)=>{
       if(!r||!r.confirmed||!r.gross||r.gross[mi]==null)return;
       const hole=chs[h]||{}, p=hole.par||4, gross=r.gross[mi], st=r.stats||{};
@@ -8979,6 +8998,10 @@ function exportTables(only){
       const mins=(fin&&prev&&fin>prev)?Math.round((fin-prev)/6000)/10:null;
       if(fin)lastFinish=fin;
       const d=gross-p;
+      if(netOk){
+        const si=hole.si!=null?hole.si:18;
+        net+=gross-((fullSt>=si?1:0)+((fullSt-18)>=si?1:0));
+      }
       if(d<=-2)eag++;else if(d===-1)bird++;else if(d===0)prs++;else if(d===1)bog++;else dbl++;
       n++;g+=gross;par+=p;
       if(h<9){f9+=gross;f9n++;}else{b9+=gross;b9n++;}
@@ -9008,7 +9031,7 @@ function exportTables(only){
             gameName(e.game||'')||e.game||'',games,
             span?span.count:'',span?span.start+1:'',
             e.code||'',partners,me.index!=null?me.index:'',live?'In progress':'Final',
-            n,g,(sum&&sum.net!=null)?sum.net:'',par,g-par,(sum&&sum.result)||'',
+            n,g,netOk?net:((sum&&sum.net!=null)?sum.net:''),par,g-par,(sum&&sum.result)||'',
             f9n?f9:'',b9n?b9:'',
             eag,bird,prs,bog,dbl,
             anyPutt?putts:'',anyPutt?one:'',anyPutt?three:'',anyPutt?puttH:'',
@@ -9771,10 +9794,14 @@ function roundSummary(){
     try{myShots().forEach(s2=>{
       if(s2&&s2.yds>0&&(!longShot||s2.yds>longShot.yds))
         longShot={yds:s2.yds,club:s2.club||null,hole:(s2.h||0)+1};});}catch(e){}
-    // net off the same strokes the round played with
+    // NET IS A NUMBER, NOT A GAME RESULT. Use the player's FULL handicap
+    // strokes, never playingStrokes() — that is measured off the low man, so it
+    // hands the best player in the group (and everybody playing alone) zero
+    // strokes and reports net = gross. Game points keep using playingStrokes.
     let net=gross;
     try{
-      const dots=h=>{const st=playingStrokes()[mi],si=(S.course.holes[h]||{si:18}).si;
+      const st=fullStrokes()[mi];
+      const dots=h=>{const si=(S.course.holes[h]||{si:18}).si;
         return (st>=si?1:0)+((st-18)>=si?1:0);};
       net=holes.reduce((t,h)=>t+S.round.holes[h].gross[mi]-dots(h),0);
     }catch(e){}
