@@ -416,7 +416,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789020501';
+const BUILD='1789078947';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -2551,6 +2551,23 @@ function savePresencePlayer(j){
   });
 }
 function toggleAddPlayer(){addingPlayer=!addingPlayer;editingPlayer=null;render();}
+// A library row is YOU when its pid is your pid, or (before any pid exists) when
+// the name matches your profile. Clubs are per-phone, so only your own row can
+// open My Bag — you cannot set what is in someone else's bag.
+function libIsMe(e){
+  if(!e)return false;
+  try{
+    if(S.me&&S.me.pid&&e.pid)return e.pid===S.me.pid;
+    const a=((S.me&&S.me.name)||'').trim().toLowerCase();
+    return !!a&&(e.name||'').trim().toLowerCase()===a;
+  }catch(err){return false;}
+}
+function openMyBag(){
+  editingPlayer=null;
+  go('settings');
+  setTimeout(()=>{const el=document.getElementById('mybag');
+    if(el)try{el.scrollIntoView({block:'center',behavior:'smooth'});}catch(e){el.scrollIntoView();}},80);
+}
 function startEditPlayer(id){editingPlayer=id;addingPlayer=false;render();}
 function cancelEditPlayer(){editingPlayer=null;render();}
 function saveEditPlayer(){
@@ -3947,9 +3964,63 @@ function bagAdd(name,after){   // after: index to insert after (−1 = top), und
   set(()=>{S.bag=b;});return true;
 }
 function bagRemove(i){const b=bagClubs();if(i<0||i>=b.length)return;b.splice(i,1);set(()=>{S.bag=b;});}
-function bagMove(i,d){const b=bagClubs();const j=i+d;if(i<0||i>=b.length||j<0||j>=b.length)return;const t=b[i];b[i]=b[j];b[j]=t;set(()=>{S.bag=b;});}
 function bagReset(){set(()=>{delete S.bag;});}
 let bagUI={pick:false,custom:false};
+// HOLD A CLUB AND DRAG IT. The arrows still work (and are the only way in with
+// a keyboard), but nobody wants to tap ↑ six times to move a wedge. A long
+// press lifts the row; the rest of the list opens a gap under your finger.
+// Scrolling is only blocked once the press has fired — a plain swipe over the
+// list still scrolls the page, which is why the rows do not set touch-action.
+let bagDrag=null;
+function bagReorder(from,to){
+  const b=bagClubs();
+  if(from===to||from<0||to<0||from>=b.length||to>=b.length)return;
+  const [c]=b.splice(from,1);b.splice(to,0,c);
+  set(()=>{S.bag=b;});
+}
+function bagPD(ev,i){
+  try{if(ev.target&&ev.target.closest&&ev.target.closest('button'))return;}catch(e){}
+  const row=ev.currentTarget, startY=ev.clientY;
+  const t=setTimeout(()=>{
+    const list=document.getElementById('bagList');if(!list)return;
+    bagDrag={from:i,to:i,startY,rowH:row.getBoundingClientRect().height||44,
+             rows:Array.from(list.children),row};
+    row.style.position='relative';row.style.zIndex='4';row.style.transition='none';
+    row.style.background='var(--green-lt)';row.style.borderRadius='10px';
+    row.style.boxShadow='0 6px 18px rgba(0,0,0,.45)';
+    try{navigator.vibrate&&navigator.vibrate(12);}catch(e){}
+  },220);
+  const stop=()=>{clearTimeout(t);window.removeEventListener('pointerup',stop);window.removeEventListener('pointercancel',stop);};
+  window.addEventListener('pointerup',stop);window.addEventListener('pointercancel',stop);
+}
+function bagPM(ev){
+  if(!bagDrag)return;
+  if(ev.cancelable)ev.preventDefault();
+  const dy=ev.clientY-bagDrag.startY, n=bagDrag.rows.length;
+  const to=Math.min(n-1,Math.max(0,bagDrag.from+Math.round(dy/bagDrag.rowH)));
+  bagDrag.to=to;
+  bagDrag.row.style.transform=`translateY(${dy}px)`;
+  bagDrag.rows.forEach((r,k)=>{
+    if(r===bagDrag.row)return;
+    let shift=0;
+    if(bagDrag.from<to&&k>bagDrag.from&&k<=to)shift=-bagDrag.rowH;
+    else if(bagDrag.from>to&&k>=to&&k<bagDrag.from)shift=bagDrag.rowH;
+    r.style.transition='transform .12s';r.style.transform=`translateY(${shift}px)`;
+  });
+}
+function bagPU(){
+  if(!bagDrag)return;
+  const from=bagDrag.from,to=bagDrag.to;
+  bagDrag=null;
+  if(from!==to)bagReorder(from,to);else render();
+}
+window.addEventListener('pointermove',bagPM,{passive:false});
+window.addEventListener('pointerup',bagPU);
+window.addEventListener('pointercancel',bagPU);
+// iOS decides to scroll from touchmove, not pointermove — block it only while a
+// club is actually lifted
+window.addEventListener('touchmove',e=>{if(bagDrag&&e.cancelable)e.preventDefault();},{passive:false});
+
 function bagTogglePick(){bagUI.pick=!bagUI.pick;bagUI.custom=false;render();}
 function bagToggleCustom(){bagUI.custom=!bagUI.custom;render();}
 function bagAddCustom(){
@@ -3961,22 +4032,23 @@ function bagAddCustom(){
 }
 function bagCardHTML(){
   const b=bagClubs();const inBag=new Set(b);
-  const rows=b.map((c,i)=>`<div class="row" style="padding:7px 0"><b class="num" style="font-size:19px;min-width:64px">${esc(c)}</b>
-      <span class="seg" style="display:inline-flex;gap:6px">
-        <button class="ghost" style="width:40px;padding:6px 0" onclick="bagMove(${i},-1)" ${i===0?'disabled':''}>↑</button>
-        <button class="ghost danger" style="width:40px;padding:6px 0" onclick="bagRemove(${i})">✕</button></span></div>`).join('');
+  const rows=`<div id="bagList">${b.map((c,i)=>`<div class="row" style="padding:7px 0;cursor:grab;-webkit-user-select:none;user-select:none" onpointerdown="bagPD(event,${i})">
+      <span style="color:var(--ink3);font-size:17px;letter-spacing:1px;margin-right:10px">⠿</span>
+      <b class="num" style="font-size:19px;min-width:64px">${esc(c)}</b>
+      <span style="margin-left:auto"><button class="ghost danger" style="width:40px;padding:6px 0" onclick="bagRemove(${i})">✕</button></span></div>`).join('')}</div>`;
   const afterOpts=`<option value="-1">Top of the bag</option>${b.map((c,i)=>`<option value="${i}" ${i===b.length-1?'selected':''}>After ${esc(c)}</option>`).join('')}`;
   const pick=bagUI.pick?`<div class="mt" style="background:var(--bg);border-radius:10px;padding:10px">
       ${CLUB_CATALOG.map(([g,list])=>`<div class="tiny" style="margin:6px 0 4px;color:var(--ink3)">${g}</div>
         <div style="display:flex;flex-wrap:wrap;gap:6px">${list.map(c=>inBag.has(c)?`<span class="pill gray" style="padding:6px 10px">${esc(c)} ✓</span>`:`<button class="ghost" style="padding:6px 12px;margin:0" onclick="bagAdd('${esc(c)}');render()">${esc(c)}</button>`).join('')}</div>`).join('')}
-      <div class="tiny mt" style="opacity:.8">Tap to add at the bottom, then move it with the arrows.</div></div>`:'';
+      <div class="tiny mt" style="opacity:.8">Tap to add at the bottom, then hold and drag it into place.</div></div>`:'';
   const custom=bagUI.custom?`<div class="mt" style="background:var(--bg);border-radius:10px;padding:10px">
       <div class="grid2"><div><div class="tiny">Club name</div><input id="bagCustomName" type="text" placeholder="e.g. 7-wood, Chipper" maxlength="14"></div>
         <div><div class="tiny">Goes</div><select id="bagCustomAfter" style="width:100%;padding:9px;border:2px solid var(--line);border-radius:8px;font-size:15px;background:var(--card);color:var(--ink)">${afterOpts}</select></div></div>
       <div class="mt" style="display:flex;gap:6px"><button class="ghost sel" onclick="bagAddCustom()">Add to my bag</button><button class="ghost" onclick="bagToggleCustom()">Cancel</button></div></div>`:'';
-  return `<div class="card" style="border-color:var(--elec);box-shadow:4px 4px 0 var(--elec-dk)">
+  return `<div class="card" id="mybag" style="border-color:var(--elec);box-shadow:4px 4px 0 var(--elec-dk)">
     <h2 style="color:var(--elec-mid)">🎒 My Bag</h2>
     <div class="tiny mb">Your clubs, your order. The club sheet after a tracked shot, your Watch and your club stats all follow this lineup — pick from every club there is, or name your own.</div>
+    <div class="tiny mb" style="opacity:.85">Hold a club and drag it to move it.</div>
     ${rows}
     <div class="mt" style="display:flex;gap:6px;flex-wrap:wrap">
       <button class="ghost ${bagUI.pick?'sel':''}" onclick="bagTogglePick()">＋ Add a club</button>
@@ -6783,7 +6855,7 @@ function render(){
   const sameScreen=window.__lastScr===scr;
   window.__lastScr=scr;
   try{if(window.__a2hsSync)window.__a2hsSync();}catch(e){}
-  const full=magBanner()+html+holeSplash()+verifySheetHTML()+joinWaitSheetHTML()+teeAskSheetHTML()+joinSpanSheetHTML()+pairsAskSheetHTML()+wolfOrderSheetHTML()+endAskSheetHTML()+mapInviteHTML()+greenClashHTML()+gamePickSheetHTML()+(S.screen!=='map'?puttAskSheetHTML():'')+(S.screen!=='map'?parAskSheetHTML():'')+photoCropHTML()+cheerSplashHTML();
+  const full=magBanner()+html+holeSplash()+verifySheetHTML()+joinWaitSheetHTML()+teeAskSheetHTML()+joinSpanSheetHTML()+pairsAskSheetHTML()+wolfOrderSheetHTML()+endAskSheetHTML()+exportSheetHTML()+mapInviteHTML()+greenClashHTML()+gamePickSheetHTML()+(S.screen!=='map'?puttAskSheetHTML():'')+(S.screen!=='map'?parAskSheetHTML():'')+photoCropHTML()+cheerSplashHTML();
   // Four phones syncing means render() fires constantly. Blowing away innerHTML
   // each time repainted the whole screen — that was the flicker on the course.
   // Identical output is a no-op; otherwise patch only the nodes that differ.
@@ -8753,6 +8825,301 @@ function vHistory(){
 // ---------- my stats ----------
 // Averages only count rounds where that thing was actually recorded — a round
 // with no putt tracking is IGNORED for putts, never counted as zero.
+// ── EXPORT YOUR DATA ─────────────────────────────────────────────────────────
+// Everything this phone knows about YOUR golf, as a real .xlsx with three tabs:
+// one row per round, one row per hole, one row per tracked shot. Nothing is
+// summarised away — a stat tracker can rebuild any average it likes from the
+// hole rows. Blank means "not recorded", never zero.
+function xEsc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function xCol(n){let s='';n++;while(n>0){const m=(n-1)%26;s=String.fromCharCode(65+m)+s;n=(n-m-1)/26;}return s;}
+function xSheetXML(rows){
+  const body=rows.map((row,r)=>{
+    const cells=row.map((v,c)=>{
+      const ref=xCol(c)+(r+1);
+      if(v==null||v==='')return '';
+      if(typeof v==='number'&&isFinite(v))return `<c r="${ref}"><v>${v}</v></c>`;
+      return `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${xEsc(v)}</t></is></c>`;
+    }).join('');
+    return `<row r="${r+1}">${cells}</row>`;
+  }).join('');
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${body}</sheetData></worksheet>`;
+}
+let _crcT=null;
+function crc32(u8){
+  if(!_crcT){_crcT=new Uint32Array(256);
+    for(let i=0;i<256;i++){let c=i;for(let k=0;k<8;k++)c=(c&1)?(0xEDB88320^(c>>>1)):(c>>>1);_crcT[i]=c>>>0;}}
+  let c=0xFFFFFFFF;
+  for(let i=0;i<u8.length;i++)c=_crcT[(c^u8[i])&0xFF]^(c>>>8);
+  return (c^0xFFFFFFFF)>>>0;
+}
+// A ZIP with every entry STORED (no compression). Excel, Numbers and Sheets all
+// accept it, and it means no deflate implementation to get wrong.
+function zipStore(files){
+  const enc=new TextEncoder();
+  const parts=[],central=[];let off=0;
+  files.forEach(f=>{
+    const name=enc.encode(f.name), data=(typeof f.data==='string')?enc.encode(f.data):f.data;
+    const crc=crc32(data);
+    const lh=new Uint8Array(30+name.length), lv=new DataView(lh.buffer);
+    lv.setUint32(0,0x04034b50,true);lv.setUint16(4,20,true);lv.setUint16(6,0,true);lv.setUint16(8,0,true);
+    lv.setUint16(10,0,true);lv.setUint16(12,0,true);lv.setUint32(14,crc,true);
+    lv.setUint32(18,data.length,true);lv.setUint32(22,data.length,true);
+    lv.setUint16(26,name.length,true);lv.setUint16(28,0,true);
+    lh.set(name,30);
+    parts.push(lh,data);
+    const ch=new Uint8Array(46+name.length), cv=new DataView(ch.buffer);
+    cv.setUint32(0,0x02014b50,true);cv.setUint16(4,20,true);cv.setUint16(6,20,true);cv.setUint16(8,0,true);
+    cv.setUint16(10,0,true);cv.setUint16(12,0,true);cv.setUint16(14,0,true);cv.setUint32(16,crc,true);
+    cv.setUint32(20,data.length,true);cv.setUint32(24,data.length,true);
+    cv.setUint16(28,name.length,true);cv.setUint16(30,0,true);cv.setUint16(32,0,true);
+    cv.setUint16(34,0,true);cv.setUint16(36,0,true);cv.setUint32(38,0,true);cv.setUint32(42,off,true);
+    ch.set(name,46);
+    central.push(ch);
+    off+=lh.length+data.length;
+  });
+  const cdSize=central.reduce((s,c)=>s+c.length,0);
+  const end=new Uint8Array(22), ev=new DataView(end.buffer);
+  ev.setUint32(0,0x06054b50,true);ev.setUint16(8,files.length,true);ev.setUint16(10,files.length,true);
+  ev.setUint32(12,cdSize,true);ev.setUint32(16,off,true);
+  const all=parts.concat(central,[end]);
+  const total=all.reduce((s,p)=>s+p.length,0);
+  const out=new Uint8Array(total);let p=0;
+  all.forEach(x=>{out.set(x,p);p+=x.length;});
+  return out;
+}
+function xlsxBlob(sheets){
+  const files=[
+    {name:'[Content_Types].xml',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>${sheets.map((s,i)=>`<Override PartName="/xl/worksheets/sheet${i+1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('')}</Types>`},
+    {name:'_rels/.rels',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`},
+    {name:'xl/workbook.xml',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${sheets.map((s,i)=>`<sheet name="${xEsc(s.name)}" sheetId="${i+1}" r:id="rId${i+1}"/>`).join('')}</sheets></workbook>`},
+    {name:'xl/_rels/workbook.xml.rels',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${sheets.map((s,i)=>`<Relationship Id="rId${i+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i+1}.xml"/>`).join('')}</Relationships>`}
+  ].concat(sheets.map((s,i)=>({name:`xl/worksheets/sheet${i+1}.xml`,data:xSheetXML(s.rows)})));
+  return new Blob([zipStore(files)],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+}
+// Which slot in a saved round is ME: pid first (names change, ids don't), then
+// name — the same rule the Stats screen uses to find your rounds.
+function exMyIdx(e){
+  const snap=e.playersSnap||[];
+  const meNm=((S.me&&S.me.name)||'').trim().toLowerCase();
+  let i=(S.me&&S.me.pid)?snap.findIndex(p=>p&&p.pid===S.me.pid):-1;
+  if(i<0)i=snap.findIndex(p=>p&&(p.name||'').trim().toLowerCase()===meNm);
+  return i;
+}
+function exDay(t){if(!t)return '';const d=new Date(t);
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function exTime(t){if(!t)return '';return new Date(t).toISOString();}
+// Every round this phone holds for you: the archive, plus the one you are
+// playing right now if it has any confirmed holes in it.
+function exRounds(){
+  const out=(S.history||[]).map(e=>({e,live:false}));
+  try{
+    if(S.round&&S.round.started&&!isReview()){
+      const live={id:'live',startedAt:S.round.startedAt,endedAt:null,
+        game:S.round.game||S.config.game,courseId:S.course.id,courseName:S.course.name,
+        players:actIdx().map(i=>S.players[i].name),round:S.round,
+        playersSnap:S.players,courseSnap:S.course,mins:null};
+      if((S.round.holes||[]).some(r=>r&&r.confirmed))out.unshift({e:live,live:true});
+    }
+  }catch(err){}
+  return out;
+}
+function exportTables(){
+  const R=[['Date','Course','Tees','Game','Status','Holes scored','Gross','Par','To par','Front 9','Back 9',
+            'Putts','1-putts','3-putts','Fairways hit','Fairway holes','Greens in reg','GIR holes',
+            'Bunker shots','Chips','Penalties','Closest to pin','Minutes','Started','Ended','Round ID']];
+  const H=[['Date','Course','Round ID','Hole','Par','Stroke index','Yards','Gross','To par',
+            'Putts','Fairway','Green in reg','Bunker','Chips','Penalties','Closest to pin',
+            'Wolf mode','Wolf partner','Confirmed']];
+  const SH=[['Date','Course','Round ID','Hole','Club','Yards','From lat','From lon','To lat','To lon','Time']];
+  exRounds().forEach(({e,live})=>{
+    const mi=exMyIdx(e); if(mi<0)return;
+    const cs=e.courseSnap||S.courses.find(c=>c.id===e.courseId)||S.course||{};
+    const chs=cs.holes||[];
+    const me=(e.playersSnap||[])[mi]||{};
+    const tee=(cs.teeSets||[]).find(t=>t.id===me.tee)||null;
+    const day=exDay(e.startedAt||e.endedAt);
+    const rid=String(e.id||'');
+    const holes=((e.round&&e.round.holes)||[]);
+    let g=0,par=0,n=0,f9=0,f9n=0,b9=0,b9n=0,putts=0,puttH=0,one=0,three=0;
+    let fwHit=0,fwN=0,girHit=0,girN=0,bunk=0,chip=0,pen=0,ctp=0,anyPutt=false,anyFwGir=false,anyX=false;
+    holes.forEach((r,h)=>{
+      if(!r||!r.confirmed||!r.gross||r.gross[mi]==null)return;
+      const hole=chs[h]||{}, p=hole.par||4, gross=r.gross[mi], st=r.stats||{};
+      const yds=tee&&tee.yds?tee.yds[h]:null;
+      const pv=(st.putts&&st.putts[mi]!=null)?st.putts[mi]:null;
+      const fv=(st.fw&&st.fw[mi])?1:0, gv=(st.gir&&st.gir[mi])?1:0;
+      const bv=(st.bunker&&st.bunker[mi])||0, cv=(st.chips&&st.chips[mi])||0, xv=(st.pen&&st.pen[mi])||0;
+      const isCtp=(r.ctp===mi);
+      n++;g+=gross;par+=p;
+      if(h<9){f9+=gross;f9n++;}else{b9+=gross;b9n++;}
+      if(p>=4){fwN++;if(fv)fwHit++;}
+      girN++;if(gv)girHit++;
+      if(fv||gv)anyFwGir=true;
+      if(pv!=null&&pv>0){putts+=pv;puttH++;anyPutt=true;if(pv===1)one++;if(pv>=3)three++;}
+      if(bv||cv||xv)anyX=true;
+      bunk+=bv;chip+=cv;pen+=xv;
+      if(isCtp)ctp++;
+      H.push([day,cs.name||e.courseName||'',rid,h+1,p,hole.si!=null?hole.si:'',yds||'',gross,gross-p,
+              pv!=null?pv:'',(p>=4)?(fv?'Y':'N'):'',gv?'Y':'N',bv||'',cv||'',xv||'',isCtp?'Y':'',
+              r.mode||'',(r.partner!=null&&(e.playersSnap||[])[r.partner])?((e.playersSnap[r.partner]||{}).name||''):'',
+              r.confirmed?'Y':'N']);
+    });
+    if(!n)return;
+    R.push([day,cs.name||e.courseName||'',tee?tee.name:'',gameName(e.game||'')||e.game||'',
+            live?'In progress':'Final',n,g,par,g-par,
+            f9n?f9:'',b9n?b9:'',
+            anyPutt?putts:'',anyPutt?one:'',anyPutt?three:'',
+            anyFwGir?fwHit:'',anyFwGir?fwN:'',anyFwGir?girHit:'',anyFwGir?girN:'',
+            anyX?bunk:'',anyX?chip:'',anyX?pen:'',ctp||'',
+            e.mins!=null?e.mins:'',exTime(e.startedAt),exTime(e.endedAt),rid]);
+    // tracked shots are logged per round start, not inside the round record
+    try{
+      const log=(S.shotLog||{})['s'+(e.startedAt||0)]||[];
+      log.forEach(x=>{
+        SH.push([day,cs.name||e.courseName||'',rid,(x.h!=null?x.h+1:''),x.club||'',
+                 x.yds!=null?Math.round(x.yds):'',
+                 x.a&&x.a[0]!=null?x.a[0]:'',x.a&&x.a[1]!=null?x.a[1]:'',
+                 x.b&&x.b[0]!=null?x.b[0]:'',x.b&&x.b[1]!=null?x.b[1]:'',exTime(x.at)]);
+      });
+    }catch(err){}
+  });
+  return {rounds:R,holes:H,shots:SH};
+}
+// CSV holds exactly ONE table, which is why the workbook exists — but every
+// stat tracker on earth imports CSV, so offer the same three tables that way
+// too and let the golfer pick. RFC4180 quoting: wrap anything with a comma,
+// quote or newline, and double the quotes inside.
+function csvCell(v){
+  if(v==null||v==='')return '';
+  const t=String(v);
+  return /[",\n\r]/.test(t)?'"'+t.replace(/"/g,'""')+'"':t;
+}
+function csvText(rows){return rows.map(r=>r.map(csvCell).join(',')).join('\r\n')+'\r\n';}
+function exportCsvBlobs(){
+  const t=exportTables(), base=exportFileName().replace(/\.xlsx$/,'');
+  return [['rounds',t.rounds],['holes',t.holes],['shots',t.shots]]
+    .map(([nm,rows])=>({name:`${base}-${nm}.csv`,text:csvText(rows),rows:rows.length-1}));
+}
+function exportFileName(){
+  const nm=((S.me&&S.me.name)||'golfer').trim().replace(/[^A-Za-z0-9]+/g,'-').replace(/^-|-$/g,'')||'golfer';
+  return `battle-tees-${nm.toLowerCase()}-${exDay(Date.now())}.xlsx`;
+}
+function exportBuild(){
+  const t=exportTables();
+  return {blob:xlsxBlob([{name:'Rounds',rows:t.rounds},{name:'Holes',rows:t.holes},{name:'Shots',rows:t.shots}]),
+          counts:{rounds:t.rounds.length-1,holes:t.holes.length-1,shots:t.shots.length-1}};
+}
+// Delivery. CSV is the default because it is what stat trackers actually
+// import; the workbook is one tap further in, for anyone who would rather have
+// all three tables in a single file. iOS in a standalone PWA does nothing
+// useful with <a download>, so share the files where that exists and fall back
+// to a plain download everywhere else.
+let exBusy='',exMsg='',exSheet='';
+const exPl=(n,w)=>`${n} ${w}${n===1?'':'s'}`;
+const exCount=c=>`${exPl(c.rounds,'round')} · ${exPl(c.holes,'hole')} · ${exPl(c.shots,'shot')}`;
+function exOpen(which){exSheet=which;exMsg='';render();
+  if(which==='email')setTimeout(()=>{const el=document.getElementById('exMail');if(el)try{el.focus();}catch(e){}},60);}
+function exClose(){exSheet='';exMsg='';render();}
+function exFiles(fmt){
+  if(fmt==='xlsx'){
+    const {blob}=exportBuild();
+    return [new File([blob],exportFileName(),{type:blob.type})];
+  }
+  return exportCsvBlobs().map(f=>new File([f.text],f.name,{type:'text/csv'}));
+}
+async function exportSave(fmt){
+  if(exBusy)return;
+  exBusy='save';exMsg='';render();
+  try{
+    const files=exFiles(fmt);
+    const what=(fmt==='xlsx')?'the workbook':'three CSV files';
+    if(navigator.canShare&&navigator.canShare({files})&&navigator.share){
+      await navigator.share({files,title:'Battle Tees data'});
+      exMsg='Shared '+what+'.';exSheet='';
+    }else{
+      files.forEach((f,i)=>setTimeout(()=>{
+        const url=URL.createObjectURL(f), a=document.createElement('a');
+        a.href=url;a.download=f.name;document.body.appendChild(a);a.click();a.remove();
+        setTimeout(()=>URL.revokeObjectURL(url),4000);
+      },i*350));   // browsers drop downloads fired in the same tick
+      exMsg='Downloading '+what+'.';exSheet='';
+    }
+    try{stat('export',{how:'save',fmt:fmt||'csv'});}catch(e){}
+  }catch(e){exMsg=(e&&/abort/i.test(e.name||''))?'':'Could not build the file — '+((e&&e.message)||'try again.');}
+  exBusy='';render();
+}
+function b64FromBuf(buf){
+  const u8=new Uint8Array(buf);let s='';
+  for(let i=0;i<u8.length;i+=0x8000)s+=String.fromCharCode.apply(null,u8.subarray(i,i+0x8000));
+  return btoa(s);
+}
+async function exportEmail(fmt){
+  if(exBusy)return;
+  const to=((document.getElementById('exMail')||{}).value||'').trim();
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)){exMsg='Type an email address first.';render();return;}
+  exBusy='mail';exMsg='';render();
+  try{
+    const files=exFiles(fmt);
+    const out=[];
+    for(const f of files)out.push({filename:f.name,content:b64FromBuf(await f.arrayBuffer())});
+    let counts={rounds:0,holes:0,shots:0};
+    try{const t=exportTables();counts={rounds:t.rounds.length-1,holes:t.holes.length-1,shots:t.shots.length-1};}catch(e){}
+    const r=await relayBattle({op:'export',to,files:out,counts,fmt:fmt||'csv',who:((S.me&&S.me.name)||'')});
+    if(r&&r.ok){
+      try{localStorage.setItem('wolfBackupEmail',to);}catch(e){}
+      exMsg='Sent to '+to+' — check your inbox.';exSheet='';
+      try{stat('export',{how:'mail',fmt:fmt||'csv'});}catch(e){}
+    }else exMsg=(r&&r.err)||'The relay could not send it.';
+  }catch(e){exMsg='Could not send — '+((e&&e.message)||'check your signal.');}
+  exBusy='';render();
+}
+function exSmallBtn(label,onclick){
+  return `<button class="ghost mt" style="width:100%" onclick="${onclick}" ${exBusy?'disabled':''}>${label}</button>`;
+}
+function exportSheetHTML(){
+  if(!exSheet)return '';
+  let c={rounds:0,holes:0,shots:0};
+  try{const t=exportTables();c={rounds:t.rounds.length-1,holes:t.holes.length-1,shots:t.shots.length-1};}catch(e){}
+  const lead=`<div class="tiny mb">Three tables \u2014 <b>${exPl(c.rounds,'round')}</b>, <b>${exPl(c.holes,'hole')}</b>
+    and <b>${exPl(c.shots,'tracked shot')}</b>, one row each. CSV is what most stat trackers import.</div>`;
+  const err=exMsg?`<div class="tiny mb" style="font-weight:600;color:var(--green-mid)">${esc(exMsg)}</div>`:'';
+  if(exSheet==='download')return `<div class="vfWrap" role="dialog" aria-modal="true" aria-labelledby="exDT"><div class="vfCard" style="max-width:430px">
+    <h2 id="exDT" class="vfTitle">Download your data</h2>
+    ${lead}${err}
+    <button class="big" onclick="exportSave('csv')" ${exBusy?'disabled':''}>${exBusy==='save'?'Building\u2026':'\u2b07\ufe0f &nbsp;Download CSV files'}</button>
+    ${exSmallBtn('One Excel workbook (.xlsx) instead',"exportSave('xlsx')")}
+    <button class="big mt" style="background:var(--card);color:var(--ink2);border-color:var(--line);box-shadow:3px 3px 0 var(--line)" onclick="exClose()">Cancel</button>
+  </div></div>`;
+  const mail=(()=>{try{return localStorage.getItem('wolfBackupEmail')||'';}catch(e){return '';}})();
+  return `<div class="vfWrap" role="dialog" aria-modal="true" aria-labelledby="exET"><div class="vfCard" style="max-width:430px">
+    <h2 id="exET" class="vfTitle">Email your data</h2>
+    ${lead}
+    <input type="email" id="exMail" placeholder="you@email.com" value="${esc(mail)}" autocapitalize="off" autocorrect="off" spellcheck="false" style="width:100%;margin-bottom:10px">
+    ${err}
+    <button class="big" onclick="exportEmail('csv')" ${exBusy?'disabled':''}>${exBusy==='mail'?'Sending\u2026':'\u2709\ufe0f &nbsp;Send CSV files'}</button>
+    ${exSmallBtn('Send one Excel workbook (.xlsx) instead',"exportEmail('xlsx')")}
+    <button class="big mt" style="background:var(--card);color:var(--ink2);border-color:var(--line);box-shadow:3px 3px 0 var(--line)" onclick="exClose()">Cancel</button>
+  </div></div>`;
+}
+function exportCardHTML(){
+  let c={rounds:0,holes:0,shots:0};
+  try{const t=exportTables();c={rounds:t.rounds.length-1,holes:t.holes.length-1,shots:t.shots.length-1};}catch(e){}
+  if(!c.rounds&&!c.shots)return `<div class="card"><h2>\ud83d\udce4 Your data</h2>
+    <div class="tiny">Once you have finished a round, everything this phone recorded can be exported here as a spreadsheet.</div></div>`;
+  return `<div class="card"><h2>\ud83d\udce4 Your data</h2>
+    <div class="tiny mb">Everything this phone has recorded for you \u2014 <b>${exPl(c.rounds,'round')}</b>, <b>${exPl(c.holes,'hole')}</b>
+      and <b>${exPl(c.shots,'tracked shot')}</b>, one row each. Take it to any stat tracker.</div>
+    <button class="big" onclick="exOpen('download')" ${exBusy?'disabled':''}>\u2b07\ufe0f &nbsp;Download Spreadsheet</button>
+    <button class="big mt" style="background:var(--card);color:var(--green-mid);border-color:var(--green)" onclick="exOpen('email')" ${exBusy?'disabled':''}>\u2709\ufe0f &nbsp;Email Spreadsheet</button>
+    ${(!exSheet&&exMsg)?`<div class="tiny mt" style="font-weight:600;color:var(--green-mid)">${esc(exMsg)}</div>`:''}
+    <div class="tiny mt">Blank cells mean the stat was never recorded \u2014 they are not zeros.</div>
+  </div>`;
+}
 function vStats(){
   const meNm=(S.me&&S.me.name||'').trim().toLowerCase();
   const rounds=[];
@@ -8873,6 +9240,7 @@ function vStats(){
     <div id="shotlist" data-keepscroll style="max-height:280px;overflow-y:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line);border-radius:12px;padding:0 12px;margin-top:6px">${recentRows}</div>
     <div class="tiny mt">From Track It on the map — GPS-measured, tagged by club.</div>`
     :'<div class="tiny">Use <b>Track It</b> on the hole map: tap at your ball, tap where it lands, tag the club. Your real distances build here.</div>'}</div>
+  ${exportCardHTML()}
   </main>`;
 }
 function vRules(){
@@ -9183,6 +9551,10 @@ function vPlayers(){
           <div id="meEErr" class="tiny mt" style="color:var(--red);font-weight:600"></div>
         </div>
       </div>
+      <div class="row" style="border-top:none">
+        <div style="flex:1;min-width:0"><b>🎒 My Bag</b>
+          <div class="tiny">The clubs you carry, and the order they appear in after a tracked shot. Yours only — you cannot set another golfer's clubs.</div></div>
+        <button class="ghost sel" style="flex:none" onclick="openMyBag()">Set my clubs</button></div>
       <div class="row" style="border-top:none;margin-bottom:10px">
         <button class="ghost sel" style="flex:1" onclick="saveEditMe()">Save</button>
         <button class="ghost" onclick="cancelEditMe()">Cancel</button>
@@ -9221,6 +9593,10 @@ function vPlayers(){
         </div>
       </div>
       <div class="row" style="border-top:none;display:block">${stdTeePicker(e.id,e.stdTee||stdTeeOf(e.teeName))}</div>
+      ${libIsMe(e)?`<div class="row" style="border-top:none">
+        <div style="flex:1;min-width:0"><b>🎒 My Bag</b>
+          <div class="tiny">The clubs you carry, and the order they show up in after a tracked shot.</div></div>
+        <button class="ghost sel" style="flex:none" onclick="openMyBag()">Set my clubs</button></div>`:''}
       ${(()=>{const f=friendEntryFor(e.name);
         if(!f)return `<div class="row" style="border-top:none"><div class="tiny">⚔️ Battle friend<div style="opacity:.75">Not registered yet — play a shared round together and they link automatically.</div></div></div>`;
         return `<div class="row" style="border-top:none">
