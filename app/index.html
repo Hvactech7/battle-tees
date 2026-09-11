@@ -416,7 +416,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789158967';
+const BUILD='1789160673';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -5708,6 +5708,15 @@ async function initHoleMap(){
   // the rangefinder only ever needed the green.
   const hasPath=!!(geo&&geo.path&&geo.path.length>1);
   const hasGreen=!!(geo&&geo.green&&geo.green.length>2);
+  // A PROVISIONAL LINE POINTS, IT DOES NOT MEASURE. These are OSM traces the
+  // bake's own QA rejected on LENGTH — nearly all of them run from a forward
+  // tee, exactly as Nathan called it on 9/8. Each one was re-checked to end on
+  // this green, to be possible for the par, to sit inside the card's range and
+  // to start a short walk from the previous green, so the tee-to-green
+  // DIRECTION is sound: good enough to turn the map green-up and draw the
+  // corridor. The yardage is not verified against a card, so nothing here is
+  // allowed to state one — the scorecard is truth (Nathan's ruling).
+  const provPath=!!(geo&&geo.prov);
   if(hasPath||hasGreen){
     let pathEnd=null;
     if(hasPath){
@@ -5730,6 +5739,7 @@ async function initHoleMap(){
         html:'<div class="teedot" style="width:0;height:0"></div>',
         iconSize:[0,0],iconAnchor:[0,0]})}).addTo(LMAP);
       const teeSay=()=>{
+        if(provPath)return 'tee';          // unverified length: say nothing about it
         const t=teeMk.getLatLng(),g=mapMarks.greenC||pathEnd;
         return g?yd(mDist([t.lat,t.lng],g))+uLbl()+' tee':'tee';
       };
@@ -5781,7 +5791,7 @@ async function initHoleMap(){
     // tap it afterwards to snap back to the green center (aimC rides separately
     // from greenC so F/M/B always speaks for the real green)
     var lGreen=L.marker(greenC,{interactive:false,icon:crosshairIcon('aimdot')}).addTo(LMAP);
-    lGreen.bindTooltip(hasPath?legLabel(geo.path[0],greenC):'green',{permanent:true,direction:'top',offset:[0,-18],className:'maplbl'});
+    lGreen.bindTooltip((hasPath&&!provPath)?legLabel(geo.path[0],greenC):'green',{permanent:true,direction:'top',offset:[0,-18],className:'maplbl'});
     // HOLD the dot (still for AIM_HOLD_MS) to unlock it, then drag to measure
     // anywhere; tap it afterwards to snap back to the green centre. aimC rides
     // separately from greenC so F/M/B always speaks for the real green. The
@@ -5802,8 +5812,8 @@ async function initHoleMap(){
     // dot stays at the bottom, the green at the top, until you are inside 100
     // yards. A mapped hole used to frame once off the tee and then sit still,
     // so by the second shot you were looking at a picture of where you had been.
-    mapMarks.orientFromMe=makeOrientFromMe(greenC,greenPoly,el,!hasPath);
-    if(hasPath)updateFMB(geo.path[0],'yards from the tee');
+    mapMarks.orientFromMe=makeOrientFromMe(greenC,greenPoly,el,!hasPath||provPath);
+    if(hasPath&&!provPath)updateFMB(geo.path[0],'yards from the tee');
     else{
       // Green-only hole: no mapped tee, so the player's live GPS plays that role
       // from the very first fix.
