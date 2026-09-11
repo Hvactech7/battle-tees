@@ -416,7 +416,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789157175';
+const BUILD='1789158967';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -663,6 +663,17 @@ let S=load();
 // Real pars also carry gts=1 (confirming the prefilled par is the feature), but
 // their confirm stamps landed DURING the round; the discriminator is the stamp
 // sitting later than the round's own end.
+// ONE COURSE, ONE ENTRY. Libraries that predate the national index carry a
+// legacy record of a course the index also lists, and until 9/11 pulling the
+// national one dropped it alongside — two Ranchos in the picker, and the
+// pre-pick took whichever pin sat nearer. Collapse them once.
+try{
+  if(!localStorage.getItem('btDupCourse1')){
+    localStorage.setItem('btDupCourse1','1');
+    const n=dedupeCourses();
+    if(n)try{save();}catch(e){}
+  }
+}catch(e){}
 try{
   // v2: the v1 repair was healed back off the phone by the review-rejoin above
   // before that hole was closed — run the same repair once more.
@@ -3705,13 +3716,28 @@ function frameAround(center,spanYds,el){
 // behaviour — swung the view constantly on the walk in (Teal Bend, 8/15).
 // Twice per hole, and that is all; a fix already inside a checkpoint when the
 // hole is drawn (back from another app at the green) counts as crossing it.
+// A GREEN-ONLY HOLE HAS NEVER BEEN FRAMED AT ALL. A mapped hole is oriented off
+// its tee the moment it is drawn, so the checkpoints are only a refinement. With
+// no tee line there is nothing to orient from, and the checkpoints start at 225
+// yards — so standing on the tee of a green-only hole the map sat north-up, and
+// an east-west hole read sideways (Nathan + Brian, Rancho 14 at 338 yards,
+// 9/11). `noTee` makes the FIRST fix frame the hole, whatever the distance.
 const AUTO_ZOOM_YDS=[225,120];
-function makeOrientFromMe(greenC,greenPoly,el){
+function makeOrientFromMe(greenC,greenPoly,el,noTee){
   const done=[false,false];
+  let framed=!noTee;
   return (from)=>{
     try{
       if(!from||!greenC||!L.Map.prototype.setBearing)return;
       const y=mDist(from,greenC)*1.09361;
+      if(!framed){
+        framed=true;
+        // a first fix already inside a checkpoint counts as having crossed it,
+        // so the walk in does not re-frame for ground already covered
+        for(let i=0;i<AUTO_ZOOM_YDS.length;i++)if(y<=AUTO_ZOOM_YDS[i])done[i]=true;
+        orientGreenUp(from,greenC,greenPoly,[from],el);
+        return;
+      }
       // fire the deepest checkpoint this fix is inside, and everything shallower
       // it skipped past — one frame, then silence until the next checkpoint
       let hit=-1;
@@ -5776,7 +5802,7 @@ async function initHoleMap(){
     // dot stays at the bottom, the green at the top, until you are inside 100
     // yards. A mapped hole used to frame once off the tee and then sit still,
     // so by the second shot you were looking at a picture of where you had been.
-    mapMarks.orientFromMe=makeOrientFromMe(greenC,greenPoly,el);
+    mapMarks.orientFromMe=makeOrientFromMe(greenC,greenPoly,el,!hasPath);
     if(hasPath)updateFMB(geo.path[0],'yards from the tee');
     else{
       // Green-only hole: no mapped tee, so the player's live GPS plays that role
@@ -9583,6 +9609,72 @@ function natFilter(raw){
     if(el){try{el.focus();const p=caret==null?el.value.length:caret;el.setSelectionRange(p,p);}catch(e){}}
   }
 }
+// ONE-TIME: collapse duplicates already sitting in the library. The guard above
+// stops new ones; this clears the pair that is already there (Nathan had two
+// Ranchos and the pre-pick took the broken one). NOTHING IS DELETED BLIND — the
+// record with more rounds behind it survives, and before the other goes, every
+// round filed under it that has no course snapshot of its own is given one, so
+// no past round loses the course it was played on.
+function dedupeCourses(){
+  try{
+    const drop=[];
+    for(let i=0;i<(S.courses||[]).length;i++){
+      const a=S.courses[i]; if(!a||!a.loc||drop.includes(i))continue;
+      for(let j=i+1;j<S.courses.length;j++){
+        const b=S.courses[j]; if(!b||!b.loc||drop.includes(j))continue;
+        if(kmBetween(a.loc[0],a.loc[1],b.loc[0],b.loc[1])*1000>400)continue;
+        const ca=courseCore(a.name),cb=courseCore(b.name);
+        if(!ca||ca!==cb)continue;
+        const n=c=>(S.history||[]).filter(e=>e&&e.courseId===c.id).length;
+        // the one the rounds were filed under wins; a tie goes to the record
+        // that is already carrying history, else the first one
+        const loser=(n(b)>n(a))?i:j, keep=(loser===i)?j:i;
+        const lid=S.courses[loser].id, kc=S.courses[keep];
+        (S.history||[]).forEach(e=>{
+          if(!e||e.courseId!==lid)return;
+          const cs=e.courseSnap;
+          if(!cs||!cs.holes||!cs.holes.length){        // give it the course before it goes
+            const snap=clone(kc); try{delete snap.geo;}catch(x){}
+            e.courseSnap=snap;
+          }
+        });
+        drop.push(loser);
+        if(loser===i)break;
+      }
+    }
+    if(!drop.length)return 0;
+    const gone=drop.map(i=>S.courses[i]&&S.courses[i].name).filter(Boolean);
+    S.courses=S.courses.filter((c,i)=>!drop.includes(i));
+    try{stat('course_dedupe',{n:drop.length,names:gone.slice(0,6)});}catch(e){}
+    return drop.length;
+  }catch(e){return 0;}
+}
+// THE SAME COURSE, TWICE. natUse() matched on id alone, so pulling a national
+// record dropped it beside the legacy record of the very course it describes.
+// That is how Nathan's library ended up with two Ranchos — and the pre-pick,
+// ranking on distance alone, took the one whose pin sat 157 ft nearer and was
+// missing hole 14's tee line (9/11).
+// Proximity ALONE cannot decide this: a 36-hole facility is two real courses a
+// few hundred metres apart (Silverado North and the resort's other eighteen),
+// and collapsing those would be far worse than a duplicate. The name has to
+// agree as well, once the scoring words are stripped off it.
+function courseCore(n){
+  return String(n||'').toLowerCase()
+    .replace(/[^a-z0-9 ]+/g,' ')
+    .replace(/\b(the|at|of|golf|course|courses|club|cc|gc|g c|country|links|resort)\b/g,' ')
+    .replace(/\s+/g,' ').trim();
+}
+function sameCourseIdx(loc,name,notId){
+  try{
+    if(!loc)return -1;
+    const core=courseCore(name); if(!core)return -1;
+    return S.courses.findIndex(c=>{
+      if(!c||c.id===notId||!c.loc)return false;
+      if(kmBetween(loc[0],loc[1],c.loc[0],c.loc[1])*1000>400)return false;
+      return courseCore(c.name)===core;
+    });
+  }catch(e){return -1;}
+}
 async function natUse(id,auto){
   if(!auto){
     if(wiz)wiz.courseTouched=true;        // you searched one out yourself
@@ -9599,7 +9691,16 @@ async function natUse(id,auto){
     normalizeNine(course);
     set(()=>{
       const i=S.courses.findIndex(c=>c.id===course.id);
-      if(i>=0)S.courses[i]=clone(course);else S.courses.push(clone(course));
+      if(i>=0)S.courses[i]=clone(course);
+      else{
+        // already saved under another id: keep THAT record. Its id is what every
+        // round in history was filed under, and re-filing them to chase a
+        // tidier record would move handicap differentials that are already in
+        // the book. One entry in the picker; the one whose past is intact.
+        const t=sameCourseIdx(course.loc,course.name,course.id);
+        if(t>=0){S.course=clone(S.courses[t]);tombLift('courses',S.courses[t].id);return;}
+        S.courses.push(clone(course));
+      }
       tombLift('courses',course.id);
       S.course=clone(course);
     });
