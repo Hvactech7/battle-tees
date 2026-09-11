@@ -416,7 +416,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789084729';
+const BUILD='1789157175';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -932,7 +932,7 @@ function migrateState(s){
     }
 }
 function freshState(){
-  return {screen:'home',course:defaultCourse(),courses:builtinCourses(),playerLib:[],groupLib:[],teamLib:[],config:defaultConfig(),players:defaultPlayers(),round:blankRound(),share:{on:false,code:null},me:{name:'',index:10},theme:'dark',history:[],autoBackup:true,units:'yd'};
+  return {screen:'home',course:defaultCourse(),courses:builtinCourses(),playerLib:[],groupLib:[],teamLib:[],config:defaultConfig(),players:defaultPlayers(),round:blankRound(),share:{on:false,code:null},me:{name:'',index:10},theme:'dark',history:[],ledger:[],autoBackup:true,units:'yd'};
 }
 function syncLib(){
   if(!S.courses)return;
@@ -953,7 +953,7 @@ function abStamp(fp){abFp=fp;try{localStorage.setItem('btAbFp',fp);localStorage.
 // manual backup that did include it.
 function abPayload(){
   const courses=S.courses.map(c=>{const {geo,...rest}=c;return rest;});
-  return {me:S.me,playerLib:S.playerLib,courses,history:S.history||[],groups:S.groupLib||[],teams:S.teamLib||[],
+  return {me:S.me,playerLib:S.playerLib,courses,history:S.history||[],ledger:S.ledger||[],groups:S.groupLib||[],teams:S.teamLib||[],
     // TEE CORRECTIONS. manualGreens rides inside each archived round, so greens
     // were always recoverable — teeFix lives on S and was in NO backup at all,
     // which is why Cypress Lakes 8/12 came back with 18 greens and only 12 tees.
@@ -2201,7 +2201,7 @@ async function doBackup(){
     const courses=S.courses.map(c=>{const {geo,...rest}=c;return rest;});
     // shot lines were local-only until now: a cleared cache or a new phone lost
     // every tracked shot, including the per-course "last time out" ghost lines
-    const r=await relayBackup({op:'save',email:em,data:{me:S.me,playerLib:S.playerLib,courses,history:S.history||[],groups:S.groupLib||[],teams:S.teamLib||[],
+    const r=await relayBackup({op:'save',email:em,data:{me:S.me,playerLib:S.playerLib,courses,history:S.history||[],ledger:S.ledger||[],groups:S.groupLib||[],teams:S.teamLib||[],
       shotLog:trimShotLog(S.shotLog),shotLast:S.shotLast||{},bag:S.bag||null}});
     if(r&&r.ok){const d=abPayload();abStamp(JSON.stringify([d.me,d.playerLib,d.courses,d.history.map(h=>h.id)]));}
     const nh=(S.history||[]).length;
@@ -2428,7 +2428,7 @@ async function tryMagicLink(){
 // merge rule, not two that can drift apart.
 function applyLibrary(d){
   d = d || {};
-  let cAdded=0, hAdded=0;
+  let cAdded=0, hAdded=0, lAdded=0;
     let added=0,updated=0;
     set(()=>{
       // tombstones FIRST: a removal recorded in the backup (or on this phone) means
@@ -2481,6 +2481,19 @@ function applyLibrary(d){
         if(!(S.history||[]).some(x=>x.id===e.id)){(S.history=S.history||[]).push(e);hAdded++;}
       });
       if(hAdded){S.history.sort((a,b)=>(b.endedAt||0)-(a.endedAt||0));S.history=S.history.slice(0,30);}
+      // SEASON LEDGER. Union by round id and never capped — these rows are the only
+      // record of a season once the 30-round history cap has thrown the round away,
+      // so a restore must bring back every one of them, not the most recent thirty.
+      // A tombstoned round stays deleted here too.
+      if(Array.isArray(d.ledger)){
+        const have=new Set((S.ledger||[]).map(r=>r&&r.id));
+        d.ledger.forEach(r=>{
+          if(!r||!r.id||have.has(r.id))return;
+          if(tombHas('rounds',r.id))return;
+          (S.ledger=S.ledger||[]).push(r);have.add(r.id);lAdded++;
+        });
+        if(lAdded)S.ledger.sort((a,b)=>(b.at||0)-(a.at||0));
+      }
       // tee corrections — merge per course+hole; a value already on this phone
       // wins, because it was placed by someone standing on that tee
       if(d.teeFix){
@@ -2513,7 +2526,7 @@ function applyLibrary(d){
       });
       if(d.me&&d.me.pid&&!(S.me&&S.me.pid))S.me.pid=d.me.pid;
     });
-  return {added, updated, cAdded, hAdded};
+  return {added, updated, cAdded, hAdded, lAdded};
 }
 
 async function doRestore(){
@@ -2769,9 +2782,21 @@ function hcpDiffFor(entry,mi){
     return Math.round((113/slope)*(ags-rating)*10)/10;
   }catch(e){return null;}
 }
+// A TYPED INDEX STANDS UNTIL THE SCORES EARN THE RIGHT TO REPLACE IT.
+// (Nathan, 9/11.) One round used to become the whole index — all 20 seeded
+// slots read that single differential — so Brian's 103 at Lake Chabot turned a
+// typed 22 into a 33.7, and it decided Rancho before either of them teed off.
+// Eight 18-hole rounds is the floor now. Nine-hole rounds still log a
+// differential and still count toward nothing until then; entries written
+// before this rule carry no hole count and are taken as 18, so nobody who
+// already has a book gets demoted by the upgrade.
+const HCP_MIN_ROUNDS=8;
+function hcpFullRounds(list){return (list||[]).filter(x=>x&&isFinite(x.d)&&(x.n||18)>=18).length;}
+function hcpEnough(list){return hcpFullRounds(list)>=HCP_MIN_ROUNDS;}
 function hcpIndexFromLog(list){
   const real=(list||[]).map(x=>x.d).filter(d=>isFinite(d));
   if(!real.length)return null;
+  if(!hcpEnough(list))return null;   // not enough golf yet — whatever was typed stands
   const avg=real.reduce((a,b)=>a+b,0)/real.length;
   const window=real.slice(-20);
   while(window.length<20)window.push(avg);
@@ -2796,14 +2821,17 @@ function hcpAfterArchive(entry){
       const log=(S.hcpLog[key]=S.hcpLog[key]||[]);
       const at=entry.endedAt||Date.now();
       const hit=log.find(x=>x.id===rk||x.id===entry.id||hcpSameRound(x.id,rk));
-      if(hit){if(!/^d/.test(rk)||/^d/.test(hit.id))hit.id=rk;hit.d=d;hit.at=at;}else log.push({id:rk,at,d});
+      // how much golf this differential came from, so the threshold can tell an
+      // 18 from a nine instead of counting rounds blind
+      const hn=(((entry.round||{}).span||{}).count===9)?9:18;
+      if(hit){if(!/^d/.test(rk)||/^d/.test(hit.id))hit.id=rk;hit.d=d;hit.at=at;hit.n=hn;}else log.push({id:rk,at,d,n:hn});
       log.sort((a,b)=>(a.at||0)-(b.at||0));
       if(log.length>20)log.splice(0,log.length-20);
       // pid'd players go to the Pi's book — queued, pushed when there's signal
       if(snap.pid){
         if(!S.hcpPending)S.hcpPending=[];
         const pi=S.hcpPending.findIndex(x=>x.pid===snap.pid&&(x.k===rk||hcpSameRound(x.k,rk)));
-        const row={pid:snap.pid,k:(pi>=0&&/^d/.test(rk)&&!/^d/.test(S.hcpPending[pi].k))?S.hcpPending[pi].k:rk,at,d};
+        const row={pid:snap.pid,k:(pi>=0&&/^d/.test(rk)&&!/^d/.test(S.hcpPending[pi].k))?S.hcpPending[pi].k:rk,at,d,n:hn};
         if(pi>=0)S.hcpPending[pi]=row;else S.hcpPending.push(row);
         if(S.hcpPending.length>200)S.hcpPending.splice(0,S.hcpPending.length-200);
       }
@@ -2838,6 +2866,9 @@ async function hcpSync(force){
       let changed=false;
       Object.entries(idx).forEach(([pid,v])=>{
         if(!v||!isFinite(+v.ix))return;
+        // the book is the union of every phone's rounds, so IT decides whether
+        // the floor is met — not this phone's partial log
+        if(!(+v.n18>=HCP_MIN_ROUNDS))return;
         (S.playerLib||[]).forEach(e=>{if(e&&e.pid===pid&&e.index!==v.ix){e.index=v.ix;changed=true;}});
         if(S.me&&S.me.pid===pid&&S.me.index!==v.ix){S.me.index=v.ix;changed=true;}
       });
@@ -6813,6 +6844,7 @@ function render(){
   else if(scr==='pickgame') html=vPickGame();
   else if(scr==='stats') html=vStats();
   else if(scr==='history') html=vHistory();
+  else if(scr==='season') html=vSeason();
   else if(scr==='pickcourse') html=vPickCourse();
   else if(scr==='course') html=vCourse();
   else if(scr==='setup') html=gpsOnly()?vGpsSetup():vSetup();
@@ -7360,7 +7392,7 @@ async function soGo(){
   const me=S.me,th=S.theme;
   S={screen:'settings',course:defaultCourse(),courses:builtinCourses(),playerLib:[],groupLib:[],teamLib:[],
      config:defaultConfig(),players:defaultPlayers(),round:blankRound(),share:{on:false,code:null},
-     me:me||{name:'',index:10},theme:th||'dark',history:[],autoBackup:true};
+     me:me||{name:'',index:10},theme:th||'dark',history:[],ledger:[],autoBackup:true};
   save();
   abFp=null;
   const saved=await backupNow();
@@ -8806,7 +8838,13 @@ function histSort(){try{(S.history||[]).sort((a,b)=>histAt(b)-histAt(a));}catch(
 function vHistory(){
   histSort();
   const H=S.history||[];
+  const seasonBtn=(S.ledger||[]).length?`<div class="card" style="border-color:var(--gold);padding:12px 14px;cursor:pointer" onclick="set(()=>S.screen='season')">
+      <div class="row" style="border:0;padding:0"><span>
+        <b style="font-family:Rajdhani,sans-serif;font-size:20px;color:var(--gold)">💰 Season standings</b>
+        <div class="tiny">Every settled round of the year — the running money, by player.</div></span>
+        <span style="font-size:22px;color:var(--gold)">›</span></div></div>`:'';
   return topbar('Past rounds','Reopen one to view or fix scores','home')+`<main>
+  ${seasonBtn}
   ${H.length?H.map(e=>{
     const d=new Date(e.startedAt||(e.endedAt-(e.mins||0)*60000));   // the day it was played
     const when=`${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()]} ${d.getMonth()+1}/${d.getDate()}`;
@@ -8822,6 +8860,97 @@ function vHistory(){
       </div>
     </div>`;}).join('')
   :`<div class="card center muted">No finished rounds yet — they land here when you tap “End round”.</div>`}
+  </main>`;
+}
+// ---------- the season ----------
+// Built entirely from S.ledger, so it keeps working after the 30-round history cap
+// has thrown the rounds themselves away. A season is a calendar year: golf already
+// has one, nobody has to declare it, and it needs no setup on the first tee.
+function seasonYears(){
+  const ys=new Set();
+  (S.ledger||[]).forEach(r=>{if(r&&r.at)ys.add(new Date(r.at).getFullYear());});
+  const out=[...ys].sort((a,b)=>b-a);
+  return out.length?out:[new Date().getFullYear()];
+}
+let seasonPick=null;
+function seasonYear(){
+  const ys=seasonYears();
+  return ys.includes(seasonPick)?seasonPick:ys[0];
+}
+function setSeason(y){set(()=>{seasonPick=+y;});}
+// Unpriced rounds are kept deliberately — they count toward rounds played and
+// they settled for nothing, which is the truth about that day. Dropping them
+// would make "12 rounds" disagree with the twelve rounds actually played.
+function seasonRows(y){
+  return (S.ledger||[]).filter(r=>r&&r.at&&new Date(r.at).getFullYear()===y);
+}
+// One line per player across every round of the season. A player is followed by
+// their ledger key, so the same person tracks across phones once they have a pid
+// and still counts on this phone when they are only a typed-in name.
+function seasonTable(rows){
+  const by={};
+  rows.forEach(r=>(r.players||[]).forEach(p=>{
+    if(!p)return;
+    const k=p.k||('n:'+(p.name||'').trim().toLowerCase());
+    const e=by[k]||(by[k]={k,name:p.name||'',rounds:0,net:0,best:null,worst:null,up:0,gross:0,grossN:0});
+    if(p.name)e.name=p.name;
+    const v=+p.net||0;
+    e.rounds++;e.net+=v;
+    if(e.best==null||v>e.best)e.best=v;
+    if(e.worst==null||v<e.worst)e.worst=v;
+    if(v>0.004)e.up++;
+    if(p.gross>0){e.gross+=p.gross;e.grossN++;}
+  }));
+  return Object.values(by).map(e=>{e.net=+e.net.toFixed(2);return e;})
+    .sort((a,b)=>b.net-a.net||b.rounds-a.rounds);
+}
+function seasonIsMe(k){
+  const mp=myPid();
+  if(mp&&k===mp)return true;
+  return k==='n:'+((S.me&&S.me.name)||'').trim().toLowerCase();
+}
+function vSeason(){
+  const ys=seasonYears(), y=seasonYear();
+  const rows=seasonRows(y), tab=seasonTable(rows);
+  const mine=tab.find(e=>seasonIsMe(e.k));
+  const money=v=>`${v>0.004?'+':''}${fmtMoney(v).replace('$-','-$')}`;
+  const col=v=>v>0.004?'#7fd49a':v<-0.004?'var(--red)':'var(--ink2)';
+  const picker=ys.length>1?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin:0 4px 10px">
+    ${ys.map(v=>`<button class="ghost${v===y?' sel':''}" style="margin:0" onclick="setSeason(${v})">${v}</button>`).join('')}</div>`:'';
+  if(!rows.length)return topbar('Season standings',String(y),'home')+`<main>${picker}
+    <div class="card center">
+      <div style="font-size:40px;line-height:1">⛳</div>
+      <b style="font-family:Rajdhani,sans-serif;font-size:20px">No settled rounds yet in ${y}</b>
+      <div class="tiny mt">Finish a round with two or more players and a $ rate on the game,
+        and it lands here. Every round after that adds to the running total.</div>
+    </div></main>`;
+  const head=mine?`<div class="card center" style="border-color:${mine.net>0.004?'var(--green)':mine.net<-0.004?'var(--red)':'var(--line)'}">
+      <div class="tiny">Your ${y} season</div>
+      <span class="bigscore num" style="color:${col(mine.net)}">${money(mine.net)}</span>
+      <div class="muted">${mine.rounds} round${mine.rounds===1?'':'s'} · up in ${mine.up} of them</div>
+    </div>`:'';
+  return topbar('Season standings',`${y} · ${rows.length} round${rows.length===1?'':'s'}`,'home')+`<main>
+    ${picker}${head}
+    <div class="card"><h2>💰 The money</h2>
+      <table class="st"><tr><th>Player</th><th class="r">Rds</th><th class="r">Best</th><th class="r">Season</th></tr>
+      ${tab.map(e=>`<tr${seasonIsMe(e.k)?' style="background:rgba(255,255,255,.04)"':''}>
+        <td>${seasonIsMe(e.k)?'<b>':''}${esc(e.name||'—')}${seasonIsMe(e.k)?'</b>':''}</td>
+        <td class="r num">${e.rounds}</td>
+        <td class="r num" style="color:${col(e.best||0)}">${money(e.best||0)}</td>
+        <td class="r num" style="font-size:19px;color:${col(e.net)}">${money(e.net)}</td></tr>`).join('')}
+      </table>
+      <div class="tiny mt">Every settled round of ${y}, from the same numbers the settlement card showed on the day.</div>
+    </div>
+    <div class="card"><h2>The rounds</h2>
+      ${rows.slice().sort((a,b)=>(b.at||0)-(a.at||0)).map(r=>{
+        const d=new Date(r.at);
+        const me=(r.players||[]).find(p=>seasonIsMe(p.k));
+        return `<div class="row"><span>
+          <b>${esc(r.course||'—')}</b>
+          <span class="tiny"> · ${d.getMonth()+1}/${d.getDate()} · ${(r.games||[]).map(gameName).join(' · ')}</span></span>
+          ${me?`<b class="num" style="color:${col(me.net)}">${money(me.net)}</b>`:'<span class="muted tiny">—</span>'}</div>`;
+      }).join('')}
+    </div>
   </main>`;
 }
 // ---------- my stats ----------
@@ -9732,7 +9861,7 @@ function roundSplashHTML(){
   const acc=[];
   // putts only when they were entered on every hole of the round; a round with
   // tracking off, or a partial set, must never read as a putts number
-  if(x.putts&&x.putts.n>0&&!(x.putts.holes<x.holes))acc.push(`<b>${x.putts.n}</b> putts`);
+  if(x.putts&&x.putts.n>0)acc.push(`<b>${x.putts.n}</b> putts${(x.putts.full===false||x.putts.holes<x.holes)?` <span style="opacity:.7">(${x.putts.holes} of ${x.holes} holes)</span>`:''}`);
   if(x.fw&&x.fw.of)acc.push(`<b>${Math.round(100*x.fw.hit/x.fw.of)}%</b> fairways`);
   if(x.gir&&x.gir.of)acc.push(`<b>${Math.round(100*x.gir.hit/x.gir.of)}%</b> greens`);
   const ctp=(x.ctp||[]).length
@@ -9840,8 +9969,11 @@ function roundSummary(){
       eagles,birdies,pars,bogeys,
       fw:tracked&&fwN?{hit:fwHit,of:fwN}:null,
       gir:tracked&&girN?{hit:girHit,of:girN}:null,
-      // every scored hole answered, or the putts are not reported at all
-      putts:(puttHoles&&puttHoles===holes.length)?{n:putts,holes:puttHoles}:null, ctp:ctps, longShot,
+      // a hole nobody answered is not a zero — report the holes that WERE
+      // answered and mark whether that covered the round, so one skipped prompt
+      // can no longer erase a whole round of putting (Brian, Rancho 9/11: 17 of
+      // 18 answered and the card showed no putts at all)
+      putts:puttHoles?{n:putts,holes:puttHoles,full:puttHoles===holes.length}:null, ctp:ctps, longShot,
       players:act.length,game:gameOn(),result};
   }catch(e){return null;}
 }
@@ -9849,6 +9981,55 @@ function roundSummary(){
 // nothing under that bar is recorded ANYWHERE — the Battlefield already had
 // this gate; the phone's own history did not. A review re-archiving an
 // existing entry is untouched (that entry passed the bar when it was made).
+// ----- the season ledger ------------------------------------------------------
+// A finished round leaves ONE compact row behind: a few hundred bytes, against the
+// tens of kilobytes a history entry carries (it clones the whole round, the config,
+// the roster and the course). S.history is also capped at 30 rounds, and a weekly
+// group plays past 30 by August — so a season can never be built out of it. These
+// rows are what a season IS, which is why they are small and never capped.
+//
+// The money comes from settleNet(), the same function the settlement card reads,
+// so a season total can never disagree with the round it came from.
+//
+// A player's key is their pid when they have one (stable across phones and already
+// merge-aware on the relay), and falls back to their name on this phone, which is
+// all a hand-typed guest has.
+function ledgerKeyFor(p){
+  if(!p)return '';
+  if(p.pid)return p.pid;
+  const nm=(p.name||'').trim().toLowerCase();
+  const e=(S.playerLib||[]).find(x=>x&&(x.id===p.libId||(x.name||'').trim().toLowerCase()===nm));
+  if(e&&e.pid)return e.pid;
+  return 'n:'+nm;
+}
+function ledgerRow(entry){
+  try{
+    if(!entry||!entry.id)return null;
+    const SN=settleNet();
+    if(!SN||!SN.act||SN.act.length<2)return null;   // solo settles nothing
+    const holes=S.round.holes.filter(r=>r&&r.confirmed&&r.gross);
+    return {
+      v:1,id:entry.id,at:entry.endedAt||Date.now(),
+      courseId:entry.courseId||null,course:entry.courseName||'',
+      games:(entry.round&&entry.round.games||[entry.game]).filter(Boolean),
+      lens:SN.lens,thru:entry.thru||0,priced:!!SN.priced,
+      players:SN.act.map((i,ai)=>({
+        k:ledgerKeyFor(S.players[i]),
+        name:(S.players[i]&&S.players[i].name||'').trim(),
+        net:+(+SN.net[ai]||0).toFixed(2),
+        gross:holes.reduce((s,r)=>s+(+r.gross[i]||0),0)
+      }))
+    };
+  }catch(e){return null;}
+}
+// Re-archiving an edited round REPLACES its row — a review must never double-count
+// a night's money into the season.
+function ledgerPut(row){
+  if(!row||!row.id)return;
+  S.ledger=(S.ledger||[]).filter(r=>r&&r.id!==row.id);
+  S.ledger.push(row);
+  S.ledger.sort((a,b)=>(b.at||0)-(a.at||0));
+}
 const MIN_ROUND_HOLES=2;
 function archiveRound(){
   if(!S.round.started)return;
@@ -9888,6 +10069,7 @@ function archiveRound(){
   S.history.unshift(entry);
   histSort();
   S.history=S.history.slice(0,30);
+  ledgerPut(ledgerRow(entry));   // the season keeps what the 30-round cap drops
   hcpAfterArchive(entry);   // the round now speaks for everyone's handicap
   try{setTimeout(()=>hcpSync(true),1500);}catch(e){}
 }
@@ -10030,7 +10212,11 @@ function endRound(){
   shellRound('ended');   // the Android shell drops its round notification + background GPS
   try{chalCheerCheck(true);cheerSummaryQueue();}catch(e){}   // the horn: every challenge is settled, then the roll call
   if(!S.round.myEndedAt)S.round.myEndedAt=Date.now();  // clock stops once, forever
-  if(!S.round._statFin){S.round._statFin=true;
+  // closeReview() ends a REOPENED round through here too, and that is not a
+  // round ending: the clock stopped hours ago, so round_end reported the very
+  // same minutes a second time (Rancho 9/11 — ended 11:43, reported again at
+  // 12:41 when the round was opened in Past Rounds and closed again).
+  if(!S.round._statFin&&!S.round.reopened){S.round._statFin=true;
     const t0=S.round.myStartedAt||S.round.startedAt;
     stat('round_end',{game:S.round.game,thru:S.round.holes.filter(r=>r.confirmed).length,
       mins:t0?Math.round((S.round.myEndedAt-t0)/60000):null});}
@@ -13447,11 +13633,53 @@ function fixedTeamsFor(g){
 }
 function settleRate(g){if(g==='skins')return 1;return +((S.round.rates||{})[g])||0;}
 function setRate(g,v){set(()=>{S.round.rates=S.round.rates||{};S.round.rates[g]=Math.max(0,+v||0);});}
+// ----- settlement as DATA -----------------------------------------------------
+// vSettleStack and vSettle both compute the money INSIDE their HTML builders and
+// throw the numbers away, so nothing else could ever read who won what. This is
+// that same arithmetic with the markup removed, and it is the one definition of
+// "what did each player win this round" — the settlement screen and the season
+// ledger both read it, so the two can never drift apart.
+//
+// The two screens price a round differently and that is deliberate, so this
+// mirrors both: ONE game charges S.round.dollarPerPt across the board, a STACK
+// charges each game its own settleRate(). Skins is already money either way, and
+// a game whose mystery partners are still undrawn settles nothing at all.
+//
+// A scramble never reaches the stack branch (it "plays alone" — see the picker),
+// which is why the stack inverts only stroke while the single path inverts both.
+function settleNet(){
+  const G=gamesOn(), act=actIdx(), L=primaryLens();
+  const out={act,lens:L,net:act.map(()=>0),per:{},pending:[],priced:false};
+  if(act.length<2)return out;
+  const multi=G.length>1;
+  G.forEach(g=>{
+    if(mysteryPending(g)){out.pending.push(g);return;}
+    const eng=computeFor(g); const led=eng&&eng.ledgers&&eng.ledgers[L];
+    if(!led)return;
+    const inv=(g==='stroke'||(!multi&&g==='scramble'))?-1:1;
+    const rate=multi?settleRate(g):(g==='skins'?1:(+S.round.dollarPerPt||0));
+    const conv=v=>g==='nines'?v/12:v;
+    if(rate>0)out.priced=true;
+    const gn={}, FT=fixedTeamsFor(g);
+    if(FT){
+      const diff=(led[FT[0][0]]-led[FT[1][0]])*inv;
+      const half=Math.abs(diff)*rate/2, winT=diff>=0?0:1;
+      act.forEach((i,ai)=>{const amt=FT[winT].includes(i)?half:-half;gn[i]=amt;out.net[ai]+=amt;});
+    }else{
+      act.forEach((i,ai)=>{
+        let u=0;act.forEach(j=>{if(j!==i)u+=conv((led[i]-led[j])*inv);});
+        const amt=(g==='skins'?u:u*rate);gn[i]=amt;out.net[ai]+=amt;});
+    }
+    out.per[g]=gn;
+  });
+  out.net=out.net.map(v=>+v.toFixed(2));
+  return out;
+}
 function vSettleStack(G){
   const thru=S.round.holes.filter(r=>r.confirmed).length;
   const act=actIdx();
   const L=primaryLens();
-  const net=act.map(()=>0);
+  const SN=settleNet(), net=SN.net;
   const UNIT={stroke:'stroke',bestball:'hole',nassau:'bet',skins:'$',nines:'pt',quota:'pt',stableford:'pt',sixes:'pt',umbrella:'pt',bbb:'pt'};
   const cards=G.map(g=>{
     const eng=computeFor(g);
@@ -13459,7 +13687,6 @@ function vSettleStack(G){
     const inv=g==='stroke'?-1:1;
     const unit=UNIT[g]||'pt';
     const rate=settleRate(g);
-    const conv=v=>g==='nines'?v/12:v;
     // Fixed 2v2 settles TEAM v TEAM — see fixedTeamsFor().
     if(mysteryPending(g)){
       return `<div class="card"><h2>${gameName(g)} · thru ${thru}</h2>
@@ -13469,7 +13696,6 @@ function vSettleStack(G){
     if(FT){
       const diff=(led[FT[0][0]]-led[FT[1][0]])*inv;
       const marg=Math.abs(diff), half=marg*rate/2, winT=diff>=0?0:1;
-      act.forEach((i,ai)=>{net[ai]+=(FT[winT].includes(i)?half:-half);});
       const ord=[winT,1-winT];
       const pot=marg*rate;
       return `<div class="card"><h2>${gameName(g)} · thru ${thru}</h2>
@@ -13485,10 +13711,8 @@ function vSettleStack(G){
     }
     // per-game dollars, kept so each game can show its own pot as well as
     // feeding the combined pile
-    const gn={};
-    act.forEach((i,ai)=>{let u=0;act.forEach(j=>{if(j!==i)u+=conv((led[i]-led[j])*inv);});
-      const amt=(g==='skins'?u:u*rate); gn[i]=amt; net[ai]+=amt;});
-    const pot=act.reduce((a,i)=>a+Math.max(0,gn[i]),0);
+    const gn=SN.per[g]||{};
+    const pot=act.reduce((a,i)=>a+Math.max(0,gn[i]||0),0);
     const priced=(g==='skins')||rate>0;
     const order=act.slice().sort((a,b)=>(led[b]-led[a])*inv);
     const fmt=v=>g==='skins'?fmtMoney(v):g==='nines'?fmtPts(v):String(v);
