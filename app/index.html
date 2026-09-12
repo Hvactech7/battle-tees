@@ -437,7 +437,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789186500';
+const BUILD='1789186800';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -9669,10 +9669,6 @@ function vRules(){
     '<b>The flip:</b> a birdie flips the opponent’s number high-first — their 4-and-8 becomes <b>84</b>. Both teams birdie = no flip.',
     '<b>Partner swap (option):</b> teams rotate twice during the round so everyone partners everyone.',
     'Swings are huge — set the $ per point low.']),'vegas')}
-  ${ruleCard(img('/stroke.png',48),'Stroke','Classic scoring — lowest total wins',li([
-    'Everyone plays their own ball; lowest total over the round wins. Works with 2, 3 or 4 players.',
-    'Settlement pays by <b>strokes of difference</b>.',
-    'Use the Standings tabs mid-round to see the same scores as Stableford, Match play, 9’s or Vegas.']),'stroke')}
   ${ruleCard(img('/bestball.png',48),'Best Ball','2 v 2 match play — best ball counts',li([
     'Everyone plays their own ball; each hole, the <b>better ball of each team</b> goes head to head.',
     'Win the hole, go 1 UP. Most holes up wins the match — clinch early and it ends “3&2” style.',
@@ -9735,6 +9731,8 @@ function vRules(){
     'Every hole starts fresh at 1× with the hammer in the air. Throw it when your opponent is in the trees.']),'hammer')}
   <div class="card" style="padding:12px 14px"><b style="font-family:Rajdhani,sans-serif;font-size:20px">Scoring options — every game</b>
     <div style="font-size:15px;line-height:1.55;margin-top:6px">
+    <b>A round with no game picked is stroke play</b> — everyone plays their own ball, lowest total wins, settlement pays by strokes of difference. It is not on this list because it is not a game you choose; it is what a round is. Pick one from the grid to play something on top of it.</div>
+    <div style="font-size:15px;line-height:1.55;margin-top:10px">
     <b>Net</b> scores (totals, Stroke play, Stableford) apply each player’s <b>full course handicap</b>. Inside the games, points play off strokes <b>relative to the low man</b> — the dots on the score entry show where those game strokes land. <b>Gross</b> is raw. <b>Both</b> shows two columns.
     All games ride the same scores — Standings tabs let you replay the round as any other game, and Settle always pays by the game you picked at the start.</div></div>
   </main>`;
