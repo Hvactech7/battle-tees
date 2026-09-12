@@ -437,7 +437,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789196803';
+const BUILD='1789201325';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1158,6 +1158,7 @@ function shareMeta(){return {course:courseForShare(),players:S.players,config:S.
   shots:shotsForShare(),
   cheers:(S.round.cheers||[]).slice(-24),
   capEnd:S.round.capEnd||null,
+  since:S.round.since||null,
   _ts:S.shareMetaTs||0};}
 function contentKey(k){
   if(k==='meta'){const {_ts,...rest}=shareMeta();return JSON.stringify(rest);}
@@ -1225,6 +1226,18 @@ function applyOp(k,v,defer){
           delete S.share.bf;S.share.near=nearFence();postRoomInvite();}}catch(e){}
         S.round.started=v.started;S.round.dollarPerPt=v.dollarPerPt;
         if(v.games)S.round.games=v.games;
+        if(v.since){
+          const had=S.round.since||{};
+          S.round.since=Object.assign({},had,v.since);
+          // The main game is per-phone (each phone picks its own view), but a
+          // tee-tap game is not a view: the wolf's pick has to be made on the
+          // wolf's phone, so Wolf or Scramble picked up mid-round takes the
+          // hole screen everywhere, exactly as it did on the phone that picked it.
+          Object.keys(v.since).forEach(g=>{
+            if(had[g]!=null||g==='bbb'||!START_ONLY.includes(g))return;
+            if(!START_ONLY.includes(S.round.game))S.round.game=g;
+          });
+        }
         if(v.rates)S.round.rates=v.rates;
         if(v.span)S.round.span=v.span;
         if(v.startedAt)S.round.startedAt=v.startedAt;
@@ -1366,9 +1379,15 @@ function syncConnect(){
   if(!S.share||!S.share.on||sock)return;
   if(previewSandboxed())return;
   try{sock=new WebSocket(RELAY+(RELAY.includes('?')?'&':'?')+'room='+encodeURIComponent(S.share.code||''));}catch(e){sock=null;scheduleReconnect();return;}
+  const ws=sock;
   sock.onopen=()=>{
+    // A merge closes the old room's socket and opens the new one within the
+    // same second; the old one's onopen can still land after `sock` has been
+    // nulled or replaced (sim-merge 9/12: "Cannot read properties of null
+    // (reading 'send')"). Only the current socket gets to act.
+    if(sock!==ws){try{ws.close();}catch(e){}return;}
     sockOpen=true;retryMs=1000;
-    sock.send(JSON.stringify({t:'join',room:S.share.code}));
+    ws.send(JSON.stringify({t:'join',room:S.share.code}));
     postRoomInvite();
     syncPush();  // catch-up: anything edited while offline goes out immediately
     bfReannounce();   // a round the Battlefield never acknowledged goes out now
@@ -1651,9 +1670,27 @@ function captureJoinCarry(){
       const stats={};Object.keys(r.stats||{}).forEach(k=>{const a=r.stats[k];if(Array.isArray(a)&&a[q])stats[k]=a[q];});
       holes.push({i,gross:+g,gts:(r.gts||[])[q]||0,sts:(r.sts||[])[q]||0,cfts:(r.cfts||[])[q]||0,confirmed:!!r.confirmed,stats});
     });
-    if(!holes.length)return null;
+    // THE PEOPLE I SCORE COME WITH ME. Two twosomes meeting on the 3rd tee:
+    // if my partner has no phone in the app, their two holes live only on
+    // mine, and used to stay behind. Every real row this phone writes (no
+    // owner, or owned/scored by me) travels as a mate: name, index, pid and
+    // holes. applyJoinCarry seats them in the room -- an existing row of the
+    // same name, else an empty seat -- and lands the holes.
+    const mates=[];
+    (S.players||[]).forEach((p,i)=>{
+      if(i===q||!isRealPl(p))return;
+      if(p.ownerDev&&p.ownerDev!==devId())return;      // their own phone carries them
+      const mh=[];
+      S.round.holes.forEach((r,j)=>{
+        const g=r.gross&&r.gross[i];if(g==null||!isFinite(+g))return;
+        const stats={};Object.keys(r.stats||{}).forEach(k=>{const a=r.stats[k];if(Array.isArray(a)&&a[i])stats[k]=a[i];});
+        mh.push({i:j,gross:+g,gts:(r.gts||[])[i]||0,sts:(r.sts||[])[i]||0,cfts:(r.cfts||[])[i]||0,confirmed:!!r.confirmed,stats});
+      });
+      mates.push({name:p.name,index:p.index,pid:p.pid||null,libId:p.libId||null,tee:p.tee||null,holes:mh});
+    });
+    if(!holes.length&&!mates.some(m=>m.holes.length))return null;
     const real=(S.players||[]).filter(isRealPl).length;
-    return {courseId:S.course.id,holes,solo:real<=1,at:Date.now(),histBefore:(S.history||[]).map(e=>e.id)};
+    return {courseId:S.course.id,holes,mates,solo:real<=1,at:Date.now(),histBefore:(S.history||[]).map(e=>e.id)};
   }catch(e){return null;}
 }
 function applyJoinCarry(){
@@ -1673,13 +1710,46 @@ function applyJoinCarry(){
     if(h.confirmed){r.cfts=r.cfts||[0,0,0,0];r.cfts[q]=h.cfts>0?h.cfts:Date.now();}
     n++;
   });
+  // the mates I carried: seat, then land
+  const low=x=>String(x||'').trim().toLowerCase();
+  const landRow=(slot,hs)=>{hs.forEach(h=>{
+    const r=S.round.holes[h.i];if(!r)return;
+    r.gross=r.gross||[null,null,null,null];r.gts=r.gts||[0,0,0,0];r.sts=r.sts||[0,0,0,0];
+    if(r.gross[slot]!=null)return;
+    r.gross[slot]=h.gross;r.gts[slot]=h.gts||Date.now();
+    Object.keys(h.stats||{}).forEach(k=>{const a=statArr(r,k);if(!a[slot])a[slot]=h.stats[k];});
+    if(h.sts)r.sts[slot]=Math.max(r.sts[slot]||0,h.sts);
+    if(h.confirmed){r.cfts=r.cfts||[0,0,0,0];r.cfts[slot]=h.cfts>0?h.cfts:Date.now();}
+    n++;});};
+  const noSeat=[];
+  (c.mates||[]).forEach(mt=>{
+    let slot=(S.players||[]).findIndex(p=>p&&isRealPl(p)&&low(p.name)===low(mt.name));
+    if(slot<0){
+      slot=(S.players||[]).findIndex(p=>!isRealPl(p));
+      if(slot<0){noSeat.push(mt.name);return;}
+      const pl=S.players[slot];
+      pl.name=mt.name;pl.index=mt.index;pl.chOverride=null;delete pl.nearby;delete pl.ownerDev;delete pl.libId;
+      if(mt.pid)pl.pid=mt.pid;if(mt.libId)pl.libId=mt.libId;
+      if(mt.tee&&S.course.teeSets.some(t=>t.id===mt.tee))pl.tee=mt.tee;
+      pl.scorer=devId();                       // I score them here too, until their phone claims
+      try{syncGroupCounts();}catch(e){}
+      S.shareMetaTs=Date.now();
+    }
+    landRow(slot,mt.holes||[]);
+  });
+  if(noSeat.length)setTimeout(()=>shotToast('No seat for '+noSeat.join(' & ')+' \u2014 their holes stayed in Past Rounds'),500);
   joinCarry=null;
   if(!n)return;
   try{stampChanges();}catch(e){}
   // the solo stub this join archived is now fully inside the room: a short
   // solo stub (under 9 holes, no handicap posting) is deleted rather than
   // left as a phantom round in Past Rounds
-  if(c.solo&&c.histId&&c.holes.length<9&&n===c.holes.length)S.history=(S.history||[]).filter(e=>e.id!==c.histId);
+  // the short round I merged out of is a stub once every row I carried --
+  // mine and my mates' -- has landed in the new room (it used to survive
+  // unless I had been playing alone, so a merged twosome kept a 2-hole ghost
+  // above the real round in Past Rounds)
+  const expected=c.holes.length+(c.mates||[]).reduce((t,m)=>t+(m.holes||[]).length,0);
+  if(c.histId&&c.holes.length<9&&n===expected)S.history=(S.history||[]).filter(e=>e.id!==c.histId);
   save();syncPush();
   setTimeout(()=>shotToast(`Your ${n} scored hole${n===1?'':'s'} came with you`),400);
 }
@@ -1699,6 +1769,7 @@ function guardedJoin(code){
 }
 function joinFromInvite(code){if(!guardedJoin(code))return;joinRoundCode(code);}
 function joinRoundCode(code){
+  wiz=null;                                   // the wizard is done with, whichever door we came in by
   lobbyClose();
   stat('round_share',{side:'joiner'});
   S.share={on:true,code,creator:false,awaitDoc:true};   // no meta leaves this phone until the room's doc has landed (9/6 sim: a joiner's stale meta flipped the whole group to its old course, started:false)
@@ -1713,7 +1784,7 @@ function joinRoundCode(code){
   // A socket still bound to an earlier room (a mistyped code, 9/6 fresh-user
   // sim) never sends the new join — syncConnect keeps any open socket. Drop it
   // so this code gets its own join and its own state doc.
-  if(sock){const s0=sock;sock=null;sockOpen=false;try{s0.onclose=null;s0.onmessage=null;s0.close();}catch(e){}}
+  if(sock){const s0=sock;sock=null;sockOpen=false;try{s0.onopen=null;s0.onclose=null;s0.onmessage=null;s0.close();}catch(e){}}
   joinErr='';
   save();syncConnect();render();
   try{setTimeout(maybeAskPar,1600);}catch(e){}
@@ -1770,7 +1841,7 @@ function joinWaitSheetHTML(){
 }
 function joinBail(code,msg){
   S.share={on:false,code:null};
-  if(sock){const s0=sock;sock=null;sockOpen=false;try{s0.onclose=null;s0.onmessage=null;s0.close();}catch(e){}}
+  if(sock){const s0=sock;sock=null;sockOpen=false;try{s0.onopen=null;s0.onclose=null;s0.onmessage=null;s0.close();}catch(e){}}
   teeAsk=null;joinSpanAsk=null;
   // the room's doc may have landed on this phone: a joiner never keeps it
   if(!S.round.started||S.players.every(p=>!p||p.ownerDev!==devId())){S.round=blankRound();resetRoster();}
@@ -2043,6 +2114,15 @@ function bfReannounce(){
 // leaveShare() on a later line, which closes that socket — an awaited send
 // resumes after the close and silently never goes out, so every round stayed
 // "LIVE" on the Battlefield forever.
+// Everyone else on the card has already stamped ended -- I am the last out.
+function lastOneOut(){
+  try{
+    if(!S.share||!S.share.on)return false;
+    const me=myPlayerIdx();
+    const others=actIdx().filter(i=>i!==me&&isRealPl(S.players[i]));
+    return others.length>0&&others.every(i=>!!S.players[i].ended);
+  }catch(e){return false;}
+}
 function bfBroadcastEnd(){
   try{
     if(!(S.share.on&&S.share.code))return;
@@ -2052,8 +2132,12 @@ function bfBroadcastEnd(){
     // round that was really 3½. The captain's capEnd is the round's end.
     // ...unless the card is COMPLETE (8/23): every hole confirmed is the round
     // over, whoever says so — and the relay keeps the EARLIEST end it hears.
-    if(!S.share.creator&&!roundComplete())return;
-    const endedAt=(S.round.capEnd&&S.round.capEnd.at)||S.round.myEndedAt||Date.now();
+    // ...was the rule while the captain's end was everyone's end. Now the
+    // battle closes when the card is COMPLETE, or when the LAST phone leaves --
+    // a joiner walking in early, or a phone auto-ending a stale round the next
+    // morning, still cannot stamp a round the rest of the group is playing.
+    if(!roundComplete()&&!lastOneOut())return;
+    const endedAt=S.round.myEndedAt||Date.now();
     const ws=(sockOpen&&sock)||((lobbySock&&lobbySock.readyState===1)?lobbySock:null);
     if(ws&&ws.readyState===1){
       ws.send(JSON.stringify({t:'battle',op:'end',code:S.share.code,endedAt,
@@ -3164,9 +3248,14 @@ function computeAll(){
     if(pos>=0&&pos>=playOrder().length-2&&S.config.last2LastPlace){
       const led=ledgers[lenses.includes(primaryLens())?primaryLens():lenses[0]];
       let min=Math.min(...led); wolf=led.indexOf(min);
-    } else wolf=Math.max(0,pos)%4;
+    } else {
+      // picked up mid-round: the first-listed golfer is the Wolf on the PICKUP
+      // hole, not on hole 1 -- the rotation counts from there
+      const sw=(S.round.since&&S.round.since.wolf)||0;
+      wolf=((Math.max(0,pos)-sw)%4+4)%4;
+    }
     const info={wolf,results:{},ledgerAfter:{},carryAfter:{}};
-    if(rec.confirmed&&rec.mode){
+    if(rec.confirmed&&rec.mode&&!sinceSkip('wolf',h)){
       const wolfSide=rec.mode==='partner'?[rec.wolfAt,rec.partner]:[rec.wolfAt];
       const field=[0,1,2,3].filter(i=>!wolfSide.includes(i));
       for(const L of lenses){
@@ -3352,7 +3441,7 @@ function computeScramble(){
   const T=scrambleTeams(),capt=T.map(t=>t[0]);
   const ledgers={net:[0,0,0,0],gross:[0,0,0,0]},par={net:[0,0,0,0],gross:[0,0,0,0]};
   for(const h of playOrder()){
-    const rec=S.round.holes[h];if(!rec.confirmed)continue;
+    const rec=S.round.holes[h];if(!rec.confirmed||sinceSkip('scramble',h))continue;
     T.forEach((t,k)=>{
       const g=rec.gross[capt[k]];if(g==null)return;
       const p=S.course.holes[h].par;
@@ -3385,7 +3474,7 @@ function computeQuota(){
 function computeBBB(){
   const led=[0,0,0,0];
   for(const h of playOrder()){
-    const rec=S.round.holes[h];if(!rec.confirmed)continue;
+    const rec=S.round.holes[h];if(!rec.confirmed||sinceSkip('bbb',h))continue;
     const b=rec.bbb||{};
     ['bingo','bango','bongo'].forEach(k=>{const i=b[k];if(i!=null&&i>=0&&i<4)led[i]+=1;});
   }
@@ -4079,13 +4168,18 @@ function bagReorder(from,to){
   const [c]=b.splice(from,1);b.splice(to,0,c);
   set(()=>{S.bag=b;});
 }
-function bagPD(ev,i){
+// ONE HOLD-AND-DRAG FOR EVERY ROW LIST. Born in My Bag; the Wolf order sheet
+// and the tee-order card use it too (Nathan 9/12: "instead of the up arrows
+// ... drag and drop for each row when you press and hold it, like the club
+// order in My Bag"). listId names the container whose children are the rows;
+// onDrop(from,to) is the list's own reorder.
+function listPD(ev,i,listId,onDrop){
   try{if(ev.target&&ev.target.closest&&ev.target.closest('button'))return;}catch(e){}
   const row=ev.currentTarget, startY=ev.clientY;
   const t=setTimeout(()=>{
-    const list=document.getElementById('bagList');if(!list)return;
+    const list=document.getElementById(listId);if(!list)return;
     bagDrag={from:i,to:i,startY,rowH:row.getBoundingClientRect().height||44,
-             rows:Array.from(list.children),row};
+             rows:Array.from(list.children),row,onDrop};
     row.style.position='relative';row.style.zIndex='4';row.style.transition='none';
     row.style.background='var(--green-lt)';row.style.borderRadius='10px';
     row.style.boxShadow='0 6px 18px rgba(0,0,0,.45)';
@@ -4094,6 +4188,7 @@ function bagPD(ev,i){
   const stop=()=>{clearTimeout(t);window.removeEventListener('pointerup',stop);window.removeEventListener('pointercancel',stop);};
   window.addEventListener('pointerup',stop);window.addEventListener('pointercancel',stop);
 }
+function bagPD(ev,i){listPD(ev,i,'bagList',bagReorder);}
 function bagPM(ev){
   if(!bagDrag)return;
   if(ev.cancelable)ev.preventDefault();
@@ -4111,9 +4206,9 @@ function bagPM(ev){
 }
 function bagPU(){
   if(!bagDrag)return;
-  const from=bagDrag.from,to=bagDrag.to;
+  const from=bagDrag.from,to=bagDrag.to,drop=bagDrag.onDrop||bagReorder;
   bagDrag=null;
-  if(from!==to)bagReorder(from,to);else render();
+  if(from!==to)drop(from,to);else render();
 }
 window.addEventListener('pointermove',bagPM,{passive:false});
 window.addEventListener('pointerup',bagPU);
@@ -7132,7 +7227,10 @@ function gamePickWhy(g){
   // for wolf before the tee, which let a twosome stack a four-man rotation).
   const seat=seatWhy(g,NP());
   if(seat)return seat;
-  if(START_ONLY.includes(g))return S.round.started?'start only':'';
+  // A tee-tap game picked up MID-ROUND scores from this hole on (see
+  // setRoundGames); it is no longer 'start only'. Wolf and Scramble take the
+  // hole screen, BBB rides as a guest -- its taps already show when stacked.
+  if(START_ONLY.includes(g))return '';
   if(!STACK_GUESTS.includes(g))return 'start only';
   const sel=gamePick?gamePick.sel:{};
   if(g==='bestball'&&sel.sixes)return 'pick one';
@@ -7162,16 +7260,48 @@ function confirmGamePick(){
   if(!gamePick)return;
   const keep=Object.keys(gamePick.sel).filter(k=>gamePick.sel[k]);
   gamePick=null;setRoundGames(keep);
+  try{maybeAskWolfOrder();}catch(e){}       // Wolf picked up mid-round: who is the Wolf on this hole?
 }
 // Mid-round the stack lives on the round (and rides shareMeta to every phone,
 // because settlement has to agree); before the tee it lives on the config.
 function setRoundGames(list){set(()=>{
-  const host=mainGameNow();
+  const prev=S.round.started?(S.round.games||[]):(S.config.games||[]);
+  let host=mainGameNow();
   const a=list.filter((x,i,arr)=>arr.indexOf(x)===i);
-  if(!a.includes(host))a.unshift(host);
+  // A TEE-TAP GAME PICKED UP MID-ROUND SCORES FROM THIS HOLE ON. Two
+  // twosomes that meet on the 3rd tee and want Wolf: holes 1-2 were stroke
+  // play and stay that way, the rotation starts here. `since` is a POSITION
+  // in playOrder (so nines and shotgun starts work), rides the meta, and the
+  // three engines ignore holes before it. Wolf and Scramble need the hole
+  // screen, so they become the main game unless a tee-tap game already has it.
+  if(S.round.started){
+    S.round.since=S.round.since||{};
+    const o=playOrder();let pos=Math.max(0,o.indexOf(S.round.cur));
+    while(pos<o.length&&(S.round.holes[o[pos]]||{}).confirmed)pos++;
+    a.filter(g=>START_ONLY.includes(g)&&!prev.includes(g)).forEach(g=>{
+      S.round.since[g]=pos;
+      if(g!=='bbb'&&!START_ONLY.includes(host)){S.round.game=g;host=g;}
+      // Wolf needs an order of play. Pre-round that is the starter's sheet on
+      // the first tee; picked up on the 3rd tee it is the same sheet, on the
+      // phone that picked it, with "first listed is the Wolf on hole 3".
+      if(g==='wolf'){S.round._orderOk=false;wolfOrderPickup=true;}
+    });
+  }
+  // the main game leads the stack -- gamesOn()[0] is the fallback main in
+  // more than one place, and a Wolf picked up mid-round has just become it
+  const k=a.indexOf(host);if(k>0)a.splice(k,1);if(k!==0)a.unshift(host);
   if(S.round.started)S.round.games=a;
   S.config.games=a;
 });}
+// holes played before a game was picked up don't score for it
+function sinceSkip(g,h){
+  try{const sc=S.round&&S.round.since&&S.round.since[g];if(sc==null)return false;return posOf(h)<sc;}catch(e){return false;}
+}
+function sinceNoteHTML(g){
+  try{const sc=S.round&&S.round.since&&S.round.since[g];if(sc==null||!sc)return '';
+    const o=playOrder();const h=o[Math.min(sc,o.length-1)];
+    return `<div class="tiny mt" style="opacity:.8">Picked up on hole ${h+1} — the holes before it don't count for ${gameName(g)}.</div>`;}catch(e){return '';}
+}
 function gamePickSheetHTML(){
   if(!gamePick)return '';
   const main=mainGameNow();
@@ -7549,12 +7679,16 @@ function vHome(){
         ${S.share.creator
           ?`<button class="ghost danger" style="flex:none;max-width:60%;white-space:normal;line-height:1.2" onclick="cancelRound()">${armCancel?'⚠️ Tap Again — Everyone Out, Nothing Saved':'✕ Cancel & Close Room'}</button>`
           :`<button class="ghost danger" onclick="leaveShare()">Leave</button>`}</div>
+      <button class="ghost mt" style="width:100%" onclick="mergeIntoRound()">⚔️ Merge into another group's round</button>
+      <div class="tiny mt">Met another group on the tee? Whoever's room you join, everyone's holes so far come along — then pick the game for the foursome under <b>Choose Game(s)</b>.</div>
       ${S.share.creator?`<div class="tiny mt">• <b>Cancel &amp; Close Room</b> kicks everyone out and keeps nothing — for a false start.</div>
-      <div class="tiny">• <b>End Round Now</b> finishes and saves the round for everyone.</div>`:''}`
+      <div class="tiny">• <b>End Round Now</b> ends and saves <i>your</i> round — everyone else keeps playing, and can still score your row.</div>`:''}`
       :S.round.reopened?''
       :(S.share.on&&S.share.bf&&S.share.creator)?`<button class="ghost mt" style="width:100%" onclick="inviteFromMap();render()">👥 Open Room To Nearby Players — <b class="num" style="letter-spacing:2px">${esc(S.share.code)}</b></button>
         <div class="tiny mt">Players near you pick it from <b>Join a round</b>; anyone can enter the code — your scores so far come with you. Typing the code works even before you tap.</div>`
       :`<button class="ghost mt" style="width:100%" onclick="goGroup()">👥 Make This A Group Round</button>
+        ${S.round.started?`<button class="ghost mt" style="width:100%" onclick="mergeIntoRound()">⚔️ Merge into another group's round</button>
+        <div class="tiny mt">Two groups, one tee: one of you makes a group round, the other merges into it — everyone's holes so far come along.</div>`:''}
         <div class="tiny mt">Get a code your group can join — your scores so far come with you.</div>`}
   </div>`:''}
   ${inRound?`  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
@@ -7619,7 +7753,7 @@ const FAQ=[
  ]],
  ['Playing a round',[
   ['Start a round',
-   'From Home choose <b>Just me</b>, <b>Multi-player</b> (you are the captain) or <b>Join an existing round</b>. As captain, add the group with <b>Nearby</b>, <b>Saved</b> or <b>Type a name</b>, then <b>Move on to pick the game</b> and <b>Start Round</b>.'],
+   'From Home choose <b>Just me</b>, <b>Multi-player</b> (you pick the course and the game) or <b>Join an existing round</b>. Add the group with <b>Nearby</b>, <b>Saved</b> or <b>Type a name</b>, then <b>Move on to pick the game</b> and <b>Start Round</b>. Ending is always yours alone — nobody\u2019s End closes anyone else\u2019s card.'],
   ['Get everyone into the same round',
    'Phones with Battle Tees open near you appear under <b>Nearby</b>. Anyone you could not add can <b>Join an existing round</b> from their Home screen and type the round code shown at the top of your screen. Joining mid-round is fine: the holes they already scored come with them.'],
   ['Pick and stack games',
@@ -8699,6 +8833,7 @@ function wizOptsDone(){
 }
 function wizBack(){
   if(!wiz)return;
+  if(wiz.step==='join'&&wiz.from){const to=wiz.from;wiz=null;S.screen=to;render();return;}
   const b={kind:'span',count:'kind',who:'count',game:'who',opts:wiz.preGame?'who':'game',
     course:wiz.solo?'kind':'opts',join:'kind'};
   if(wiz.step==='span'||(wiz.step==='count'&&wiz.preGame)){wiz=null;S.screen='home';render();return;}
@@ -8739,7 +8874,7 @@ function vStart(){
 
   if(step==='kind')return head('Start a round','What kind of round?')+`<main>
     <button class="big hb" style="padding:16px 12px" onclick="wizKind('solo')">⛳ Just me<div style="font-size:14px;font-weight:500;margin-top:4px;color:inherit;opacity:.92;font-family:Inter,-apple-system,sans-serif">Solo stroke play — score and GPS</div></button>
-    <button class="big mt hb" style="padding:16px 12px" onclick="wizKind('multi')">⚔️ Multi-player<div style="font-size:14px;font-weight:500;margin-top:4px;color:inherit;opacity:.92;font-family:Inter,-apple-system,sans-serif">2–4 golfers, any game — you'll be the captain</div></button>
+    <button class="big mt hb" style="padding:16px 12px" onclick="wizKind('multi')">⚔️ Multi-player<div style="font-size:14px;font-weight:500;margin-top:4px;color:inherit;opacity:.92;font-family:Inter,-apple-system,sans-serif">2–4 golfers, any game — you pick the course and the game</div></button>
     <button class="big mt hb" style="padding:16px 12px;background:var(--card);color:var(--green-mid);border-color:var(--green)" onclick="wizKind('join')">👥 Join an existing round<div style="font-size:14px;font-weight:500;margin-top:4px;color:var(--ink);opacity:.9;font-family:Inter,-apple-system,sans-serif">Someone already started it — find it nearby or by code</div></button>
     </main>`;
 
@@ -8827,18 +8962,25 @@ function vStart(){
       <div class="mb"><b>${esc(inv.course||'Shared round')}</b><div class="tiny">${(inv.players||[]).map(esc).join(' \u00b7 ')}</div></div>
       <button class="big warn" style="margin:0" onclick="joinFromInvite('${esc(inv.code)}')">${armJoinSwap===inv.code?'\u26a0\ufe0f Tap again \u2014 ends current round':'\u26a4 Join this round'}</button></div>`).join('');
     return head('Join a round','Rounds started near you')+`<main>
-    ${rows||`<div class="card"><div class="tiny">${relayStatusHTML('Looking for rounds near you\u2026 the captain\'s round shows up here once they start it.')}</div></div>`}
+    ${rows||`<div class="card"><div class="tiny">${relayStatusHTML(S.round.started?'No rounds open near you yet. The other group taps <b>Make This A Group Round</b> on their Setup screen and it shows up here.':'Looking for rounds near you\u2026 a round shows up here once whoever starts it shares it.')}</div></div>`}
     <div class="card"><h2>Or type the code</h2>
       <div class="row" style="border:none">
         <input type="text" id="joincode" placeholder="ABCDE" maxlength="8" autocapitalize="characters" style="width:46%;text-transform:uppercase;font-family:Rajdhani,sans-serif;font-size:20px;letter-spacing:3px">
         <button class="ghost sel" style="flex:1" onclick="joinRound()">Join</button></div>
       ${joinErr?`<div class="tiny mt" style="color:var(--red);font-weight:600">${esc(joinErr)}</div>`:''}
-      <div class="tiny mt">Ask the captain \u2014 it's on their Setup screen.</div></div>
+      <div class="tiny mt">Ask whoever started it \u2014 it's on their Setup screen.</div></div>
     </main>`;
   }
   return vHome();
 }
 function goGroup(){set(()=>{if(!S.round.started)resetRoster();S.screen='gate';});}
+// Two groups on one tee. The join step already carries your holes into
+// another room; this is the door to it from a LIVE round, with a way back.
+function mergeIntoRound(){
+  if(!S.round.started||isReview())return;
+  wiz={step:'join',n:4,from:S.screen};
+  S.screen='start';sendHello();grabCoords();render();
+}
 function soloRound(){primeGeo();set(()=>{
   if(!S.round.started)resetRoster();
   S.config.game='stroke';S.config.games=['stroke'];S.config.stroke.n=1;
@@ -11673,13 +11815,19 @@ function movePl(i){set(()=>{const a=S.players;[a[i-1],a[i]]=[a[i],a[i-1]];});}
 // pointing at the wrong golfer — carry all of it across together.
 // ---- Wolf: confirm the order once four are seated ---------------------------
 let orderAsk=false;
+let wolfOrderPickup=false;          // this phone picked Wolf up mid-round and owes the order
+function wolfPickupHole(){try{const sc=S.round.since&&S.round.since.wolf;if(!sc)return 0;const o=playOrder();return o[Math.min(sc,o.length-1)];}catch(e){return 0;}}
 function wolfOrderDue(){
   try{
     if(!S.round.started||isReview())return false;
     if(S.round._orderOk)return false;
     if(gameOn()!=='wolf')return false;
-    if(S.share&&S.share.on&&!S.share.creator)return false;      // captain's call
-    if(!canReorderRoster())return false;                       // a hole is in — too late
+    if(S.round.since&&S.round.since.wolf){
+      if(!wolfOrderPickup)return false;                       // only the phone that picked it up asks
+    }else{
+      if(S.share&&S.share.on&&!S.share.creator)return false;    // the starter's call on the first tee
+      if(!canReorderRoster())return false;                     // a hole is in — too late
+    }
     const real=S.players.filter(p=>p&&p.name&&!/^Player \d$/.test(p.name.trim())).length;
     return real>=4;
   }catch(e){return false;}
@@ -11689,7 +11837,7 @@ function maybeAskWolfOrder(){
   orderAsk=true;render();
 }
 function wolfOrderDone(){
-  orderAsk=false;
+  orderAsk=false;wolfOrderPickup=false;
   set(()=>{S.round._orderOk=true;});
 }
 function wolfOrderSheetHTML(){
@@ -11697,9 +11845,10 @@ function wolfOrderSheetHTML(){
   if(!wolfOrderDue()){orderAsk=false;return '';}
   return `<div class="vfWrap"><div class="vfCard" style="max-width:430px">
     <h2 class="vfTitle" style="margin-bottom:2px">🐺 Confirm the order of play</h2>
-    <div class="tiny mb">First listed is the Wolf on hole 1, then it rotates. Tap ↑ to move a golfer up.</div>
-    ${S.players.slice(0,4).map((p,i)=>`<div class="row"><div style="flex:1;min-width:0"><b>${['1st','2nd','3rd','4th'][i]} · ${esc(p.name)}</b>${i===0?' <span class="pill wolf">wolf h1</span>':''}</div>
-      ${i>0?`<button class="ghost" onclick="movePlRound(${i})" style="flex:none">↑</button>`:''}</div>`).join('')}
+    <div class="tiny mb">First listed is the Wolf on hole ${wolfPickupHole()+1}, then it rotates. Hold a golfer and drag them into place.</div>
+    <div id="orderList">${S.players.slice(0,4).map((p,i)=>`<div class="row" style="padding:10px 0;cursor:grab;-webkit-user-select:none;user-select:none" onpointerdown="listPD(event,${i},'orderList',movePlRoundTo)">
+      <span style="color:var(--ink3);font-size:17px;letter-spacing:1px;margin-right:10px">⠿</span>
+      <div style="flex:1;min-width:0"><b>${['1st','2nd','3rd','4th'][i]} · ${esc(p.name)}</b>${i===0?` <span class="pill wolf">wolf h${wolfPickupHole()+1}</span>`:''}</div></div>`).join('')}</div>
     <button class="big mt" style="width:100%" onclick="wolfOrderDone()">✓ &nbsp;This is the order</button>
   </div></div>`;
 }
@@ -11724,11 +11873,19 @@ function swapRoundPlayers(a,b){
     if(r.hammer&&r.hammer.by!=null)r.hammer.by=fix(r.hammer.by);
   });
 }
-function movePlRound(i){
-  if(!canReorderRoster()||i<1)return;
+function movePlRound(i){movePlRoundTo(i,i-1);}
+// Drop a golfer at a position. A chain of adjacent swaps, because
+// swapRoundPlayers moves every per-hole array with the golfer -- so the holes
+// already in stay right, mid-round or not. Allowed on the first tee, or while
+// the pickup order sheet is up.
+function movePlRoundTo(from,to){
+  if(!(canReorderRoster()||(orderAsk&&wolfOrderPickup)))return;
+  const n=Math.min(4,(S.players||[]).length);
+  if(from===to||from<0||to<0||from>=n||to>=n)return;
   set(()=>{
-    swapRoundPlayers(i-1,i);
-    // hole 1's wolf is derived from the order — drop an unconfirmed pick so it re-derives
+    const step=from<to?1:-1;
+    for(let k=from;k!==to;k+=step)swapRoundPlayers(k,k+step);
+    // the wolf on the current hole is derived from the order — drop an unconfirmed pick so it re-derives
     const r=S.round.holes[S.round.cur];
     if(r&&!r.confirmed){r.mode=null;r.partner=null;r.wolfAt=null;r.passes=[];}
   });
@@ -11736,9 +11893,10 @@ function movePlRound(i){
 function reorderHTML(){
   if(!canReorderRoster())return '';
   if(!reorderOpen)return `<button class="ghost mt" style="width:100%" onclick="toggleReorder()">⇅ Fix tee order</button>`;
-  return `<div class="card mt"><div class="tiny mb">Tap ↑ to move a golfer up. Only available until the first hole is confirmed.</div>
-    ${S.players.map((p,i)=>`<div class="row"><div style="flex:1;min-width:0"><b>${['1st','2nd','3rd','4th'][i]} · ${esc(p.name)}</b></div>
-      ${i>0?`<button class="ghost" onclick="movePlRound(${i})" style="flex:none">↑</button>`:''}</div>`).join('')}
+  return `<div class="card mt"><div class="tiny mb">Hold a golfer and drag them into place. Only available until the first hole is confirmed.</div>
+    <div id="orderList">${S.players.slice(0,4).map((p,i)=>`<div class="row" style="padding:10px 0;cursor:grab;-webkit-user-select:none;user-select:none" onpointerdown="listPD(event,${i},'orderList',movePlRoundTo)">
+      <span style="color:var(--ink3);font-size:17px;letter-spacing:1px;margin-right:10px">⠿</span>
+      <div style="flex:1;min-width:0"><b>${['1st','2nd','3rd','4th'][i]} · ${esc(p.name)}</b></div></div>`).join('')}</div>
     <button class="ghost mt" style="width:100%" onclick="toggleReorder()">Done</button></div>`;
 }
 function chPt(k,d){set(()=>{S.config.pts[k]=Math.max(0,S.config.pts[k]+d);});}
@@ -12616,12 +12774,8 @@ function endAskSheetHTML(){
   const lead=thru>=total
     ? `That was your last hole — all ${thru} confirmed.`
     : `You've played ${thru} of ${total} holes. The rest stay blank.`;
-  // The starter's end is everyone's end (capEnd) -- "everyone else keeps
-  // playing" was a lie on the captain's phone. othersStillInHTML says which.
   const others=othersStillInHTML();
-  const tail=others?'':(S.share&&S.share.on&&!S.share.bf&&S.share.creator
-    ?' Ending stops your clock and saves the round to your history. You started this round, so it closes on every phone.'
-    :' Ending stops your clock, saves the round to your history and unlinks you from the group. Everyone else keeps playing.');
+  const tail=others?'':' Ending stops your clock, saves the round to your history and unlinks you from the group. Everyone else keeps playing.';
   return `<div class="vfWrap" role="dialog" aria-modal="true" aria-labelledby="erTitle">
     <div class="vfCard">
       <h2 id="erTitle" class="vfTitle">Confirm round is over?</h2>
@@ -12682,12 +12836,15 @@ function finishMyRound(){
       try{
         const mi=myPlayerIdx();
         if(S.players[mi])S.players[mi].ended=Date.now();
-        // THE CAPTAIN'S END ENDS THE ROUND. The starter is the captain: when
-        // they close out, a capEnd stamp rides the meta doc and every joined
-        // phone puts itself away with the synced scores. The doc persists on
-        // the relay, so a phone that reconnects later still hears it.
-        // startedAt guards a stale doc from killing a new round.
-        if(S.share.creator)S.round.capEnd={by:(S.me&&S.me.name)||'',at:Date.now(),startedAt:S.round.startedAt};
+        // NOBODY'S END ENDS ANYBODY ELSE'S ROUND (Nathan 9/12). The starter's
+        // end used to ride the meta as capEnd and every joined phone put itself
+        // away on the spot -- a starter walking off at 16 froze the whole
+        // group's card at 16, and nobody could score anybody. Now every end is
+        // its own: my row is stamped ended (the group can still score it, and
+        // the Battlefield reads the room doc, so those scores still count),
+        // and the room stays open for everyone else. capEnd survives only for
+        // Cancel, which is explicit. The receive side still honours a capEnd
+        // from an older build.
         S.shareMetaTs=Date.now();
         syncPush();
       }catch(e){}
@@ -12779,13 +12936,11 @@ function othersStillInHTML(){
     if(!others.length)return '';
     const first=i=>esc((S.players[i].name||'').split(' ')[0]);
     const done=others.filter(i=>S.players[i].ended), still=others.filter(i=>!S.players[i].ended);
-    const cap=!!S.share.creator;
     let line='';
     if(still.length&&done.length)line=`<b>${done.map(first).join(' & ')}</b> ${done.length>1?'have':'has'} ended. <b>${still.map(first).join(' & ')}</b> ${still.length>1?'are':'is'} still in the round.`;
     else if(still.length)line=`<b>${still.map(first).join(' & ')}</b> ${still.length>1?'haven\u2019t':'hasn\u2019t'} ended ${still.length>1?'their rounds':'their round'} yet.`;
     else line=`<b>${done.map(first).join(' & ')}</b> ${done.length>1?'have':'has'} ended.`;
-    const what=cap?' You started this round, so ending yours closes it on every phone — their cards are saved as they stand.'
-                  :' Ending yours only ends yours; everyone else keeps playing.';
+    const what=' Ending yours only ends yours; everyone else keeps playing, and they can still score your row.';
     return `<div class="tiny" style="margin:2px 0 10px;line-height:1.45">${line}${still.length?what:''}</div>`;
   }catch(e){return '';}
 }
@@ -13816,10 +13971,10 @@ function vStandings(){
   // mainBtn is outer because cardFor writes it per card.
   let mainBtn='';
   const cardFor=(view)=>{
-   mainBtn=(view===g||view==='match')?''
+   mainBtn=sinceNoteHTML(view)+((view===g||view==='match')?''
      :(START_ONLY.includes(g)
        ?`<div class="tiny mt" style="opacity:.75">${gameName(g)} runs your score screen for the rest of the round — this card is a view only.</div>`
-       :`<button class="ghost mt" style="width:100%" onclick="makeMainGame('${view}')">★ Make ${gameName(view)} my main game</button>`);
+       :`<button class="ghost mt" style="width:100%" onclick="makeMainGame('${view}')">★ Make ${gameName(view)} my main game</button>`));
    let tables='';
    if(mysteryPending(view)){          // partners hidden -> no team table can show
      return mysteryCardHTML(view)+mainBtn;
