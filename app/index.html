@@ -437,7 +437,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789202097';
+const BUILD='1789251193';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -688,9 +688,13 @@ let S=load();
 // legacy record of a course the index also lists, and until 9/11 pulling the
 // national one dropped it alongside — two Ranchos in the picker, and the
 // pre-pick took whichever pin sat nearer. Collapse them once.
+// v2 (9/12): the v1 flag was burned on phones that ran an earlier build of
+// this pass and merged nothing -- Nathan's library still carried both Ranchos
+// at 17:58 on 9/11 and the relay never saw a single course_dedupe. The pass
+// itself is right (it collapses his exact pair in the harness); run it once more.
 try{
-  if(!localStorage.getItem('btDupCourse1')){
-    localStorage.setItem('btDupCourse1','1');
+  if(!localStorage.getItem('btDupCourse2')){
+    localStorage.setItem('btDupCourse2','1');
     const n=dedupeCourses();
     if(n)try{save();}catch(e){}
   }
@@ -4709,7 +4713,10 @@ async function refreshStaleGeo(){
 }
 function geoHeldIds(){return 'nat10008,nat1001,nat10046,nat10091,nat10103,nat10104,nat10106,nat10109,nat10110,nat10112,nat10159,nat10162,nat10174,nat10190,nat102,nat1020,nat10209,nat1021,nat1022,nat10253,nat10259,nat10263,nat10280,nat10356,nat10357,nat10361,nat10373,nat10382,nat10419,nat10444,nat10459,nat10517,nat10523,nat10550,nat10555,nat10580,nat10584,nat10688,nat10693,nat10725,nat1077,nat10770,nat10802,nat10815,nat10819,nat10835,nat1085,nat10870,nat10883,nat10888,nat10949,nat10965,nat10979,nat10981,nat10984,nat11,nat11001,nat11037,nat11064,nat11091,nat11133,nat11160,nat11195,nat11274,nat11309,nat11333,nat11398,nat114,nat11414,nat11497,nat11499,nat11512,nat11515,nat11588,nat1159,nat11596,nat11609,nat1164,nat11658,nat11670,nat11674,nat11680,nat11709,nat11711,nat11720,nat11724,nat11733,nat11749,nat11752,nat11796,nat11805,nat11837,nat11853,nat11855,nat11879,nat11897,nat11929,nat11964,nat11965,nat12059,nat12162,nat12178,nat12181,nat12237,nat12248,nat12250,nat12286,nat12292,nat12301,nat12313,nat12321,nat12342,nat12355,nat12365,nat12374,nat12392,nat12394,nat12418,nat12439,nat1244,nat12455,nat12458,nat125,nat1266,nat129,nat1295,nat1328,nat1338,nat135,nat1370,nat1386,nat14,nat140,nat1420,nat1432,nat1453,nat1492,nat153,nat1530,nat156,nat1628,nat1650,nat1666,nat1673,nat1683,nat1684,nat1715,nat1717,nat1721,nat1752,nat1775,nat1846,nat1854,nat1855,nat194,nat1952,nat1964,nat1975,nat2079,nat2136,nat2143,nat2161,nat2169,nat2215,nat2221,nat2238,nat2240,nat2250,nat226,nat2260,nat2273,nat2285,nat2286,nat2315,nat2337,nat2393,nat2406,nat2418,nat2476,nat250,nat2519,nat252,nat2531,nat2532,nat2533,nat2545,nat2570,nat2574,nat2604,nat2621,nat2624,nat2700,nat2738,nat2744,nat275,nat2769,nat2781,nat2789,nat2792,nat2805,nat2835,nat2840,nat2895,nat2897,nat2923,nat2939,nat2940,nat2951,nat2955,nat2959,nat2988,nat2992,nat3008,nat3018,nat3022,nat3056,nat3134,nat3140,nat3154,nat3155,nat3177,nat3268,nat3297,nat332,nat3340,nat3362,nat3396,nat3401,nat3406,nat3419,nat3451,nat348,nat3563,nat3573,nat3581,nat3598,nat3614,nat3686,nat37,nat3710,nat3716,nat3718,nat3758,nat3772,nat3812,nat3843,nat3847,nat3891,nat392,nat398,nat3983,nat4040,nat4055,nat4059,nat4063,nat41,nat4130,nat4153,nat4202,nat4206,nat4252,nat4267,nat4271,nat4391,nat4397,nat4413,nat4451,nat4455,nat454,nat4582,nat4605,nat462,nat4651,nat4666,nat4700,nat4710,nat4749,nat4803,nat4804,nat482,nat4821,nat4823,nat4856,nat4906,nat4911,nat4947,nat4953,nat5019,nat5026,nat5043,nat5048,nat5081,nat5091,nat5136,nat5148,nat5232,nat5257,nat5261,nat5282,nat5297,nat530,nat5305,nat5350,nat5355,nat5409,nat5410,nat5411,nat5437,nat5481,nat5510,nat5524,nat5538,nat5570,nat5575,nat5582,nat5622,nat5663,nat5664,nat5684,nat5720,nat5736,nat5784,nat5792,nat5800,nat5807,nat5813,nat5825,nat585,nat5913,nat5917,nat5945,nat61,nat6113,nat6117,nat612,nat6148,nat6175,nat6194,nat62,nat6223,nat6279,nat6293,nat632,nat6330,nat6343,nat6369,nat64,nat6488,nat6495,nat6530,nat656,nat6597,nat660,nat6637,nat6652,nat6658,nat6697,nat6700,nat671,nat6725,nat6751,nat6763,nat68,nat6819,nat6869,nat6903,nat7041,nat707,nat7082,nat7091,nat7120,nat7137,nat7164,nat7168,nat7187,nat722,nat7235,nat7240,nat7272,nat7280,nat7299,nat7356,nat7385,nat7424,nat7435,nat7559,nat7571,nat7607,nat762,nat7635,nat7648,nat7755,nat7763,nat7821,nat7833,nat784,nat786,nat7883,nat7897,nat790,nat7905,nat7914,nat7970,nat8002,nat8003,nat8005,nat8054,nat807,nat8076,nat8094,nat8103,nat8123,nat8126,nat818,nat8182,nat8188,nat8243,nat8252,nat8289,nat8326,nat835,nat8380,nat839,nat8408,nat8485,nat8574,nat8579,nat8594,nat8603,nat8624,nat865,nat8654,nat8658,nat8669,nat8693,nat8698,nat8699,nat8703,nat8724,nat8748,nat8755,nat8765,nat8936,nat8944,nat8958,nat8989,nat9002,nat9058,nat9072,nat912,nat913,nat9148,nat9173,nat9190,nat9215,nat9238,nat934,nat9356,nat9357,nat9360,nat9365,nat9385,nat941,nat9413,nat943,nat9462,nat9467,nat9549,nat955,nat9588,nat959,nat9610,nat9616,nat9622,nat963,nat9685,nat974,nat9741,nat9810,nat9848,nat9870,nat9903,nat992,nat9924,nat9926,nat9935,nat9974,oga14229f7ecdf1,oga9b4a7f70331c,ogaa83f7d0c5332,ogadd07c64be1fa';}
 const GEO_HELD=new Set(geoHeldIds().split(','));   // records held back by the 2026-09-05 map audit (see ~/battletees-national/audit-2026-09-05)
-const HOSTED_GEO={'rancho-solano':'/geo/rancho-solano.json?v=4','lake-chabot':'/geo/lake-chabot.json?v=1','paradise-valley':'/geo/paradise-valley.json?v=1','teal-bend':'/geo/teal-bend.json?v=1','hiddenbrooke':'/geo/hiddenbrooke.json?v=1','green-valley':'/geo/green-valley.json?v=1','silverado-north':'/geo/silverado-north.json?v=1','davis':'/geo/davis.json?v=1','el-macero':'/geo/el-macero.json?v=1','wildhorse':'/geo/wildhorse.json?v=1','wild-wings':'/geo/wild-wings.json?v=2','diablo-creek':'/geo/diablo-creek.json?v=1','bartley-cavanaugh':'/geo/bartley-cavanaugh.json?v=1','yocha-dehe':'/geo/yocha-dehe.json?v=1','franklin-canyon':'/geo/franklin-canyon.json?v=1','boundary-oak':'/geo/boundary-oak.json?v=1','cypress-lakes':'/geo/cypress-lakes.json?v=1','stonetree':'/geo/stonetree.json?v=2','tilden-park':'/geo/tilden-park.json?v=2','valley-hi':'/geo/valley-hi.json?v=2'};
+// 'darkhorse' is the pre-national built-in every install carries; it never had a
+// map, and the national record that does (nat10762, 13 of 18 holes) was never
+// in anyone's library -- so the course opened as if nothing existed (Nathan 9/12).
+const HOSTED_GEO={'darkhorse':'/geo/nat/ca/10762.json','rancho-solano':'/geo/rancho-solano.json?v=4','lake-chabot':'/geo/lake-chabot.json?v=1','paradise-valley':'/geo/paradise-valley.json?v=1','teal-bend':'/geo/teal-bend.json?v=1','hiddenbrooke':'/geo/hiddenbrooke.json?v=1','green-valley':'/geo/green-valley.json?v=1','silverado-north':'/geo/silverado-north.json?v=1','davis':'/geo/davis.json?v=1','el-macero':'/geo/el-macero.json?v=1','wildhorse':'/geo/wildhorse.json?v=1','wild-wings':'/geo/wild-wings.json?v=2','diablo-creek':'/geo/diablo-creek.json?v=1','bartley-cavanaugh':'/geo/bartley-cavanaugh.json?v=1','yocha-dehe':'/geo/yocha-dehe.json?v=1','franklin-canyon':'/geo/franklin-canyon.json?v=1','boundary-oak':'/geo/boundary-oak.json?v=1','cypress-lakes':'/geo/cypress-lakes.json?v=1','stonetree':'/geo/stonetree.json?v=2','tilden-park':'/geo/tilden-park.json?v=2','valley-hi':'/geo/valley-hi.json?v=2'};
 // ---------- offline tile pack ----------
 // Pre-downloads the satellite tiles for every hole view into the SW's bt-tiles
 // cache, so each hole opens instantly even with no signal on the course.
@@ -11016,6 +11023,7 @@ function vCourse(){
   return topbar('Course setup','','courses')+`<main>
   ${c._note?`<div class="banner ${c._noteOk?'ok':'wolf'}">${c._noteOk?'✓ ':''}${esc(c._note)} <button class="ghost" style="margin-left:6px" onclick="set(()=>{delete S.course._note;delete S.course._noteOk;})">Got it</button></div>`:''}
   <div class="card"><h2>Name</h2><input id="cname" type="text" value="${esc(c.name)}" onchange="set(()=>S.course.name=this.value)" oninput="S.course.name=this.value;save()">
+    ${courseMapStatusHTML(c)}
     ${c.geo?`<button class="ghost mt" id="tilebtn" onclick="preloadCourseTiles(true)">${tilePackFresh()?'✓ Offline maps ready — tap to refresh':'⬇ Download offline hole maps'}</button>
     <div class="tiny mt">Grab the satellite tiles on wifi and every hole opens instantly, even with no signal on the course.</div>
     <button class="ghost mt" onclick="set(()=>{delete S.course.geo;delete S.course.geoReal;})">Clear downloaded hole-map data</button>
@@ -11025,6 +11033,32 @@ function vCourse(){
     <div class="tiny mt">Enter the women's rating/slope as its own tee set (e.g. "Red (W)") — a player assigned to it is handicapped correctly automatically.</div></div>
   <div class="card"><h2>Holes — par & stroke index</h2>${holes}</div>
   </main>`;
+}
+// WHAT MAP THIS COURSE HAS, said up front. The hole map only downloads when
+// the map screen is opened at the course, so a course you saved at home showed
+// nothing about maps at all on this page and read as "no map data" (DarkHorse,
+// 9/12). Now: hosted and cached -> how many holes; hosted but not fetched yet ->
+// say so and offer the download; nothing hosted -> say that too.
+function courseMapStatusHTML(c){
+  try{
+    const hosted=!!(c.geoUrl||HOSTED_GEO[c.id]);
+    const g=c.geo;
+    if(g&&g.none)return `<div class="tiny mt">🗺 No hole map for this course — the card and the rangefinder still work.</div>`;
+    if(g&&g.holes&&Object.keys(g.holes).length){
+      const n=Object.keys(g.holes).length, tot=(c.holes||[]).length||18;
+      return `<div class="tiny mt">🗺 Hole map on this phone: <b>${n} of ${tot}</b> holes have a line and a green${n<tot?' — the rest open with the rangefinder only':''}.</div>`;
+    }
+    if(hosted)return `<div class="tiny mt">🗺 A hole map exists for this course — it downloads the first time you open the map here, or now: <button class="ghost" style="margin-left:6px" onclick="fetchMapNow()">⬇ Get the hole map</button><span id="mapNowNote"></span></div>`;
+    return `<div class="tiny mt">🗺 No hole map for this course yet — the rangefinder works on any hole, and you can draw the holes from the map screen.</div>`;
+  }catch(e){return '';}
+}
+async function fetchMapNow(){
+  const note=document.getElementById('mapNowNote');
+  if(note)note.textContent=' downloading…';
+  const fresh=await fetchCourseGeo(S.course);
+  if(!fresh){if(note)note.textContent=' could not download — try again with signal.';return;}
+  set(()=>{S.course.geo=fresh;const k=(S.courses||[]).find(x=>x&&x.id===S.course.id);if(k)k.geo=clone(fresh);});
+  try{preloadCourseTiles(false);}catch(e){}
 }
 function chPar(i,d){set(()=>{const hd=S.course.holes[i];hd.par=Math.min(6,Math.max(3,hd.par+d));hd.parOk=true;
   if((S.course.holes||[]).every(x=>x&&x.parOk))delete S.course._cardGuess;});}
