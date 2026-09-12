@@ -437,7 +437,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789201626';
+const BUILD='1789202097';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -7019,7 +7019,7 @@ function render(){
   else if(scr==='pickgame') html=vPickGame();
   else if(scr==='stats') html=vStats();
   else if(scr==='history') html=vHistory();
-  else if(scr==='season') html=vSeason();
+  else if(scr==='season') html=SEASON_ON?vSeason():vHistory();
   else if(scr==='pickcourse') html=vPickCourse();
   else if(scr==='course') html=vCourse();
   else if(scr==='setup') html=gpsOnly()?vGpsSetup():vSetup();
@@ -9196,7 +9196,11 @@ function histSort(){try{(S.history||[]).sort((a,b)=>histAt(b)-histAt(a));}catch(
 function vHistory(){
   histSort();
   const H=S.history||[];
-  const seasonBtn=(S.ledger||[]).length?`<div class="card" style="border-color:var(--gold);padding:12px 14px;cursor:pointer" onclick="set(()=>S.screen='season')">
+  // TABLED (Nathan 9/12): the season standings screen was built 9/10 and
+  // rode out unannounced on the 9/11 deploy. The ledger keeps collecting rows
+  // silently -- it costs nothing and means the season is already there the day
+  // this is switched back on -- but nothing in the UI shows it.
+  const seasonBtn=(SEASON_ON&&(S.ledger||[]).length)?`<div class="card" style="border-color:var(--gold);padding:12px 14px;cursor:pointer" onclick="set(()=>S.screen='season')">
       <div class="row" style="border:0;padding:0"><span>
         <b style="font-family:Rajdhani,sans-serif;font-size:20px;color:var(--gold)">💰 Season standings</b>
         <div class="tiny">Every settled round of the year — the running money, by player.</div></span>
@@ -9221,6 +9225,7 @@ function vHistory(){
   </main>`;
 }
 // ---------- the season ----------
+const SEASON_ON=false;   // tabled 9/12 -- flip to show the card + screen again
 // Built entirely from S.ledger, so it keeps working after the 30-round history cap
 // has thrown the rounds themselves away. A season is a calendar year: golf already
 // has one, nobody has to declare it, and it needs no setup on the first tee.
