@@ -437,7 +437,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789194948';
+const BUILD='1789196803';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1330,6 +1330,7 @@ function applyOp(k,v,defer){
       // ops only, so the state doc on join doesn't replay old holes
       if(!defer&&!cur.confirmed&&merged.confirmed&&S.round.started)setTimeout(()=>showSplash(i),60);
       S.round.holes[i]=merged;
+      if(!defer&&!cur.confirmed&&merged.confirmed&&S.round.started)remoteCloseMaybeFinish(i);
       const mk=contentKey(k);
       localContent[k]=mk;
       // if our merge produced more than the incoming record, mark it unsent so
@@ -12587,14 +12588,25 @@ function endAskSheetHTML(){
   const thru=S.round.holes.filter(r=>r.confirmed).length;
   const total=playOrder().length;
   if(endAsk==='scan'){
-    const u=unscoredHoles().map(h=>h+1);
-    const list=u.length>6 ? `${u.slice(0,6).join(', ')} and ${u.length-6} more`
-      : u.length>1 ? `${u.slice(0,-1).join(', ')} and ${u[u.length-1]}` : `${u[0]}`;
+    const uh=unscoredHoles();
+    const u=uh.map(h=>h+1);
+    const fmt=a=>a.length>6 ? `${a.slice(0,6).join(', ')} and ${a.length-6} more`
+      : a.length>1 ? `${a.slice(0,-1).join(', ')} and ${a[a.length-1]}` : `${a[0]}`;
+    // A hole with every score in that hasn't CLOSED is not blank -- it is
+    // waiting on another phone's confirm. Say that, and say whose.
+    const act=actIdx();
+    const pending=uh.filter(h=>{const r=S.round.holes[h]||{};return act.every(i=>(r.gross||[])[i]!=null);});
+    const blank=uh.filter(h=>!pending.includes(h));
+    const first=i=>esc((S.players[i].name||'').split(' ')[0]);
+    const waitOn=[...new Set(pending.flatMap(h=>act.filter(i=>!cfOn(S.round.holes[h],i))))].map(first);
+    const title=blank.length?`${blank.length} hole${blank.length===1?'':'s'} with no score`
+      :`Hole${pending.length===1?'':'s'} ${fmt(pending.map(h=>h+1))} not closed yet`;
+    const body=(blank.length?`You have scored <b>${thru} of ${total}</b>. Still blank: <b>${fmt(blank.map(h=>h+1))}</b>. Blank holes stay blank — they are left out of your totals and your stats.`:'')
+      +(pending.length?` ${blank.length?'Hole'+(pending.length===1?'':'s')+' <b>'+fmt(pending.map(h=>h+1))+'</b> '+(pending.length===1?'is':'are'):'Every score is in, but the hole is'} waiting on <b>${waitOn.join(' & ')||'another phone'}</b> to confirm. Your scores are saved either way.`:'');
     return `<div class="vfWrap" role="dialog" aria-modal="true" aria-labelledby="esTitle">
       <div class="vfCard">
-        <h2 id="esTitle" class="vfTitle">${u.length} hole${u.length===1?'':'s'} with no score</h2>
-        <div class="tiny mb">You have scored <b>${thru} of ${total}</b>. Still blank: <b>${list}</b>.
-          Blank holes stay blank — they are left out of your totals and your stats.</div>
+        <h2 id="esTitle" class="vfTitle">${title}</h2>
+        <div class="tiny mb">${body}</div>
         <button class="big mt" onclick="endAskScore()">✎ &nbsp;Let me finish scoring</button>
         <button class="big mt" style="background:var(--card);color:var(--ink2);border-color:var(--line);box-shadow:3px 3px 0 var(--line)" onclick="endAskAnyway()">End the round anyway</button>
       </div></div>`;
@@ -12604,11 +12616,16 @@ function endAskSheetHTML(){
   const lead=thru>=total
     ? `That was your last hole — all ${thru} confirmed.`
     : `You've played ${thru} of ${total} holes. The rest stay blank.`;
+  // The starter's end is everyone's end (capEnd) -- "everyone else keeps
+  // playing" was a lie on the captain's phone. othersStillInHTML says which.
+  const others=othersStillInHTML();
+  const tail=others?'':(S.share&&S.share.on&&!S.share.bf&&S.share.creator
+    ?' Ending stops your clock and saves the round to your history. You started this round, so it closes on every phone.'
+    :' Ending stops your clock, saves the round to your history and unlinks you from the group. Everyone else keeps playing.');
   return `<div class="vfWrap" role="dialog" aria-modal="true" aria-labelledby="erTitle">
     <div class="vfCard">
       <h2 id="erTitle" class="vfTitle">Confirm round is over?</h2>
-      <div class="tiny mb">${lead} Ending stops your clock,
-        saves the round to your history and unlinks you from the group. Everyone else keeps playing.</div>
+      <div class="tiny mb">${lead}${tail}</div>${others}
       <button class="big mt" onclick="endAskYes()">⚔️ &nbsp;Yes — my round is over</button>
       <button class="big mt" style="background:var(--card);color:var(--ink2);border-color:var(--line);box-shadow:3px 3px 0 var(--line)" onclick="endAskNo()">Not yet — keep me in</button>
     </div></div>`;
@@ -12700,7 +12717,15 @@ function advanceToNext(){
   const cur=Math.max(0,o.indexOf(S.round.cur));
   let next=-1;
   for(let k=1;k<=o.length;k++){const cand=o[(cur+k)%o.length];if(!S.round.holes[cand].confirmed){next=cand;break;}}
-  if(next===-1){
+  if(next===-1)landOnSettle();
+  else{S.round.cur=next;if(gameOn()!=='wolf')prefillNines(next);try{setTimeout(maybeAskPar,900);}catch(e){}}
+}
+// THE CARD IS DONE: Settle, and ask. Called by advanceToNext() on the phone
+// whose confirm closed the last hole, and by remoteCloseMaybeFinish() on every
+// other phone in the room when that close arrives over the wire -- the same
+// landing for everyone, which it was not (Rancho 9/11).
+function landOnSettle(){
+  {
     S.screen='settle';
     askEndRound();
     if(!S.round._statFin){S.round._statFin=true;
@@ -12715,7 +12740,54 @@ function advanceToNext(){
         role:S.share.on?(S.share.bf?'solo-broadcast':(S.share.creator?'host':'joiner')):'solo',
         players:NP(), sharedAtStart:!!S.round._sharedAtStart,
         sharedLater:!!(S.share.on&&!S.round._sharedAtStart)});}
-  }else{S.round.cur=next;if(gameOn()!=='wolf')prefillNines(next);try{setTimeout(maybeAskPar,900);}catch(e){}}
+  }
+}
+// THE LAST HOLE CLOSING ON ANOTHER PHONE ENDS THE CARD HERE TOO. Brian's
+// confirm closed hole 18 for both phones on 9/11: his ran advanceToNext(),
+// landed on Settle and got "Confirm round is over?"; Nathan's got the splash
+// and then sat on hole 18 behind a "Finish round" button, reading as a hole
+// that still wanted something from him. Nothing on the receiving side ever
+// moved. Now: no open holes left, and you are on the card -> the same landing.
+// Only from the hole/map screens -- someone reading Standings or Settings
+// stays put -- and only after the splash has had its moment, because the
+// splash is what tells you the hole closed at all.
+function remoteCloseMaybeFinish(h){
+  try{
+    if(!S.round.started||S.round._finished||endAsk||isReview())return;
+    if(!['hole','map'].includes(S.screen))return;
+    if(playOrder().some(x=>!(S.round.holes[x]||{}).confirmed))return;
+    setTimeout(()=>{
+      try{
+        if(!S.round.started||S.round._finished||endAsk||isReview())return;
+        if(!['hole','map'].includes(S.screen))return;
+        if(playOrder().some(x=>!(S.round.holes[x]||{}).confirmed))return;
+        landOnSettle();
+        render();
+      }catch(e){}
+    },1400);
+  }catch(e){}
+}
+// Who is still on the card. Only a shared round has anyone else, and my own
+// end tears the round down on this phone -- so this only ever describes the
+// OTHER phones, and what my ending does to them: the starter's end closes the
+// round for everyone (capEnd), a joiner's end is theirs alone.
+function othersStillInHTML(){
+  try{
+    if(!S.share||!S.share.on||S.share.bf||!S.round.started)return '';
+    const me=myPlayerIdx();
+    const others=actIdx().filter(i=>i!==me&&isRealPl(S.players[i]));
+    if(!others.length)return '';
+    const first=i=>esc((S.players[i].name||'').split(' ')[0]);
+    const done=others.filter(i=>S.players[i].ended), still=others.filter(i=>!S.players[i].ended);
+    const cap=!!S.share.creator;
+    let line='';
+    if(still.length&&done.length)line=`<b>${done.map(first).join(' & ')}</b> ${done.length>1?'have':'has'} ended. <b>${still.map(first).join(' & ')}</b> ${still.length>1?'are':'is'} still in the round.`;
+    else if(still.length)line=`<b>${still.map(first).join(' & ')}</b> ${still.length>1?'haven\u2019t':'hasn\u2019t'} ended ${still.length>1?'their rounds':'their round'} yet.`;
+    else line=`<b>${done.map(first).join(' & ')}</b> ${done.length>1?'have':'has'} ended.`;
+    const what=cap?' You started this round, so ending yours closes it on every phone — their cards are saved as they stand.'
+                  :' Ending yours only ends yours; everyone else keeps playing.';
+    return `<div class="tiny" style="margin:2px 0 10px;line-height:1.45">${line}${still.length?what:''}</div>`;
+  }catch(e){return '';}
 }
 // Announce the round the first time a hole is genuinely confirmed — once, from
 // whichever of the three confirm paths gets there first.
@@ -13953,7 +14025,12 @@ function vStandings(){
   const extra=(thru>0?`
     <div class="card" onclick="openFullCard()" style="cursor:pointer"><h2>Scorecard · gross strokes <span class="tiny" style="font-weight:400">— tap for all 18</span></h2>${scorecardHTML()}
       <div class="tiny mt"><span style="color:#7fd49a">○</span> birdie · <span style="color:#9fe8b8">◎</span> eagle · <span style="color:var(--amber)">□</span> bogey · <span style="color:var(--red)">▣</span> double+ · HCP = hole handicap. Swipe the card sideways.</div></div>`:'')+shotsCard+statsCard;
-  return topbar('Standings',esc(S.course.name),'','','')+`<main>${paceLine()}${tables}${extra}
+  // "who hasn't ended yet" belongs here: this is where the last hole lands you
+  const stillIn=(()=>{try{
+    const done=playOrder().every(h=>(S.round.holes[h]||{}).confirmed);
+    const anyOut=actIdx().some(i=>S.players[i]&&S.players[i].ended);
+    return (done||anyOut)?othersStillInHTML():'';}catch(e){return '';}})();
+  return topbar('Standings',esc(S.course.name),'','','')+`<main>${paceLine()}${stillIn}${tables}${extra}
     ${(all!=null&&all.perHole)?`<div class="card"><h2>Hole history (tap to edit)</h2>${hist||'<div class="muted">No holes confirmed yet.</div>'}</div>`:''}
     ${settleSectionHTML()}
   </main>`+tabs('standings');
