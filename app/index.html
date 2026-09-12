@@ -437,7 +437,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789185990';
+const BUILD='1789186500';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -7313,15 +7313,23 @@ function gameGridHTML(fn,showPick){
   const pick=k=>seatWhy(k,seats)?' seatoff':'';
   const go_=k=>seatWhy(k,seats)?'':`${fn}('${k}')`;
   const note=k=>seatNote(k,seats);
-  // STROKE STANDS APART. It is not badged as a default any more — it simply sits
-  // on its own above the line, described as what it is, so a regular round is the
-  // first thing you can tap and everything below it is a choice you go looking for.
-  return `${chosen?'<div class="gamegrid-has-pick">':''}    <button class="gamebtn strokeg solo${pick('stroke')}${gdCls('stroke')}"${gdTag('stroke')} onclick="${go_('stroke')}">
+  // STROKE ONLY BELONGS WHERE YOU ARE CHOOSING. It is not a game -- it is what a
+  // round is when nobody picks one -- so it stands apart above the line on the
+  // PICKER, sits inline on the stack sheet (a stroke card can be scored next to
+  // any game), and is absent from the home "Games & rules" grid entirely. That
+  // grid is a reading list, and a hero card over an "or play a game" divider made
+  // no sense there. (Nathan 9/11: "I didnt want Stroke to be in the start screen
+  // with the games rules. only in the game picker".) The Rules screen still
+  // carries a Stroke card, the same way it carries Hammer, which is not in this
+  // grid either.
+  const strokeCard=solo=>`<button class="gamebtn strokeg${solo?' solo':''}${pick('stroke')}${gdCls('stroke')}"${gdTag('stroke')} onclick="${go_('stroke')}">
       <div style="flex:1;min-width:0"><span class="gname">Stroke</span>
         <div class="tiny">Standard round with classic scoring</div>${note('stroke')}</div>
       <img src="${art('/stroke.png')}" alt="" style="height:92px;margin:4px 8px 4px 0;filter:drop-shadow(0 0 6px rgba(224,187,69,.5))" onerror="this.outerHTML='<span class=&quot;stroke-ph&quot;>⛳</span>'">
-    </button>
-    <div class="gamesplit"><span>or play a game</span></div>
+    </button>`;
+  const strokeTop=live?strokeCard(true)+`<div class="gamesplit"><span>or play a game</span></div>`
+    :gridDeco?strokeCard(false):'';
+  return `${chosen?'<div class="gamegrid-has-pick">':''}    ${strokeTop}
     <button class="gamebtn${pick('wolf')}${gdCls('wolf')}"${gdTag('wolf')} onclick="${go_('wolf')}">
       <div style="flex:1;min-width:0"><span class="gname">Wolf</span>
         <div class="tiny">Hunt with a partner — or go lone wolf</div>${note('wolf')}</div>
