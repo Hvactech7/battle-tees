@@ -437,7 +437,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789253989';
+const BUILD='1789275773';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1083,7 +1083,7 @@ function setTheme(t){set(()=>{S.theme=t;});applyTheme();}
 // the relay lives, so the host can move (Pi -> cloud, or failover) without every
 // phone in the wild needing an update. Order: manual override > last discovered >
 // bundled default. The default is only the seed for a brand-new install.
-const RELAY_DEFAULT='wss://raspi5.tail734d97.ts.net/battletees';
+const RELAY_DEFAULT='wss://relay.vexcomllc.com/battletees';   // the Pi relay was retired 9/12
 let RELAY=localStorage.getItem('wolfRelay')||localStorage.getItem('btRelayCfg')||RELAY_DEFAULT;
 async function discoverRelay(){
   if(localStorage.getItem('wolfRelay'))return;            // manual override wins, always
