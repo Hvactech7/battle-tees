@@ -437,7 +437,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789341162';
+const BUILD='1789343402';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -12938,8 +12938,26 @@ function advanceToNext(){
   let next=-1;
   for(let k=1;k<=o.length;k++){const cand=o[(cur+k)%o.length];if(!S.round.holes[cand].confirmed){next=cand;break;}}
   if(next===-1)landOnSettle();
+  else if(myCardWaiting().length){S.round.cur=next;landWaitingOnSettle();}
   else{S.round.cur=next;if(gameOn()!=='wolf')prefillNines(next);try{setTimeout(maybeAskPar,900);}catch(e){}}
 }
+// MY CARD IS IN, THE HOLE ISN'T CLOSED. DarkHorse 9/13: Nathan confirmed his 18 from
+// the map, the hole waited on Nate's confirm, and with nothing left to score the map
+// sat on hole 18's GPS until Nate's phone caught up (the score screen sat on 18 too).
+// A shared round where every hole carries MY confirm has nothing more for me: land on
+// Settle, say who we wait on, and remoteCloseMaybeFinish asks "Confirm round is over?"
+// the moment their confirm arrives.
+// Returns the holes still open when every one of them already has my confirm, else [].
+function myCardWaiting(){
+  try{
+    if(!S.round.started||isReview()||!groupShare())return [];
+    const mi=myPlayerIdx();if(mi<0)return [];
+    const o=playOrder();
+    if(!o.every(h=>{const r=S.round.holes[h]||{};return r.confirmed||cfOn(r,mi);}))return [];
+    return o.filter(h=>!(S.round.holes[h]||{}).confirmed);
+  }catch(e){return [];}
+}
+function landWaitingOnSettle(){S.screen='settle';S.round._waitLand=true;}
 // THE CARD IS DONE: Settle, and ask. Called by advanceToNext() on the phone
 // whose confirm closed the last hole, and by remoteCloseMaybeFinish() on every
 // other phone in the room when that close arrives over the wire -- the same
@@ -12974,12 +12992,13 @@ function landOnSettle(){
 function remoteCloseMaybeFinish(h){
   try{
     if(!S.round.started||S.round._finished||endAsk||isReview())return;
-    if(!['hole','map'].includes(S.screen))return;
+    // ...or from Settle when my own card landed me there to wait (myCardWaiting)
+    if(!(['hole','map'].includes(S.screen)||(S.screen==='settle'&&S.round._waitLand)))return;
     if(playOrder().some(x=>!(S.round.holes[x]||{}).confirmed))return;
     setTimeout(()=>{
       try{
         if(!S.round.started||S.round._finished||endAsk||isReview())return;
-        if(!['hole','map'].includes(S.screen))return;
+        if(!(['hole','map'].includes(S.screen)||(S.screen==='settle'&&S.round._waitLand)))return;
         if(playOrder().some(x=>!(S.round.holes[x]||{}).confirmed))return;
         landOnSettle();
         render();
@@ -14245,6 +14264,16 @@ function vStandings(){
       <div class="tiny mt"><span style="color:#7fd49a">○</span> birdie · <span style="color:#9fe8b8">◎</span> eagle · <span style="color:var(--amber)">□</span> bogey · <span style="color:var(--red)">▣</span> double+ · HCP = hole handicap. Swipe the card sideways.</div></div>`:'')+shotsCard+statsCard;
   // "who hasn't ended yet" belongs here: this is where the last hole lands you
   const stillIn=(()=>{try{
+    // my card is in but a hole waits on another phone: say so, and who
+    const wait=myCardWaiting();
+    if(wait.length){
+      const rec=h=>S.round.holes[h]||{};
+      const who=[...new Set(wait.flatMap(h=>actIdx().filter(i=>!cfOn(rec(h),i))))]
+        .map(i=>esc((S.players[i].name||'').split(' ')[0]));
+      const hs=wait.map(h=>h+1);
+      return `<div class="card center"><b>Your card is in.</b>
+        <div class="tiny mt">Hole${hs.length===1?'':'s'} <b>${hs.join(', ')}</b> ${hs.length===1?'is':'are'} waiting on <b>${who.join(' &amp; ')||'the group'}</b> to confirm — you'll be asked to end your round the moment that lands.</div></div>`;
+    }
     const done=playOrder().every(h=>(S.round.holes[h]||{}).confirmed);
     const anyOut=actIdx().some(i=>S.players[i]&&S.players[i].ended);
     return (done||anyOut)?othersStillInHTML():'';}catch(e){return '';}})();
