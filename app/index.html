@@ -437,7 +437,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789275773';
+const BUILD='1789341162';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -605,7 +605,16 @@ function trackCardHTML(){
   </div>`;
 }
 // _set records that a human chose this, so the repair below never overrides it.
-function toggleTrack(i,k){ if(!ownsRow(i))return; set(()=>{const T=trackOf(i);T[k]=!T[k];T._set=1;}); }
+function toggleTrack(i,k){ if(!ownsRow(i))return; set(()=>{const T=trackOf(i);T[k]=!T[k];T._set=1;rememberMyTrack(i);}); }
+// MY trackers belong to MY phone, like my handicap. The round's player rows ride
+// the meta doc, so whoever STARTED the round decided them: DarkHorse 9/13 Nate
+// started, his phone's copy of Nathan's row said putts off, and Nathan's phone
+// stopped asking for putts until he found the toggle on hole 6. The choice is
+// kept on the phone (S.me.track) and claimMySlot puts it back on my row.
+function rememberMyTrack(i){
+  if(i!==myPlayerIdx()||!S.players[i]||!S.players[i].track)return;
+  S.me.track=Object.assign({},S.players[i].track,{_set:1});
+}
 
 const TRACK_DEFS=[['putts','Putts'],['bunker','Bunkers'],['chips','Chips'],['pen','Penalties']];
 // Extras tracking is PER PLAYER, not per round. It used to live on S.config,
@@ -1521,6 +1530,17 @@ function claimMySlot(steal){
     // my phone is the authority on MY handicap — a stale index someone loaded
     // from their library gets corrected to my current profile the moment I join
     if(match&&p.ownerDev===devId()&&S.me.index!=null&&+p.index!==+S.me.index){p.index=+S.me.index;changed=true;}
+    // ...and on MY trackers (putts etc). A phone that never touched the toggle
+    // plays the app default (putts on) — not whatever the starter's phone seeded.
+    // First run after this shipped: a choice made before S.me.track existed is
+    // picked up from my own library row, so nobody who turned putts off gets it back on.
+    if(match&&p.ownerDev===devId()){
+      if(!S.me.track){const lib=(S.playerLib||[]).find(q=>q&&q.pid&&q.pid===S.me.pid);
+        if(lib&&lib.track&&lib.track._set)S.me.track=Object.assign({},lib.track);}
+      const want=Object.assign(defaultTrack(),S.me.track||{});
+      const have=Object.assign(defaultTrack(),p.track||{});
+      if(['putts','bunker','chips','pen'].some(k=>!!want[k]!==!!have[k])){p.track=want;changed=true;}
+    }
     if(PHOTOS_ON&&match&&p.ownerDev===devId()&&(p.photo||'')!==(S.me.photo||'')){
       if(S.me.photo)p.photo=S.me.photo;else delete p.photo;changed=true;}
   });
@@ -1994,7 +2014,7 @@ function saveMe(){
   if(em)try{localStorage.setItem('wolfBackupEmail',em);}catch(x2){}
   setTimeout(registerProfile,0);          // the pid exists now — tell the Pi
   set(()=>{
-    S.me={name,index:parseIdx(x&&x.value,10),pid:(S.me&&S.me.pid)||('u'+Date.now().toString(36)+Math.random().toString(36).slice(2,8))};
+    S.me={name,index:parseIdx(x&&x.value,10),pid:(S.me&&S.me.pid)||('u'+Date.now().toString(36)+Math.random().toString(36).slice(2,8)),...(S.me&&S.me.track?{track:S.me.track}:{})};
     upsertLib({name,index:S.me.index,libId:null});   // no tee yet: the first tee sheet decides, not the default course's tips
   });
   try{localStorage.setItem('btOnboarded','1');}catch(x3){}
@@ -2024,8 +2044,10 @@ function saveEditMe(){
     // pid-keyed lookup went blind. The display name is the only thing changing.
     const pid=(S.me&&S.me.pid)||('u'+Date.now().toString(36)+Math.random().toString(36).slice(2,8));
     const photo=S.me&&S.me.photo;   // the photo rides through a profile save (8/20: Save wiped it back to initials)
+    const track=S.me&&S.me.track;   // ...and so do my trackers (putts), which live on the phone since 9/13
     S.me={name,index:parseIdx(x&&x.value,S.me.index),pid};
     if(photo)S.me.photo=photo;
+    if(track)S.me.track=track;
     // my library card — by pid first, old name as the grandfathered fallback
     const e=S.playerLib.find(p=>p.pid===pid)
       ||S.playerLib.find(p=>p.name.trim().toLowerCase()===old.trim().toLowerCase());
@@ -12305,7 +12327,9 @@ function prefillNines(h){
 // ----- hole screen -----
 function vHole(){
   if(!S.round.started) return topbar(gameName(),'','home')+`<main><div class="card center">No round in progress.<button class="big mt" onclick="go('home')">Pick a game</button></div></main>`;
-  if(['nines','stroke','bestball','stableford','quota','sixes','umbrella','bbb','nassau','skins'].includes(gameOn())) return vHoleNines();
+  // Every game but Wolf, Vegas and Scramble scores on the plain card. A game missing
+  // from this list falls through to the WOLF screen (DarkHorse 9/13: Match Play did).
+  if(['nines','stroke','bestball','stableford','quota','sixes','umbrella','bbb','nassau','skins','matchplay'].includes(gameOn())) return vHoleNines();
   if(gameOn()==='vegas') return vHoleVegas();
   if(gameOn()==='scramble') return vHoleScramble();
   const h=S.round.cur, hole=S.course.holes[h], rec=S.round.holes[h];
@@ -13553,7 +13577,7 @@ function chalApplyTrackers(){
   const i=myPlayerIdx(); if(i<0||!S.players[i])return false;
   const T=trackOf(i);
   if(T.putts)return false;
-  T.putts=true;T._set=1;
+  T.putts=true;T._set=1;rememberMyTrack(i);
   return true;                      // caller decides whether to tell the user
 }
 
