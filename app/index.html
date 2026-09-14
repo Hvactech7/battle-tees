@@ -50,9 +50,9 @@
   .num{font-family:Rajdhani,Inter,sans-serif;font-weight:700}
   header.top{background:#151d2c;color:var(--green-mid);padding:14px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:5;border-bottom:2px solid var(--green-dk)}
   header.top h1{font-size:17px;font-weight:600;letter-spacing:.3px}
-  header.top .gbadge{display:flex;flex-direction:column;align-items:center;gap:1px;margin-left:auto;flex:none}
+  header.top .gbadge{display:flex;flex-direction:column;align-items:center;gap:1px;margin-left:auto;flex:none;max-width:60px}
   header.top .gbadge img{height:34px;width:auto;filter:drop-shadow(0 1px 3px rgba(0,0,0,.5))}
-  header.top .gbadge span{font-size:11px;font-weight:700;color:var(--ink2);letter-spacing:.3px;white-space:nowrap}
+  header.top .gbadge span{font-size:10px;font-weight:700;color:var(--ink2);letter-spacing:.2px;white-space:normal;text-align:center;line-height:1.15}   /* a long name ("Bingo Bango Bongo") wraps instead of pushing the header off the phone (click walk 9/13) */
   header.top .gbadge+button{margin-left:10px}
   header.top .sub{font-size:12px;opacity:.8;color:var(--ink2)}
   /* hero topbar — hole screens only: big Rajdhani hole number with a gold glow */
@@ -63,7 +63,8 @@
     -webkit-background-clip:text;background-clip:text;color:transparent;
     filter:drop-shadow(0 2px 0 rgba(0,0,0,.6)) drop-shadow(0 0 12px rgba(232,197,82,.38))}
   header.top.hero .sub{font-size:13px;letter-spacing:.4px}
-  header.top.maphero h1{font-size:26px;letter-spacing:1.2px;white-space:nowrap}
+  header.top.maphero h1{font-size:clamp(19px,6vw,26px);letter-spacing:clamp(.4px,.3vw,1.2px);white-space:nowrap}   /* "HOLE 18 · PAR 4 ✓" + score + join code ran 21px off a 390px phone at 26px (click walk 9/13) */
+  @media (max-width:389px){header.top.maphero h1{font-size:19px;letter-spacing:.4px}header.top.maphero{padding-left:12px;padding-right:12px}}   /* 360/375px phones (SE, mini): still 5-12px over at 6vw */
   header.top button{background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:8px;padding:7px 12px;font-size:13px;font-weight:600;font-family:inherit}
   main{flex:1;padding:14px 14px calc(110px + env(safe-area-inset-bottom))}
   .card{background:var(--card);border:2px solid var(--green);border-radius:10px;padding:14px;margin-bottom:16px;box-shadow:4px 4px 0 var(--green)}
@@ -105,7 +106,7 @@
   .stepper button{width:38px;height:38px;border-radius:8px;border:2px solid var(--elec);background:var(--card);font-size:20px;color:var(--elec-mid);font-family:inherit;flex:none;box-shadow:2px 2px 0 var(--elec-dk)}
   .stepper button:active{transform:translate(1px,1px);box-shadow:1px 1px 0 var(--elec-dk)}
   .stepper .val{min-width:34px;text-align:center;font-size:22px}
-  .stepper.mini button{width:28px;height:28px;border-radius:8px;font-size:15px}
+  .stepper.mini button{width:36px;height:36px;border-radius:8px;font-size:17px}
   .stepper.mini .val{min-width:20px;font-size:17px}
   .stepper.mini{gap:5px}
   .splash{position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;
@@ -437,7 +438,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789366523';
+const BUILD='1789370529';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -3264,8 +3265,8 @@ function runningTotalsCard(){
   }
   return `<div class="card" style="padding:12px 10px 8px"><div style="display:flex;gap:6px">${tiles}</div>
     <div style="display:flex;justify-content:center;align-items:center;gap:8px;margin-top:7px">
-      <button class="ghost ${L==='gross'?'sel':''}" style="padding:3px 14px;font-size:13px${L==='gross'?'':';color:var(--ink3);border-color:var(--line);box-shadow:2px 2px 0 rgba(0,0,0,.2)'}" onclick="setTopLens('gross')">Gross</button>
-      <button class="ghost ${L==='net'?'sel':''}" style="padding:3px 14px;font-size:13px${L==='net'?'':';color:var(--ink3);border-color:var(--line);box-shadow:2px 2px 0 rgba(0,0,0,.2)'}" onclick="setTopLens('net')">Net</button>
+      <button class="ghost ${L==='gross'?'sel':''}" style="min-height:36px;padding:6px 16px;font-size:14px${L==='gross'?'':';color:var(--ink3);border-color:var(--line);box-shadow:2px 2px 0 rgba(0,0,0,.2)'}" onclick="setTopLens('gross')">Gross</button>
+      <button class="ghost ${L==='net'?'sel':''}" style="min-height:36px;padding:6px 16px;font-size:14px${L==='net'?'':';color:var(--ink3);border-color:var(--line);box-shadow:2px 2px 0 rgba(0,0,0,.2)'}" onclick="setTopLens('net')">Net</button>
       ${g==='bestball'?'':`<span class="tiny">${foot?foot+' · ':''}thru ${thru}</span>`}
     </div></div>`;
 }
@@ -4116,8 +4117,9 @@ function mapGeoNote(){
   if(mapMarks&&mapMarks.mePos)return;               // we have a fix; leave the yardage alone
   if(mapMarks&&mapMarks._preview)return;            // previewing an unmapped hole: its own note stands
   // the map bar is short; a long sentence here wraps and shoves the fixed buttons
-  if(geoState==='denied')s2.innerHTML='Location off — yardages from the tee. Enable in Settings › Privacy.';
-  else if(geoState==='waiting')s2.textContent='waiting for GPS — distance will appear once your phone has a fix.';
+  // two short lines at most: the long versions ran 3-4 lines in a 2-line box, cutting off how to fix it (click walk 9/13)
+  if(geoState==='denied')s2.innerHTML='Location off — turn it on in Settings.';
+  else if(geoState==='waiting')s2.textContent='Waiting for GPS…';
 }
 // ---- COURSE PREVIEW: the GPS screen for any course in the library, no round ----
 // "View" on a Courses row opens hole 1 exactly as the GPS screen would show it
@@ -4690,16 +4692,20 @@ function vMap(){
     manualShown=!(gg&&gg.green&&gg.green.length>2);
   }catch(e){}
   const d=myTot-myPar;
-  const myScore=(myPar>0&&!gpsOnly())?`<div style="text-align:center;flex:none;margin:0 14px 0 10px">
+  // The header's right side had to fit the score, the join code AND the game badge:
+  // 484px on a 390px phone, so the map scrolled sideways (click walk 9/13). With a code
+  // showing, the badge steps aside (the game is on every other screen) and margins tighten.
+  const codeShown=!!(S.share&&S.share.on&&S.share.creator&&S.share.code);
+  const myScore=(myPar>0&&!gpsOnly())?`<div style="text-align:center;flex:none;margin:0 ${codeShown?'6px 0 4px':'14px 0 10px'}">
     <div class="num" style="font-size:38px;line-height:1;font-weight:700;color:${d<0?'#7fd49a':d>0?'var(--amber-bd)':'var(--ink)'};text-shadow:0 0 10px rgba(0,0,0,.5)">${d===0?'E':(d>0?'+':'')+d}</div>
     <div class="tiny" style="color:var(--ink2);white-space:nowrap;font-size:12px">${myTot} strokes</div></div>`:'';
   return topbar(`Hole ${mapHole+1} · Par ${hole.par}${(!gpsOnly()&&(S.round.holes[mapHole]||{}).confirmed)?' ✓':''}`,
     gpsOnly()?`Handicap ${hole.si} · rangefinder`
              :`Handicap ${hole.si}${(S.round.holes[mapHole]||{}).confirmed?' · scored':' · NOT scored yet'}`,'','hero maphero',
     `<div style="display:flex;align-items:center;margin-left:auto;gap:10px">${myScore}${
-      (S.share&&S.share.on&&S.share.creator&&S.share.code)?`<div onclick="inviteFromMap()" style="text-align:center;flex:none;margin-right:20px;color:var(--gold,#e8c552);font-family:Rajdhani,Inter,sans-serif;font-weight:700;line-height:1.05;cursor:pointer">
+      codeShown?`<div onclick="inviteFromMap()" style="text-align:center;flex:none;margin-right:4px;color:var(--gold,#e8c552);font-family:Rajdhani,Inter,sans-serif;font-weight:700;line-height:1.05;cursor:pointer">
         <div style="font-size:10px;font-weight:600;opacity:.85;letter-spacing:.5px">${S.share.bf?'TAP TO INVITE':'JOIN CODE'}</div>
-        <div class="num" style="font-size:22px;letter-spacing:3px">${esc(S.share.code)}</div></div>`:''}${gameBadgeHTML()}</div>`)+`
+        <div class="num" style="font-size:22px;letter-spacing:3px">${esc(S.share.code)}</div></div>`:''}${codeShown?'':gameBadgeHTML()}</div>`)+`
   <div id="holemap"></div>
   <div id="windrose" onclick="toggleWindMode()" onpointerdown="windRosePD(event)" onpointerup="windRosePU()" onpointercancel="windRosePU()" oncontextmenu="return false" style="display:none${manualShown?';bottom:calc(276px + env(safe-area-inset-bottom))':''}"></div>
   ${mapCreditsChipHTML()}
@@ -5323,8 +5329,13 @@ function maybeInviteMapping(){
   try{
     if(S.round._mapInviteSeen||!S.round.started||isReview())return;
     if(markState().tee||markState().green)return;   // they are already at it
-    S.round._mapInviteSeen=true;try{save();}catch(e){}
-    setTimeout(showMapInvite,900);   // let the imagery paint first
+    // let the imagery paint first — and only if you are still ON the map. Unguarded,
+    // leaving the map inside 0.9 s dropped the invite over Standings (click walk 9/13).
+    setTimeout(()=>{
+      if(S.screen!=='map'||S.round._mapInviteSeen)return;
+      S.round._mapInviteSeen=true;try{save();}catch(e){}
+      showMapInvite();
+    },900);
   }catch(e){}
 }
 // ---- the receipt -----------------------------------------------------------
@@ -10814,14 +10825,16 @@ function endRound(){
       mins:t0?Math.round((S.round.myEndedAt-t0)/60000):null});}
   bfBroadcastEnd();
   archiveRound();
-  const wasShared=S.share.on;
+  const wasShared=S.share.on, wasReview=!!S.round.reopened;
   S.round=blankRound();S.screen='home';stView=null;
   resetRoster();   // next round starts with just you — pick a fresh group
   save();
   if(wasShared)leaveShare();else render();
   // Playing never requires a confirmed address — but once the round is in the books,
   // ask, because nothing has been saved anywhere yet.
-  if(!emailVerified())setTimeout(()=>openVerify('roundEnd'),450);
+  // ...but closing a PAST round you reopened to review is not a round ending: it was
+  // saved when you played it, and "Save this round?" read as if it were not (click walk 9/13).
+  if(!emailVerified()&&!wasReview)setTimeout(()=>openVerify('roundEnd'),450);
 }
 // Resume a past round for real: fully live (not review), with the clock
 // continuing from where it stopped — the break doesn't count against pace.
@@ -11466,7 +11479,7 @@ function vSetup(){
           :`<input id="plIdx${i}" data-rec="${esc(p.name)}" type="text" inputmode="decimal" value="${p.index}" onfocus="tapClear(this)" onblur="commitPl(this,${i},'index')">`}</div>
         <div></div>
       </div>
-      <div class="tiny mt">Course hcp <b>${ch[i]}</b> → plays with <b>${st[i]}</b> stroke${st[i]===1?'':'s'} (off the low man). Handicaps adjust themselves as rounds are saved.</div>
+      <div class="tiny mt">Course hcp <b>${ch[i]}</b> → plays with <b>${st[i]}</b> stroke${st[i]===1?'':'s'} (off the low man).${i===0?' Handicaps adjust themselves as rounds are saved.':''}</div>
     </div>`;
   }).join('');
   const P=S.config.pts;
@@ -13226,7 +13239,7 @@ function holeChipsHTML(){
   const h=S.round.cur,hole=S.course.holes[h]||{par:4};
   const rec=S.round.holes[h],mi=myPlayerIdx();
   const on=k=>!!(rec&&rec.stats&&rec.stats[k]&&rec.stats[k][mi]);
-  const chip=(k,label)=>`<button onclick="holeStatToggle('${k}')" style="height:32px;padding:0 14px;border-radius:9px;font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:14px;letter-spacing:.4px;background:${on(k)?'var(--green-lt)':'var(--card)'};border:1.5px solid ${on(k)?'var(--green)':'var(--line)'};color:${on(k)?'var(--green-mid)':'var(--ink3)'}">${on(k)?'✓ ':''}${label}</button>`;
+  const chip=(k,label)=>`<button onclick="holeStatToggle('${k}')" style="height:40px;padding:0 18px;border-radius:9px;font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:14px;letter-spacing:.4px;background:${on(k)?'var(--green-lt)':'var(--card)'};border:1.5px solid ${on(k)?'var(--green)':'var(--line)'};color:${on(k)?'var(--green-mid)':'var(--ink3)'}">${on(k)?'✓ ':''}${label}</button>`;
   return `<div style="display:flex;gap:8px;justify-content:center;margin:2px 0 8px">${hole.par>=4?chip('fw','FW'):''}${chip('gir','GIR')}</div>`;
 }
 function holeStatToggle(k){reviewTouch();set(()=>{const rec=S.round.holes[S.round.cur];const a=statArr(rec,k);const i=myPlayerIdx();a[i]=a[i]?0:1;stampStat(rec,i);});}
