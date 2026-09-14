@@ -437,7 +437,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789343402';
+const BUILD='1789344887';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -3882,10 +3882,22 @@ function frameAround(center,spanYds,el){
 // an east-west hole read sideways (Nathan + Brian, Rancho 14 at 338 yards,
 // 9/11). `noTee` makes the FIRST fix frame the hole, whatever the distance.
 const AUTO_ZOOM_YDS=[225,120];
+// KEEP ME IN THE PICTURE (Nathan, DarkHorse 9/13: "under 150 yards my gps dot is
+// quite often off screen"). The two checkpoints were the only moves, so a step
+// off the line, a walk past the pin, or a stale frame put back by a rebuild left
+// the dot off the glass. Now, on any fix, if the dot has left the calm part of the
+// screen — within 12% of a side, above 40% of the height, below 95%, or off it —
+// and you have moved at least 8 metres since the last frame (GPS jitter at the
+// edge is not a move), the map re-frames green-up from you. A dot sitting where it
+// belongs never moves the view, so the walk in stays as quiet as 8/15 wanted.
+// A hole you framed yourself is never taken from you: the 📍 Me chip offers the
+// way back instead, once the dot is actually off the screen.
+const LIVE_MIN_ALONG_YDS=120;   // the live map never frames tighter than this along the line
 function makeOrientFromMe(greenC,greenPoly,el,noTee){
   const done=[false,false];
-  let framed=!noTee;
-  return (from)=>{
+  let framed=!noTee, lastAt=null;
+  const frame=from=>{lastAt=from.slice();orientGreenUp(from,greenC,greenPoly,[from],el,LIVE_MIN_ALONG_YDS);};
+  const fn=(from)=>{
     try{
       if(!from||!greenC||!L.Map.prototype.setBearing)return;
       const y=mDist(from,greenC)*1.09361;
@@ -3894,18 +3906,30 @@ function makeOrientFromMe(greenC,greenPoly,el,noTee){
         // a first fix already inside a checkpoint counts as having crossed it,
         // so the walk in does not re-frame for ground already covered
         for(let i=0;i<AUTO_ZOOM_YDS.length;i++)if(y<=AUTO_ZOOM_YDS[i])done[i]=true;
-        orientGreenUp(from,greenC,greenPoly,[from],el);
+        frame(from);
         return;
       }
       // fire the deepest checkpoint this fix is inside, and everything shallower
       // it skipped past — one frame, then silence until the next checkpoint
       let hit=-1;
       for(let i=0;i<AUTO_ZOOM_YDS.length;i++){if(y<=AUTO_ZOOM_YDS[i]&&!done[i])hit=i;}
-      if(hit<0)return;
-      for(let i=0;i<=hit;i++)done[i]=true;
-      orientGreenUp(from,greenC,greenPoly,[from],el);
+      if(hit>=0){
+        for(let i=0;i<=hit;i++)done[i]=true;
+        if(camOwnHere())return;          // you framed this hole: a checkpoint does not take it back
+        frame(from);meChip(false);
+        return;
+      }
+      const f=(typeof mapMarks!=='undefined'&&mapMarks&&mapMarks.meFrac)?mapMarks.meFrac():null;
+      if(!f)return;
+      const off=f[0]<0||f[0]>1||f[1]<0||f[1]>1;
+      if(!(off||f[0]<0.12||f[0]>0.88||f[1]<0.40||f[1]>0.95)){meChip(false);return;}
+      if(camOwnHere()){meChip(true);return;}   // your frame stays; the chip is the way back
+      if(!off&&lastAt&&mDist(from,lastAt)<8)return;
+      frame(from);meChip(false);
     }catch(e){}
   };
+  fn.frame=frame;
+  return fn;
 }
 // The camera for green-up: bearing that puts `greenC` straight up from `from`,
 // and the centre/zoom that fit `pts` + the green into a viewport of el's size
@@ -3913,7 +3937,7 @@ function makeOrientFromMe(greenC,greenPoly,el,noTee){
 // — the live hole map and the read-only shot viewer both point their maps with it.
 // `padBottom` (px) reserves a strip at the foot of the viewport — the shot
 // viewer's legend sits there — so the bottom of the frame lands above it.
-function greenUpCamera(from,greenC,greenPoly,pts,el,padBottom){
+function greenUpCamera(from,greenC,greenPoly,pts,el,padBottom,minAlongYds){
   const rad=Math.PI/180, lat0=from[0]*rad;
   const M=pt=>[(pt[1]-from[1])*111320*Math.cos(lat0),(pt[0]-from[0])*110540];  // metres [east,north]
   const g=M(greenC); const len=Math.hypot(g[0],g[1])||1;
@@ -3924,19 +3948,34 @@ function greenUpCamera(from,greenC,greenPoly,pts,el,padBottom){
     if(a<a0)a0=a;if(a>a1)a1=a;if(c<c0)c0=c;if(c>c1)c1=c;});
   const pb=padBottom||0;
   const vh=((el&&el.clientHeight)||600)-pb, vw=(el&&el.clientWidth)||360;
-  const mpp=Math.max((a1-a0)*1.18/Math.max(1,vh-110),(c1-c0)*1.35/Math.max(1,vw-30),0.05);
-  const zoom=Math.min(20,Math.log2(156543.03392*Math.cos(lat0)/mpp));
+  let mpp=Math.max((a1-a0)*1.18/Math.max(1,vh-110),(c1-c0)*1.35/Math.max(1,vw-30),0.05);
   // the map centres on `center`; pull it toward `from` by half the reserved
   // strip so the content is centred in the part of the screen that is visible
-  const midA=(a0+a1)/2-(pb/2)*mpp, midC=(c0+c1)/2;
+  let midA=(a0+a1)/2-(pb/2)*mpp;
+  const midC=(c0+c1)/2;
+  // THE LIVE MAP'S FLOOR (DarkHorse 9/13). Framed off just you + the green, the
+  // last 100 yards zoomed to 19-20, where one step sideways or past the pin took
+  // the dot off the glass. `minAlongYds` is the least ground shown along the
+  // line; when the floor is bigger than the content, YOU stay near the foot of
+  // the screen (84% down, `from` is a=0) with the green above you, instead of
+  // the two of you being centred together.
+  if(minAlongYds){
+    const floor=(minAlongYds*0.9144)*1.18/Math.max(1,vh-110);
+    if(floor>mpp){mpp=floor;midA=0.34*vh*mpp;}
+  }
+  const zoom=Math.min(20,Math.log2(156543.03392*Math.cos(lat0)/mpp));
   const cx=u[0]*midA+v[0]*midC, cy=u[1]*midA+v[1]*midC;
   const center=[from[0]+cy/110540, from[1]+cx/(111320*Math.cos(lat0))];
   return {bearing:-((Math.atan2(g[0],g[1])/rad+360)%360),center,zoom};
 }
-function orientGreenUp(from,greenC,greenPoly,pts,el){
+function orientGreenUp(from,greenC,greenPoly,pts,el,minAlongYds){
   try{
     if(!LMAP||!from||!greenC||!L.Map.prototype.setBearing)return false;
-    const cam=greenUpCamera(from,greenC,greenPoly,pts,el);
+    const cam=greenUpCamera(from,greenC,greenPoly,pts,el,0,minAlongYds);
+    // OUR frame, never "yours". The zoomend this fires used to be recorded as
+    // camOwn, so every later rebuild restored a stale auto frame (DarkHorse 9/13:
+    // a partner's score put the dot off the screen at 139 yards).
+    try{camProgUntil=Math.max(camProgUntil,Date.now()+300);}catch(e){}
     if(!LMAP._btUserRot)autoBearing(cam.bearing);
     LMAP.setView(cam.center,cam.zoom,{animate:false});
     return true;
@@ -5757,6 +5796,27 @@ function camArm(map){
   };
   map.on('zoomend',note);map.on('dragend',note);
 }
+function camOwnHere(){try{return !!(camOwn&&camOwn.key===camKey());}catch(e){return false;}}
+// 📍 ME. You pinched or dragged this hole yourself and your dot has since left the
+// screen: the app will not yank your view away (you may be reading the green), but
+// it offers one tap back — green up, you at the foot, auto framing handed back.
+function meChip(show){
+  try{
+    let b=document.getElementById('mechip');
+    if(!show||S.screen!=='map'){if(b)b.hidden=true;return;}
+    if(!b){const host=document.getElementById('app');if(!host)return;
+      host.insertAdjacentHTML('beforeend','<button id="mechip" onclick="meRecenter()" aria-label="Center the map on me" style="position:fixed;left:max(10px,calc(50vw - 230px));top:calc(100px + env(safe-area-inset-top));z-index:7;background:rgba(15,21,34,.82);border:2px solid #2b86ec;border-radius:12px;color:#fff;padding:9px 16px;font-size:17px;font-weight:700;font-family:inherit">📍 Me</button>');   // top-left, level with Back: the bottom row is Score and the stepper
+      b=document.getElementById('mechip');}
+    if(b)b.hidden=false;
+  }catch(e){}
+}
+function meRecenter(){
+  try{
+    camOwn=null;meChip(false);
+    const p=mapMarks&&mapMarks.mePos;
+    if(p&&mapMarks.orientFromMe&&mapMarks.orientFromMe.frame)mapMarks.orientFromMe.frame(p);
+  }catch(e){}
+}
 function camRestore(map){
   try{
     const k=camKey();
@@ -5980,8 +6040,16 @@ async function initHoleMap(){
     // dot stays at the bottom, the green at the top, until you are inside 100
     // yards. A mapped hole used to frame once off the tee and then sit still,
     // so by the second shot you were looking at a picture of where you had been.
-    mapMarks.orientFromMe=makeOrientFromMe(greenC,greenPoly,el,!hasPath||provPath);
-    if(hasPath&&!provPath)updateFMB(geo.path[0],'yards from the tee');
+    // A REBUILD MID-HOLE FRAMES FROM YOU, NOT THE TEE (DarkHorse 9/13). The map
+    // rebuilds on every render — a partner's score, a relay retry — and each one
+    // framed the whole hole off the tee again; standing still over a 140-yard shot
+    // the dot sat off the screen until the next GPS fix. A fresh fix on this hole,
+    // away from its tee, frames green-up from where you are.
+    const freshMe=!coursePreview&&hasPath&&!provPath&&canRotate&&myCoords&&isFinite(myCoords[0])
+      &&Date.now()-myCoordsAt<90000&&mDist(myCoords,greenC)<1400&&mDist(myCoords,geo.path[0])>40;
+    mapMarks.orientFromMe=makeOrientFromMe(greenC,greenPoly,el,!hasPath||provPath||!!freshMe);
+    if(freshMe){mapMarks.orientFromMe(myCoords);updateFMB(myCoords,'yards from you');}
+    else if(hasPath&&!provPath)updateFMB(geo.path[0],'yards from the tee');
     else{
       // Green-only hole: no mapped tee, so the player's live GPS plays that role
       // from the very first fix.
@@ -6128,6 +6196,14 @@ async function initHoleMap(){
     if(!lMe)lMe=L.circleMarker(pos,{radius:8,color:'#fff',weight:2.5,fillColor:'#2b86ec',fillOpacity:1}).addTo(LMAP);else lMe.setLatLng(pos);
     refreshTapLine();  // the first leg walks with you
   };
+  // Where the blue dot sits, as fractions of the map box (0,0 top-left; outside
+  // 0..1 is off the glass). Read off the drawn marker, so the rotation is in it.
+  mapMarks.meFrac=()=>{try{
+    if(!lMe||!lMe._path)return null;
+    const r=el.getBoundingClientRect(),b=lMe._path.getBoundingClientRect();
+    if(!r.width||!r.height||!b.width)return null;
+    return [(b.left+b.width/2-r.left)/r.width,(b.top+b.height/2-r.top)/r.height];
+  }catch(e){return null;}};
   mapMarks.setTap=t=>{if(!LMAP)return;
     if(lTaps.length>=2){
       // both spots placed — a fresh tap moves whichever is closer to it
