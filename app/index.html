@@ -437,7 +437,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789366043';
+const BUILD='1789366353';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -7999,10 +7999,9 @@ function vSettings(){
     <div class="tiny mt">Announcements go out once per round, from Battle Tees — never from a personal address.</div>
   </div>
   ${trackCardHTML()}
-  <div class="card"><h2>📏 Distances</h2>
-    <div class="row"><div style="flex:1;min-width:0"><b>Yards or meters</b>
-      <div class="tiny">Changes what you SEE — every distance on the map, the scorecard and your tracked shots. Nothing is converted or re-saved: measurements stay exactly as they were, so you can switch back any time.</div></div>
-      <span class="seg" style="display:inline-flex;gap:6px">
+  <div class="card">
+    <div class="row" style="border-top:none;padding:0;align-items:center"><h2 style="margin:0">📏 Distances</h2>
+      <span class="seg" style="display:inline-flex;gap:6px;margin-left:auto">
         <button class="ghost ${distUnit()==='yd'?'sel':''}" onclick="if(distUnit()!=='yd')toggleUnits()">Yards</button>
         <button class="ghost ${distUnit()==='m'?'sel':''}" onclick="if(distUnit()!=='m')toggleUnits()">Meters</button>
       </span></div>
