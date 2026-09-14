@@ -438,7 +438,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789370529';
+const BUILD='1789428378';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1416,7 +1416,7 @@ function syncConnect(){
       if(m.k==='meta'&&m.v&&S.share&&S.share.awaitDoc&&!S.share.creator){onStateDoc({meta:m.v});return;}
       applyOp(m.k,m.v,false);
     }
-    else if(m.t==='courseResult'||m.t==='backupResult'||m.t==='battleResult')handleCourseResult(m);
+    else if(m.t==='courseResult'||m.t==='backupResult'||m.t==='battleResult'||m.t==='accountResult')handleCourseResult(m);
   };
   sock.onclose=()=>{sockOpen=false;sock=null;render();scheduleReconnect();};
   sock.onerror=()=>{try{sock&&sock.close();}catch(e){}};
@@ -2102,6 +2102,16 @@ function onlineList(){
 let addingPlayer=false,editingPlayer=null,scanOpen=false,scanShown=[];
 // ---- library backup to the Pi (email-verified restore) ----
 let backupUI={mode:null,stage:0,msg:''};
+async function relayAccount(payload){
+  const ws=await waitForRelay(6000);
+  return new Promise((res,rej)=>{
+    if(!ws)return rej(new Error('relay offline'));
+    const rid='a'+Math.random().toString(36).slice(2,8);
+    pendingCourse[rid]={res,timer:setTimeout(()=>{delete pendingCourse[rid];rej(new Error('timeout'));},20000)};
+    try{ws.send(JSON.stringify({t:'account',rid,...payload}));}
+    catch(e){clearTimeout(pendingCourse[rid].timer);delete pendingCourse[rid];rej(e);}
+  });
+}
 async function relayBackup(payload){
   const ws=await waitForRelay(6000);
   return new Promise((res,rej)=>{
@@ -2788,7 +2798,7 @@ function lobbyConnect(){
     else if(m.t==='uninvite'){invites=invites.filter(i=>i.code!==m.code);render();}
     else if(m.t==='nearby'){nearby=(m.list||[]).filter(p=>p.id!==devId());if(S.screen==='home'||S.screen==='players'||S.screen==='setup'||S.screen==='gate'||S.screen==='start')render();}
     else if(m.t==='whois')libWhoisApply(m);
-    else if(m.t==='courseResult'||m.t==='backupResult'||m.t==='battleResult')handleCourseResult(m);
+    else if(m.t==='courseResult'||m.t==='backupResult'||m.t==='battleResult'||m.t==='accountResult')handleCourseResult(m);
   };
   lobbySock.onclose=()=>{lobbySock=null;nearby=[];if(!(S.share&&S.share.on))setTimeout(lobbyConnect,10000);};
   lobbySock.onerror=()=>{try{lobbySock&&lobbySock.close();}catch(e){}};
@@ -7895,6 +7905,62 @@ async function soGo(){
              :'✓ Fresh start on this phone. Your library will save once your email is confirmed.';
   render();
 }
+// ---------- Delete account (App Store 5.1.1(v)) ----------
+// Start Over keeps who you are; this removes you. The relay erases the profile,
+// handicap book, friends and usage rows, and — once a code sent to the verified
+// email proves the address is yours — the cloud backup. Then everything this app
+// stored on the phone goes and it opens as a first install. Rounds played with
+// others stay on their phones (the /delete/ page says so).
+let daUI=0,daMsg='',daEmail='';   // 0 idle · 1 confirm · 2 code · 3 working
+function daArm(){daUI=1;daMsg='';daEmail='';render();}
+function daCancel(){daUI=0;daMsg='';daEmail='';render();}
+const DA_OFFLINE='Couldn’t reach Battle Tees. Check your connection and try again.';
+async function daStart(){
+  const pid=myPid();
+  if(!pid){daWipe();return;}
+  daUI=3;daMsg='Contacting Battle Tees…';render();
+  const em=(localStorage.getItem('wolfBackupEmail')||'').trim();
+  try{
+    const r=await relayAccount({op:'delcode',pid,email:em||undefined});
+    if(!r||!r.ok){daUI=1;daMsg=(r&&r.error)||DA_OFFLINE;render();return;}
+    if(r.needCode){daEmail=em;daUI=2;daMsg='';render();return;}
+    await daErase('');
+  }catch(e){daUI=1;daMsg=DA_OFFLINE;render();}
+}
+async function daErase(code){
+  const back=daEmail?2:1;
+  daUI=3;daMsg='Deleting…';render();
+  try{
+    const r=await relayAccount({op:'erase',pid:myPid(),dev:devId(),email:daEmail||undefined,code:code||undefined});
+    if(!r||!r.ok||r.testMuted){daUI=back;daMsg=(r&&r.error)||(r&&r.testMuted?'Test build — nothing was deleted.':DA_OFFLINE);render();return;}
+    daWipe();
+  }catch(e){daUI=back;daMsg=DA_OFFLINE;render();}
+}
+function daCode(){
+  const el=document.getElementById('daCodeIn');
+  const c=String(el&&el.value||'').replace(/\D/g,'');
+  if(c.length!==6){daMsg='Enter the 6-digit code from the email.';render();return;}
+  daErase(c);
+}
+function daWipe(){
+  try{localStorage.clear();}catch(e){}
+  try{sessionStorage.clear();}catch(e){}
+  location.replace(location.pathname);
+}
+function daHTML(){
+  const red='color:var(--red);border-color:var(--red)';
+  const msg=daMsg?`<div class="tiny mt" style="color:var(--red)">${esc(daMsg)}</div>`:'';
+  if(daUI===0)return `<div class="tiny">Erase your profile and everything Battle Tees keeps about you.</div>
+    <button class="ghost mt" style="width:100%;${red}" onclick="daArm()">Delete account…</button>`;
+  if(daUI===1)return `<div class="tiny"><b style="color:var(--red)">This can’t be undone.</b> Your profile, library, handicap record and cloud backup are erased. Rounds you played with others stay on their phones.</div>${msg}
+    <button class="big mt" style="background:var(--red);border-color:var(--red)" onclick="daStart()">Delete my account</button>
+    <button class="ghost mt" style="width:100%" onclick="daCancel()">Cancel</button>`;
+  if(daUI===2)return `<div class="tiny">Enter the code we sent to <b>${esc(daEmail)}</b>.</div>
+    <input id="daCodeIn" class="mt" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6-digit code" style="letter-spacing:5px;font-family:Rajdhani,sans-serif;font-size:20px;margin-top:8px">${msg}
+    <button class="big mt" style="background:var(--red);border-color:var(--red)" onclick="daCode()">Delete my account</button>
+    <button class="ghost mt" style="width:100%" onclick="daCancel()">Cancel</button>`;
+  return `<div class="tiny">${esc(daMsg)}</div>`;
+}
 // ---------- FAQ: how to use Battle Tees (Settings) ----------
 // Every <b>label</b> below is a real button or card name in this file — the faq
 // suite cross-checks them, so the help cannot drift away from the app.
@@ -7972,6 +8038,8 @@ const FAQ=[
    'Settings › <b>Screen</b>: <b>Keep the screen awake during a round</b> holds the display on while you are playing — not on Home or Settings, and not after you end your round. Turn it <b>Off</b> to save the most battery. iPhones grant it only after you have touched the screen, so it arms on your first tap.'],
   ['Practice on an unmapped course',
    'Settings › <b>Course Amnesia</b>: <b>Ignore saved course maps</b> plays a course you have already mapped as if it were your first time, so you can practise mapping a hole. Nothing is deleted.'],
+  ['Delete your account',
+   'Settings › <b>Delete account</b> erases your profile, library, handicap record and cloud backup, on this phone and on our server. If your email is verified, we send a code to it first. Rounds you played with others stay on their phones.'],
   ['Start over',
    'Settings › <b>Start Over</b> wipes this phone’s Battle Tees library and replaces your cloud backup with the empty one. Your name, email and Battlefield archive are kept. It cannot be undone.'],
   ['Where the course data comes from',
@@ -8047,6 +8115,9 @@ function vSettings(){
     <button class="big mt" style="background:var(--red);border-color:var(--red)" onclick="soGo()">Are you sure? Erase it all</button>
     <button class="ghost mt" style="width:100%" onclick="soCancel()">Cancel</button>`
     :`<div class="tiny" style="color:var(--green-mid);font-weight:600">${esc(soMsg)}</div>`}
+  </div>
+  <div class="card"><h2>🗑️ Delete account</h2>
+    ${daHTML()}
   </div>
   <div class="card"><h2>📜 Data credits</h2>
     <div class="tiny">Scorecards and course listings: <b>© OpenStreetMap contributors (ODbL 1.0) via OpenGolfAPI</b>, plus licensed scorecard data from GolfCourseAPI.</div>
