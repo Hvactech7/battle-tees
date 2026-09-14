@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Scramble — golf game rules &amp; how to play | Battle Tees</title>
-<meta name="description" content="Scramble golf rules: pick the best shot and everyone plays from there, USGA scramble handicap allowances, 2v2 or one-team tournament mode. Free at Battle Tees.">
+<title>Scramble Golf Rules &amp; Texas Scramble Handicap | Battle Tees</title>
+<meta name="description" content="Scramble and Texas scramble rules, plus the team handicap: 25/20/15/10% for four players, 35/15% for two, with a worked example and a free calculator.">
 <meta property="og:title" content="Scramble — golf game rules | Battle Tees">
 <meta property="og:description" content="One ball per team">
 <meta property="og:image" content="https://battletees.app/scramble.png">
@@ -79,7 +79,20 @@ padding:14px;text-decoration:none;box-shadow:4px 4px 0 var(--elec-dk);margin:22p
 .rel b{display:block;font-family:Rajdhani,Inter,sans-serif;font-size:18px;color:var(--gc)}
 .rel span{font-size:13px;color:var(--ink2)}
 </style>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"Article","headline":"Scramble — golf game rules and how to play","description":"Scramble golf rules: pick the best shot and everyone plays from there, USGA scramble handicap allowances, 2v2 or one-team tournament mode. Free at Battle Tees.","image":"https://battletees.app/scramble.png","mainEntityOfPage":{"@type":"WebPage","@id":"https://battletees.app/rules/scramble/"},"author":{"@type":"Organization","name":"Battle Tees","url":"https://battletees.app/"},"publisher":{"@type":"Organization","name":"Battle Tees","logo":{"@type":"ImageObject","url":"https://battletees.app/icon-512.png"}},"about":{"@type":"Thing","name":"Scramble (golf game)"},"isPartOf":{"@type":"WebSite","name":"Battle Tees","url":"https://battletees.app/"}}</script>
+<style>
+.calc{margin:16px 0 4px;padding:16px;border:2px solid var(--elec-dk);border-radius:12px;background:rgba(15,21,34,.72)}
+.calc-h{font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:19px;color:#9ccfff;letter-spacing:.4px}
+.card .calc-sub{font-size:13.5px;color:var(--ink2);margin:2px 0 12px}
+.calc-in{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}
+.calc-in label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--ink2)}
+.calc-in input{font:600 18px Inter,sans-serif;color:var(--ink);background:#0f1522;border:2px solid var(--line);
+  border-radius:9px;padding:9px 10px;width:100%}
+.calc-in input:focus{outline:none;border-color:var(--elec)}
+.calc-out{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-top:14px}
+.calc-num{font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:40px;line-height:1;color:#e8c552}
+.calc-why{font-size:14px;color:var(--ink2)}
+</style>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"Article","headline":"Scramble — golf game rules and how to play","description":"Scramble and Texas scramble rules, plus the team handicap: 25/20/15/10% for four players, 35/15% for two, with a worked example and a free calculator.","image":"https://battletees.app/scramble.png","mainEntityOfPage":{"@type":"WebPage","@id":"https://battletees.app/rules/scramble/"},"author":{"@type":"Organization","name":"Battle Tees","url":"https://battletees.app/"},"publisher":{"@type":"Organization","name":"Battle Tees","logo":{"@type":"ImageObject","url":"https://battletees.app/icon-512.png"}},"about":{"@type":"Thing","name":"Scramble (golf game)"},"isPartOf":{"@type":"WebSite","name":"Battle Tees","url":"https://battletees.app/"}}</script>
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Battle Tees","item":"https://battletees.app/"},{"@type":"ListItem","position":2,"name":"Golf games","item":"https://battletees.app/rules/"},{"@type":"ListItem","position":3,"name":"Scramble","item":"https://battletees.app/rules/scramble/"}]}</script>
 <style>
 
@@ -130,10 +143,55 @@ padding:14px;text-decoration:none;box-shadow:4px 4px 0 var(--elec-dk);margin:22p
   </div>
   <div class="card "><h2>The basics</h2><p>Everyone tees off, the team picks the best shot, and everyone plays their next shot from that spot. One score per team per hole. Lowest team total wins.</p><p>It's the format of charity events and member-guests everywhere — fast, forgiving, and social.</p></div>
   <div class="card "><h2>Handicaps</h2><p><b>2 v 2:</b> Battle Tees applies the USGA two-player scramble allowance — 35% of the low course handicap plus 15% of the high — as net strokes for the higher team.</p><p><b>One team (all four):</b> tournament mode. The whole group plays one ball and the app keeps the official card with the 25/20/15/10% four-player allowance.</p></div>
+  <div class="card k-strat" id="texas-scramble-handicap"><h2><span class="ki">🧮</span>Texas scramble handicap — how to work it out</h2>
+<p>“Texas scramble” is what golfers in the UK and Ireland call a scramble. The handicap works the same either way, and it comes from the <b>World Handicap System allowances</b>:</p>
+<div class="stake"><span>2 players · 35% low + 15% high</span><span>4 players · 25% · 20% · 15% · 10%</span></div>
+<p><b>1. Get each player's course handicap</b> for the tees you are playing — handicap index × slope ÷ 113, plus course rating minus par, rounded.</p>
+<p><b>2. Sort them lowest to highest</b> and apply the percentages in that order: the lowest handicap gets the biggest percentage.</p>
+<p><b>3. Add them up and round</b> to the nearest whole number. That is the team's handicap.</p>
+<p><b>Worked example (four players):</b> course handicaps 4, 8, 12 and 16 give 25% of 4 = 1.0, 20% of 8 = 1.6, 15% of 12 = 1.8, 10% of 16 = 1.6. Total 6.0 — <b>team handicap 6</b>. Some clubs round each player's share first, which here gives 1 + 2 + 2 + 2 = 7; check your competition's rules if a stroke matters.</p>
+<p><b>Two-player example:</b> 6 and 18 give 35% of 6 = 2.1 plus 15% of 18 = 2.7, so 4.8 — <b>team handicap 5</b>. In a 2 v 2 match the team handicaps are compared and the higher team gets the difference: 6 &amp; 18 (5) against 14 &amp; 20 (4.9 + 3.0 = 7.9, so 8) means the second team gets <b>3 strokes</b>.</p>
+<div class="calc" aria-label="Scramble handicap calculator">
+  <div class="calc-h">Scramble handicap calculator</div>
+  <p class="calc-sub">Enter two or four course handicaps. Use a minus sign for a plus handicap.</p>
+  <div class="calc-in">
+    <label>Player 1<input inputmode="numeric" type="number" step="1" data-h></label>
+    <label>Player 2<input inputmode="numeric" type="number" step="1" data-h></label>
+    <label>Player 3<input inputmode="numeric" type="number" step="1" data-h></label>
+    <label>Player 4<input inputmode="numeric" type="number" step="1" data-h></label>
+  </div>
+  <div class="calc-out" aria-live="polite"><span class="calc-num">–</span><span class="calc-why">Team handicap</span></div>
+</div>
+<script>
+(function(){
+  var box=document.currentScript.previousElementSibling;
+  var ins=box.querySelectorAll('[data-h]'),num=box.querySelector('.calc-num'),why=box.querySelector('.calc-why');
+  function pct(x){return Math.round(x*100)+'%';}
+  function run(){
+    var v=[];ins.forEach(function(i){if(i.value.trim()!==''&&isFinite(+i.value))v.push(Math.round(+i.value));});
+    if(v.length!==2&&v.length!==4){num.textContent='–';
+      why.textContent=v.length===3?'The allowances are set for two or four players':'Team handicap';return;}
+    v.sort(function(a,b){return a-b;});
+    var P=v.length===2?[0.35,0.15]:[0.25,0.20,0.15,0.10],sum=0,parts=[];
+    v.forEach(function(h,i){sum+=h*P[i];parts.push(pct(P[i])+' of '+h+' = '+parseFloat((h*P[i]).toFixed(2)));});
+    num.textContent=Math.max(0,Math.round(sum));
+    why.textContent=parts.join(' + ')+' = '+parseFloat(sum.toFixed(2));
+  }
+  ins.forEach(function(i){i.addEventListener('input',run);});
+})();
+</script>
+<p style="margin-top:12px">Battle Tees applies exactly this — 35/15 for pairs, 25/20/15/10 for a foursome, summed then rounded — from each player's index and the tees they actually play, so you never do the math on the first tee.</p>
+</div>
   <div class="card k-strat"><h2><span class="ki">⚡</span>How to actually win it</h2><p><b>Order of play is a strategy.</b> Send your most reliable player first to guarantee a ball in position, then let the big hitters swing freely from safety. Reversing that — hero first, then pressure on the steady player — is how scramble teams throw away shots.</p><p><b>Putt worst-to-best, always.</b> Every player before the last one is a free read: same line, same speed, no consequence. Teams that putt in random order are giving away a stroke a side.</p><p><b>Take the aggressive line on par 5s and short par 4s.</b> With four attempts, the expected value of going for it is far better than it is in your own ball. Scramble scores are won on the holes where you can get greedy.</p><p><b>Play from the best position, not the best-looking shot.</b> A ball forty yards further back in the fairway often beats one closer but in the rough — especially if your group has a preferred yardage.</p></div>
   <div class="card k-fun"><h2><span class="ki">🔥</span>Why it&#x27;s the most social round in golf</h2><p>Scramble is the format where nobody has a bad day. Your worst shot disappears the second somebody else hits a good one, which means the pressure evaporates and the conversation starts. It's why every charity event and member-guest on earth runs one.</p><p>It's also the fastest way to bring a beginner into a money game. A new golfer who would be miserable playing their own ball can contribute one great drive on one hole and be a hero for the rest of the round.</p><p>And it's genuinely fun to watch a team gel — four people converging on one ball, arguing about the line, then all making the same putt in sequence.</p></div>
   <div class="card k-wager"><h2><span class="ki">💰</span>The wager</h2><p>In <b>2 v 2</b>, scramble settles <b>team against team</b> on strokes of difference: the margin is paid once by the losing pair and split evenly between them. In <b>one-team mode</b> there is nothing to settle — you're building a card for a committee, not a bet.</p><div class="stake"><span>Friendly · $0.50 / stroke</span><span>Standard · $1 / stroke</span><span>Grown folks · $2–5 / stroke</span></div><p>Team scramble scores cluster tightly — a normal 2 v 2 finishes within <b>2–6 strokes</b> — so the per-stroke number needs to be higher than in individual stroke play to make it interesting.</p><div class="netnote"><span class="lede">Mixed handicaps? Play it net.</span>Scramble uses the USGA allowances rather than plain strokes — 35% of the low handicap plus 15% of the high for a pair, or 25/20/15/10% for a full team — so mixed teams are balanced by formula, automatically. Battle Tees computes every player's course handicap from their index and the tees they actually played, then keeps <b>gross and net side by side, live, on every phone</b> — so the scratch sees their real number while everyone bets the one that decides the money. It is the difference between a group that bets and a group that talks about betting.</div><div class="house"><b>Battle Tees never touches the money.</b> The app scores it, applies your handicaps, and shows exactly who owes whom at the end — one clean list, no arguing on the tailgate. You settle it in the parking lot, the way golfers always have.</div></div>
   <div class="card "><h2>In Battle Tees</h2><div class="tune"><span class="lede">Your group, your point structure.</span>Every group has its own house rules, and the app bends to them instead of the other way round. In Scramble that means <b>2 v 2 or one team of four</b>, which changes the USGA allowance the app applies (35%/15% for pairs, 25/20/15/10% for a foursome) and whether there's anything to settle at all. Change any of it in setup before the round — the scoring, the standings and the settle math all follow automatically, and the numbers ride along to every phone in the group.</div><p>In one-team mode there's nothing to settle — hand the card to the committee. In 2 v 2, settlement pays by strokes of difference.</p></div>
+  <div class="card"><h2>Scramble questions</h2>
+<p><b>What is a Texas scramble?</b><br>The same format as a scramble: everyone tees off, the team picks the best shot, and everyone plays from there. “Texas scramble” is the usual name in the UK and Ireland.</p>
+<p><b>How many drives does each player need in a Texas scramble?</b><br>Many competitions require a minimum number of each player's drives over the round — often three or four each in an 18-hole four-player event. It is set by the organiser, so check the entry sheet.</p>
+<p><b>Why isn't a scramble played off full handicaps?</b><br>Because the team always plays its best shot, a team scores far better than any one player would. Full handicaps would hand high-handicap teams an enormous edge, so the allowances shrink them.</p>
+<p><b>What about a three-player scramble?</b><br>The World Handicap System publishes allowances for two- and four-player scrambles. Three-player events set their own allowance, so check with the organiser.</p>
+</div>
   <div class="rel"><h2>If you like Scramble, try these</h2><ul><li><a href="/rules/best-ball/"><b>Best Ball</b><span>play your own ball instead</span></a></li><li><a href="/rules/vegas/"><b>Vegas</b><span>a real 2 v 2 money game</span></a></li><li><a href="/rules/stroke/"><b>Stroke</b><span>the individual version</span></a></li></ul></div>
   
   <a class="cta" href="/#beta">⚔️ &nbsp;Play Scramble in Battle Tees — request beta access</a>
