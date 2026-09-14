@@ -437,7 +437,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789365068';
+const BUILD='1789366043';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -586,23 +586,25 @@ function defaultConfig(){
     track:defaultTrack(),
   };
 }
-// Track-extras toggles for the rows THIS phone owns — you, plus anyone you're
-// scoring who has no phone of their own. Everybody else sets their own.
+// Track-extras toggles for YOU only. It used to list every row this phone could
+// own, so a leftover placeholder showed up as "Player 2" (Nathan, 9/13). Your
+// trackers are yours (S.me.track since 9/13); off a round there is no seat, so the
+// switch writes the phone's own setting directly.
 function trackCardHTML(){
-  const mine=actIdx().filter(ownsRow);
-  if(!mine.length) return '';
   const LBL={putts:'Putts',bunker:'Bunker shots',chips:'Chips',pen:'Penalties'};
-  const many=mine.length>1;
+  const mi=myPlayerIdx();
+  const seated=mi>=0&&S.players[mi]&&ownsRow(mi);
+  const T=seated?trackOf(mi):Object.assign(defaultTrack(),S.me.track||{});
   return `<div class="card"><h2>📊 Track extras <span class="tiny" style="font-weight:400">&mdash; per hole</span></h2>
-    <div class="tiny mb">With <b>Putts</b> on, a quick 0–4+ prompt pops up the moment you confirm a hole. Turn it off here to stop the prompt. The others add a stepper on the score and GPS screens.</div>
-    ${mine.map(i=>{
-      const T=trackOf(i);
-      return `${many?`<div class="tiny mt" style="color:var(--gold)"><b>${esc(S.players[i].name)}</b></div>`:''}
-        ${TRACK_DEFS.map(([k])=>`<div class="row"><span class="muted">${LBL[k]}</span>
-          <button class="ghost ${T[k]?'sel':''}" onclick="toggleTrack(${i},'${k}')">${T[k]?'On':'Off'}</button></div>`).join('')}`;
-    }).join('')}
-    <div class="tiny mt">${many?'Applies to these players only':'Applies to you only'} &mdash; anyone else in the group turns their own on from their phone.</div>
+    <div class="tiny mb">With <b>Putts</b> on, you're asked for putts after each hole.</div>
+    ${TRACK_DEFS.map(([k])=>`<div class="row"><span class="muted">${LBL[k]}</span>
+      <button class="ghost ${T[k]?'sel':''}" onclick="toggleMyTrack('${k}')">${T[k]?'On':'Off'}</button></div>`).join('')}
   </div>`;
+}
+function toggleMyTrack(k){
+  const mi=myPlayerIdx();
+  if(mi>=0&&S.players[mi]&&ownsRow(mi)){toggleTrack(mi,k);return;}
+  set(()=>{const T=Object.assign(defaultTrack(),S.me.track||{});T[k]=!T[k];T._set=1;S.me.track=T;});
 }
 // _set records that a human chose this, so the repair below never overrides it.
 function toggleTrack(i,k){ if(!ownsRow(i))return; set(()=>{const T=trackOf(i);T[k]=!T[k];T._set=1;rememberMyTrack(i);}); }
@@ -1441,7 +1443,7 @@ function wakeSet(st){
   if(wakeState===st)return;
   wakeState=st;
   try{const el=document.getElementById('wakestate');
-    if(el){el.textContent=wakeLabel();
+    if(el){el.textContent=wakeLabel();el.style.display=wakeLabel()?'block':'none';
       el.style.color=st==='held'?'var(--green-mid)':(st==='off'||st==='noround')?'var(--ink2)':'var(--amber-bd)';}
   }catch(e){}
 }
@@ -1501,7 +1503,7 @@ document.addEventListener('touchend',()=>{if(!wakeLock)wakeOn(true);},{passive:t
 document.addEventListener('click',()=>{if(!wakeLock)wakeOn(true);},{passive:true});
 function wakeLabel(){
   return wakeState==='off'?'Off'
-    :wakeState==='noround'?'Waiting for a round'
+    :wakeState==='noround'?''   // no round, nothing to say (Nathan 9/13: remove it)
     :wakeState==='held'?'On — the screen will stay lit'
     :wakeState==='unsupported'?'This browser cannot hold the screen awake'
     :wakeState==='denied'?'The phone refused. Low Power Mode does this — turn it off to keep the screen lit.'
@@ -2046,7 +2048,7 @@ function saveMe(){
   sendHello();
 }
 let editingMe=false;
-function editMe(){editingMe=true;addingPlayer=false;editingPlayer=null;render();}
+function editMe(){editingMe=true;addingPlayer=false;editingPlayer=null;bagOpen=false;render();}
 function cancelEditMe(){editingMe=false;render();}
 function saveEditMe(){
   const n=document.getElementById('meEName'),x=document.getElementById('meEIdx'),e=document.getElementById('meEEmail');
@@ -2741,13 +2743,15 @@ function libIsMe(e){
     return !!a&&(e.name||'').trim().toLowerCase()===a;
   }catch(err){return false;}
 }
+// MY BAG LIVES WITH YOUR PROFILE (Nathan 9/13): it used to be a Settings card this
+// button jumped to. It now opens right under the row on the Players screen.
+let bagOpen=false;
 function openMyBag(){
-  editingPlayer=null;
-  go('settings');
-  setTimeout(()=>{const el=document.getElementById('mybag');
+  bagOpen=!bagOpen;render();
+  if(bagOpen)setTimeout(()=>{const el=document.getElementById('mybag');
     if(el)try{el.scrollIntoView({block:'center',behavior:'smooth'});}catch(e){el.scrollIntoView();}},80);
 }
-function startEditPlayer(id){editingPlayer=id;addingPlayer=false;render();}
+function startEditPlayer(id){editingPlayer=id;addingPlayer=false;bagOpen=false;render();}
 function cancelEditPlayer(){editingPlayer=null;render();}
 function saveEditPlayer(){
   const n=document.getElementById('epName'),x=document.getElementById('epIdx');
@@ -4330,7 +4334,7 @@ function bagAddCustom(){
   if(bagAdd(nm,isNaN(after)?undefined:after)){bagUI.custom=false;render();}
   else shotToast('That club is already in your bag');
 }
-function bagCardHTML(){
+function bagCardHTML(inline){
   const b=bagClubs();const inBag=new Set(b);
   const rows=`<div id="bagList">${b.map((c,i)=>`<div class="row" style="padding:7px 0;cursor:grab;-webkit-user-select:none;user-select:none" onpointerdown="bagPD(event,${i})">
       <span style="color:var(--ink3);font-size:17px;letter-spacing:1px;margin-right:10px">⠿</span>
@@ -4345,9 +4349,9 @@ function bagCardHTML(){
       <div class="grid2"><div><div class="tiny">Club name</div><input id="bagCustomName" type="text" placeholder="e.g. 7-wood, Chipper" maxlength="14"></div>
         <div><div class="tiny">Goes</div><select id="bagCustomAfter" style="width:100%;padding:9px;border:2px solid var(--line);border-radius:8px;font-size:15px;background:var(--card);color:var(--ink)">${afterOpts}</select></div></div>
       <div class="mt" style="display:flex;gap:6px"><button class="ghost sel" onclick="bagAddCustom()">Add to my bag</button><button class="ghost" onclick="bagToggleCustom()">Cancel</button></div></div>`:'';
-  return `<div class="card" id="mybag" style="border-color:var(--elec);box-shadow:4px 4px 0 var(--elec-dk)">
-    <h2 style="color:var(--elec-mid)">🎒 My Bag</h2>
-    <div class="tiny mb">Your clubs, your order. The club sheet after a tracked shot, your Watch and your club stats all follow this lineup — pick from every club there is, or name your own.</div>
+  return `<div ${inline?'':'class="card" '}id="mybag" style="${inline?'padding:4px 0 10px':'border-color:var(--elec);box-shadow:4px 4px 0 var(--elec-dk)'}">
+    ${inline?'':`<h2 style="color:var(--elec-mid)">🎒 My Bag</h2>
+    <div class="tiny mb">Your clubs, your order. The club sheet after a tracked shot, your Watch and your club stats all follow this lineup — pick from every club there is, or name your own.</div>`}
     <div class="tiny mb" style="opacity:.85">Hold a club and drag it to move it.</div>
     ${rows}
     <div class="mt" style="display:flex;gap:6px;flex-wrap:wrap">
@@ -8003,7 +8007,6 @@ function vSettings(){
         <button class="ghost ${distUnit()==='m'?'sel':''}" onclick="if(distUnit()!=='m')toggleUnits()">Meters</button>
       </span></div>
   </div>
-  ${bagCardHTML()}
   <div class="card"><h2>🌬 Wind</h2>
     <div class="row"><div style="flex:1;min-width:0"><b>Wind on the GPS map</b>
       <div class="tiny">The wind arrows above FW / GIR — tap them to see the sight-line yardages adjusted for the wind. Off hides them on this phone only.</div></div>
@@ -8012,7 +8015,7 @@ function vSettings(){
   <div class="card"><h2>☀️ Screen</h2>
     <div class="row"><div style="flex:1;min-width:0"><b>Keep the screen awake during a round</b>
       <div class="tiny">Off saves the most battery.</div>
-      <b class="tiny" id="wakestate" style="display:block;margin-top:6px;color:${wakeState==='held'?'var(--green-mid)':(wakeState==='off'||wakeState==='noround')?'var(--ink2)':'var(--amber-bd)'}">${wakeLabel()}</b></div>
+      <b class="tiny" id="wakestate" style="display:${wakeLabel()?'block':'none'};margin-top:6px;color:${wakeState==='held'?'var(--green-mid)':(wakeState==='off'||wakeState==='noround')?'var(--ink2)':'var(--amber-bd)'}">${wakeLabel()}</b></div>
       <button class="ghost ${S.wakeOff?'':'sel'}" onclick="wakeSettingToggle()">${S.wakeOff?'Off':'On'}</button></div>
   </div>
   <div class="card"><h2>🧠 Course Amnesia</h2>
@@ -10328,8 +10331,9 @@ function vPlayers(){
       </div>
       <div class="row" style="border-top:none">
         <div style="flex:1;min-width:0"><b>🎒 My Bag</b>
-          <div class="tiny">The clubs you carry, and the order they appear in after a tracked shot. Yours only — you cannot set another golfer's clubs.</div></div>
-        <button class="ghost sel" style="flex:none" onclick="openMyBag()">Set my clubs</button></div>
+          <div class="tiny">Your clubs and their order.</div></div>
+        <button class="ghost sel" style="flex:none" onclick="openMyBag()">${bagOpen?'Done':'Set my clubs'}</button></div>
+      ${bagOpen?bagCardHTML(true):''}
       <div class="row" style="border-top:none;margin-bottom:10px">
         <button class="ghost sel" style="flex:1" onclick="saveEditMe()">Save</button>
         <button class="ghost" onclick="cancelEditMe()">Cancel</button>
@@ -10370,8 +10374,9 @@ function vPlayers(){
       <div class="row" style="border-top:none;display:block">${stdTeePicker(e.id,e.stdTee||stdTeeOf(e.teeName))}</div>
       ${libIsMe(e)?`<div class="row" style="border-top:none">
         <div style="flex:1;min-width:0"><b>🎒 My Bag</b>
-          <div class="tiny">The clubs you carry, and the order they show up in after a tracked shot.</div></div>
-        <button class="ghost sel" style="flex:none" onclick="openMyBag()">Set my clubs</button></div>`:''}
+          <div class="tiny">Your clubs and their order.</div></div>
+        <button class="ghost sel" style="flex:none" onclick="openMyBag()">${bagOpen?'Done':'Set my clubs'}</button></div>
+      ${bagOpen?bagCardHTML(true):''}`:''}
       ${(()=>{const f=friendEntryFor(e.name);
         if(!f)return `<div class="row" style="border-top:none"><div class="tiny">⚔️ Battle friend<div style="opacity:.75">Not registered yet — play a shared round together and they link automatically.</div></div></div>`;
         return `<div class="row" style="border-top:none">
