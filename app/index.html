@@ -437,7 +437,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789366353';
+const BUILD='1789366523';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -8006,10 +8006,9 @@ function vSettings(){
         <button class="ghost ${distUnit()==='m'?'sel':''}" onclick="if(distUnit()!=='m')toggleUnits()">Meters</button>
       </span></div>
   </div>
-  <div class="card"><h2>🌬 Wind</h2>
-    <div class="row"><div style="flex:1;min-width:0"><b>Wind on the GPS map</b>
-      <div class="tiny">The wind arrows above FW / GIR — tap them to see the sight-line yardages adjusted for the wind. Off hides them on this phone only.</div></div>
-    <button class="ghost ${S.windHide?'':'sel'}" onclick="windSettingToggle()">${S.windHide?'Off':'On'}</button></div>
+  <div class="card">
+    <div class="row" style="border-top:none;padding:0;align-items:center"><h2 style="margin:0">🌬 Wind on the map</h2>
+      <button class="ghost ${S.windHide?'':'sel'}" style="margin-left:auto" onclick="windSettingToggle()">${S.windHide?'Off':'On'}</button></div>
   </div>
   <div class="card"><h2>☀️ Screen</h2>
     <div class="row"><div style="flex:1;min-width:0"><b>Keep the screen awake during a round</b>
