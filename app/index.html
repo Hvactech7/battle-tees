@@ -437,7 +437,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789344887';
+const BUILD='1789360972';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1442,12 +1442,33 @@ function wakeSet(st){
   wakeState=st;
   try{const el=document.getElementById('wakestate');
     if(el){el.textContent=wakeLabel();
-      el.style.color=st==='held'?'var(--green-mid)':'var(--amber-bd)';}
+      el.style.color=st==='held'?'var(--green-mid)':(st==='off'||st==='noround')?'var(--ink2)':'var(--amber-bd)';}
   }catch(e){}
 }
+// THE SCREEN STAYS LIT FOR A ROUND, NOT FOR THE APP (9/13, battery). It used to be
+// asked for the moment the app opened and on every tap anywhere — Home, Settings,
+// past rounds — and held until the phone locked; the screen is the biggest drain on
+// a five-hour round. Now only a live round holds it (a GPS-only rangefinder round
+// counts), your own end lets it go, and Settings › Screen can turn it off.
+function wakeWanted(){
+  try{return !S.wakeOff&&!!(S.round&&S.round.started&&!S.round.myEndedAt)&&!isReview();}catch(e){return false;}
+}
+let wakeLetGo=false;
+function wakeRelease(){
+  try{
+    wakeSet(S.wakeOff?'off':'noround');
+    if(wakeLock){const w=wakeLock;wakeLock=null;wakeLetGo=true;w.release().catch(()=>{});}
+  }catch(e){}
+}
+// render() calls this: a round that ends, or the switch going off, lets go at once
+function wakeSync(){
+  try{if(!wakeWanted()&&(wakeLock||!['off','noround','unsupported'].includes(wakeState)))wakeRelease();}catch(e){}
+}
+function wakeSettingToggle(){set(()=>{S.wakeOff=!S.wakeOff;});if(S.wakeOff)wakeRelease();else wakeOn(true);}
 async function wakeOn(byHand){
   try{
     if(!('wakeLock' in navigator)){wakeSet('unsupported');return;}
+    if(!wakeWanted()){wakeRelease();return;}
     if(document.hidden||wakeLock)return;
     wakeLock=await navigator.wakeLock.request('screen');
     wakeSet('held');
@@ -1457,8 +1478,9 @@ async function wakeOn(byHand){
       // judgement — and nothing ever asked for it again, so the screen slept for
       // the rest of the round (Cypress 8/13, a 2.5h round on GPS). Ask again
       // while we are still the thing on screen.
-      if(!document.hidden){wakeSet('lost');setTimeout(()=>wakeOn(false),400);}
-      else wakeSet('idle');
+      if(wakeLetGo){wakeLetGo=false;return;}   // we let it go (round over / switched off): nothing to win back
+      if(!document.hidden&&wakeWanted()){wakeSet('lost');setTimeout(()=>wakeOn(false),400);}
+      else wakeSet(wakeWanted()?'idle':(S.wakeOff?'off':'noround'));
     });
   }catch(e){
     wakeLock=null;
@@ -1478,7 +1500,9 @@ async function wakeOn(byHand){
 document.addEventListener('touchend',()=>{if(!wakeLock)wakeOn(true);},{passive:true});
 document.addEventListener('click',()=>{if(!wakeLock)wakeOn(true);},{passive:true});
 function wakeLabel(){
-  return wakeState==='held'?'On — the screen will stay lit'
+  return wakeState==='off'?'Off'
+    :wakeState==='noround'?'Waiting for a round'
+    :wakeState==='held'?'On — the screen will stay lit'
     :wakeState==='unsupported'?'This browser cannot hold the screen awake'
     :wakeState==='denied'?'The phone refused. Low Power Mode does this — turn it off to keep the screen lit.'
     :wakeState==='lost'?'The phone took it back — asking again'
@@ -1494,9 +1518,9 @@ function wakeLabel(){
 let cameBackAt=0;
 function justResumed(){return Date.now()-cameBackAt<800;}
 document.addEventListener('visibilitychange',()=>{
-  if(document.hidden){wakeLock=null;return;}   // the OS already released it
+  if(document.hidden){wakeLock=null;gpsPauseHidden();return;}   // the OS already released it
   cameBackAt=Date.now();
-  wakeOn();autoEndStaleRound();kickSync();statFlush();try{autoBackupCheck();}catch(e){}
+  wakeOn();gpsResumeVisible();autoEndStaleRound();kickSync();statFlush();try{autoBackupCheck();}catch(e){}
 });
 wakeOn();
 // In a shared round, each phone claims the player slot matching its profile
@@ -3127,7 +3151,7 @@ function paceLine(){
   const mins=Math.max(0,Math.floor(((S.round.myEndedAt||Date.now())-t0)/60000));
   const el=`${Math.floor(mins/60)}:${String(mins%60).padStart(2,'0')}`;
   const thru=S.round.holes.filter(r=>r.confirmed).length;
-  return `<div class="tiny mt" style="text-align:center">⏱ ${el} on the course${thru?` · ${(mins/thru).toFixed(1)} min/hole`:''}</div>`;
+  return `<div class="tiny mt" data-pace="1" style="text-align:center">⏱ ${el} on the course${thru?` · ${(mins/thru).toFixed(1)} min/hole`:''}</div>`;
 }
 // Compact running stroke totals for the top of the hole screens.
 // Defaults to gross; the little toggle flips to net (remembered per phone).
@@ -4186,6 +4210,21 @@ function scoreNagToast(){
     // the arrow hangs over the word Score on the button below
     +'<div style="font-size:26px;line-height:1;margin-top:5px;text-align:right;padding-right:50px">⬇</div>';
   document.body.appendChild(d);
+}
+// GPS SLEEPS WITH THE APP (9/13, battery). A high-accuracy watch left running while
+// you are in Messages or Pandora keeps the location radio working for nothing
+// (iPhones freeze a backgrounded web app anyway; Android keeps going). Hidden: stop
+// it. Back on the map: start it again, the same way the first open does.
+let gpsPausedHidden=false;
+function gpsPauseHidden(){
+  try{if(mapWatch!=null&&navigator.geolocation){navigator.geolocation.clearWatch(mapWatch);mapWatch=null;gpsPausedHidden=true;}}catch(e){}
+}
+function gpsResumeVisible(){
+  try{
+    if(!gpsPausedHidden)return;
+    gpsPausedHidden=false;
+    if(S.screen==='map'&&LMAP&&mapWatch==null)startMapGps();
+  }catch(e){}
 }
 function teardownMap(){
   if(mapWatch!=null&&navigator.geolocation){navigator.geolocation.clearWatch(mapWatch);mapWatch=null;}
@@ -7198,6 +7237,7 @@ function render(){
   if(scr==='map')requestAnimationFrame(initHoleMap);
   if(scr==='shotview')requestAnimationFrame(initShotView);
   else teardownMap();
+  wakeSync();   // a round that just ended, or the switch going off, lets the screen sleep
 }
 function verifySheetHTML(){
   if(!verifyUI)return '';
@@ -7914,7 +7954,7 @@ const FAQ=[
   ['Yards or meters',
    'Settings › <b>Distances</b> switches every yardage in the app to <b>Meters</b> and back.'],
   ['Keep the screen on',
-   'Settings › <b>Screen</b>: <b>Keep the screen awake</b> holds the display on while the app is in front. iPhones grant this only after you have touched the screen, so it arms on your first tap.'],
+   'Settings › <b>Screen</b>: <b>Keep the screen awake during a round</b> holds the display on while you are playing — not on Home or Settings, and not after you end your round. Turn it <b>Off</b> to save the most battery. iPhones grant it only after you have touched the screen, so it arms on your first tap.'],
   ['Practice on an unmapped course',
    'Settings › <b>Course Amnesia</b>: <b>Ignore saved course maps</b> plays a course you have already mapped as if it were your first time, so you can practise mapping a hole. Nothing is deleted.'],
   ['Start over',
@@ -7970,9 +8010,10 @@ function vSettings(){
     <button class="ghost ${S.windHide?'':'sel'}" onclick="windSettingToggle()">${S.windHide?'Off':'On'}</button></div>
   </div>
   <div class="card"><h2>☀️ Screen</h2>
-    <div class="row"><div style="flex:1;min-width:0"><b>Keep the screen awake</b>
-      <div class="tiny">iPhones only grant this when you have touched the screen, so it arms on your first tap and holds from then on. If the phone takes it back mid-round the app asks again. Shown here because a refusal is silent — <b>Low Power Mode</b> is the one that really blocks it.</div></div>
-      <b class="tiny" id="wakestate" style="text-align:right;max-width:46%;color:${wakeState==='held'?'var(--green-mid)':'var(--amber-bd)'}">${wakeLabel()}</b></div>
+    <div class="row"><div style="flex:1;min-width:0"><b>Keep the screen awake during a round</b>
+      <div class="tiny">Off saves the most battery.</div>
+      <b class="tiny" id="wakestate" style="display:block;margin-top:6px;color:${wakeState==='held'?'var(--green-mid)':(wakeState==='off'||wakeState==='noround')?'var(--ink2)':'var(--amber-bd)'}">${wakeLabel()}</b></div>
+      <button class="ghost ${S.wakeOff?'':'sel'}" onclick="wakeSettingToggle()">${S.wakeOff?'Off':'On'}</button></div>
   </div>
   <div class="card"><h2>🧠 Course Amnesia</h2>
     <div class="row"><div style="flex:1;min-width:0"><b>Ignore saved course maps</b>
@@ -8359,6 +8400,7 @@ function openBfWatch(code){
 }
 function bfPoll(){
   if(!bfWatch||S.screen!=='bfwatch'){clearInterval(bfTimer);bfTimer=null;return;}
+  if(document.visibilityState==='hidden')return;   // nobody is watching (9/13, battery): the next tick after you come back fetches
   const finished=bfDocFinal(bfWatch.entry&&bfWatch.entry.endedAt,bfWatch.doc,bfWatch.docAt);
   // A final archive stops the 20-second polling, but opening it still peeks ONCE:
   // Apple Mountain 9/6 — the copy cached at the moment the round ended carried a
@@ -9100,7 +9142,7 @@ function openGatePick(){
   sendHello();grabCoords();
   gateSnapshot();
   clearInterval(gatePick.timer);
-  gatePick.timer=setInterval(()=>{gateSnapshot();render();},15000);
+  gatePick.timer=setInterval(()=>{if(document.visibilityState==='hidden')return;gateSnapshot();render();},15000);   // paused in the background (9/13)
   render();
 }
 function closeGatePick(){gatePick.open=false;clearInterval(gatePick.timer);gatePick.timer=null;render();}
@@ -14649,7 +14691,20 @@ const ART={};
   }).catch(()=>{});
 });
 function art(f){return ART[f]||f;}
-setInterval(()=>{if(S.round.started&&!S.round.myEndedAt&&S.round.startedAt&&(S.screen==='hole'||S.screen==='standings'))render();},60000);
+// THE ROUND CLOCK TICKS IN PLACE (9/13, battery). This redrew the whole hole or
+// Standings screen every minute just to move the ⏱ line (it was added with the
+// clock on 7/10); now only that line is repainted, and nothing runs while the app
+// is in the background.
+setInterval(()=>{
+  if(document.visibilityState==='hidden'||!S.round.started||S.round.myEndedAt||!S.round.startedAt)return;
+  if(S.screen!=='hole'&&S.screen!=='standings')return;
+  try{
+    const els=document.querySelectorAll('[data-pace]');
+    if(!els.length){render();return;}
+    const h=paceLine();
+    els.forEach(e=>{if(e.outerHTML!==h)e.outerHTML=h;});
+  }catch(e){render();}
+},60000);
 // Retention, without needing to cross-reference the whole event log: how many
 // days since this device first opened the app, and how many separate days it has
 // been opened on. A beta lives or dies on whether people come BACK.
