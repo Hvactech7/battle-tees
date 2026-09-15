@@ -438,7 +438,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789428378';
+const BUILD='1789432109';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -8439,6 +8439,8 @@ function vBattlefield(){
    :L.map(e=>{
       const day=e.at?new Date(e.at*1000).toLocaleDateString(undefined,{month:'short',day:'numeric'}):'';
       const when=e.live?'<span style="color:var(--elec)">● live</span> · playing '+dur(e):(day?day+' · ':'')+'finished · '+dur(e);
+      const when2=e.live?'<span style="color:var(--elec)">● live</span> · playing '+dur(e)+(day?' · '+day:''):'finished · '+dur(e)+(day?' · '+day:'');
+      const group=Math.max((e.players||[]).length,(e.sum||[]).filter(x=>x&&x.name).length)>1;
       // one card per PLAYER in the round — gross to par where they stand right
       // now, and the same highlights the end-of-round splash shows. Zero
       // counts are omitted, exactly as on the splash.
@@ -8464,8 +8466,12 @@ function vBattlefield(){
         :`<div class="tiny" style="padding-top:6px;color:var(--ink3)">${e.live?'No holes carded yet.':'No scores were recorded.'}</div>`;
       return `<div class="card" style="padding:12px 14px;cursor:pointer" onclick="openBfWatch('${esc(e.code)}')">
       <div class="row" style="border-top:none">
-        <div style="flex:1;min-width:0"><b style="font-family:Rajdhani,sans-serif;font-size:20px">${esc(e.starter)}</b>
-          <div class="tiny">${esc(e.course||'')} · ${esc(e.game||'')} · ${when}</div></div>
+        <div style="flex:1;min-width:0">${group
+          // a group's card leads with the course — the players are all listed below (Nathan 9/14)
+          ?`<b style="font-family:Rajdhani,sans-serif;font-size:22px;line-height:1.1">${esc(e.course||'Battle')}</b>
+          <div class="tiny">${[esc(e.game||''),when2].filter(Boolean).join(' · ')}</div>`
+          :`<b style="font-family:Rajdhani,sans-serif;font-size:20px">${esc(e.starter)}</b>
+          <div class="tiny">${esc(e.course||'')} · ${esc(e.game||'')} · ${when}</div>`}</div>
         <span class="pill wolf" style="flex:none">${e.live?'Watch':'View'}</span>
         ${e._archived?`<button class="ghost danger" style="flex:none;margin-left:6px" onclick="event.stopPropagation();bfForget('${esc(e.code)}')">✕</button>`:''}
       </div>${cards}</div>`;}).join('')}
