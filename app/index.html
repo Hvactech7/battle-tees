@@ -486,7 +486,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789454888';
+const BUILD='1789455383';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -6589,7 +6589,7 @@ function elevReady(){return elevMode&&!!elevEnsure();}
 // THE distance calculation for the sight line: actual → mountain (elevation, altitude) → wind arrows (temperature, wind)
 function playsLike(from,to){
   const yds=mDist(from,to)*1.09361;let plays=yds,adj=false;
-  // the mountain: the ground's rise and fall, then the course's altitude against your home
+  // the mountain: the ground's rise and fall, then the course's altitude above sea level
   if(elevMode){const a=elevAt(from),b=elevAt(to);if(a!=null&&b!=null){plays+=(b-a)*ELEV_YDS_PER_FT;adj=true;}
     const f=altFactor();if(Math.abs(f-1)>=0.002){plays*=f;adj=true;}}
   // the wind arrows: the temperature, then the wind itself
@@ -6603,9 +6603,8 @@ function playsLike(from,to){
 // altitude with the MOUNTAIN (the ground). Never shown as figures.
 // Temperature: TrackMan data (Andrew Rice) ~2 y per 10°F on a 250 y drive, ~1 y on a
 // 6-iron -> 0.7% per 10°F from 70°F; warmer air carries farther, so it plays shorter.
-// Altitude: ~1.1% per 1,000 ft (2.5 y per 1,000 ft on a 250 y drive; Shot Pattern
-// says 1.2%), measured against YOUR home altitude, because the yardages you know were
-// learned there: the middle altitude of your saved rounds, 3 needed, none until then.
+// Altitude: ~1.1% per 1,000 ft above SEA LEVEL (2.5 y per 1,000 ft on a 250 y drive;
+// Shot Pattern says 1.2%). Nathan 9/14: sea level is the baseline, not a "home" course.
 const AIR_TEMP_BASE_F=70,AIR_PER_F=0.0007,AIR_PER_FT=0.000011;
 function altCache(){try{return JSON.parse(localStorage.getItem('btAlt')||'{}')||{};}catch(e){return {};}}
 function altRemember(id,ft){
@@ -6629,16 +6628,6 @@ function courseAltFt(c){
   const m=altCache();if(m[c.id]!=null)return m[c.id];
   altLookup(c);return null;
 }
-function homeAltFt(){
-  const vals=[];
-  (S.history||[]).forEach(e=>{
-    if(!e)return;let v=e.altFt;
-    if(v==null&&e.courseSnap&&e.courseSnap.id){v=altCache()[e.courseSnap.id];if(v==null)altLookup(e.courseSnap);}
-    if(v!=null&&isFinite(v))vals.push(+v);
-  });
-  if(vals.length<3)return null;
-  vals.sort((a,b)=>a-b);return vals[vals.length>>1];
-}
 function airTempF(){
   const W=S.wx;if(!W||W.key!==windKey())return null;
   const now=Date.now(),hs=W.hourly||[];let h=null;hs.forEach(p=>{if(p.t<=now)h=p;});
@@ -6647,7 +6636,7 @@ function airTempF(){
 }
 const airClamp=f=>Math.min(1.15,Math.max(0.85,f));
 function tempFactor(){const t=airTempF();return t==null?1:airClamp(1-AIR_PER_F*(t-AIR_TEMP_BASE_F));}
-function altFactor(){const a=courseAltFt(),home=homeAltFt();return (a==null||home==null)?1:airClamp(1-AIR_PER_FT*(a-home));}
+function altFactor(){const a=courseAltFt();return a==null?1:airClamp(1-AIR_PER_FT*a);}   // feet above sea level
 function toggleElevMode(){
   if(!elevUrlFor(S.course)||ELEV[S.course.id]==='none'){shotToast('No elevation data for this course yet');return;}
   if(!elevEnsure()){shotToast('Loading elevation — try again in a moment');return;}
@@ -11173,8 +11162,7 @@ function archiveRound(){
     // the course as played, minus its map blob (geo re-fetches by id/geoUrl):
     // if the course is later removed from Courses, the review still knows
     // exactly what it was, not whatever the phone has chosen since
-    courseSnap:(()=>{const c=clone(S.course);delete c.geo;return c;})(),
-    altFt:courseAltFt()   // where it was played: your home altitude is the middle of these (plays-like air)
+    courseSnap:(()=>{const c=clone(S.course);delete c.geo;return c;})()
   };
   S.history=(S.history||[]).filter(e=>e.id!==entry.id);
   S.history.unshift(entry);
