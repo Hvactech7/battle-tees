@@ -206,15 +206,15 @@
   .bfcmCard{display:flex;flex-direction:column;max-height:88dvh}
   .bfcmCard .vfTitle small{font:600 13px Inter,sans-serif;color:var(--ink3);margin-left:6px}
   .bfcmList{overflow-y:auto;display:flex;flex-direction:column;gap:6px;min-height:60px;max-height:46dvh;margin:6px 0 10px}
-  .bfcm{position:relative;background:#141c2a;border:1px solid #2a3448;border-radius:10px;padding:7px 38px 8px 10px;font-size:14px;line-height:1.35;overflow-wrap:anywhere;-webkit-user-select:text;user-select:text}
+  .bfcm{position:relative;background:#141c2a;border:1px solid #2a3448;border-radius:10px;padding:7px 38px 8px 10px;font-size:16.5px;line-height:1.4;overflow-wrap:anywhere;-webkit-user-select:text;user-select:text}
   .bfcm.mine{border-color:var(--elec-dk);background:#10223a}
-  .bfcmBy{font:700 15px Rajdhani,Inter,sans-serif;color:var(--green-mid)}
-  .bfcmAt{color:var(--ink3);font-size:11px;margin-left:6px}
+  .bfcmBy{font:700 18px Rajdhani,Inter,sans-serif;color:var(--green-mid)}
+  .bfcmAt{color:var(--ink3);font-size:12px;margin-left:6px}
   .bfmore{position:absolute;top:1px;right:1px;width:36px;height:36px;background:none;border:0;color:var(--ink3);font:700 17px/1 Inter,sans-serif}
   .bfmenu{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}
   .bfmenu button{min-height:36px;padding:0 12px;border-radius:8px;background:none;border:1px solid var(--line);color:var(--ink2);font:600 13px Inter,sans-serif}
   .bfmenu .danger{color:var(--red);border-color:#6a2a24}
-  .bfcmText{width:100%;resize:none;background:var(--bg);border:1px solid var(--line);border-radius:10px;color:var(--ink);font:16px/1.4 Inter,sans-serif;padding:10px;-webkit-user-select:text;user-select:text}
+  .bfcmText{width:100%;resize:none;background:var(--bg);border:1px solid var(--line);border-radius:10px;color:var(--ink);font:16px/1.35 Inter,sans-serif;padding:8px 10px;height:62px;-webkit-user-select:text;user-select:text}
   .bfcmMeta{display:flex;justify-content:space-between;gap:10px;font-size:12px;color:var(--ink3);margin-top:4px;min-height:16px}
   .bfcmErr.err{color:var(--red)}
   .bfcmBtns{display:flex;gap:8px;margin-top:10px}
@@ -474,7 +474,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789440671';
+const BUILD='1789441116';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -8555,7 +8555,7 @@ function openBfComments(code,t){
       <button class="big" onclick="bfCmRulesOk()">OK, post it</button><button class="ghost mt" style="width:100%" onclick="bfCmRules(false)">Cancel</button></div>
     <div id="bfcmCompose">
       <label for="bfcmText" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Comment</label>
-      <textarea id="bfcmText" class="bfcmText" maxlength="140" rows="3" placeholder="Say something to ${t==='round'?'everyone':who}" oninput="bfCmInput()"></textarea>
+      <textarea id="bfcmText" class="bfcmText" maxlength="140" rows="2" placeholder="Say something to ${t==='round'?'everyone':who}" oninput="bfCmInput()"></textarea>
       <div class="bfcmMeta"><span id="bfcmErr" class="bfcmErr"></span><span id="bfcmCount">0/140</span></div>
       <div class="bfcmBtns"><button class="ghost" onclick="closeBfComments()">Close</button><button class="big" onclick="bfCmSend()">Send</button></div>
     </div></div>`;
@@ -8581,8 +8581,9 @@ function bfCmSend(){
   relayBattle({op:'comment',pid:myPid(),name:(S.me&&S.me.name)||'',code:c.code,target:c.t,text}).then(r=>{
     c.sending=false;if(bfCm!==c)return;
     if(r&&r.ok&&r.comment){
-      if(!Array.isArray(c.list))c.list=[];c.list.push(r.comment);c.note='';
-      ta.value='';bfCmInput();bfSocBump(c.code,c.t,1);bfCmPaint(true);
+      // posting closes the popup (Nathan 9/14); the card's count and caption say it landed
+      bfSay[c.code]=`Comment posted on ${c.t==='round'?'the round':bfWhoFor(c.code,c.t)}.`;
+      closeBfComments();bfSocBump(c.code,c.t,1);
     }else bfCmErr((r&&r.error)||'Could not post. Try again.');
   }).catch(()=>{c.sending=false;bfCmErr('Could not post. Check your signal.');});
 }
