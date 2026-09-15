@@ -486,7 +486,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789456060';
+const BUILD='1789458351';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -6565,9 +6565,28 @@ let PLAYSLIKE_OPEN=true;
 function playsLikeEntitled(){return PLAYSLIKE_OPEN||!!(S.round&&S.round.premium);}
 const ELEV_YDS_PER_FT=1/3;   // the common rule: a yard for every three feet up or down
 const HOSTED_ELEV={'darkhorse':'/geo/elev/10762.json','rancho-solano':'/geo/elev/rancho-solano.json'};
+// Every other course with a grid (.build/elevbatch.py): the manifest on the site says
+// which, the grid itself lives in R2 behind the relay (too big for the website: ~1.2 GB
+// for the whole country). A fetched grid is kept in Cache Storage so a round that
+// starts with no signal still has its elevation.
+const ELEV_REMOTE='https://relay.vexcomllc.com/elev/';
+let ELEV_MANIFEST=null,elevManifestP=null;
+function elevManifestLoad(){
+  if(ELEV_MANIFEST||elevManifestP)return elevManifestP;
+  elevManifestP=fetch('/geo/elev/index.json').then(r=>r.ok?r.json():{}).then(m=>{
+    ELEV_MANIFEST=m&&typeof m==='object'?m:{};
+    if(S.screen==='map'&&elevUrlFor(S.course))render();
+  }).catch(()=>{elevManifestP=null;});
+  return elevManifestP;
+}
 let elevMode=(()=>{try{return localStorage.getItem('btElev')==='on';}catch(e){return false;}})();
 const ELEV={};   // course id -> decoded grid | 'none' | Promise (loading)
-function elevUrlFor(c){return (c&&(c.elevUrl||HOSTED_ELEV[c.id]))||null;}
+function elevUrlFor(c){
+  if(!c)return null;
+  if(c.elevUrl||HOSTED_ELEV[c.id])return c.elevUrl||HOSTED_ELEV[c.id];
+  if(!ELEV_MANIFEST){elevManifestLoad();return null;}
+  return ELEV_MANIFEST[c.id]?ELEV_REMOTE+ELEV_MANIFEST[c.id]:null;
+}
 function elevDecode(js){
   const bin=atob(js.d),n=bin.length>>1,a=new Uint16Array(n);
   for(let i=0;i<n;i++)a[i]=bin.charCodeAt(2*i)|(bin.charCodeAt(2*i+1)<<8);
@@ -6579,7 +6598,12 @@ function elevEnsure(course){
   const hit=ELEV[course.id];
   if(hit)return (hit==='none'||hit instanceof Promise)?null:hit;
   let u=url;if(!/^(https?:)?\/\//i.test(u)&&u[0]!=='/')u='/'+u;
-  ELEV[course.id]=fetch(u).then(r=>r.ok?r.json():null).then(js=>{
+  const viaCache=()=>{try{return caches.open('bt-elev').then(c=>c.match(u)).then(r=>r?r.json():null);}catch(e){return Promise.resolve(null);}};
+  ELEV[course.id]=fetch(u).then(r=>{
+    if(!r.ok)return viaCache();
+    try{const cl=r.clone();caches.open('bt-elev').then(c=>c.put(u,cl)).catch(()=>{});}catch(e){}
+    return r.json();
+  }).catch(()=>viaCache()).then(js=>{
     ELEV[course.id]=(js&&js.d)?elevDecode(js):'none';
     if(S.course&&S.course.id===course.id)windRepaint();
   }).catch(()=>{delete ELEV[course.id];});
