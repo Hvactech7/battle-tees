@@ -486,7 +486,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789453038';
+const BUILD='1789453432';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -6555,7 +6555,7 @@ function paintWindRose(){
 // F/M/B numbers stay actual, as with wind. No network during a round: the grid
 // is fetched once beside the course's geo file.
 const ELEV_YDS_PER_FT=1/3;   // the common rule: a yard for every three feet up or down
-const HOSTED_ELEV={'darkhorse':'/geo/elev/10762.json'};
+const HOSTED_ELEV={'darkhorse':'/geo/elev/10762.json','rancho-solano':'/geo/elev/rancho-solano.json'};
 let elevMode=(()=>{try{return localStorage.getItem('btElev')==='on';}catch(e){return false;}})();
 const ELEV={};   // course id -> decoded grid | 'none' | Promise (loading)
 function elevUrlFor(c){return (c&&(c.elevUrl||HOSTED_ELEV[c.id]))||null;}
