@@ -185,6 +185,42 @@
   @keyframes livePulse{0%,100%{opacity:1}50%{opacity:.45}}
   @keyframes cheerPop{from{transform:scale(.3) rotate(-12deg);opacity:0}to{transform:none;opacity:1}}
   @keyframes vfRise{from{opacity:0;transform:translateY(16px) scale(.98)}to{opacity:1;transform:none}}
+  /* Battlefield reactions + comments (Nathan 9/14): our own icons, one reaction per person per row */
+  .bfi{width:28px;height:28px;color:var(--green-mid);overflow:visible;flex:none}
+  .bfrx{position:relative;display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:2px 0 8px}
+  .bfpill{display:inline-flex;align-items:center;gap:4px;height:36px;padding:0 10px 0 5px;border-radius:999px;background:#232e41;border:1px solid var(--line);font:700 15px Rajdhani,Inter,sans-serif;color:var(--ink)}
+  .bfpill.mine{background:var(--elec-lt);border-color:var(--elec);color:var(--elec-mid)}
+  .bfadd,.bfcbtn{display:inline-flex;align-items:center;gap:5px;height:36px;padding:0 12px;border-radius:999px;background:none;border:1px dashed #4a5877;color:var(--ink3);font:600 12.5px Inter,sans-serif}
+  .bfcbtn{border-style:solid;color:var(--ink2)}
+  .bfpop{position:absolute;left:-6px;bottom:calc(100% - 4px);z-index:6;display:flex;padding:4px;background:#0b111c;border:1px solid var(--elec-dk);border-radius:999px;box-shadow:0 8px 24px rgba(0,0,0,.55);animation:vfRise .16s ease-out both}
+  .bfpick{position:relative;width:44px;height:46px;display:grid;place-items:center;border-radius:50%;background:none;border:0;padding:0}
+  .bfpick .bfi{width:40px;height:40px}
+  .bfpick small{position:absolute;bottom:calc(100% + 2px);left:50%;transform:translateX(-50%);white-space:nowrap;font:700 9px Rajdhani,sans-serif;letter-spacing:1px;text-transform:uppercase;background:var(--ink);color:var(--bg);padding:1px 5px;border-radius:4px;opacity:0;pointer-events:none}
+  .bfpick:hover small,.bfpick:focus-visible small,.bfpick:active small{opacity:1}
+  .bfpick.mine{background:var(--elec-lt)}
+  .bfpick.fit::after{content:"";position:absolute;bottom:-1px;left:50%;width:6px;height:6px;margin-left:-3px;border-radius:50%;background:var(--amber)}
+  .bfround{border-top:2px solid var(--green-dk);margin-top:4px;padding-top:8px}
+  .bfroundT{font:700 12px Rajdhani,sans-serif;letter-spacing:2px;color:var(--green-mid);margin-bottom:4px}
+  .bfsay{font-size:15px;line-height:1.4;font-weight:500;color:var(--ink);padding:2px 0 4px}
+  .bfsay b{font:700 17px Rajdhani,Inter,sans-serif;color:var(--green-mid)}
+  .bfcmCard{display:flex;flex-direction:column;max-height:88dvh}
+  .bfcmCard .vfTitle small{font:600 13px Inter,sans-serif;color:var(--ink3);margin-left:6px}
+  .bfcmList{overflow-y:auto;display:flex;flex-direction:column;gap:6px;min-height:60px;max-height:46dvh;margin:6px 0 10px}
+  .bfcm{position:relative;background:#141c2a;border:1px solid #2a3448;border-radius:10px;padding:7px 38px 8px 10px;font-size:14px;line-height:1.35;overflow-wrap:anywhere;-webkit-user-select:text;user-select:text}
+  .bfcm.mine{border-color:var(--elec-dk);background:#10223a}
+  .bfcmBy{font:700 15px Rajdhani,Inter,sans-serif;color:var(--green-mid)}
+  .bfcmAt{color:var(--ink3);font-size:11px;margin-left:6px}
+  .bfmore{position:absolute;top:1px;right:1px;width:36px;height:36px;background:none;border:0;color:var(--ink3);font:700 17px/1 Inter,sans-serif}
+  .bfmenu{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}
+  .bfmenu button{min-height:36px;padding:0 12px;border-radius:8px;background:none;border:1px solid var(--line);color:var(--ink2);font:600 13px Inter,sans-serif}
+  .bfmenu .danger{color:var(--red);border-color:#6a2a24}
+  .bfcmText{width:100%;resize:none;background:var(--bg);border:1px solid var(--line);border-radius:10px;color:var(--ink);font:16px/1.4 Inter,sans-serif;padding:10px;-webkit-user-select:text;user-select:text}
+  .bfcmMeta{display:flex;justify-content:space-between;gap:10px;font-size:12px;color:var(--ink3);margin-top:4px;min-height:16px}
+  .bfcmErr.err{color:var(--red)}
+  .bfcmBtns{display:flex;gap:8px;margin-top:10px}
+  .bfcmBtns .ghost{flex:1}
+  .bfcmBtns .big{flex:2;margin:0}
+  .linkish{background:none;border:0;color:var(--elec-mid);font-weight:600;padding:6px 4px;min-height:36px}
   @media (prefers-reduced-motion:reduce){.vfWrap,.vfCard{animation:none}}
   /* rules cards render the same sections as battletees.app/rules */
   .rsec{margin-top:16px}
@@ -438,7 +474,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789432109';
+const BUILD='1789440671';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -7168,6 +7204,7 @@ function render(){
   if(S.screen!=='gate'&&gatePick.timer){clearInterval(gatePick.timer);gatePick.timer=null;gatePick.open=false;}
   const el=$('#app');
   const scr=S.screen;
+  if(bfCm&&scr!=='bfield')closeBfComments();   // the comments popup belongs to the Battlefield list
   // iOS Shake-to-Undo mitigation: on the play screens (no text inputs) drop any
   // lingering first-responder field so a cart-path bump has no 'Undo Typing' to
   // offer. The full disable is Settings>Accessibility>Touch>Shake to Undo>Off.
@@ -8396,6 +8433,180 @@ function bfHomeBtnHTML(){
   const chip=live?`<span class="livechip">LIVE</span>`:'';
   return `<button class="ghost hb${live?' hb-live':''}" style="width:100%;padding:12px;margin-bottom:16px" onclick="openBattlefield()">${chip} ⚔️ Community Battlefield ⚔️ ${chip}</button>`;
 }
+// ---------- Battlefield reactions + comments (Nathan 9/14) ----------
+// A friend drops ONE reaction on each player's row and one on the whole round
+// (tap another icon to switch, tap yours to take it back) and types comments in
+// a popup. The relay (books.js bfSocialOp) decides who may see a round and owns
+// the word filter, report and block; the filter is mirrored here so a swear
+// never makes the trip. The icons are our own drawings (9/14 mockup), not emoji.
+const BF_ICONS=[['fire','On Fire'],['splash','Splash'],['beer','Buy a Round'],['trophy','Champ'],['axe','Battle Time'],['shield','Shield Up'],['pirate','Going Down']];
+const BF_ICON_NAME=Object.fromEntries(BF_ICONS);
+const BF_SPRITE='<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><g id="bfi-dimples" fill="#cfc7ae"><circle cx="-3" cy="-2" r="1"/><circle cx="2" cy="-3" r="1"/><circle cx="0" cy="2" r="1"/><circle cx="4" cy="1.5" r="1"/><circle cx="-4" cy="3" r="1"/></g><symbol id="bfi-fire" viewBox="0 0 48 48"><path d="M9 31c-2-8 1-14 5-18 0 4 2 6 4 7-1-6 2-12 6-18 1 6 4 10 6 13 1-3 1-5 0-8 5 4 9 11 8 18-1 4-2 6-4 8z" fill="#ff8a2b" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M14 30c-1-5 1-8 3-10 0 3 1 4 3 5 0-4 1-8 4-11 1 4 3 6 4 8 1-2 1-3 1-5 3 3 4 7 3 11z" fill="#ffd66b"/><circle cx="24" cy="33" r="12" fill="#f4efe0" stroke="currentColor" stroke-width="2.2"/><use href="#bfi-dimples" transform="translate(24 34) scale(1.5)"/><path d="M12.5 38c1 3 3 5 5 6.5M35.5 38c-1 3-3 5-5 6.5" stroke="#ff8a2b" stroke-width="2.2" stroke-linecap="round" fill="none"/></symbol><symbol id="bfi-splash" viewBox="0 0 48 48"><path d="M14 26c-3-6-6-9-10-11M34 26c3-6 6-9 10-11M18 22c-1-6-2-9-5-13M30 22c1-6 2-9 5-13" stroke="#4aa8ff" stroke-width="2.6" stroke-linecap="round" fill="none"/><g fill="#7cc3ff"><circle cx="5" cy="10" r="1.8"/><circle cx="43" cy="10" r="1.8"/><circle cx="11" cy="5" r="1.4"/><circle cx="37" cy="5" r="1.4"/></g><path d="M2 30q5.5-3 11 0t11 0t11 0t11 0V46H2z" fill="#0e3d75" stroke="#4aa8ff" stroke-width="1.6"/><circle cx="24" cy="27" r="8" fill="#f4efe0" stroke="currentColor" stroke-width="2"/><use href="#bfi-dimples" transform="translate(24 25) scale(1.1)"/><path d="M2 32q5.5-3 11 0t11 0t11 0t11 0V46H2z" fill="#1d5fb0" stroke="#7cc3ff" stroke-width="1.8" stroke-linejoin="round"/><path d="M8 40q4-2 8 0M28 39q4-2 8 0" stroke="#7cc3ff" stroke-width="1.4" fill="none" stroke-linecap="round"/></symbol><symbol id="bfi-beer" viewBox="0 0 48 48"><g transform="rotate(-14 16 30)"><path d="M6 25H3a3 3 0 0 0-3 3v4a3 3 0 0 0 3 3h3" fill="none" stroke="currentColor" stroke-width="2.4"/><rect x="6" y="19" width="16" height="23" rx="2" fill="#e8b23a" stroke="currentColor" stroke-width="2.2"/><path d="M11 25v11M17 25v11" stroke="#a87a18" stroke-width="1.8" stroke-linecap="round"/><path d="M5 21a4 4 0 0 1 4-6 4 4 0 0 1 8-1 4 4 0 0 1 6 3v4z" fill="#f4efe0" stroke="currentColor" stroke-width="1.8"/></g><g transform="rotate(14 32 30)"><path d="M42 25h3a3 3 0 0 1 3 3v4a3 3 0 0 1-3 3h-3" fill="none" stroke="currentColor" stroke-width="2.4"/><rect x="26" y="19" width="16" height="23" rx="2" fill="#e8b23a" stroke="currentColor" stroke-width="2.2"/><path d="M31 25v11M37 25v11" stroke="#a87a18" stroke-width="1.8" stroke-linecap="round"/><path d="M25 21v-4a4 4 0 0 1 6-3 4 4 0 0 1 8 1 4 4 0 0 1 4 6z" fill="#f4efe0" stroke="currentColor" stroke-width="1.8"/></g><g fill="#f4efe0"><circle cx="24" cy="8" r="2.3"/><circle cx="18" cy="4" r="1.5"/><circle cx="30" cy="4" r="1.5"/></g></symbol><symbol id="bfi-trophy" viewBox="0 0 48 48"><path d="M14 9H8a6 6 0 0 0 6 11M34 9h6a6 6 0 0 1-6 11" fill="none" stroke="currentColor" stroke-width="2.6"/><path d="M14 5h20v13a10 10 0 0 1-20 0z" fill="#e8c552" stroke="currentColor" stroke-width="2.2"/><path d="M18 8v9" stroke="#fff4c2" stroke-width="1.6" stroke-linecap="round"/><path d="M24 9.5l1.6 3.3 3.6.5-2.6 2.5.6 3.6L24 17.7l-3.2 1.7.6-3.6-2.6-2.5 3.6-.5z" fill="#fff4c2"/><path d="M22 28h4v6h-4z" fill="#e8c552" stroke="currentColor" stroke-width="1.6"/><path d="M15 34h18v5H15z" fill="#6e5716" stroke="currentColor" stroke-width="2"/><path d="M12 39h24v5H12z" fill="#2a3448" stroke="currentColor" stroke-width="2"/></symbol><symbol id="bfi-axe" viewBox="0 0 48 48"><g transform="translate(24 24) rotate(-22) scale(.9) translate(-24 -24)"><rect x="22.4" y="4" width="3.6" height="41" rx="1.6" fill="#b07a45" stroke="currentColor" stroke-width="1.8"/><rect x="22" y="35" width="4.4" height="2" fill="#6e4a26"/><rect x="22" y="39" width="4.4" height="2" fill="#6e4a26"/><path d="M22 10C15 8 9 6 4 4c-2.5 7-2.5 15 0 22 5-2 11-4 18-6z" fill="#c9d1de" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/><path d="M26.4 10c7-2 13-4 18-6 2.5 7 2.5 15 0 22-5-2-11-4-18-6z" fill="#c9d1de" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/><path d="M6.2 7.5c-1.4 6-1.4 12 0 16M42.2 7.5c1.4 6 1.4 12 0 16" stroke="#eef2f7" stroke-width="1.4" fill="none" stroke-linecap="round"/><rect x="20.4" y="8.5" width="7.6" height="13" rx="1.5" fill="#9aa6b8" stroke="currentColor" stroke-width="1.8"/><path d="M24.2 0.5l2.2 4.5h-4.4z" fill="#c9d1de" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><circle cx="24.2" cy="15" r="2" fill="#e8c552"/><circle cx="24.2" cy="45.6" r="2.2" fill="#e8c552" stroke="currentColor" stroke-width="1.2"/></g></symbol><symbol id="bfi-shield" viewBox="0 0 48 48"><clipPath id="bfShA"><path d="M24 3L42 8v14c0 11-8 19-18 23C14 41 6 33 6 22V8z"/></clipPath><path d="M24 3L42 8v14c0 11-8 19-18 23C14 41 6 33 6 22V8z" fill="#0e3d75"/><g clip-path="url(#bfShA)" fill="#e8c552"><rect x="0" y="0" width="24" height="23"/><rect x="24" y="23" width="24" height="25"/></g><path d="M24 7L38.5 11v11c0 9-6.3 15.5-14.5 19C15.8 37.5 9.5 31 9.5 22V11z" fill="none" stroke="#6e5716" stroke-width="1.2"/><path d="M24 3L42 8v14c0 11-8 19-18 23C14 41 6 33 6 22V8z" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/><circle cx="24" cy="23" r="6" fill="#f4efe0" stroke="currentColor" stroke-width="1.8"/><use href="#bfi-dimples" transform="translate(24 23) scale(.9)"/></symbol><symbol id="bfi-pirate" viewBox="0 0 48 48"><path d="M6 44L42 30M6 30l36 14" stroke="#e8c552" stroke-width="3" stroke-linecap="round"/><g fill="#e8c552"><circle cx="5" cy="44.5" r="2.4"/><circle cx="43" cy="29.5" r="2.4"/><circle cx="5" cy="29.5" r="2.4"/><circle cx="43" cy="44.5" r="2.4"/></g><path d="M15 29h18v8a3 3 0 0 1-3 3H18a3 3 0 0 1-3-3z" fill="#f4efe0" stroke="currentColor" stroke-width="2.2"/><path d="M20 33v6M24 33v6M28 33v6" stroke="currentColor" stroke-width="1.6"/><circle cx="24" cy="19" r="15" fill="#f4efe0" stroke="currentColor" stroke-width="2.2"/><use href="#bfi-dimples" transform="translate(30 10)"/><use href="#bfi-dimples" transform="translate(15 10) scale(.8)"/><circle cx="30" cy="21" r="4" fill="#141c2a"/><path d="M6 15Q18 11 42 12" stroke="#0b0f18" stroke-width="2.2" fill="none"/><ellipse cx="18" cy="21" rx="5.5" ry="4.8" fill="#0b0f18"/><path d="M24 26l-2.2 3.2h4.4z" fill="#141c2a"/></symbol></defs></svg>';
+const BF_BUBBLE='<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg>';
+let bfSoc={},bfPick=null,bfSay={},bfCm=null;
+const bfArg=s=>encodeURIComponent(String(s)).replace(/'/g,'%27');
+const bfIcon=id=>`<svg class="bfi" viewBox="-2 -2 52 52" aria-hidden="true"><use href="#bfi-${id}"/></svg>`;
+function bfTarget(x){return (x&&x.pid)||('n:'+String((x&&x.name)||'').slice(0,40));}
+// the icon that fits the player's round goes first in their bar
+function bfFitIcon(x,ppl){
+  try{
+    if(ppl.length>1&&x.thru>=3&&x.toPar===Math.min(...ppl.map(p=>p.toPar)))return 'trophy';
+    if((x.eagles||0)+(x.birdies||0)>=2)return 'fire';
+    if(x.longShot&&x.longShot.yds>=260)return 'axe';
+    if(x.thru>=3&&x.toPar>=x.thru*1.5)return 'pirate';
+    if((x.bogeys||0)>=3)return 'shield';
+  }catch(e){}
+  return null;
+}
+function bfWhoFor(code,t){
+  if(t==='round')return 'the round';
+  const e=(Array.isArray(bfList)?bfList:[]).find(x=>x.code===code);
+  const p=((e&&e.sum)||[]).find(x=>bfTarget(x)===t);
+  return p?esc(p.name):'this player';
+}
+function bfRxHTML(code,t,fit){
+  const o=bfSoc[code];if(!o)return '';
+  const r=(o.r||{})[t]||{},mine=(o.mine||{})[t],n=(o.n||{})[t]||0;
+  const C=bfArg(code),T=bfArg(t);
+  const pills=BF_ICONS.filter(([id])=>(r[id]||[]).length).map(([id,nm])=>
+    `<button class="bfpill${mine===id?' mine':''}" aria-label="${nm}, ${r[id].length}" onclick="event.stopPropagation();bfPillTap('${C}','${T}','${id}')">${bfIcon(id)}${r[id].length}</button>`).join('');
+  const open=bfPick&&bfPick.code===code&&bfPick.t===t;
+  const order=fit?[...BF_ICONS.filter(i=>i[0]===fit),...BF_ICONS.filter(i=>i[0]!==fit)]:BF_ICONS;
+  const pop=open?`<div class="bfpop" role="menu" onclick="event.stopPropagation()">${order.map(([id,nm])=>
+    `<button class="bfpick${id===fit?' fit':''}${mine===id?' mine':''}" role="menuitem" aria-label="${nm}" onclick="event.stopPropagation();bfReact('${C}','${T}','${id}')">${bfIcon(id)}<small>${nm}</small></button>`).join('')}</div>`:'';
+  return `<div class="bfrx">${pop}${pills}<button class="bfadd" aria-haspopup="true" aria-expanded="${!!open}" onclick="event.stopPropagation();bfPickToggle('${C}','${T}')">+ React</button>`
+    +`<button class="bfcbtn" onclick="event.stopPropagation();openBfComments('${C}','${T}')">${BF_BUBBLE}${n?n+(n===1?' comment':' comments'):'Comment'}</button></div>`;
+}
+function bfRoundHTML(code){
+  if(!bfSoc[code])return '';
+  return `<div class="bfround"><div class="bfroundT">THE WHOLE ROUND</div>${bfRxHTML(code,'round',null)}${bfSay[code]?`<div class="bfsay">${bfSay[code]}</div>`:''}</div>`;
+}
+function bfPickToggle(code,t){code=decodeURIComponent(code);t=decodeURIComponent(t);
+  bfPick=(bfPick&&bfPick.code===code&&bfPick.t===t)?null:{code,t};render();}
+function bfPickClose(){if(!bfPick)return false;bfPick=null;render();return true;}
+function bfReact(code,t,icon){
+  code=decodeURIComponent(code);t=decodeURIComponent(t);
+  const o=bfSoc[code];if(!o||!BF_ICON_NAME[icon])return;
+  o.r=o.r||{};o.mine=o.mine||{};
+  const r=o.r[t]=o.r[t]||{},prev=o.mine[t];
+  if(prev&&r[prev]){const i=r[prev].indexOf('You');if(i>=0)r[prev].splice(i,1);if(!r[prev].length)delete r[prev];}
+  const off=prev===icon;
+  if(off)delete o.mine[t];else{(r[icon]=r[icon]||[]).push('You');o.mine[t]=icon;}
+  const R=id=>`<b>${BF_ICON_NAME[id]}</b>`,who=bfWhoFor(code,t);
+  bfSay[code]=off?`Took back your ${R(icon)} on ${who}.`:prev?`Switched your ${R(prev)} to ${R(icon)} on ${who}.`:`${R(icon)} on ${who}: ${r[icon].map(esc).join(', ')}`;
+  bfPick=null;render();
+  relayBattle({op:'react',pid:myPid(),name:(S.me&&S.me.name)||'',code,target:t,icon:off?null:icon})
+    .then(res=>{if(!res||!res.ok)bfSocLoad();}).catch(()=>bfSocLoad());
+}
+function bfPillTap(code,t,icon){
+  const c=decodeURIComponent(code),tt=decodeURIComponent(t),o=bfSoc[c]||{};
+  if((o.mine||{})[tt]===icon)return bfReact(code,t,icon);
+  const names=(((o.r||{})[tt]||{})[icon])||[];
+  bfSay[c]=`<b>${BF_ICON_NAME[icon]||''}</b> on ${bfWhoFor(c,tt)}: ${names.map(esc).join(', ')}`;render();
+}
+function bfSocLoad(){
+  try{
+    if(!myPid()||previewSandboxed()||!Array.isArray(bfList))return;
+    const codes=bfList.map(e=>e.code).filter(Boolean).slice(0,60);if(!codes.length)return;
+    relayBattle({op:'social',pid:myPid(),codes}).then(r=>{if(r&&r.ok){bfSoc=r.soc||{};if(S.screen==='bfield')render();}}).catch(()=>{});
+  }catch(e){}
+}
+function bfSocBump(code,t,d){const o=bfSoc[code];if(!o)return;o.n=o.n||{};o.n[t]=Math.max(0,(o.n[t]||0)+d);if(S.screen==='bfield')render();}
+// comments ----------------------------------------------------------------
+const BF_CM_BAD_IN=/(fuck|shit|cunt|bitch|nigg|whore|motherf|asshole)/,BF_CM_BAD_WORD=/^(dick(s|head|hole)?|cock(s|sucker)?|fag(s|got|gots)?|sluts?|pussy|retard(s|ed)?|bastards?)$/;
+function bfCmClean(t){return !String(t||'').toLowerCase().split(/\s+/).some(w=>{
+  w=w.replace(/[@4]/g,'a').replace(/[$5]/g,'s').replace(/0/g,'o').replace(/[!1|]/g,'i').replace(/3/g,'e').replace(/[^a-z]/g,'');
+  return BF_CM_BAD_IN.test(w)||BF_CM_BAD_WORD.test(w);});}
+function bfCmCheck(text){
+  const t=String(text||'').replace(/\s+/g,' ').trim();
+  if(!t)return 'Type a comment first.';
+  if(t.length>140)return '140 characters max.';
+  if(!bfCmClean(t))return "Keep it clean. That word isn't allowed.";
+  return '';
+}
+function bfAgo(at){const s=Math.max(0,Math.floor(Date.now()/1000)-(at||0));return s<60?'now':s<3600?Math.floor(s/60)+'m':s<86400?Math.floor(s/3600)+'h':Math.floor(s/86400)+'d';}
+function bfCmListHTML(){
+  const c=bfCm;if(!c)return '';
+  if(c.list===null)return '<div class="tiny" style="padding:10px 0">Loading comments…</div>';
+  if(c.list==='offline')return '<div class="tiny" style="padding:10px 0">Could not load comments. Check your signal.</div>';
+  let h=c.list.length?c.list.map(x=>`<div class="bfcm${x.mine?' mine':''}"><span class="bfcmBy">${esc(x.name)}</span><span class="bfcmAt">${bfAgo(x.at)}</span>
+    <div>${esc(x.text)}</div>
+    <button class="bfmore" aria-label="Comment options" aria-expanded="${c.menu===x.id}" onclick="bfCmMenu(${+x.id})">⋯</button>
+    ${c.menu===x.id?`<div class="bfmenu">${x.mine?`<button class="danger" onclick="bfCmDel(${+x.id})">Delete</button>`
+      :`<button onclick="bfCmReport(${+x.id})">Report</button><button class="danger" onclick="bfCmBlock('${bfArg(x.pid)}')">Block ${esc(x.name)}</button>${c.t===myPid()?`<button class="danger" onclick="bfCmDel(${+x.id})">Delete</button>`:''}`}</div>`:''}</div>`).join('')
+    :'<div class="tiny" style="padding:10px 0">No comments yet. Start it off.</div>';
+  if((c.blocked||[]).length)h+=`<div class="tiny">Hidden: you blocked ${c.blocked.map(b=>esc(b.name||'someone')).join(', ')}. ${c.blocked.map(b=>`<button class="linkish" onclick="bfCmUnblock('${bfArg(b.pid)}')">Unblock${b.name?' '+esc(b.name):''}</button>`).join(' ')}</div>`;
+  if(c.note)h+=`<div class="tiny" style="color:var(--green-mid)">${esc(c.note)}</div>`;
+  return h;
+}
+function bfCmPaint(scroll){const el=document.getElementById('bfcmList');if(!el)return;el.innerHTML=bfCmListHTML();if(scroll)el.scrollTop=el.scrollHeight;}
+function openBfComments(code,t){
+  code=decodeURIComponent(code);t=decodeURIComponent(t);
+  bfPick=null;closeBfComments(true);
+  bfCm={code,t,list:null,menu:null,blocked:[],note:'',sending:false};
+  const who=t==='round'?'the whole round':bfWhoFor(code,t);
+  const d=document.createElement('div');
+  d.className='vfWrap';d.id='bfcm';d.setAttribute('role','dialog');d.setAttribute('aria-modal','true');d.setAttribute('aria-labelledby','bfcmT');
+  d.onclick=ev=>{if(ev.target===d)closeBfComments();};
+  d.innerHTML=`<div class="vfCard bfcmCard"><h2 class="vfTitle" id="bfcmT">Comments<small>${who}</small></h2>
+    <div class="bfcmList" id="bfcmList">${bfCmListHTML()}</div>
+    <div id="bfcmRules" hidden><div class="vfTitle" style="font-size:20px;margin-top:4px">Keep it friendly</div>
+      <div class="tiny mb">No abuse, hate or explicit stuff. Comments can be reported, and players can block you.</div>
+      <button class="big" onclick="bfCmRulesOk()">OK, post it</button><button class="ghost mt" style="width:100%" onclick="bfCmRules(false)">Cancel</button></div>
+    <div id="bfcmCompose">
+      <label for="bfcmText" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Comment</label>
+      <textarea id="bfcmText" class="bfcmText" maxlength="140" rows="3" placeholder="Say something to ${t==='round'?'everyone':who}" oninput="bfCmInput()"></textarea>
+      <div class="bfcmMeta"><span id="bfcmErr" class="bfcmErr"></span><span id="bfcmCount">0/140</span></div>
+      <div class="bfcmBtns"><button class="ghost" onclick="closeBfComments()">Close</button><button class="big" onclick="bfCmSend()">Send</button></div>
+    </div></div>`;
+  document.body.appendChild(d);
+  relayBattle({op:'comments',pid:myPid(),code,target:t}).then(r=>{
+    if(!bfCm||bfCm.code!==code||bfCm.t!==t)return;
+    if(r&&r.ok){bfCm.list=r.list||[];bfCm.blocked=r.blocked||[];}else bfCm.list='offline';
+    bfCmPaint(true);
+  }).catch(()=>{if(bfCm&&bfCm.code===code){bfCm.list='offline';bfCmPaint();}});
+}
+function closeBfComments(keep){try{document.querySelectorAll('#bfcm').forEach(x=>x.remove());}catch(e){}if(!keep)bfCm=null;}
+function bfCmInput(){const ta=document.getElementById('bfcmText'),n=document.getElementById('bfcmCount');if(ta&&n)n.textContent=`${ta.value.length}/140`;bfCmErr('');}
+function bfCmErr(msg,neutral){const e=document.getElementById('bfcmErr');if(!e)return;e.textContent=msg||'';e.className='bfcmErr'+(msg&&!neutral?' err':'');}
+function bfCmRules(on){const r=document.getElementById('bfcmRules'),c=document.getElementById('bfcmCompose');if(r)r.hidden=!on;if(c)c.hidden=!!on;}
+function bfCmRulesOk(){try{localStorage.setItem('btCmRules','1');}catch(e){}bfCmRules(false);bfCmSend();}
+function bfCmSend(){
+  const c=bfCm,ta=document.getElementById('bfcmText');if(!c||!ta||c.sending)return;
+  const bad=bfCmCheck(ta.value);if(bad){bfCmErr(bad);return;}
+  let agreed=false;try{agreed=!!localStorage.getItem('btCmRules');}catch(e){}
+  if(!agreed){bfCmRules(true);return;}
+  const text=ta.value.replace(/\s+/g,' ').trim();
+  c.sending=true;bfCmErr('Sending…',true);
+  relayBattle({op:'comment',pid:myPid(),name:(S.me&&S.me.name)||'',code:c.code,target:c.t,text}).then(r=>{
+    c.sending=false;if(bfCm!==c)return;
+    if(r&&r.ok&&r.comment){
+      if(!Array.isArray(c.list))c.list=[];c.list.push(r.comment);c.note='';
+      ta.value='';bfCmInput();bfSocBump(c.code,c.t,1);bfCmPaint(true);
+    }else bfCmErr((r&&r.error)||'Could not post. Try again.');
+  }).catch(()=>{c.sending=false;bfCmErr('Could not post. Check your signal.');});
+}
+function bfCmMenu(id){if(!bfCm)return;bfCm.menu=bfCm.menu===id?null:id;bfCmPaint();}
+function bfCmDrop(pred,note){
+  const c=bfCm;if(!c||!Array.isArray(c.list))return;
+  const gone=c.list.filter(pred).length;c.list=c.list.filter(x=>!pred(x));c.menu=null;c.note=note;
+  if(gone)bfSocBump(c.code,c.t,-gone);bfCmPaint();
+}
+function bfCmDel(id){const c=bfCm;if(!c)return;
+  relayBattle({op:'cdel',pid:myPid(),id}).then(r=>{if(r&&r.ok)bfCmDrop(x=>x.id===id,'Comment deleted.');else{c.note=(r&&r.error)||'Could not delete.';bfCmPaint();}}).catch(()=>{c.note='Could not delete. Check your signal.';bfCmPaint();});}
+function bfCmReport(id){const c=bfCm;if(!c)return;
+  relayBattle({op:'report',pid:myPid(),id}).then(r=>{if(r&&r.ok)bfCmDrop(x=>x.id===id,"Reported. It's hidden for you, and we'll review it.");else{c.note=(r&&r.error)||'Could not report.';bfCmPaint();}}).catch(()=>{c.note='Could not report. Check your signal.';bfCmPaint();});}
+function bfCmBlock(pid){const c=bfCm;if(!c)return;pid=decodeURIComponent(pid);
+  const x=(Array.isArray(c.list)?c.list:[]).find(y=>y.pid===pid),name=(x&&x.name)||'';
+  relayBattle({op:'block',pid:myPid(),blocked:pid,name}).then(r=>{
+    if(!r||!r.ok){c.note=(r&&r.error)||'Could not block.';bfCmPaint();return;}
+    if(!c.blocked.some(b=>b.pid===pid))c.blocked.push({pid,name});
+    bfCmDrop(y=>y.pid===pid,`You blocked ${name||'them'}. You won't see each other's comments.`);
+  }).catch(()=>{c.note='Could not block. Check your signal.';bfCmPaint();});}
+function bfCmUnblock(pid){const c=bfCm;if(!c)return;pid=decodeURIComponent(pid);
+  relayBattle({op:'unblock',pid:myPid(),blocked:pid}).then(r=>{
+    if(!r||!r.ok)return;const code=c.code,t=c.t;openBfComments(bfArg(code),bfArg(t));bfSocLoad();
+  }).catch(()=>{});}
 function openBattlefield(){
   bfPrunePhantoms();
   bfList=null;S.screen='bfield';render();
@@ -8416,7 +8627,7 @@ function openBattlefield(){
     const archived=Object.values(st).filter(x=>x.entry&&!seen.has(x.entry.code))
       .map(x=>Object.assign({},x.entry,{live:false,_archived:true}))
       .sort((a,b)=>(b.at||0)-(a.at||0));
-    bfList=[...live,...archived];render();
+    bfList=[...live,...archived];render();bfSocLoad();
   }).catch(()=>{
     const st=bfStore();
     const archived=Object.values(st).filter(x=>x.entry)
@@ -8432,7 +8643,7 @@ function vBattlefield(){
     const m=Math.max(1,Math.round((end-e.at*1000)/60000));
     return m>=60?`${Math.floor(m/60)}h ${m%60}m`:`${m} min`;
   };
-  return topbar('Community Battlefield','Watch your Battle Friends fight it out','home')+`<main>
+  return topbar('Community Battlefield','Watch your Battle Friends fight it out','home')+`<main>${BF_SPRITE}
   ${L===null?'<div class="card center muted">Checking the Battlefield…</div>'
    :L==='offline'?'<div class="card center muted">Could not reach the Battlefield — check your signal.</div>'
    :!L.length?'<div class="card center muted">No battles right now. Start a round and yours shows up here for your friends.</div>'
@@ -8462,9 +8673,9 @@ function vBattlefield(){
           <div style="text-align:right;flex:none">
             <div class="num" style="font-size:28px;line-height:1;color:${x.toPar<0?'#7fd49a':x.toPar>0?'var(--amber-bd)':'var(--ink)'}">${tp(x.toPar)}</div>
             <div class="tiny">${x.gross} · thru ${x.thru}</div></div>
-        </div>`).join('')
+        </div>${bfRxHTML(e.code,bfTarget(x),bfFitIcon(x,ppl))}`).join('')
         :`<div class="tiny" style="padding-top:6px;color:var(--ink3)">${e.live?'No holes carded yet.':'No scores were recorded.'}</div>`;
-      return `<div class="card" style="padding:12px 14px;cursor:pointer" onclick="openBfWatch('${esc(e.code)}')">
+      return `<div class="card" style="padding:12px 14px;cursor:pointer" onclick="if(!bfPickClose())openBfWatch('${esc(e.code)}')">
       <div class="row" style="border-top:none">
         <div style="flex:1;min-width:0">${group
           // a group's card leads with the course — the players are all listed below (Nathan 9/14)
@@ -8474,7 +8685,7 @@ function vBattlefield(){
           <div class="tiny">${esc(e.course||'')} · ${esc(e.game||'')} · ${when}</div>`}</div>
         <span class="pill wolf" style="flex:none">${e.live?'Watch':'View'}</span>
         ${e._archived?`<button class="ghost danger" style="flex:none;margin-left:6px" onclick="event.stopPropagation();bfForget('${esc(e.code)}')">✕</button>`:''}
-      </div>${cards}</div>`;}).join('')}
+      </div>${cards}${bfRoundHTML(e.code)}</div>`;}).join('')}
   <button class="ghost mt" style="width:100%" onclick="openBattlefield()">↻ Refresh</button>
   </main>`;
 }
