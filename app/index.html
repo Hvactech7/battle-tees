@@ -179,7 +179,9 @@
   .wdial .wdir.on{background:#4fd8ff;border-color:#4fd8ff;color:#06101c}
   .wdial .wdarrow{position:absolute;left:50%;top:50%;width:56px;height:56px;margin:-28px 0 0 -28px;transition:transform .15s}
   .wdial .wdgreen{position:absolute;left:50%;top:-11px;transform:translateX(-50%);font-size:15px;line-height:1;background:var(--card);padding:0 3px}
-  #holemap.windmode .bt-sight{color:#4fd8ff!important}   /* wind mode: the crosshairs wear the arrows' blue */
+  #holemap.windmode .bt-sight{color:#4fd8ff!important}
+  .elevstrip{position:relative;height:22px;margin:3px 4px 0}
+  .elevstrip .elevdot{position:absolute;width:9px;height:9px;margin:-4.5px 0 0 -4.5px;border-radius:50%;background:#4aa8ff;border:1.5px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.45)}   /* wind mode: the crosshairs wear the arrows' blue */
   .livechip{display:inline-block;background:var(--elec);color:#eef6ff;font:700 11px Rajdhani,sans-serif;letter-spacing:2px;padding:2px 7px 1px;border-radius:99px;vertical-align:2px;margin:0 2px;animation:livePulse 1.6s ease-in-out infinite}
   .hb-live{border-color:var(--elec)!important;box-shadow:3px 3px 0 var(--elec-dk)!important}
   @keyframes livePulse{0%,100%{opacity:1}50%{opacity:.45}}
@@ -484,7 +486,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789442542';
+const BUILD='1789453038';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -3796,7 +3798,7 @@ function computeGame(){const g=gameOn();
 let mapHole=0,LMAP=null,mapWatch=null,mapMarks={},leafletP=null;
 let lSpine=null,gmSpine=null,showSpine=false;   // spines retired — always off
 let lTee=null;   // draggable tee marker (mapMarks is reassigned mid-init, so it cannot live there)
-let lShots=[],gmShots=[],showShots=(localStorage.btShots!=='off');
+let lShots=[],gmShots=[],showShots=false;   // shot lines never drawn on the map (Nathan 9/14); the mountain took their button
 function shotsForHole(h){
   const log=(S.shotLog&&S.shotLog['s'+(S.round.startedAt||0)])||[];
   return log.filter(e=>e&&e.h===h&&e.a&&e.b);
@@ -4801,12 +4803,13 @@ function vMap(){
   <div class="mapbar">
     <div class="row" style="border:none;padding:2px 0">
       <button class="ghost" onclick="mapPrev()">◀</button>
-      ${gpsOnly()?'':`<button id="shotsbtn" class="ghost" onclick="toggleShots()" style="width:40px;height:40px;padding:0;display:flex;align-items:center;justify-content:center;opacity:${showShots?'1':'.45'};border-color:${showShots?'var(--green)':''}">
-        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><circle cx="4.5" cy="17.5" r="2.4" fill="currentColor"/><path d="M6 16 L16 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><circle cx="17.5" cy="4.5" r="2.4" fill="currentColor"/></svg>
-      </button>`}
+      ${elevUrlFor(S.course)?`<button id="elevbtn" class="ghost" onclick="toggleElevMode()" aria-label="Elevation" aria-pressed="${elevReady()}" style="width:40px;height:40px;padding:0;display:flex;align-items:center;justify-content:center;opacity:${elevReady()?'1':'.45'};${elevReady()?'border-color:#4fd8ff;color:#4fd8ff':''}">
+        <svg width="24" height="20" viewBox="0 0 24 20" fill="none" aria-hidden="true"><path d="M1.5 18 L8.5 6.5 L12.5 12 L15.5 8 L22.5 18 Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+      </button>`:''}
       <div class="center" style="flex:1;min-width:0">
         <div class="num" id="fmb" style="font-size:29px;white-space:nowrap">—</div>
         <div class="tiny" id="fmbsub" style="max-height:2.7em;overflow:hidden">loading…</div>
+        <div id="elevstrip" class="elevstrip" hidden></div>
         ${amnesiaOn(S.course.id)?`<div class="tiny" style="color:var(--amber-bd,#e0a53a);margin-top:2px">🧠 amnesia on — this phone is ignoring the saved map. <a href="?amnesia=off" style="color:inherit;text-decoration:underline">turn off</a></div>`:''}
       </div>
       <button class="ghost" onclick="mapNext()">▶</button>
@@ -6542,15 +6545,105 @@ function paintWindRose(){
   el.innerHTML=windArrowsSVG(w,mapB,active);
   paintSightMode();
 }
-// a leg of the sight line: actual yards, or the wind-adjusted number marked (w)
+// ---------- elevation: plays-like from the ground's rise and fall (Nathan 9/14) ----------
+// A course with a baked grid (.build/elevbake.py: USGS 3DEP lidar, one height per
+// 5 m, checked to ±0.5 ft against point lidar at every Darkhorse tee and green)
+// adjusts the sight-line yardages for the climb or drop between you and each
+// target. The bottom-bar mountain turns it on. The numbers wear the same blue ~
+// as wind and no elevation figure is ever put on screen (Nathan). Both on:
+// elevation first, then wind applied to the elevation-adjusted distance. The
+// F/M/B numbers stay actual, as with wind. No network during a round: the grid
+// is fetched once beside the course's geo file.
+const ELEV_YDS_PER_FT=1/3;   // the common rule: a yard for every three feet up or down
+const HOSTED_ELEV={'darkhorse':'/geo/elev/10762.json'};
+let elevMode=(()=>{try{return localStorage.getItem('btElev')==='on';}catch(e){return false;}})();
+const ELEV={};   // course id -> decoded grid | 'none' | Promise (loading)
+function elevUrlFor(c){return (c&&(c.elevUrl||HOSTED_ELEV[c.id]))||null;}
+function elevDecode(js){
+  const bin=atob(js.d),n=bin.length>>1,a=new Uint16Array(n);
+  for(let i=0;i<n;i++)a[i]=bin.charCodeAt(2*i)|(bin.charCodeAt(2*i+1)<<8);
+  return {w:js.w,h:js.h,west:js.west,south:js.south,east:js.east,north:js.north,base:js.base,scale:js.scale,a};
+}
+function elevEnsure(course){
+  course=course||S.course;
+  const url=elevUrlFor(course);if(!course||!url)return null;
+  const hit=ELEV[course.id];
+  if(hit)return (hit==='none'||hit instanceof Promise)?null:hit;
+  let u=url;if(!/^(https?:)?\/\//i.test(u)&&u[0]!=='/')u='/'+u;
+  ELEV[course.id]=fetch(u).then(r=>r.ok?r.json():null).then(js=>{
+    ELEV[course.id]=(js&&js.d)?elevDecode(js):'none';
+    if(S.course&&S.course.id===course.id)windRepaint();
+  }).catch(()=>{delete ELEV[course.id];});
+  return null;
+}
+function elevAt(p,g){
+  g=g||elevEnsure();if(!g||!p)return null;
+  const fx=(p[1]-g.west)/(g.east-g.west)*(g.w-1),fy=(g.north-p[0])/(g.north-g.south)*(g.h-1);
+  if(!(fx>=0&&fy>=0&&fx<=g.w-1&&fy<=g.h-1))return null;
+  const x0=Math.min(g.w-2,Math.floor(fx)),y0=Math.min(g.h-2,Math.floor(fy)),tx=fx-x0,ty=fy-y0,i=y0*g.w+x0;
+  const q=[g.a[i],g.a[i+1],g.a[i+g.w],g.a[i+g.w+1]];if(q.some(x=>x===65535))return null;
+  return g.base+g.scale*(q[0]*(1-tx)*(1-ty)+q[1]*tx*(1-ty)+q[2]*(1-tx)*ty+q[3]*tx*ty);
+}
+function elevReady(){return elevMode&&!!elevEnsure();}
+// THE distance calculation for the sight line: actual → elevation (if on) → wind (if on)
+function playsLike(from,to){
+  const yds=mDist(from,to)*1.09361;let plays=yds,adj=false;
+  if(elevMode){const a=elevAt(from),b=elevAt(to);if(a!=null&&b!=null){plays+=(b-a)*ELEV_YDS_PER_FT;adj=true;}}
+  if(windMode){const w=windNow();if(w&&w.mph>=1){plays=windOnShot(w,from,to,plays).plays;adj=true;}}
+  return {yds,plays:Math.round(plays),adj};
+}
+function toggleElevMode(){
+  if(!elevUrlFor(S.course)||ELEV[S.course.id]==='none'){shotToast('No elevation data for this course yet');return;}
+  if(!elevEnsure()){shotToast('Loading elevation — try again in a moment');return;}
+  elevMode=!elevMode;
+  try{localStorage.setItem('btElev',elevMode?'on':'off');}catch(e){}
+  windRepaint();
+  shotToast(elevMode?'Elevation ON':'Elevation OFF');
+  try{stat('elev_mode',{on:elevMode,course:S.course.id});}catch(e){}
+}
+function elevBtnPaint(){
+  const b=document.getElementById('elevbtn');if(!b)return;
+  const on=elevReady();
+  b.style.opacity=on?'1':'.45';b.style.borderColor=on?'#4fd8ff':'';b.style.color=on?'#4fd8ff':'';
+  b.setAttribute('aria-pressed',on?'true':'false');
+}
+// the hole's rise and fall along its centre line, tee on the left, you on it —
+// a shape only, no figures (Nathan: don't clutter the screen with the change)
+function elevStripPaint(pos){
+  const el=document.getElementById('elevstrip');if(!el)return;
+  const off=()=>{el.hidden=true;el.innerHTML='';};
+  const g=elevReady()?elevEnsure():null;
+  let geo=null;try{geo=amnesiaOn(S.course.id)?null:S.course.geo.holes[physHole(mapHole)+1];}catch(e){}
+  if(!g||!geo||!geo.path||geo.path.length<2||geo.prov)return off();
+  const P=geo.path,segs=[];let L=0;
+  for(let i=1;i<P.length;i++){const d=mDist(P[i-1],P[i]);segs.push(d);L+=d;}
+  if(L<30)return off();
+  const N=48,pts=[];
+  for(let k=0;k<=N;k++){
+    let d=L*k/N,i=0;while(i<segs.length-1&&d>segs[i]){d-=segs[i];i++;}
+    const t=segs[i]?Math.min(1,d/segs[i]):0,p=[P[i][0]+(P[i+1][0]-P[i][0])*t,P[i][1]+(P[i+1][1]-P[i][1])*t];
+    pts.push({p,e:elevAt(p,g),s:L*k/N});
+  }
+  if(pts.some(x=>x.e==null))return off();
+  const lo=Math.min(...pts.map(x=>x.e)),hi=Math.max(...pts.map(x=>x.e)),span=Math.max(hi-lo,40);   // a flat hole still looks flat
+  const H=22,X=s=>s/L*100,Y=e=>H-2-(e-lo)/span*(H-5);
+  const line=pts.map((x,i)=>`${i?'L':'M'}${X(x.s).toFixed(2)} ${Y(x.e).toFixed(2)}`).join(' ');
+  let dot='';
+  const me=pos||mapMarks.mePos;
+  if(me){let best=null;pts.forEach(x=>{const d=mDist(me,x.p);if(!best||d<best.d)best={d,x};});
+    if(best&&best.d<90)dot=`<span class="elevdot" style="left:${X(best.x.s).toFixed(1)}%;top:${Y(best.x.e).toFixed(1)}px"></span>`;}
+  el.hidden=false;
+  el.innerHTML=`<svg viewBox="0 0 100 ${H}" preserveAspectRatio="none" width="100%" height="${H}" aria-hidden="true"><path d="${line} L100 ${H} L0 ${H} Z" fill="rgba(79,216,255,.13)"/><path d="${line}" fill="none" stroke="#4fd8ff" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>${dot}`;
+}
+// a leg of the sight line: actual yards, or the plays-like number (elevation and/or wind) marked ~
 function legLabel(from,to,suffix){
   let txt=yd(mDist(from,to))+uLbl();
   // adjusted: ~ before the number, in the arrows' blue — that IS the signal (Nathan, 9/2)
-  try{if(windMode){const w=windNow();if(w&&w.mph>=1){const x=windOnShot(w,from,to,mDist(from,to)*1.09361);txt=`<span style="color:#4fd8ff">~${ydDisp(x.plays)}${uLbl()}</span>`;}}}catch(e){}
+  try{const x=playsLike(from,to);if(x.adj)txt=`<span style="color:#4fd8ff">~${ydDisp(x.plays)}${uLbl()}</span>`;}catch(e){}
   return txt+(suffix||'');
 }
 function windSettingToggle(){set(()=>{S.windHide=!S.windHide;if(S.windHide)windMode=false;});}
-function sightColor(){return windMode?'#4fd8ff':'#ffffff';}
+function sightColor(){return (windMode||elevReady())?'#4fd8ff':'#ffffff';}
 // ---- your own wind: HOLD the arrows → a dial in the hole's own frame ----------
 // Tap where the wind is blowing TO (green at the top, like the map), set the
 // mph, Set wind. Stored as a compass direction so a later map rotation, or the
@@ -6604,7 +6697,7 @@ function windDialHTML(){
 function windDialDir(a){if(!windDial)return;windDial.a=a;windDialPaint();}
 function windDialMph(dm){if(!windDial)return;windDial.mph=Math.max(0,Math.min(40,windDial.mph+dm));windDialPaint();}
 function windDialClose(){windDial=null;windDialPaint();}
-function windRepaint(){try{paintWindRose();}catch(e){}try{if(mapMarks&&mapMarks.refreshTapLine)mapMarks.refreshTapLine();}catch(e){}try{paintSightMode();}catch(e){}}
+function windRepaint(){try{paintWindRose();}catch(e){}try{elevBtnPaint();elevStripPaint();}catch(e){}try{if(mapMarks&&mapMarks.refreshTapLine)mapMarks.refreshTapLine();}catch(e){}try{paintSightMode();}catch(e){}}
 function windDialDone(){
   const d=windDial;if(!d)return;
   if(d.a==null){shotToast('Tap a direction first');return;}
@@ -6624,7 +6717,7 @@ function windDialForecast(){
   windRepaint();
   if(had)shotToast('Back to the forecast');
 }
-function paintSightMode(){try{const m=document.getElementById('holemap');if(m)m.classList.toggle('windmode',!!windMode);if(mapMarks.setSightColor)mapMarks.setSightColor(sightColor());}catch(e){}}
+function paintSightMode(){try{const m=document.getElementById('holemap');if(m)m.classList.toggle('windmode',!!(windMode||elevReady()));if(mapMarks.setSightColor)mapMarks.setSightColor(sightColor());}catch(e){}}
 function toggleWindMode(){
   if(S.windHide)return;
   if(windRoseHeld){windRoseHeld=false;return;}   // the click after a hold: the dial already opened
@@ -6652,6 +6745,7 @@ function updateFMB(pos,label){
     :`${yd(r.m)}${uLbl()} to green`;
   if(s2)s2.textContent='';  // label dropped by design — F/M/B speaks for itself
   try{paintWindRose();}catch(e){}
+  try{elevEnsure();elevBtnPaint();elevStripPaint(pos);}catch(e){}
   try{if(S.round&&S.round.started&&r&&r.m!=null)shellRoundTick(`${yd(r.m)}${uLbl()} to the middle`);}catch(e){}
 }
 
