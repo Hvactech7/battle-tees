@@ -220,6 +220,16 @@
   .bfcmBtns{display:flex;gap:8px;margin-top:10px}
   .bfcmBtns .ghost{flex:1}
   .bfcmBtns .big{flex:2;margin:0}
+  .bfNote{position:fixed;left:10px;right:10px;margin:0 auto;max-width:440px;top:calc(10px + env(safe-area-inset-top));z-index:8900;display:flex;flex-direction:column;gap:8px}   /* no transform on a fixed element: WebKit drifts it (livepatch.js) */
+  .bfNoteItem{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:10px 12px;background:#141c2a;border:2px solid var(--green);border-radius:14px;box-shadow:4px 4px 0 var(--green-dk),0 10px 28px rgba(0,0,0,.55);color:var(--ink);font:500 15px/1.3 Inter,sans-serif;animation:vfRise .3s cubic-bezier(.2,.8,.25,1) both,bfNoteGlow 2.4s ease-in-out .3s infinite}
+  .bfNoteItem .bfi{width:40px;height:40px}
+  .bfNoteItem b{font:700 17px Rajdhani,Inter,sans-serif;color:var(--green-mid)}
+  .bfNoteTxt{flex:1;min-width:0;overflow-wrap:anywhere}
+  .bfNoteSub{display:block;font-size:12px;color:var(--ink3);margin-top:2px}
+  .bfNoteOk{flex:none;font:700 13px Rajdhani,sans-serif;letter-spacing:1px;color:var(--elec-mid);border:1px solid var(--elec-dk);border-radius:8px;padding:6px 8px}
+  .bfNoteMore{align-self:center;min-height:36px;padding:0 14px;border-radius:999px;background:#0b111c;border:1px solid var(--line);color:var(--ink2);font:600 13px Inter,sans-serif}
+  @keyframes bfNoteGlow{50%{box-shadow:4px 4px 0 var(--green-dk),0 0 0 4px rgba(232,197,82,.35),0 10px 28px rgba(0,0,0,.55)}}
+  @media (prefers-reduced-motion:reduce){.bfNoteItem{animation:none}}
   .linkish{background:none;border:0;color:var(--elec-mid);font-weight:600;padding:6px 4px;min-height:36px}
   @media (prefers-reduced-motion:reduce){.vfWrap,.vfCard{animation:none}}
   /* rules cards render the same sections as battletees.app/rules */
@@ -474,7 +484,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789441116';
+const BUILD='1789442542';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -8096,7 +8106,7 @@ function vSettings(){
   const bf=S.config.bf||{broadcast:true,emails:true};
   const row=(label,sub,key)=>`<div class="row"><div style="flex:1;min-width:0"><b>${label}</b>
       <div class="tiny">${sub}</div></div>
-    <button class="ghost ${bf[key]?'sel':''}" onclick="bfToggle('${key}')">${bf[key]?'On':'Off'}</button></div>`;
+    <button class="ghost ${bf[key]!==false?'sel':''}" onclick="bfToggle('${key}')">${bf[key]!==false?'On':'Off'}</button></div>`;   // a missing key is On (added later)
   return topbar('Settings','','home')+`<main>
   <div class="card"><h2>📲 Share Battle Tees</h2>
     <div style="display:flex;gap:16px;align-items:center">
@@ -8113,6 +8123,8 @@ function vSettings(){
     <div class="tiny mt" style="color:var(--ink3)">Relay: <b>${/relay\.vexcomllc\.com|workers\.dev/.test(RELAY)?'Cloud':/raspi5/.test(RELAY)?'Pi':'custom'}</b> · ${relayUp()?'connected':'not connected'}${localStorage.getItem('wolfRelay')?' · manual override':''}</div>
     ${row('Email me when friends play','Get the “Battlefield is set” email when someone who has you in their library tees off.','emails')}
     <div class="tiny mt">Announcements go out once per round, from Battle Tees — never from a personal address.</div>
+    ${row('Reaction pop-ups','Show reactions and comments on your rounds on screen.','popups')}
+    ${row('Reaction emails','Email me about them after a round. One a day at most.','reactMail')}
   </div>
   ${trackCardHTML()}
   <div class="card">
@@ -8608,6 +8620,59 @@ function bfCmUnblock(pid){const c=bfCm;if(!c)return;pid=decodeURIComponent(pid);
   relayBattle({op:'unblock',pid:myPid(),blocked:pid}).then(r=>{
     if(!r||!r.ok)return;const code=c.code,t=c.t;openBfComments(bfArg(code),bfArg(t));bfSocLoad();
   }).catch(()=>{});}
+// ---------- reaction + comment notices (Nathan 9/14) ----------
+// A reaction or comment aimed at you (your row, or a round you played) pops up
+// over whatever screen you're on and stays until you tap it. The relay keeps
+// what you've acknowledged, so a phone that was asleep catches up and a second
+// phone never shows it twice. After the round the relay emails you as well
+// (one a day at most). One small relay message a minute, only while the app is
+// on screen.
+let bfInbox=[],bfInboxAt=0,bfInboxBusy=false;
+const bfAckedLocal=new Set();
+function bfInboxPoll(force){
+  try{
+    if(!myPid()||previewSandboxed()||bfInboxBusy)return;
+    if(S.config.bf&&S.config.bf.popups===false)return;   // Settings › Reaction pop-ups: Off
+    if(document.visibilityState==='hidden')return;
+    if(!force&&Date.now()-bfInboxAt<55000)return;
+    bfInboxBusy=true;bfInboxAt=Date.now();
+    relayBattle({op:'inbox',pid:myPid()}).then(r=>{
+      bfInboxBusy=false;if(!r||!r.ok)return;
+      bfInbox=(r.items||[]).filter(x=>x&&x.k&&!bfAckedLocal.has(x.k));bfNotePaint();
+    }).catch(()=>{bfInboxBusy=false;});
+  }catch(e){bfInboxBusy=false;}
+}
+function bfNoteHTML(){
+  if(!bfInbox.length)return '';
+  return bfInbox.slice(0,3).map(x=>{
+    const where=x.round?"your group's round":'your round';
+    const icon=x.kind==='r'?bfIcon(x.icon):`<span style="color:var(--green-mid);flex:none;display:flex">${BF_BUBBLE.replace('width="15" height="15"','width="34" height="34"')}</span>`;
+    const main=x.kind==='r'?`<b>${esc(x.from)}</b> · ${esc(BF_ICON_NAME[x.icon]||'Reaction')}`:`<b>${esc(x.from)}</b>: “${esc(x.text||'')}”`;
+    return `<button class="bfNoteItem" onclick="bfAck('${bfArg(x.k)}')">${icon}<span class="bfNoteTxt">${main}<span class="bfNoteSub">${x.kind==='r'?'Reacted to':'Commented on'} ${where}${x.course?' at '+esc(x.course):''}</span></span><span class="bfNoteOk">GOT IT</span></button>`;
+  }).join('')+(bfInbox.length>3?`<button class="bfNoteMore" onclick="bfAck('*')">+${bfInbox.length-3} more · Clear all</button>`:'');
+}
+function bfNotePaint(){
+  try{
+    let el=document.getElementById('bfNote');
+    const html=bfNoteHTML();
+    if(!html){if(el&&el.remove)el.remove();return;}
+    if(!document.getElementById('bfSprite')){const s=document.createElement('div');s.id='bfSprite';s.innerHTML=BF_SPRITE;document.body.appendChild(s);}
+    if(!el){el=document.createElement('div');el.id='bfNote';el.className='bfNote';el.setAttribute('role','status');el.setAttribute('aria-live','polite');document.body.appendChild(el);}
+    el.innerHTML=html;
+  }catch(e){}
+}
+function bfAck(k){
+  k=decodeURIComponent(k);
+  const keys=k==='*'?bfInbox.map(x=>x.k):[k];
+  keys.forEach(x=>bfAckedLocal.add(x));
+  bfInbox=bfInbox.filter(x=>!keys.includes(x.k));bfNotePaint();
+  if(keys.length)relayBattle({op:'ack',pid:myPid(),keys}).catch(()=>{});
+}
+try{
+  setInterval(()=>bfInboxPoll(false),60000);
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')bfInboxPoll(true);});
+  setTimeout(()=>bfInboxPoll(true),4000);
+}catch(e){}
 function openBattlefield(){
   bfPrunePhantoms();
   bfList=null;S.screen='bfield';render();
@@ -9093,11 +9158,13 @@ async function bfMiniMap(shotMap,players,course){
   m.fitBounds(L.latLngBounds(pts).pad(0.3));
 }
 function bfToggle(key){
-  set(()=>{S.config.bf=S.config.bf||{broadcast:true,emails:true};S.config.bf[key]=!S.config.bf[key];});
+  set(()=>{S.config.bf=S.config.bf||{broadcast:true,emails:true};S.config.bf[key]=S.config.bf[key]===false;});   // a missing key was On
   if(key==='emails'){
     const em=(localStorage.getItem('wolfBackupEmail')||'').trim();
     if(em)relayBattle({op:'optout',email:em,out:!S.config.bf.emails}).catch(()=>{});
   }
+  if(key==='popups'){if(S.config.bf.popups===false){bfInbox=[];bfNotePaint();}else bfInboxPoll(true);}
+  if(key==='reactMail'&&myPid())relayBattle({op:'socmail',pid:myPid(),off:S.config.bf.reactMail===false}).catch(()=>{});
 }
 function pickGame(g){set(()=>{S.config.game=g;S.config.games=[g];S.screen='gate';});}
 // After picking a game: join a nearby group or build your own.
