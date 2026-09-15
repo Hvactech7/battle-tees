@@ -486,7 +486,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789453432';
+const BUILD='1789454888';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -6451,10 +6451,11 @@ async function windFetch(force){
         const kmh=q.windSpeed&&q.windSpeed.value,g=q.windGust&&q.windGust.value,d=q.windDirection&&q.windDirection.value;
         if(kmh!=null&&d!=null)obs={mph:Math.round(kmh*0.621371),dir:+d,gust:g!=null?Math.round(g*0.621371):null,at:Date.parse(q.timestamp)||Date.now(),station:sname||sid,km:pts.stationKm!=null?pts.stationKm:null};}
     }catch(e){}
-    let hourly=W&&W.hourly||[];
+    let hourly=W&&W.hourly||[],altFt=W&&W.altFt!=null?W.altFt:null;
     try{if(pts.hourly){const f=await j(pts.hourly);
+      try{const ev=(f.properties||{}).elevation;if(ev&&isFinite(ev.value)){altFt=Math.round(ev.value*(/ft|foot/i.test(ev.unitCode||'')?1:3.28084));altRemember(key,altFt);}}catch(e){}
       hourly=((f.properties||{}).periods||[]).slice(0,36).map(p=>({t:Date.parse(p.startTime),mph:parseInt(String(p.windSpeed||'0'))||0,dir:compassToDeg(p.windDirection),temp:p.temperature})).filter(p=>p.t&&p.dir!=null);}}catch(e){}
-    S.wx={key,pts,obs,hourly,fetchedAt:Date.now()};save();
+    S.wx={key,pts,obs,hourly,altFt,fetchedAt:Date.now()};save();
     try{stat('wind',{src:obs?'obs':'fc',mph:(obs||hourly[0]||{}).mph,station:obs&&obs.station});}catch(e){}
     if(S.screen==='map')try{updateFMB(mapMarks.mePos||mapMarks.ref,'');paintWindRose();}catch(e){}
   }catch(e){}finally{windFetch._busy=false;}
@@ -6540,7 +6541,7 @@ function paintWindRose(){
   if(coursePreview||!WIND_ON||S.windHide){el.style.display='none';return;}
   const w=windNow();
   let mapB=0;try{mapB=(LMAP&&LMAP.getBearing)?(LMAP.getBearing()||0):0;}catch(e){}
-  const active=windMode&&!!w&&w.mph>=1;
+  const active=windMode&&((!!w&&w.mph>=1)||airTempF()!=null);
   el.style.display='';el.classList.toggle('on',active);
   el.innerHTML=windArrowsSVG(w,mapB,active);
   paintSightMode();
@@ -6585,13 +6586,68 @@ function elevAt(p,g){
   return g.base+g.scale*(q[0]*(1-tx)*(1-ty)+q[1]*tx*(1-ty)+q[2]*(1-tx)*ty+q[3]*tx*ty);
 }
 function elevReady(){return elevMode&&!!elevEnsure();}
-// THE distance calculation for the sight line: actual → elevation (if on) → wind (if on)
+// THE distance calculation for the sight line: actual → mountain (elevation, altitude) → wind arrows (temperature, wind)
 function playsLike(from,to){
   const yds=mDist(from,to)*1.09361;let plays=yds,adj=false;
-  if(elevMode){const a=elevAt(from),b=elevAt(to);if(a!=null&&b!=null){plays+=(b-a)*ELEV_YDS_PER_FT;adj=true;}}
-  if(windMode){const w=windNow();if(w&&w.mph>=1){plays=windOnShot(w,from,to,plays).plays;adj=true;}}
+  // the mountain: the ground's rise and fall, then the course's altitude against your home
+  if(elevMode){const a=elevAt(from),b=elevAt(to);if(a!=null&&b!=null){plays+=(b-a)*ELEV_YDS_PER_FT;adj=true;}
+    const f=altFactor();if(Math.abs(f-1)>=0.002){plays*=f;adj=true;}}
+  // the wind arrows: the temperature, then the wind itself
+  if(windMode){const f=tempFactor();if(Math.abs(f-1)>=0.002){plays*=f;adj=true;}
+    const w=windNow();if(w&&w.mph>=1){plays=windOnShot(w,from,to,plays).plays;adj=true;}}
   return {yds,plays:Math.round(plays),adj};
 }
+// ---- the air: temperature and course altitude (Nathan 9/14, from that night's research) ----
+// No switch of their own (Nathan: not too many toggles on the GPS screen). Each rides
+// with the switch it belongs to (Nathan 9/14): temperature with WIND (the weather),
+// altitude with the MOUNTAIN (the ground). Never shown as figures.
+// Temperature: TrackMan data (Andrew Rice) ~2 y per 10°F on a 250 y drive, ~1 y on a
+// 6-iron -> 0.7% per 10°F from 70°F; warmer air carries farther, so it plays shorter.
+// Altitude: ~1.1% per 1,000 ft (2.5 y per 1,000 ft on a 250 y drive; Shot Pattern
+// says 1.2%), measured against YOUR home altitude, because the yardages you know were
+// learned there: the middle altitude of your saved rounds, 3 needed, none until then.
+const AIR_TEMP_BASE_F=70,AIR_PER_F=0.0007,AIR_PER_FT=0.000011;
+function altCache(){try{return JSON.parse(localStorage.getItem('btAlt')||'{}')||{};}catch(e){return {};}}
+function altRemember(id,ft){
+  if(!id||!isFinite(ft))return;const m=altCache();ft=Math.round(ft);if(m[id]===ft)return;
+  m[id]=ft;try{localStorage.setItem('btAlt',JSON.stringify(m));}catch(e){}
+}
+const altLookups={};
+function altLookup(c){   // USGS point elevation for a course's pin, once, cached on the phone
+  try{
+    if(!c||!c.id||altLookups[c.id]||previewSandboxed())return;
+    const loc=c.loc;if(!loc||!isFinite(loc[0])||!isFinite(loc[1]))return;
+    if(Object.keys(altLookups).length>=12)return;
+    altLookups[c.id]=1;
+    fetch(`https://epqs.nationalmap.gov/v1/json?x=${(+loc[1]).toFixed(5)}&y=${(+loc[0]).toFixed(5)}&units=Feet&wkid=4326`)
+      .then(r=>r.ok?r.json():null).then(j=>{const v=j&&parseFloat(j.value);if(isFinite(v)&&v>-1000)altRemember(c.id,v);}).catch(()=>{});
+  }catch(e){}
+}
+function courseAltFt(c){
+  c=c||S.course;if(!c||!c.id)return null;
+  if(S.wx&&S.wx.key===c.id&&isFinite(S.wx.altFt))return +S.wx.altFt;   // the NWS forecast's own grid elevation
+  const m=altCache();if(m[c.id]!=null)return m[c.id];
+  altLookup(c);return null;
+}
+function homeAltFt(){
+  const vals=[];
+  (S.history||[]).forEach(e=>{
+    if(!e)return;let v=e.altFt;
+    if(v==null&&e.courseSnap&&e.courseSnap.id){v=altCache()[e.courseSnap.id];if(v==null)altLookup(e.courseSnap);}
+    if(v!=null&&isFinite(v))vals.push(+v);
+  });
+  if(vals.length<3)return null;
+  vals.sort((a,b)=>a-b);return vals[vals.length>>1];
+}
+function airTempF(){
+  const W=S.wx;if(!W||W.key!==windKey())return null;
+  const now=Date.now(),hs=W.hourly||[];let h=null;hs.forEach(p=>{if(p.t<=now)h=p;});
+  if(!h&&hs.length&&hs[0].t-now<3*3600000)h=hs[0];
+  return (h&&now-h.t<6*3600000&&h.temp!=null&&isFinite(h.temp))?+h.temp:null;
+}
+const airClamp=f=>Math.min(1.15,Math.max(0.85,f));
+function tempFactor(){const t=airTempF();return t==null?1:airClamp(1-AIR_PER_F*(t-AIR_TEMP_BASE_F));}
+function altFactor(){const a=courseAltFt(),home=homeAltFt();return (a==null||home==null)?1:airClamp(1-AIR_PER_FT*(a-home));}
 function toggleElevMode(){
   if(!elevUrlFor(S.course)||ELEV[S.course.id]==='none'){shotToast('No elevation data for this course yet');return;}
   if(!elevEnsure()){shotToast('Loading elevation — try again in a moment');return;}
@@ -6722,7 +6778,8 @@ function toggleWindMode(){
   if(S.windHide)return;
   if(windRoseHeld){windRoseHeld=false;return;}   // the click after a hold: the dial already opened
   const w=windNow();
-  if(!w||w.mph<1){windMode=false;paintWindRose();shotToast(w?'Calm — hold the arrows to set your own wind':'No forecast for this course — hold the arrows to set your own wind');return;}
+  // calm still switches on when the temperature is known: it rides with this switch (9/14)
+  if((!w||w.mph<1)&&(windMode||airTempF()==null)){windMode=false;paintWindRose();shotToast(w?'Calm — hold the arrows to set your own wind':'No forecast for this course — hold the arrows to set your own wind');return;}
   windMode=!windMode;
   try{if(mapMarks.refreshTapLine)mapMarks.refreshTapLine();}catch(e){}
   paintSightMode();
@@ -11116,7 +11173,8 @@ function archiveRound(){
     // the course as played, minus its map blob (geo re-fetches by id/geoUrl):
     // if the course is later removed from Courses, the review still knows
     // exactly what it was, not whatever the phone has chosen since
-    courseSnap:(()=>{const c=clone(S.course);delete c.geo;return c;})()
+    courseSnap:(()=>{const c=clone(S.course);delete c.geo;return c;})(),
+    altFt:courseAltFt()   // where it was played: your home altitude is the middle of these (plays-like air)
   };
   S.history=(S.history||[]).filter(e=>e.id!==entry.id);
   S.history.unshift(entry);
