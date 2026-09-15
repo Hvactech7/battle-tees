@@ -486,7 +486,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789455383';
+const BUILD='1789456060';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -4803,7 +4803,7 @@ function vMap(){
   <div class="mapbar">
     <div class="row" style="border:none;padding:2px 0">
       <button class="ghost" onclick="mapPrev()">◀</button>
-      ${elevUrlFor(S.course)?`<button id="elevbtn" class="ghost" onclick="toggleElevMode()" aria-label="Elevation" aria-pressed="${elevReady()}" style="width:40px;height:40px;padding:0;display:flex;align-items:center;justify-content:center;opacity:${elevReady()?'1':'.45'};${elevReady()?'border-color:#4fd8ff;color:#4fd8ff':''}">
+      ${(playsLikeEntitled()&&elevUrlFor(S.course))?`<button id="elevbtn" class="ghost" onclick="toggleElevMode()" aria-label="Elevation" aria-pressed="${elevReady()}" style="width:40px;height:40px;padding:0;display:flex;align-items:center;justify-content:center;opacity:${elevReady()?'1':'.45'};${elevReady()?'border-color:#4fd8ff;color:#4fd8ff':''}">
         <svg width="24" height="20" viewBox="0 0 24 20" fill="none" aria-hidden="true"><path d="M1.5 18 L8.5 6.5 L12.5 12 L15.5 8 L22.5 18 Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
       </button>`:''}
       <div class="center" style="flex:1;min-width:0">
@@ -6538,7 +6538,7 @@ function windArrowsSVG(w,mapB,active){
 }
 function paintWindRose(){
   const el=document.getElementById('windrose');if(!el)return;
-  if(coursePreview||!WIND_ON||S.windHide){el.style.display='none';return;}
+  if(coursePreview||!WIND_ON||S.windHide||!playsLikeEntitled()){el.style.display='none';return;}
   const w=windNow();
   let mapB=0;try{mapB=(LMAP&&LMAP.getBearing)?(LMAP.getBearing()||0):0;}catch(e){}
   const active=windMode&&((!!w&&w.mph>=1)||airTempF()!=null);
@@ -6555,6 +6555,14 @@ function paintWindRose(){
 // elevation first, then wind applied to the elevation-adjusted distance. The
 // F/M/B numbers stay actual, as with wind. No network during a round: the grid
 // is fetched once beside the course's geo file.
+// PREMIUM (Nathan 9/15): wind, temperature, altitude and elevation/slope will be paid
+// features; for now they are open to everyone for field testing. Set PLAYSLIKE_OPEN to
+// false and only a round carrying a subscription gets them: the one-subscriber-covers-
+// the-foursome plan puts the entitlement on the ROUND (S.round.premium, not built yet),
+// checked on each phone because plays-like is computed on the phone. Closed = actual
+// yards, no wind arrows, no mountain; nothing announced (battletees-pricing-plan).
+let PLAYSLIKE_OPEN=true;
+function playsLikeEntitled(){return PLAYSLIKE_OPEN||!!(S.round&&S.round.premium);}
 const ELEV_YDS_PER_FT=1/3;   // the common rule: a yard for every three feet up or down
 const HOSTED_ELEV={'darkhorse':'/geo/elev/10762.json','rancho-solano':'/geo/elev/rancho-solano.json'};
 let elevMode=(()=>{try{return localStorage.getItem('btElev')==='on';}catch(e){return false;}})();
@@ -6585,10 +6593,11 @@ function elevAt(p,g){
   const q=[g.a[i],g.a[i+1],g.a[i+g.w],g.a[i+g.w+1]];if(q.some(x=>x===65535))return null;
   return g.base+g.scale*(q[0]*(1-tx)*(1-ty)+q[1]*tx*(1-ty)+q[2]*(1-tx)*ty+q[3]*tx*ty);
 }
-function elevReady(){return elevMode&&!!elevEnsure();}
+function elevReady(){return playsLikeEntitled()&&elevMode&&!!elevEnsure();}
 // THE distance calculation for the sight line: actual → mountain (elevation, altitude) → wind arrows (temperature, wind)
 function playsLike(from,to){
   const yds=mDist(from,to)*1.09361;let plays=yds,adj=false;
+  if(!playsLikeEntitled())return {yds,plays:Math.round(yds),adj:false};
   // the mountain: the ground's rise and fall, then the course's altitude above sea level
   if(elevMode){const a=elevAt(from),b=elevAt(to);if(a!=null&&b!=null){plays+=(b-a)*ELEV_YDS_PER_FT;adj=true;}
     const f=altFactor();if(Math.abs(f-1)>=0.002){plays*=f;adj=true;}}
@@ -6638,6 +6647,7 @@ const airClamp=f=>Math.min(1.15,Math.max(0.85,f));
 function tempFactor(){const t=airTempF();return t==null?1:airClamp(1-AIR_PER_F*(t-AIR_TEMP_BASE_F));}
 function altFactor(){const a=courseAltFt();return a==null?1:airClamp(1-AIR_PER_FT*a);}   // feet above sea level
 function toggleElevMode(){
+  if(!playsLikeEntitled())return;
   if(!elevUrlFor(S.course)||ELEV[S.course.id]==='none'){shotToast('No elevation data for this course yet');return;}
   if(!elevEnsure()){shotToast('Loading elevation — try again in a moment');return;}
   elevMode=!elevMode;
@@ -6688,7 +6698,7 @@ function legLabel(from,to,suffix){
   return txt+(suffix||'');
 }
 function windSettingToggle(){set(()=>{S.windHide=!S.windHide;if(S.windHide)windMode=false;});}
-function sightColor(){return (windMode||elevReady())?'#4fd8ff':'#ffffff';}
+function sightColor(){return ((windMode&&playsLikeEntitled())||elevReady())?'#4fd8ff':'#ffffff';}
 // ---- your own wind: HOLD the arrows → a dial in the hole's own frame ----------
 // Tap where the wind is blowing TO (green at the top, like the map), set the
 // mph, Set wind. Stored as a compass direction so a later map rotation, or the
@@ -6696,7 +6706,7 @@ function sightColor(){return (windMode||elevReady())?'#4fd8ff':'#ffffff';}
 let windRoseTr=null,windRoseTimer=null,windRoseHeld=false,windDial=null;
 function windRosePD(e){
   try{
-    if(S.windHide||!S.round||!S.round.started||coursePreview)return;
+    if(S.windHide||!playsLikeEntitled()||!S.round||!S.round.started||coursePreview)return;
     const tr=makePressTracker({holdMs:AIM_HOLD_MS,moveTol:14,needHold:true});
     tr.down({x:e.clientX||0,y:e.clientY||0},Date.now());windRoseTr=tr;
     clearTimeout(windRoseTimer);
@@ -6762,9 +6772,9 @@ function windDialForecast(){
   windRepaint();
   if(had)shotToast('Back to the forecast');
 }
-function paintSightMode(){try{const m=document.getElementById('holemap');if(m)m.classList.toggle('windmode',!!(windMode||elevReady()));if(mapMarks.setSightColor)mapMarks.setSightColor(sightColor());}catch(e){}}
+function paintSightMode(){try{const m=document.getElementById('holemap');if(m)m.classList.toggle('windmode',!!((windMode&&playsLikeEntitled())||elevReady()));if(mapMarks.setSightColor)mapMarks.setSightColor(sightColor());}catch(e){}}
 function toggleWindMode(){
-  if(S.windHide)return;
+  if(S.windHide||!playsLikeEntitled())return;
   if(windRoseHeld){windRoseHeld=false;return;}   // the click after a hold: the dial already opened
   const w=windNow();
   // calm still switches on when the temperature is known: it rides with this switch (9/14)
