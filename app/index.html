@@ -486,7 +486,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789587730';
+const BUILD='1789589046';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -4240,6 +4240,7 @@ function openMap(){
 function closeMap(){S.screen='hole';render();}
 function mapPrev(){clearScoreNag(false);
   if(coursePreview){const n=previewHoleCount();mapHole=(mapHole+n-1)%n;render();return;}
+  mapBounceSnap();
   mapHole=(mapHole+17)%18;render();}
 // Walking off the hole you are playing without scoring it is how holes go
 // missing from cards. The FIRST press of ▶ on an unscored current hole stays
@@ -4258,7 +4259,7 @@ function mapNext(){
     }
   }catch(e){}
   clearScoreNag(false);
-  mapHole=(mapHole+1)%18;render();
+  mapHole=(mapHole+1)%18;mapBounceBack(mapHole);render();
 }
 function clearScoreNag(ack){
   if(ack)scoreNagAckHole=mapHole;
@@ -4288,6 +4289,49 @@ function gpsResumeVisible(){
     if(!gpsPausedHidden)return;
     gpsPausedHidden=false;
     if(S.screen==='map'&&LMAP&&mapWatch==null)startMapGps();
+  }catch(e){}
+}
+// A WATCH THAT GOES QUIET (Brian, Paradise Valley 9/16: "a couple holes where the gps
+// went wonky" — arrowing to the previous hole and back fixed it). An iPhone can stop
+// delivering a web app's watchPosition with no error at all: the dot and the yardages
+// freeze where they were. Changing holes rebuilds the map and starts a fresh watch,
+// which is why the arrows cured it. Now the map does that itself: on the live map, 30 s
+// without a fix restarts the watch. A golfer on the move gets a fix every second or
+// so, so a healthy watch never trips it; a quiet one costs a single restart.
+const GPS_STALL_MS=30000;
+let mapFixAt=0,mapFixAcc=null,mapWatchAt=0,gpsStallSeen={};
+function gpsWatchdog(){
+  try{
+    if(document.hidden||S.screen!=='map'||!LMAP||mapWatch==null||!navigator.geolocation)return;
+    if(!(S.round&&S.round.started)||isReview()||geoState==='denied')return;
+    const since=Math.max(mapFixAt,mapWatchAt);
+    if(!since||Date.now()-since<GPS_STALL_MS)return;
+    const k=(S.round.startedAt||0)+':'+physHole(mapHole);
+    if(!gpsStallSeen[k]){gpsStallSeen[k]=1;   // one report per hole: a phone with no signal must not flood the stats
+      stat('gps_stall',{hole:physHole(mapHole)+1,secs:Math.round((Date.now()-since)/1000),hadFix:mapFixAt>=mapWatchAt,acc:mapFixAcc});}
+    navigator.geolocation.clearWatch(mapWatch);mapWatch=null;
+    startMapGps();
+  }catch(e){}
+}
+setInterval(gpsWatchdog,10000);
+// THE ARROW WORKAROUND, WRITTEN DOWN. ◀ off the hole you are playing and ▶ straight
+// back is what a golfer does when the map looks wrong — so when it happens, record
+// what the map looked like the moment before: how old the last fix was, whether the
+// dot was on the glass, whether the frame was yours. The next "wonky" is evidence.
+let mapBounce=null;
+function mapBounceSnap(){
+  try{
+    if(!(S.round&&S.round.started)||isReview()||coursePreview||mapHole!==S.round.cur){mapBounce=null;return;}
+    const f=mapMarks&&mapMarks.meFrac?mapMarks.meFrac():null;
+    mapBounce={at:Date.now(),h:mapHole,fixAge:mapFixAt?Math.round((Date.now()-mapFixAt)/1000):null,acc:mapFixAcc,
+      me:!!(mapMarks&&mapMarks.mePos),frac:f?f.map(x=>Math.round(x*100)/100):null,own:camOwnHere(),geo:geoState,watch:mapWatch!=null};
+  }catch(e){mapBounce=null;}
+}
+function mapBounceBack(to){
+  try{
+    const b=mapBounce;mapBounce=null;
+    if(!b||to!==b.h||Date.now()-b.at>60000)return;
+    stat('map_bounce',{hole:physHole(b.h)+1,secs:Math.round((Date.now()-b.at)/1000),fixAge:b.fixAge,acc:b.acc,me:b.me,frac:b.frac,own:b.own,geo:b.geo,watch:b.watch});
   }catch(e){}
 }
 function teardownMap(){
@@ -5598,8 +5642,10 @@ function startMapGps(){
   if(!navigator.geolocation){geoState='denied';mapGeoNote();return;}
   if(!geoPrimed)primeGeo();          // reached the map without going through openMap
   mapGeoNote();
+  mapWatchAt=Date.now();
   mapWatch=navigator.geolocation.watchPosition(p=>{
     geoState='ok';
+    mapFixAt=Date.now();mapFixAcc=Math.round(p.coords.accuracy||0)||null;
     const pos=[p.coords.latitude,p.coords.longitude];
     cacheCoords(pos);
     if(greensIsMode()){
