@@ -486,7 +486,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789501003';
+const BUILD='1789586401';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -8847,6 +8847,16 @@ try{
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')bfInboxPoll(true);});
   setTimeout(()=>bfInboxPoll(true),4000);
 }catch(e){}
+// A CACHED ROW CARRIES NO FRESH VERDICT. Live-or-finished is the relay's answer
+// (books.js: no end stamp, and younger than six hours), and when this phone has
+// to draw the list from its own cache it must answer the same question the same
+// way. Stamping every cached row live:false called a round IN PROGRESS
+// "finished" the moment a refresh failed — Brian, Paradise Valley 9/16: the
+// relay was answering live:true with his score thru 4 while his card on
+// Nathan's phone read "finished · 57 min".
+const BF_LIVE_MAX=6*3600;
+function bfLiveGuess(e){return !!(e&&!e.endedAt&&(Date.now()/1000-(e.at||0))<BF_LIVE_MAX);}
+let bfStale=false;   // the last refresh failed: what follows is the cache, not the relay
 function openBattlefield(){
   bfPrunePhantoms();
   bfList=null;S.screen='bfield';render();
@@ -8865,14 +8875,16 @@ function openBattlefield(){
     const st=bfStore();
     const seen=new Set(live.map(e=>e.code));
     const archived=Object.values(st).filter(x=>x.entry&&!seen.has(x.entry.code))
-      .map(x=>Object.assign({},x.entry,{live:false,_archived:true}))
+      .map(x=>Object.assign({},x.entry,{live:bfLiveGuess(x.entry),_archived:true}))
       .sort((a,b)=>(b.at||0)-(a.at||0));
+    bfStale=false;
     bfList=[...live,...archived];render();bfSocLoad();
   }).catch(()=>{
     const st=bfStore();
     const archived=Object.values(st).filter(x=>x.entry)
-      .map(x=>Object.assign({},x.entry,{live:false,_archived:true}))
+      .map(x=>Object.assign({},x.entry,{live:bfLiveGuess(x.entry),_archived:true}))
       .sort((a,b)=>(b.at||0)-(a.at||0));
+    bfStale=archived.length>0;   // say so on screen: these scores are as of the last refresh
     bfList=archived.length?archived:'offline';render();
   });
 }
@@ -8884,6 +8896,7 @@ function vBattlefield(){
     return m>=60?`${Math.floor(m/60)}h ${m%60}m`:`${m} min`;
   };
   return topbar('Community Battlefield','Watch your Battle Friends fight it out','home')+`<main>${BF_SPRITE}
+  ${bfStale&&Array.isArray(L)&&L.length?'<div class="tiny center muted" style="margin-bottom:8px">Couldn\'t refresh — showing your last view.</div>':''}
   ${L===null?'<div class="card center muted">Checking the Battlefield…</div>'
    :L==='offline'?'<div class="card center muted">Could not reach the Battlefield — check your signal.</div>'
    :!L.length?'<div class="card center muted">No battles right now. Start a round and yours shows up here for your friends.</div>'
@@ -10717,6 +10730,9 @@ async function natUse(id,auto){
     const course={id:rec.id,name:rec.name,loc:rec.loc,
       teeSets:(rec.teeSets||[]).filter(t=>t.rating&&t.slope).map(t=>({id:t.id,name:t.name,rating:t.rating,slope:t.slope,yds:t.yds||null})),
       holes:rec.holes,geoUrl:rec.geoUrl||null,tier:rec.tier};
+    // a record whose scorecard was PROVEN wrong ships without it (fix-wrong-cards.py,
+    // 9/16): its pars are guesses, so the group is asked each hole's par as they play
+    if(rec.cardGuess)course._cardGuess=true;
     if(!course.teeSets.length)course.teeSets=[{id:'na-def',name:'White',rating:70,slope:120}];
     normalizeNine(course);
     set(()=>{
