@@ -492,7 +492,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789612724';
+const BUILD='1789612880';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -10047,7 +10047,7 @@ function vHistory(){
     return `<div class="card" style="padding:12px 14px">
       <div style="display:flex;align-items:flex-start;gap:10px">
         <b style="flex:1;min-width:0;font-family:Rajdhani,sans-serif;font-size:20px">${gameName(e.game)} · ${esc(e.courseName)}</b>
-        <button class="ghost danger" style="flex:none;width:46px;height:40px;padding:0;margin:0;display:flex;align-items:center;justify-content:center" aria-label="Delete this round" onclick="delHist('${e.id}')">${armDelHist===e.id?'Del?':'<span style="font-size:26px;line-height:1;font-weight:700">✕</span>'}</button>
+        <button class="ghost danger" style="flex:none;width:46px;height:40px;padding:0;margin:0;display:flex;align-items:center;justify-content:center" aria-label="Delete this round" onclick="delHist('${e.id}')">${armDelHist===e.id?'Del?':'<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>'}</button>
       </div>
       <div class="tiny">${when} · thru ${e.thru} · ${e.mins!=null?e.mins+' min':''}${e.code?' · shared '+esc(e.code):''}</div>
       <div class="tiny">${(e.players||[]).map(esc).join(' · ')}</div>
