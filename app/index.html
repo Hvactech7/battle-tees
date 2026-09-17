@@ -210,6 +210,9 @@
   .bfcmList{overflow-y:auto;display:flex;flex-direction:column;gap:6px;min-height:60px;max-height:46dvh;margin:6px 0 10px}
   .bfcm{position:relative;background:#141c2a;border:1px solid #2a3448;border-radius:10px;padding:7px 38px 8px 10px;font-size:16.5px;line-height:1.4;overflow-wrap:anywhere;-webkit-user-select:text;user-select:text}
   .bfcm.mine{border-color:var(--elec-dk);background:#10223a}
+  .bfcmReply{display:inline-block;margin-top:4px;min-height:32px;padding:0 12px;border-radius:8px;background:transparent;border:1px solid var(--green);color:var(--green-mid);font:700 14px Rajdhani,Inter,sans-serif;letter-spacing:.5px}
+  .bfcmTo{font-size:14px;color:var(--ink2);margin-bottom:6px}
+  .bfcmTo b{color:var(--green-mid)}
   .bfcmBy{font:700 18px Rajdhani,Inter,sans-serif;color:var(--green-mid)}
   .bfcmAt{color:var(--ink3);font-size:12px;margin-left:6px}
   .bfmore{position:absolute;top:1px;right:1px;width:36px;height:36px;background:none;border:0;color:var(--ink3);font:700 17px/1 Inter,sans-serif}
@@ -489,7 +492,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789604961';
+const BUILD='1789612558';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -8783,6 +8786,7 @@ function bfCmListHTML(){
   if(c.list==='offline')return '<div class="tiny" style="padding:10px 0">Could not load comments. Check your signal.</div>';
   let h=c.list.length?c.list.map(x=>`<div class="bfcm${x.mine?' mine':''}"><span class="bfcmBy">${esc(x.name)}</span><span class="bfcmAt">${bfAgo(x.at)}</span>
     <div>${esc(x.text)}</div>
+    ${x.mine?'':`<button class="bfcmReply" onclick="bfCmReplyTo('${bfArg(x.pid)}','${bfArg(x.name)}')">Reply</button>`}
     <button class="bfmore" aria-label="Comment options" aria-expanded="${c.menu===x.id}" onclick="bfCmMenu(${+x.id})">⋯</button>
     ${c.menu===x.id?`<div class="bfmenu">${x.mine?`<button class="danger" onclick="bfCmDel(${+x.id})">Delete</button>`
       :`<button onclick="bfCmReport(${+x.id})">Report</button><button class="danger" onclick="bfCmBlock('${bfArg(x.pid)}')">Block ${esc(x.name)}</button>${c.t===myPid()?`<button class="danger" onclick="bfCmDel(${+x.id})">Delete</button>`:''}`}</div>`:''}</div>`).join('')
@@ -8790,6 +8794,24 @@ function bfCmListHTML(){
   if((c.blocked||[]).length)h+=`<div class="tiny">Hidden: you blocked ${c.blocked.map(b=>esc(b.name||'someone')).join(', ')}. ${c.blocked.map(b=>`<button class="linkish" onclick="bfCmUnblock('${bfArg(b.pid)}')">Unblock${b.name?' '+esc(b.name):''}</button>`).join(' ')}</div>`;
   if(c.note)h+=`<div class="tiny" style="color:var(--green-mid)">${esc(c.note)}</div>`;
   return h;
+}
+// REPLY FROM THE THREAD (Nathan 9/16: "how can a player reply after they've dismissed it
+// with GOT IT?"). Every comment someone else wrote carries Reply: it addresses what you
+// type next to them, so they are told — the same reply the notice's REPLY sends.
+function bfCmReplyTo(pid,name){
+  const c=bfCm;if(!c)return;
+  pid=decodeURIComponent(pid);name=decodeURIComponent(name);
+  c.replyTo=pid;c.replyName=name;
+  const to=document.getElementById('bfcmTo'),ta=document.getElementById('bfcmText');
+  if(to){to.innerHTML=`Replying to <b>${esc(name)}</b> <button class="linkish" aria-label="Not a reply" onclick="bfCmReplyClear()">✕</button>`;to.hidden=false;}
+  if(ta){ta.placeholder='Reply to '+name;try{ta.focus();}catch(e){}}
+}
+function bfCmReplyClear(){
+  const c=bfCm;if(!c)return;
+  c.replyTo='';c.replyName='';
+  const to=document.getElementById('bfcmTo'),ta=document.getElementById('bfcmText');
+  if(to){to.hidden=true;to.innerHTML='';}
+  if(ta)ta.placeholder='Say something to '+(c.t==='round'?'everyone':bfWhoFor(c.code,c.t));
 }
 function bfCmPaint(scroll){const el=document.getElementById('bfcmList');if(!el)return;el.innerHTML=bfCmListHTML();if(scroll)el.scrollTop=el.scrollHeight;}
 function openBfComments(code,t,rp){
@@ -8807,6 +8829,7 @@ function openBfComments(code,t,rp){
       <div class="tiny mb">No abuse, hate or explicit stuff. Comments can be reported, and players can block you.</div>
       <button class="big" onclick="bfCmRulesOk()">OK, post it</button><button class="ghost mt" style="width:100%" onclick="bfCmRules(false)">Cancel</button></div>
     <div id="bfcmCompose">
+      <div id="bfcmTo" class="bfcmTo" hidden></div>
       <label for="bfcmText" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Comment</label>
       <textarea id="bfcmText" class="bfcmText" maxlength="140" rows="2" placeholder="${rp?'Reply to '+who:'Say something to '+(t==='round'?'everyone':who)}" oninput="bfCmInput()"></textarea>
       <div class="bfcmMeta"><span id="bfcmErr" class="bfcmErr"></span><span id="bfcmCount">0/140</span></div>
@@ -8820,7 +8843,7 @@ function openBfComments(code,t,rp){
     bfCmPaint(true);
   }).catch(()=>{if(bfCm&&bfCm.code===code){bfCm.list='offline';bfCmPaint();}});
 }
-function closeBfComments(keep){try{document.querySelectorAll('#bfcm').forEach(x=>x.remove());}catch(e){}if(!keep){const wasNote=bfCm&&bfCm.noteK;bfCm=null;if(wasNote)bfNotePaint();}}
+function closeBfComments(keep){try{document.querySelectorAll('#bfcm').forEach(x=>x.remove());}catch(e){}if(!keep){bfCm=null;bfNotePaint();}}
 function bfCmInput(){const ta=document.getElementById('bfcmText'),n=document.getElementById('bfcmCount');if(ta&&n)n.textContent=`${ta.value.length}/140`;bfCmErr('');}
 function bfCmErr(msg,neutral){const e=document.getElementById('bfcmErr');if(!e)return;e.textContent=msg||'';e.className='bfcmErr'+(msg&&!neutral?' err':'');}
 function bfCmRules(on){const r=document.getElementById('bfcmRules'),c=document.getElementById('bfcmCompose');if(r)r.hidden=!on;if(c)c.hidden=!!on;}
@@ -8837,7 +8860,7 @@ function bfCmSend(){
     if(r&&r.ok&&r.comment){
       if(c.noteK){const k=c.noteK;bfAck(encodeURIComponent(k));closeBfComments();return;}   // answered: that notice is done
       // posting closes the popup (Nathan 9/14); the card's count and caption say it landed
-      bfSay[c.code]=`Comment posted on ${c.t==='round'?'the round':bfWhoFor(c.code,c.t)}.`;
+      bfSay[c.code]=c.replyTo&&c.replyName?`Reply sent to ${esc(c.replyName)}.`:`Comment posted on ${c.t==='round'?'the round':bfWhoFor(c.code,c.t)}.`;
       closeBfComments();bfSocBump(c.code,c.t,1);
     }else bfCmErr((r&&r.error)||'Could not post. Try again.');
   }).catch(()=>{c.sending=false;bfCmErr('Could not post. Check your signal.');});
@@ -8927,8 +8950,8 @@ function bfNoteHTML(){
 function bfNotePaint(){
   try{
     let el=document.getElementById('bfNote');
-    // the reply box sits under the notices otherwise (z-index): they wait while you type
-    const html=(bfCm&&bfCm.noteK)?'':bfNoteHTML();
+    // any comments box sits under the notices otherwise (z-index): they wait while it is open
+    const html=bfCm?'':bfNoteHTML();
     if(!html){if(el&&el.remove)el.remove();return;}
     if(el&&el._html===html)return;                           // every render calls this: never rebuild a card mid-tap
     if(!document.getElementById('bfSprite')){const s=document.createElement('div');s.id='bfSprite';s.innerHTML=BF_SPRITE;document.body.appendChild(s);}
@@ -10019,15 +10042,19 @@ function vHistory(){
   ${H.length?H.map(e=>{
     const d=new Date(e.startedAt||(e.endedAt-(e.mins||0)*60000));   // the day it was played
     const when=`${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()]} ${d.getMonth()+1}/${d.getDate()}`;
+    // delete sits top-right, apart from Review/Data/Email (Nathan 9/16) — it used to wrap
+    // onto a row of its own under them, one careless tap below Review
     return `<div class="card" style="padding:12px 14px">
-      <b style="font-family:Rajdhani,sans-serif;font-size:20px">${gameName(e.game)} · ${esc(e.courseName)}</b>
+      <div style="display:flex;align-items:flex-start;gap:10px">
+        <b style="flex:1;min-width:0;font-family:Rajdhani,sans-serif;font-size:20px">${gameName(e.game)} · ${esc(e.courseName)}</b>
+        <button class="ghost danger" style="flex:none;width:46px;margin:0" aria-label="Delete this round" onclick="delHist('${e.id}')">${armDelHist===e.id?'Del?':'✕'}</button>
+      </div>
       <div class="tiny">${when} · thru ${e.thru} · ${e.mins!=null?e.mins+' min':''}${e.code?' · shared '+esc(e.code):''}</div>
       <div class="tiny">${(e.players||[]).map(esc).join(' · ')}</div>
       <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
         <button class="ghost sel" style="flex:1 1 40%;margin:0;white-space:nowrap" onclick="reopenRound('${e.id}')">Review</button>
         <button class="ghost" style="flex:1 1 auto;margin:0;white-space:nowrap" onclick="exOpen('download','${e.id}')">⬇️ Data</button>
         <button class="ghost" style="flex:1 1 auto;margin:0;white-space:nowrap" onclick="exOpen('email','${e.id}')">✉️ Email</button>
-        <button class="ghost danger" style="flex:none;width:46px;margin:0" onclick="delHist('${e.id}')">${armDelHist===e.id?'Del?':'✕'}</button>
       </div>
     </div>`;}).join('')
   :`<div class="card center muted">No finished rounds yet — they land here when you tap “End round”.</div>`}
