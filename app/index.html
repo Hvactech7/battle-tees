@@ -497,7 +497,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-centre in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789613148';
+const BUILD='1789613397';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -4283,7 +4283,7 @@ function scoreNagToast(){
   d.style.cssText='position:fixed;right:max(10px,calc(50vw - 230px));bottom:calc(226px + env(safe-area-inset-bottom));z-index:90;width:min(300px,80vw);background:var(--card);border:2px solid var(--amber-bd,#c9922e);border-radius:12px;padding:10px 12px;box-shadow:3px 3px 0 rgba(0,0,0,.4)';
   d.innerHTML='<div style="display:flex;align-items:flex-start;gap:8px">'
     +'<div class="tiny" style="flex:1;font-size:14.5px;text-align:center;padding-top:3px"><b>Score this hole first</b><br>close this and ▶ moves on</div>'
-    +'<button onclick="clearScoreNag(true)" style="flex:none;border:1px solid var(--line);background:#1b2433;color:var(--ink2);border-radius:8px;padding:5px 10px;font-weight:700">✕</button></div>'
+    +'<button onclick="clearScoreNag(true)" aria-label="Close" style="flex:none;border:1px solid var(--line);background:#1b2433;color:var(--ink2);border-radius:8px;width:40px;height:40px;padding:0;display:flex;align-items:center;justify-content:center">'+XICON+'</button></div>'
     // the arrow hangs over the word Score on the button below
     +'<div style="font-size:26px;line-height:1;margin-top:5px;text-align:right;padding-right:50px">⬇</div>';
   document.body.appendChild(d);
@@ -4496,7 +4496,7 @@ function updateTrackBtn(){
   b.textContent=armed?'Mark It':'Track It';
   let x=document.getElementById('trackxbtn');
   if(armed&&!x){
-    b.insertAdjacentHTML('afterend','<button id="trackxbtn" onclick="clearTrackStart()" style="position:fixed;left:max(138px,calc(50vw - 102px));bottom:calc(112px + env(safe-area-inset-bottom));z-index:6;width:46px;height:46px;background:var(--card);border:2px solid var(--red,#c0392b);border-radius:12px;color:var(--red,#c0392b);font-size:22px;font-weight:800;box-shadow:2px 2px 0 rgba(0,0,0,.35)">✕</button>');
+    b.insertAdjacentHTML('afterend','<button id="trackxbtn" onclick="clearTrackStart()" aria-label="Cancel this shot" style="position:fixed;left:max(138px,calc(50vw - 102px));bottom:calc(112px + env(safe-area-inset-bottom));z-index:6;width:46px;height:46px;padding:0;display:flex;align-items:center;justify-content:center;background:var(--card);border:2px solid var(--red,#c0392b);border-radius:12px;color:var(--red,#c0392b);box-shadow:2px 2px 0 rgba(0,0,0,.35)">'+XICON+'</button>');
   }else if(!armed&&x)x.remove();
   b.style.borderColor=armed?'var(--amber-bd)':'var(--green)';
   b.style.color=armed?'var(--amber-bd)':'var(--green-mid)';
@@ -4825,7 +4825,7 @@ function vMap(){
   ${mapCreditsChipHTML()}
   ${mapStatChipsHTML(hole)}
   ${gpsOnly()?'':`<button id="trackbtn" onclick="trackShotTap()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(112px + env(safe-area-inset-bottom));z-index:6;width:120px;height:46px;background:var(--card);border:2px solid ${trackShot&&trackShot.hole===mapHole?'var(--amber-bd)':'var(--green)'};border-radius:12px;color:${trackShot&&trackShot.hole===mapHole?'var(--amber-bd)':'var(--green-mid)'};font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:19px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">${trackShot&&trackShot.hole===mapHole?'Mark It':'Track It'}</button>`}
-  ${gpsOnly()?'':(trackShot&&trackShot.hole===mapHole?`<button id="trackxbtn" onclick="clearTrackStart()" style="position:fixed;left:max(138px,calc(50vw - 102px));bottom:calc(112px + env(safe-area-inset-bottom));z-index:6;width:46px;height:46px;background:var(--card);border:2px solid var(--red,#c0392b);border-radius:12px;color:var(--red,#c0392b);font-size:22px;font-weight:800;box-shadow:2px 2px 0 rgba(0,0,0,.35)">✕</button>`:'')}
+  ${gpsOnly()?'':(trackShot&&trackShot.hole===mapHole?`<button id="trackxbtn" onclick="clearTrackStart()" aria-label="Cancel this shot" style="position:fixed;left:max(138px,calc(50vw - 102px));bottom:calc(112px + env(safe-area-inset-bottom));z-index:6;width:46px;height:46px;padding:0;display:flex;align-items:center;justify-content:center;background:var(--card);border:2px solid var(--red,#c0392b);border-radius:12px;color:var(--red,#c0392b);box-shadow:2px 2px 0 rgba(0,0,0,.35)">${XICON}</button>`:'')}
   ${gpsOnly()?'':undoTrackHTML()}
   ${(()=>{try{
       // Under amnesia the hole is unmapped BY DEFINITION. This runs during
@@ -14177,7 +14177,7 @@ function openFullCard(){
   d.style.cssText='position:fixed;inset:0;z-index:85;background:rgba(8,12,22,.88);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:12px';
   d.onclick=e=>{if(e.target===d)closeFullCard();};
   d.innerHTML=`<div class="card" style="width:min(470px,96vw);max-height:92vh;overflow-y:auto;margin:0">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><h2 style="margin:0">Scorecard · gross</h2><button class="ghost" onclick="closeFullCard()">✕</button></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><h2 style="margin:0">Scorecard · gross</h2><button class="ghost xbtn" aria-label="Close" onclick="closeFullCard()">${XICON}</button></div>
     ${fullScorecardHTML()}
   </div>`;
   document.body.appendChild(d);
@@ -15486,7 +15486,7 @@ try{
            :'Tap <b>Share</b>, then <b>Add to Home Screen</b> for the full experience.')
     +'</div>'
     +(droid?'<button id="a2hsGo" style="flex:none;border:1px solid var(--green-dk);background:linear-gradient(180deg,#e0bb45,#a8851e);color:#241d08;border-radius:8px;padding:7px 14px;font-weight:700;font-family:Rajdhani;font-size:14px">How</button>':'')
-    +'<button id="a2hsX" style="flex:none;border:1px solid var(--line);background:#1b2433;color:var(--ink2);border-radius:8px;padding:7px 11px;font-weight:700">✕</button>';
+    +'<button id="a2hsX" aria-label="Close" style="flex:none;border:1px solid var(--line);background:#1b2433;color:var(--ink2);border-radius:8px;width:40px;height:40px;padding:0;display:flex;align-items:center;justify-content:center">'+XICON+'</button>';
   document.body.appendChild(bar);
   // NEVER during a round. At the bottom it sat exactly on the nav bar (z 400 vs
   // the nav's lower) so browser players had no navigation at all — and its
