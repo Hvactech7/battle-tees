@@ -228,7 +228,10 @@
   .bfNoteItem b{font:700 17px Rajdhani,Inter,sans-serif;color:var(--green-mid)}
   .bfNoteTxt{flex:1;min-width:0;overflow-wrap:anywhere}
   .bfNoteSub{display:block;font-size:12px;color:var(--ink3);margin-top:2px}
-  .bfNoteOk{flex:none;font:700 13px Rajdhani,sans-serif;letter-spacing:1px;color:var(--elec-mid);border:1px solid var(--elec-dk);border-radius:8px;padding:6px 8px}
+  .bfNoteBtns{flex:none;display:flex;flex-direction:column;gap:6px}
+  .bfNoteOk,.bfNoteReply{min-height:36px;font:700 13px Rajdhani,sans-serif;letter-spacing:1px;border-radius:8px;padding:6px 10px;background:transparent}
+  .bfNoteOk{color:var(--elec-mid);border:1px solid var(--elec-dk)}
+  .bfNoteReply{color:#0b111c;background:var(--green-mid);border:1px solid var(--green)}
   .bfNoteMore{align-self:center;min-height:36px;padding:0 14px;border-radius:999px;background:#0b111c;border:1px solid var(--line);color:var(--ink2);font:600 13px Inter,sans-serif}
   @keyframes bfNoteGlow{50%{box-shadow:4px 4px 0 var(--green-dk),0 0 0 4px rgba(232,197,82,.35),0 10px 28px rgba(0,0,0,.55)}}
   @media (prefers-reduced-motion:reduce){.bfNoteItem{animation:none}}
@@ -486,7 +489,7 @@
 <script>
 'use strict';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789600267';
+const BUILD='1789604961';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -7450,7 +7453,7 @@ function render(){
   if(S.screen!=='gate'&&gatePick.timer){clearInterval(gatePick.timer);gatePick.timer=null;gatePick.open=false;}
   const el=$('#app');
   const scr=S.screen;
-  if(bfCm&&scr!=='bfield')closeBfComments();   // the comments popup belongs to the Battlefield list
+  if(bfCm&&scr!=='bfield'&&!bfCm.noteK)closeBfComments();   // the comments popup belongs to the Battlefield list (a reply to a notice goes where the notice was)
   // iOS Shake-to-Undo mitigation: on the play screens (no text inputs) drop any
   // lingering first-responder field so a cart-path bump has no 'Undo Typing' to
   // offer. The full disable is Settings>Accessibility>Touch>Shake to Undo>Off.
@@ -7546,6 +7549,7 @@ function render(){
   if(scr==='shotview')requestAnimationFrame(initShotView);
   else teardownMap();
   wakeSync();   // a round that just ended, or the switch going off, lets the screen sleep
+  try{bfNotePaint();}catch(e){}   // a hole just scored (here or on a partner's phone) releases held notices
 }
 function verifySheetHTML(){
   if(!verifyUI)return '';
@@ -8788,33 +8792,35 @@ function bfCmListHTML(){
   return h;
 }
 function bfCmPaint(scroll){const el=document.getElementById('bfcmList');if(!el)return;el.innerHTML=bfCmListHTML();if(scroll)el.scrollTop=el.scrollHeight;}
-function openBfComments(code,t){
+function openBfComments(code,t,rp){
   code=decodeURIComponent(code);t=decodeURIComponent(t);
   bfPick=null;closeBfComments(true);
-  bfCm={code,t,list:null,menu:null,blocked:[],note:'',sending:false};
-  const who=t==='round'?'the whole round':bfWhoFor(code,t);
+  bfCm={code,t,list:null,menu:null,blocked:[],note:'',noteK:(rp&&rp.note)||'',replyTo:(rp&&rp.replyTo)||'',sending:false};
+  bfNotePaint();
+  const who=rp?esc(rp.replyName||'them'):t==='round'?'the whole round':bfWhoFor(code,t);
   const d=document.createElement('div');
   d.className='vfWrap';d.id='bfcm';d.setAttribute('role','dialog');d.setAttribute('aria-modal','true');d.setAttribute('aria-labelledby','bfcmT');
   d.onclick=ev=>{if(ev.target===d)closeBfComments();};
-  d.innerHTML=`<div class="vfCard bfcmCard"><h2 class="vfTitle" id="bfcmT">Comments<small>${who}</small></h2>
+  d.innerHTML=`<div class="vfCard bfcmCard"><h2 class="vfTitle" id="bfcmT">${rp?'Reply':'Comments'}<small>${rp?'to '+who:who}</small></h2>
     <div class="bfcmList" id="bfcmList">${bfCmListHTML()}</div>
     <div id="bfcmRules" hidden><div class="vfTitle" style="font-size:20px;margin-top:4px">Keep it friendly</div>
       <div class="tiny mb">No abuse, hate or explicit stuff. Comments can be reported, and players can block you.</div>
       <button class="big" onclick="bfCmRulesOk()">OK, post it</button><button class="ghost mt" style="width:100%" onclick="bfCmRules(false)">Cancel</button></div>
     <div id="bfcmCompose">
       <label for="bfcmText" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Comment</label>
-      <textarea id="bfcmText" class="bfcmText" maxlength="140" rows="2" placeholder="Say something to ${t==='round'?'everyone':who}" oninput="bfCmInput()"></textarea>
+      <textarea id="bfcmText" class="bfcmText" maxlength="140" rows="2" placeholder="${rp?'Reply to '+who:'Say something to '+(t==='round'?'everyone':who)}" oninput="bfCmInput()"></textarea>
       <div class="bfcmMeta"><span id="bfcmErr" class="bfcmErr"></span><span id="bfcmCount">0/140</span></div>
       <div class="bfcmBtns"><button class="ghost" onclick="closeBfComments()">Close</button><button class="big" onclick="bfCmSend()">Send</button></div>
     </div></div>`;
   document.body.appendChild(d);
+  if(rp)try{document.getElementById('bfcmText').focus();}catch(e){}
   relayBattle({op:'comments',pid:myPid(),code,target:t}).then(r=>{
     if(!bfCm||bfCm.code!==code||bfCm.t!==t)return;
     if(r&&r.ok){bfCm.list=r.list||[];bfCm.blocked=r.blocked||[];}else bfCm.list='offline';
     bfCmPaint(true);
   }).catch(()=>{if(bfCm&&bfCm.code===code){bfCm.list='offline';bfCmPaint();}});
 }
-function closeBfComments(keep){try{document.querySelectorAll('#bfcm').forEach(x=>x.remove());}catch(e){}if(!keep)bfCm=null;}
+function closeBfComments(keep){try{document.querySelectorAll('#bfcm').forEach(x=>x.remove());}catch(e){}if(!keep){const wasNote=bfCm&&bfCm.noteK;bfCm=null;if(wasNote)bfNotePaint();}}
 function bfCmInput(){const ta=document.getElementById('bfcmText'),n=document.getElementById('bfcmCount');if(ta&&n)n.textContent=`${ta.value.length}/140`;bfCmErr('');}
 function bfCmErr(msg,neutral){const e=document.getElementById('bfcmErr');if(!e)return;e.textContent=msg||'';e.className='bfcmErr'+(msg&&!neutral?' err':'');}
 function bfCmRules(on){const r=document.getElementById('bfcmRules'),c=document.getElementById('bfcmCompose');if(r)r.hidden=!on;if(c)c.hidden=!!on;}
@@ -8826,9 +8832,10 @@ function bfCmSend(){
   if(!agreed){bfCmRules(true);return;}
   const text=ta.value.replace(/\s+/g,' ').trim();
   c.sending=true;bfCmErr('Sending…',true);
-  relayBattle({op:'comment',pid:myPid(),name:(S.me&&S.me.name)||'',code:c.code,target:c.t,text}).then(r=>{
+  relayBattle(Object.assign({op:'comment',pid:myPid(),name:(S.me&&S.me.name)||'',code:c.code,target:c.t,text},c.replyTo?{replyTo:c.replyTo}:{})).then(r=>{
     c.sending=false;if(bfCm!==c)return;
     if(r&&r.ok&&r.comment){
+      if(c.noteK){const k=c.noteK;bfAck(encodeURIComponent(k));closeBfComments();return;}   // answered: that notice is done
       // posting closes the popup (Nathan 9/14); the card's count and caption say it landed
       bfSay[c.code]=`Comment posted on ${c.t==='round'?'the round':bfWhoFor(c.code,c.t)}.`;
       closeBfComments();bfSocBump(c.code,c.t,1);
@@ -8874,32 +8881,72 @@ function bfInboxPoll(force){
     bfInboxBusy=true;bfInboxAt=Date.now();
     relayBattle({op:'inbox',pid:myPid()}).then(r=>{
       bfInboxBusy=false;if(!r||!r.ok)return;
-      bfInbox=(r.items||[]).filter(x=>x&&x.k&&!bfAckedLocal.has(x.k));bfNotePaint();
+      bfInbox=(r.items||[]).filter(x=>x&&x.k&&!bfAckedLocal.has(x.k));
+      const t=Date.now();bfInbox.forEach(x=>{if(!bfSeen[x.k])bfSeen[x.k]=t;});
+      bfNotePaint();
     }).catch(()=>{bfInboxBusy=false;});
   }catch(e){bfInboxBusy=false;}
 }
+// NOT MID-SHOT (Nathan 9/16). Two notices at the top of the hole map covered the hole
+// number, Back and the green with its yardage — a golfer standing over a shot had to
+// clear a friend's message to see where he was aiming. During a live round a notice
+// now waits until the hole is scored: anything that reached this phone before a hole
+// was completed (or in the moment right after, while the scoring phone asks again)
+// shows then, and stays until GOT IT. Arrivals mid-hole wait for the next score. Out of
+// a round — watching, browsing, the round over — they show straight away, as before.
+let bfSeen={},bfDone={key:'',n:0,at:0};
+const BF_RELEASE_MS=20000;
+function bfRoundLive(){try{return !!(S.round&&S.round.started&&!S.round.myEndedAt)&&!isReview();}catch(e){return false;}}
+function bfHoleDoneTick(){
+  try{
+    if(!bfRoundLive())return;
+    const key=String(S.round.startedAt||''),n=(S.round.holes||[]).filter(r=>r&&r.confirmed).length;
+    if(bfDone.key!==key){bfDone={key,n,at:0};return;}        // opened mid-round: nothing released until the next hole
+    if(n>bfDone.n){bfDone.n=n;bfDone.at=Date.now();}
+    else if(n<bfDone.n)bfDone.n=n;                            // an un-confirmed hole: not a release
+  }catch(e){}
+}
+function bfShowable(){
+  if(!bfRoundLive())return bfInbox;
+  bfHoleDoneTick();
+  return bfInbox.filter(x=>(bfSeen[x.k]||Date.now())<=bfDone.at+BF_RELEASE_MS);
+}
 function bfNoteHTML(){
-  if(!bfInbox.length)return '';
-  return bfInbox.slice(0,3).map(x=>{
+  const list=bfShowable();
+  if(!list.length)return '';
+  return list.slice(0,3).map(x=>{
     const where=x.round?"your group's round":'your round';
     const icon=x.kind==='r'?bfIcon(x.icon):`<span style="color:var(--green-mid);flex:none;display:flex">${BF_BUBBLE.replace('width="15" height="15"','width="34" height="34"')}</span>`;
     const main=x.kind==='r'?`<b>${esc(x.from)}</b> · ${esc(BF_ICON_NAME[x.icon]||'Reaction')}`:`<b>${esc(x.from)}</b>: “${esc(x.text||'')}”`;
-    return `<button class="bfNoteItem" onclick="bfAck('${bfArg(x.k)}')">${icon}<span class="bfNoteTxt">${main}<span class="bfNoteSub">${x.kind==='r'?'Reacted to':'Commented on'} ${where}${x.course?' at '+esc(x.course):''}</span></span><span class="bfNoteOk">GOT IT</span></button>`;
-  }).join('')+(bfInbox.length>3?`<button class="bfNoteMore" onclick="bfAck('*')">+${bfInbox.length-3} more · Clear all</button>`:'');
+    const sub=x.kind==='r'?`Reacted to ${where}`:x.reply?`Replied to you${x.starter?` on ${esc(x.starter)}'s round`:''}`:`Commented on ${where}`;
+    // a comment can be answered; a reaction just gets GOT IT (Nathan 9/16)
+    const reply=x.kind==='c'&&x.pid&&x.target?`<button class="bfNoteReply" onclick="bfReply('${bfArg(x.k)}')">REPLY</button>`:'';
+    return `<div class="bfNoteItem">${icon}<span class="bfNoteTxt">${main}<span class="bfNoteSub">${sub}${x.course?' at '+esc(x.course):''}</span></span><span class="bfNoteBtns"><button class="bfNoteOk" onclick="bfAck('${bfArg(x.k)}')">GOT IT</button>${reply}</span></div>`;
+  }).join('')+(list.length>3?`<button class="bfNoteMore" onclick="bfAck('*')">+${list.length-3} more · Clear all</button>`:'');
 }
 function bfNotePaint(){
   try{
     let el=document.getElementById('bfNote');
-    const html=bfNoteHTML();
+    // the reply box sits under the notices otherwise (z-index): they wait while you type
+    const html=(bfCm&&bfCm.noteK)?'':bfNoteHTML();
     if(!html){if(el&&el.remove)el.remove();return;}
+    if(el&&el._html===html)return;                           // every render calls this: never rebuild a card mid-tap
     if(!document.getElementById('bfSprite')){const s=document.createElement('div');s.id='bfSprite';s.innerHTML=BF_SPRITE;document.body.appendChild(s);}
     if(!el){el=document.createElement('div');el.id='bfNote';el.className='bfNote';el.setAttribute('role','status');el.setAttribute('aria-live','polite');document.body.appendChild(el);}
-    el.innerHTML=html;
+    el.innerHTML=html;el._html=html;
   }catch(e){}
+}
+// REPLY (Nathan 9/16: "so the player can message you back, easily"). Opens the same
+// comments box on the same row or round, addressed to whoever wrote it; the relay
+// puts the answer in their notices (reply_to) as well as in the thread.
+function bfReply(k){
+  k=decodeURIComponent(k);
+  const x=bfInbox.find(i=>i.k===k);if(!x||!x.code||!x.target)return;
+  openBfComments(encodeURIComponent(x.code),encodeURIComponent(x.target),{replyTo:x.pid,replyName:x.from,note:k});
 }
 function bfAck(k){
   k=decodeURIComponent(k);
-  const keys=k==='*'?bfInbox.map(x=>x.k):[k];
+  const keys=k==='*'?bfShowable().map(x=>x.k):[k];
   keys.forEach(x=>bfAckedLocal.add(x));
   bfInbox=bfInbox.filter(x=>!keys.includes(x.k));bfNotePaint();
   if(keys.length)relayBattle({op:'ack',pid:myPid(),keys}).catch(()=>{});
@@ -13803,7 +13850,7 @@ function maybeBroadcastRound(){
     setTimeout(bfBroadcastStart,300);
   }catch(e){}
 }
-function confirmHole(){const h=S.round.cur;if(wolfPickGate(h,confirmHole))return;if(greensIsMode())greensConsumeTarget();set(()=>{commitStage(h,actIdx());S.round.holes[h].confirmed=true;if(!isReview())advanceToNext();});maybeBroadcastRound();askPutts(h,()=>showSplash(h,true));try{setTimeout(()=>chalCheerCheck(false),900);}catch(e){}}
+function confirmHole(){const h=S.round.cur;if(wolfPickGate(h,confirmHole))return;if(greensIsMode())greensConsumeTarget();set(()=>{commitStage(h,actIdx());S.round.holes[h].confirmed=true;if(!isReview())advanceToNext();});maybeBroadcastRound();askPutts(h,()=>showSplash(h,true));try{setTimeout(()=>chalCheerCheck(false),900);}catch(e){}try{bfHoleDoneTick();bfInboxPoll(true);}catch(e){}}
 // ----- shared rounds: each phone confirms its own rows, then moves on -----
 function myRows(h){
   // A row is mine to confirm if nobody owns it, my phone owns it, OR I have
