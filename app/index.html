@@ -497,7 +497,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-centre in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789613397';
+const BUILD='1789621967';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -10058,8 +10058,7 @@ function vHistory(){
       <div class="tiny">${(e.players||[]).map(esc).join(' · ')}</div>
       <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
         <button class="ghost sel" style="flex:1 1 40%;margin:0;white-space:nowrap" onclick="reopenRound('${e.id}')">Review</button>
-        <button class="ghost" style="flex:1 1 auto;margin:0;white-space:nowrap" onclick="exOpen('download','${e.id}')">⬇️ Data</button>
-        <button class="ghost" style="flex:1 1 auto;margin:0;white-space:nowrap" onclick="exOpen('email','${e.id}')">✉️ Email</button>
+        <button class="ghost" style="flex:1 1 40%;margin:0;white-space:nowrap" onclick="exOpen('pick','${e.id}')">💾 Save Data</button>
       </div>
     </div>`;}).join('')
   :`<div class="card center muted">No finished rounds yet — they land here when you tap “End round”.</div>`}
@@ -10405,12 +10404,12 @@ function exportBuild(only){
 // all three tables in a single file. iOS in a standalone PWA does nothing
 // useful with <a download>, so share the files where that exists and fall back
 // to a plain download everywhere else.
-let exBusy='',exMsg='',exSheet='',exScope=null;   // exScope: a round id, or null for everything
+let exBusy='',exMsg='',exSheet='',exScope=null,exFromPick=false;   // exScope: a round id, or null for everything; exFromPick: Back returns to Save Data
 const exPl=(n,w)=>`${n} ${w}${n===1?'':'s'}`;
 const exCount=c=>`${exPl(c.rounds,'round')} · ${exPl(c.holes,'hole')} · ${exPl(c.shots,'shot')}`;
-function exOpen(which,only){exSheet=which;exScope=only||null;exMsg='';render();
+function exOpen(which,only,fromPick){exSheet=which;exScope=only||null;exFromPick=!!fromPick;exMsg='';render();
   if(which==='email')setTimeout(()=>{const el=document.getElementById('exMail');if(el)try{el.focus();}catch(e){}},60);}
-function exClose(){exSheet='';exScope=null;exMsg='';render();}
+function exClose(){exSheet='';exScope=null;exFromPick=false;exMsg='';render();}
 // CSV holds exactly ONE table, which is why the workbook exists — but every
 // stat tracker on earth imports CSV, so offer the same tables that way too and
 // let the golfer pick. RFC4180 quoting: wrap anything with a comma, quote or
@@ -10493,12 +10492,23 @@ function exportSheetHTML(){
     <b>${exPl(c.holes,'hole')}</b> and <b>${exPl(c.shots,'tracked shot')}</b>, one row each, on three tables \u2014 the round, its holes and its shots.
     CSV is what most stat trackers import.</div>`;
   const err=exMsg?`<div class="tiny mb" style="font-weight:600;color:var(--green-mid)">${esc(exMsg)}</div>`:'';
+  // SAVE DATA (Nathan 9/16): one button on a past round, then the two ways out — to this
+  // phone or to an inbox. Each leads to its own sheet, with Back to come here again.
+  if(exSheet==='pick')return `<div class="vfWrap" role="dialog" aria-modal="true" aria-labelledby="exPT"><div class="vfCard" style="max-width:430px">
+    <h2 id="exPT" class="vfTitle">Save your data</h2>
+    <div class="tiny mb"><b>${esc((one&&one.courseName)||'This round')}</b>${one?` \u00b7 ${esc(exDay(one.startedAt||one.endedAt))}`:''} \u00b7 ${exPl(c.holes,'hole')} \u00b7 ${exPl(c.shots,'tracked shot')}</div>${err}
+    <button class="big" onclick="exOpen('download',exScope,true)">⬇️ &nbsp;Download to this phone</button>
+    <button class="big mt" onclick="exOpen('email',exScope,true)">✉️ &nbsp;Email it</button>
+    <button class="big mt" style="background:var(--card);color:var(--ink2);border-color:var(--line);box-shadow:3px 3px 0 var(--line)" onclick="exClose()">Cancel</button>
+  </div></div>`;
+  const back=exFromPick?`<button class="big mt" style="background:var(--card);color:var(--ink2);border-color:var(--line);box-shadow:3px 3px 0 var(--line)" onclick="exOpen('pick',exScope)">Back</button>`
+    :`<button class="big mt" style="background:var(--card);color:var(--ink2);border-color:var(--line);box-shadow:3px 3px 0 var(--line)" onclick="exClose()">Cancel</button>`;
   if(exSheet==='download')return `<div class="vfWrap" role="dialog" aria-modal="true" aria-labelledby="exDT"><div class="vfCard" style="max-width:430px">
     <h2 id="exDT" class="vfTitle">Download your data</h2>
     ${lead}${err}
     <button class="big" onclick="exportSave('csv')" ${exBusy?'disabled':''}>${exBusy==='save'?'Building\u2026':'\u2b07\ufe0f &nbsp;Download CSV files'}</button>
     ${exSmallBtn('One Excel workbook (.xlsx) instead',"exportSave('xlsx')")}
-    <button class="big mt" style="background:var(--card);color:var(--ink2);border-color:var(--line);box-shadow:3px 3px 0 var(--line)" onclick="exClose()">Cancel</button>
+    ${back}
   </div></div>`;
   const mail=(()=>{try{return localStorage.getItem('wolfBackupEmail')||'';}catch(e){return '';}})();
   return `<div class="vfWrap" role="dialog" aria-modal="true" aria-labelledby="exET"><div class="vfCard" style="max-width:430px">
@@ -10508,7 +10518,7 @@ function exportSheetHTML(){
     ${err}
     <button class="big" onclick="exportEmail('csv')" ${exBusy?'disabled':''}>${exBusy==='mail'?'Sending\u2026':'\u2709\ufe0f &nbsp;Send CSV files'}</button>
     ${exSmallBtn('Send one Excel workbook (.xlsx) instead',"exportEmail('xlsx')")}
-    <button class="big mt" style="background:var(--card);color:var(--ink2);border-color:var(--line);box-shadow:3px 3px 0 var(--line)" onclick="exClose()">Cancel</button>
+    ${back}
   </div></div>`;
 }
 function vStats(){
