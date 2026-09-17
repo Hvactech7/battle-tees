@@ -96,6 +96,9 @@
   button.ghost.sel{background:var(--elec-lt);border-color:var(--elec);color:var(--elec-mid);box-shadow:2px 2px 0 var(--elec-dk)}
   button.ghost.danger{background:var(--red);color:#fff2ef;border-color:#7f1f16;box-shadow:2px 2px 0 #7f1f16}
   button.ghost.danger:active{box-shadow:1px 1px 0 #7f1f16}
+  /* every red delete X (Nathan 9/16): one drawn X, dead centre, same box everywhere; a
+     confirm word ("Del?", "Delete?") widens it instead of reflowing the row */
+  button.ghost.xbtn{flex:none;min-width:46px;height:40px;padding:0 10px;margin:0;display:inline-flex;align-items:center;justify-content:center}
   .seg{display:flex;gap:6px}
   .seg button{flex:1}
   input[type=text],input[type=number]{border:2px solid var(--line);border-radius:8px;padding:8px 10px;font-size:15px;font-family:inherit;width:100%;background:var(--card);color:var(--ink)}
@@ -491,8 +494,10 @@
 <div id="app"></div>
 <script>
 'use strict';
+// the drawn X for red delete buttons: a text ✕ sits off-centre in an iPhone's font
+const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789612880';
+const BUILD='1789613148';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -4450,7 +4455,7 @@ function bagCardHTML(inline){
   const rows=`<div id="bagList">${b.map((c,i)=>`<div class="row" style="padding:7px 0;cursor:grab;-webkit-user-select:none;user-select:none" onpointerdown="bagPD(event,${i})">
       <span style="color:var(--ink3);font-size:17px;letter-spacing:1px;margin-right:10px">⠿</span>
       <b class="num" style="font-size:19px;min-width:64px">${esc(c)}</b>
-      <span style="margin-left:auto"><button class="ghost danger" style="width:40px;padding:6px 0" onclick="bagRemove(${i})">✕</button></span></div>`).join('')}</div>`;
+      <span style="margin-left:auto"><button class="ghost danger xbtn" aria-label="Remove club" onclick="bagRemove(${i})">${XICON}</button></span></div>`).join('')}</div>`;
   const afterOpts=`<option value="-1">Top of the bag</option>${b.map((c,i)=>`<option value="${i}" ${i===b.length-1?'selected':''}>After ${esc(c)}</option>`).join('')}`;
   const pick=bagUI.pick?`<div class="mt" style="background:var(--bg);border-radius:10px;padding:10px">
       ${CLUB_CATALOG.map(([g,list])=>`<div class="tiny" style="margin:6px 0 4px;color:var(--ink3)">${g}</div>
@@ -4518,7 +4523,7 @@ function openClubSheet(yds){
   d.style.cssText='position:fixed;left:0;right:0;margin:0 auto;bottom:calc(172px + env(safe-area-inset-bottom));z-index:80;width:min(440px,94vw);background:var(--card);border:2px solid var(--green);border-radius:14px;padding:12px;box-shadow:4px 4px 0 rgba(0,0,0,.4)';
   d.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <b class="num" style="font-size:24px">${ydDisp(yds)}${uLbl()}</b><span class="tiny">what club was that?</span>
-      <button class="ghost danger" onclick="cancelMark()">✕</button></div>
+      <button class="ghost danger xbtn" aria-label="Cancel" onclick="cancelMark()">${XICON}</button></div>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">${bagClubs().map(c=>`<button class="ghost" style="padding:10px 0" onclick="saveShot('${esc(c).replace(/'/g,'&#39;')}')">${esc(c)}</button>`).join('')}</div>
     <button class="ghost mt" style="width:100%" onclick="saveShot(null)">Skip — just log the distance</button>`;
   document.body.appendChild(d);
@@ -9067,7 +9072,7 @@ function vBattlefield(){
           <b style="font-family:Rajdhani,sans-serif;font-size:22px;line-height:1.1">${esc(e.course||'Battle')}</b>
           <div class="tiny">${[ppl.length?'':esc(e.starter||''),esc(e.game||''),when].filter(Boolean).join(' · ')}</div></div>
         <span class="pill wolf" style="flex:none">${e.live?'Watch':'View'}</span>
-        ${e._archived?`<button class="ghost danger" style="flex:none;margin-left:6px" onclick="event.stopPropagation();bfForget('${esc(e.code)}')">✕</button>`:''}
+        ${e._archived?`<button class="ghost danger xbtn" style="margin-left:6px" aria-label="Remove from this phone" onclick="event.stopPropagation();bfForget('${esc(e.code)}')">${XICON}</button>`:''}
       </div>${cards}${bfRoundHTML(e.code)}</div>`;}).join('')}
   <button class="ghost mt" style="width:100%" onclick="openBattlefield()">↻ Refresh</button>
   </main>`;
@@ -9730,7 +9735,7 @@ function vStart(){
       const isMe=low(p.name)===meNm;
       return `<div class="row"><div style="flex:1;min-width:0"><b style="font-size:17px">${esc(p.name)}</b>${isMe?' <span class="pill gray">you</span>':''}
           <div class="tiny">Index ${p.index}${p.nearby?' · <span style="color:var(--amber)">◌ invited when you start</span>':(!isMe?' · <span class="muted">✎ you\'ll score them</span>':'')}</div></div>
-        ${isMe?'':`<button class="ghost danger" onclick="removeGolfer(${i})">✕</button>`}</div>`;}).join('');
+        ${isMe?'':`<button class="ghost danger xbtn" aria-label="Remove player" onclick="removeGolfer(${i})">${XICON}</button>`}</div>`;}).join('');
     const nearbyRows=(gatePick.list||[]).filter(n=>!inRoster(n.name)).map(n=>`
       <div class="row" style="cursor:pointer" onclick="gateAddOne('${esc(n.id)}')">
         <div><b>${n.near?'📍':'🌐'} ${esc(n.name)}</b><div class="tiny">Index ${n.index!=null?n.index:'?'} · ${n.near?'nearby':'online'}</div></div>
@@ -9874,7 +9879,7 @@ function vGate(){
     return `<div class="row">
       <div style="flex:1;min-width:0"><b style="font-size:17px">${esc(p.name)}</b>${isMe?' <span class="pill gray">you</span>':''}
         <div class="tiny">Index ${p.index}${st2?' · '+st2:''}</div></div>
-      ${isMe?'':`<button class="ghost danger" onclick="removeGolfer(${i})">✕</button>`}
+      ${isMe?'':`<button class="ghost danger xbtn" aria-label="Remove player" onclick="removeGolfer(${i})">${XICON}</button>`}
     </div>`;
   }).join('');
   const nearbyRows=(gatePick.list||[]).filter(n=>!inRoster(n.name)).map(n=>`
@@ -10047,7 +10052,7 @@ function vHistory(){
     return `<div class="card" style="padding:12px 14px">
       <div style="display:flex;align-items:flex-start;gap:10px">
         <b style="flex:1;min-width:0;font-family:Rajdhani,sans-serif;font-size:20px">${gameName(e.game)} · ${esc(e.courseName)}</b>
-        <button class="ghost danger" style="flex:none;width:46px;height:40px;padding:0;margin:0;display:flex;align-items:center;justify-content:center" aria-label="Delete this round" onclick="delHist('${e.id}')">${armDelHist===e.id?'Del?':'<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>'}</button>
+        <button class="ghost danger xbtn" aria-label="Delete this round" onclick="delHist('${e.id}')">${armDelHist===e.id?'Del?':XICON}</button>
       </div>
       <div class="tiny">${when} · thru ${e.thru} · ${e.mins!=null?e.mins+' min':''}${e.code?' · shared '+esc(e.code):''}</div>
       <div class="tiny">${(e.players||[]).map(esc).join(' · ')}</div>
@@ -10940,7 +10945,7 @@ function courseRowHTML(x,forPick){
     <div onclick="pickCourse(${i})" style="flex:1;min-width:0;cursor:pointer"><b${active?' style="color:var(--green)"':''}>${esc(c.name)}</b><div class="tiny">Par ${par} · ${c.teeSets.map(t=>esc(t.name)).join(' / ')}</div></div>${miTag}
     <button class="ghost" onclick="openCoursePreview(${i})" style="flex:none;margin-right:6px">View</button>
     ${active?`<button class="ghost sel" onclick="go('course')" style="flex:none">Edit</button>`
-      :S.courses.length>1?`<button class="ghost danger" onclick="delCourse(${i})" style="flex:none">${armDelCourse===i?'Delete?':'✕'}</button>`:''}
+      :S.courses.length>1?`<button class="ghost danger xbtn" aria-label="Delete course" onclick="delCourse(${i})">${armDelCourse===i?'Delete?':XICON}</button>`:''}
   </div>`;
 }
 function courseListHTML(forPick){
@@ -10970,7 +10975,7 @@ function groupsCardHTML(){
   return `<div class="card"><h2>⚔️ Groups</h2>
     ${G.map(g2=>`<div class="row"><div style="flex:1;min-width:0"><b>${esc(g2.name)}</b>
       <div class="tiny">${g2.members.map(m=>esc(m.name)).join(' · ')}</div></div>
-      <span style="display:flex;gap:6px;flex:none"><button class="ghost" onclick="openGroupEditor('${g2.id}')">✎</button><button class="ghost danger" onclick="delGroup('${g2.id}')">✕</button></span></div>`).join('')}
+      <span style="display:flex;gap:6px;flex:none"><button class="ghost" onclick="openGroupEditor('${g2.id}')">✎</button><button class="ghost danger xbtn" aria-label="Delete group" onclick="delGroup('${g2.id}')">${XICON}</button></span></div>`).join('')}
     <button class="ghost mt" style="width:100%" onclick="openGroupBuild()">＋ New group</button>
     <div class="tiny mt">Build tomorrow's group tonight — pick it in Round setup and the whole crew loads in one tap. Course maps download from the course's page in ⛳ Courses.</div>
   </div>`;
@@ -11107,7 +11112,7 @@ function vPlayers(){
           ?`<button class="ghost" onclick="delPlayerCancel()">Keep</button>
             <button class="ghost danger" style="font-weight:700" onclick="delPlayer('${e.id}')">Confirm Delete</button>`
           :`<button class="ghost" onclick="startEditPlayer('${e.id}')">Edit</button>
-            <button class="ghost danger" onclick="delPlayer('${e.id}')">✕</button>`}
+            <button class="ghost danger xbtn" aria-label="Delete player" onclick="delPlayer('${e.id}')">${XICON}</button>`}
       </span></div>`;})()).join('')
     :'<div class="tiny">Golfers you set up in a round are saved here automatically.</div>';})()}
     ${backupBlockHTML()}
@@ -11855,7 +11860,7 @@ function vCourse(){
     <div class="row"><input id="cteeN${i}" type="text" value="${esc(t.name)}" style="width:34%" onchange="chTee(${i},'name',this.value)">
     <input id="cteeR${i}" type="number" value="${t.rating}" step="0.1" style="width:24%" onchange="chTee(${i},'rating',this.value)" title="Rating">
     <input id="cteeS${i}" type="number" value="${t.slope}" style="width:20%" onchange="chTee(${i},'slope',this.value)" title="Slope">
-    <button class="ghost danger" onclick="delTee(${i})">✕</button></div>`).join('');
+    <button class="ghost danger xbtn" aria-label="Delete tee" onclick="delTee(${i})">${XICON}</button></div>`).join('');
   return topbar('Course setup','','courses')+`<main>
   ${c._note?`<div class="banner ${c._noteOk?'ok':'wolf'}">${c._noteOk?'✓ ':''}${esc(c._note)} <button class="ghost" style="margin-left:6px" onclick="set(()=>{delete S.course._note;delete S.course._noteOk;})">Got it</button></div>`:''}
   <div class="card"><h2>Name</h2><input id="cname" type="text" value="${esc(c.name)}" onchange="set(()=>S.course.name=this.value)" oninput="S.course.name=this.value;save()">
