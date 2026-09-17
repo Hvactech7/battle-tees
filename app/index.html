@@ -497,7 +497,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-centre in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789621967';
+const BUILD='1789682837';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1094,6 +1094,36 @@ function emailVerified(){
 // reconnect re-check, and every skip or failure is a stat the Pi can see.
 let abFirstPending=0,abRetryTimer=null,abRetryMs=30000,abSkipSaid='';
 function abFingerprint(){const d=abPayload();return JSON.stringify([d.me,d.playerLib,d.courses,d.history.map(h=>h.id),d.groups,d.teams,shotFp(),teeFixFp()]);}
+// NOT SAVED ANYWHERE YET (Nathan 9/17). A modal 450 ms after End Round is dismissed while
+// the golfer is walking off — nobody has ever confirmed an address from it (the relay's
+// verified list, 9/17: every entry is Nathan's own magic link or a manual row). So the ask
+// also lives as a card that STAYS: on Home and on Settlement, from the moment there is a
+// finished round on this phone, until the address is confirmed. "Later" quiets it until the
+// next round ends, never for good — the rounds it protects are the ones already played.
+function vfNagDue(){
+  try{
+    if(emailVerified()||!(S.history||[]).length)return false;
+    const later=+(localStorage.getItem('btVerifyLater')||0);
+    return !(later&&(S.history[0]||{}).endedAt&&later>=S.history[0].endedAt);
+  }catch(e){return false;}
+}
+function vfNagLater(){
+  try{localStorage.setItem('btVerifyLater',String(Date.now()));}catch(e){}
+  try{stat('verify_later',{rounds:(S.history||[]).length});}catch(e){}
+  render();
+}
+function vfNagHTML(){
+  if(!vfNagDue())return '';
+  const n=(S.history||[]).length, one=S.history[0]||{};
+  const what=n===1?`Your round at ${esc(one.courseName||'the course')}`:`Your ${n} rounds`;
+  return `<div class="card" style="border-color:var(--amber);box-shadow:4px 4px 0 var(--amber-bd,#c9922e)">
+    <h2 style="color:var(--amber)">☁ ${what} ${n===1?'is':'are'} only on this phone</h2>
+    <div class="tiny mb">Confirm your email and everything backs up by itself — lose the phone, get it all back.</div>
+    <div class="row" style="border-top:none;padding:0;gap:8px">
+      <button class="big" style="flex:1" onclick="openVerify('nagCard')">Confirm my email</button>
+      <button class="ghost" style="flex:none" onclick="vfNagLater()">Later</button>
+    </div></div>`;
+}
 function autoBackupCheck(){
   let why='';
   const em=(localStorage.getItem('wolfBackupEmail')||'').trim();
@@ -2332,68 +2362,28 @@ async function relayBattle(payload){
 let verifyUI=null;   // {email,stage,msg,after}
 function openVerify(after){
   verifyUI={email:(localStorage.getItem('wolfBackupEmail')||'').trim(),stage:0,msg:'',after:after||null};
+  // who is asked, who types, who finishes: without this the funnel is invisible (9/17 —
+  // not one player has ever confirmed from the end-of-round sheet and nothing said so)
+  try{stat('verify_open',{from:after||'settings',rounds:(S.history||[]).length});}catch(e){}
   render();
 }
 function closeVerify(){verifyUI=null;render();}
-async function sendVerifyCode(){
+// TAP, DON'T TYPE (Nathan 9/17). Every address on the relay that ever got confirmed came
+// from a link, never from the 6-digit sheet — so the sheet leads with the link. The tap may
+// land in the browser rather than the installed app; the profile reply above picks that up.
+// The 6-digit code is GONE from this sheet (Nathan 9/17: "remove the code totally"). It was
+// never once finished by a player, and the link does strictly more: it proves the address AND
+// brings a returning golfer's library back with it (redeemToken). Restore-by-code still exists
+// on the Restore panel, and deleting an account still needs a typed code.
+async function sendVerifyLink(){
   const el=document.getElementById('vfEmail');
   const em=(el&&el.value||'').trim().toLowerCase();
   if(!/^\S+@\S+\.\S+$/.test(em)){verifyUI.msg='Enter a valid email address.';render();return;}
-  localStorage.setItem('wolfBackupEmail',em);
-  verifyUI.email=em;verifyUI.msg='Sending code…';render();
-  try{
-    const r=await relayBackup({op:'verify',email:em});
-    if(r&&r.ok){verifyUI.stage=1;verifyUI.msg='Code sent — check your email (valid 15 min).';}
-    else verifyUI.msg=(r&&r.error)||'Could not send the code.';
-  }catch(e){verifyUI.msg='Could not connect — check your signal and try again.';}
+  verifyUI.email=em;verifyUI.stage=4;verifyUI.msg='';render();
+  const ok=await sendMagicLink(em,(msg)=>{if(verifyUI){verifyUI.msg=msg;render();}});
+  try{stat(ok?'verify_link_sent':'verify_link_fail',{from:(verifyUI||{}).after||''});}catch(e){}
+  if(!ok&&verifyUI)verifyUI.stage=0;
   render();
-}
-async function confirmVerifyCode(){
-  const el=document.getElementById('vfCode');
-  const cd=(el&&el.value||'').trim();
-  if(!/^\d{6}$/.test(cd)){verifyUI.msg='Enter the 6-digit code from the email.';render();return;}
-  verifyUI.msg='Confirming…';render();
-  try{
-    const r=await relayBackup({op:'confirm',email:verifyUI.email,code:cd});
-    if(r&&r.ok){
-      try{localStorage.setItem('btEmailOk',verifyUI.email);}catch(e){}
-      if(r.hasBackup&&r.rcode){
-        // this email already has a saved library — offer restore BEFORE the
-        // first auto-save clobbers the backup slot with an empty profile
-        verifyUI.rcode=r.rcode;verifyUI.stage=3;verifyUI.msg='';
-      }else{
-        verifyUI.msg='✓ Email confirmed — saving your library…';render();
-        abFp=null;                       // force the next check to send
-        const ok=await backupNow();
-        verifyUI.msg=ok?'✓ Confirmed and saved. Everything backs up automatically from now on.'
-                       :'✓ Confirmed. Your library will save as soon as you have signal.';
-        verifyUI.stage=2;
-      }
-    }else verifyUI.msg=(r&&r.error)||'Could not confirm that code.';
-  }catch(e){verifyUI.msg='Could not connect — check your signal and try again.';}
-  render();
-}
-async function verifyRestoreExisting(){
-  verifyUI.msg='Restoring your library…';render();
-  try{
-    const r=await relayBackup({op:'get',email:verifyUI.email,code:verifyUI.rcode});
-    if(r.ok&&r.data){
-      const _r=applyLibrary(r.data);
-      abFp=null;
-      verifyUI.msg=`✓ Restored — ${_r.added} player${_r.added===1?'':'s'} added${_r.hAdded?`, ${_r.hAdded} round${_r.hAdded===1?'':'s'} recovered`:''}. Everything backs up automatically from now on.`;
-      verifyUI.stage=2;
-      backupNow();
-    }else verifyUI.msg=(r&&r.error)||'Restore failed — you can also use Restore from the Home screen.';
-  }catch(e){verifyUI.msg='Could not connect — check your signal and try again.';}
-  render();
-}
-async function verifyStartFresh(){
-  verifyUI.msg='Saving your new library…';render();
-  abFp=null;
-  const ok=await backupNow();
-  verifyUI.msg=ok?'✓ Saved. Everything backs up automatically from now on.'
-                 :'✓ Confirmed. Your library will save as soon as you have signal.';
-  verifyUI.stage=2;render();
 }
 async function backupNow(){
   const em=(localStorage.getItem('wolfBackupEmail')||'').trim();
@@ -7566,24 +7556,20 @@ function verifySheetHTML(){
   const atEnd=verifyUI.after==='roundEnd';
   return `<div class="vfWrap" role="dialog" aria-modal="true" aria-labelledby="vfTitle">
     <div class="vfCard">
-      <h2 id="vfTitle" class="vfTitle">${done?'You&rsquo;re all set':verifyUI.stage===3?'Welcome back!':(atEnd?'Save this round?':'Confirm your email')}</h2>
-      ${done||verifyUI.stage===3?'':`<div class="tiny mb">${atEnd
-        ? 'Your round is finished, but nothing has been saved yet. Confirm your email and we&rsquo;ll keep your rounds, players and courses safe — and you can restore them on any phone.'
-        : 'We&rsquo;ll send a 6-digit code. Until it&rsquo;s confirmed, nothing leaves this phone.'}</div>`}
+      <h2 id="vfTitle" class="vfTitle">${done?'You&rsquo;re all set':(atEnd?'Save this round?':'Confirm your email')}</h2>
+      ${done?'':`<div class="tiny mb">${atEnd
+        ? `Your ${esc(((S.history||[])[0]||{}).courseName||'')} round is on this phone only. Confirm your email and it saves itself — rounds, players and courses, back on any phone.`
+        : 'We&rsquo;ll email you a link. One tap and your rounds, players and courses back themselves up — until then nothing leaves this phone.'}</div>`}
       ${done?'':(verifyUI.stage===0?`
         <div class="tiny">Email</div>
         <input id="vfEmail" type="text" inputmode="email" autocapitalize="off" placeholder="you@email.com" value="${em}">
-        <button class="big mt" onclick="sendVerifyCode()">Send me a code</button>`
-      :verifyUI.stage===3?`
-        <div class="tiny mb"><b>${em}</b> already has a saved Battle Tees library.</div>
-        <button class="big mt" onclick="verifyRestoreExisting()">⚔️ &nbsp;Restore my library</button>
-        <button class="ghost mt" style="width:100%" onclick="verifyStartFresh()">Start fresh instead</button>
-        <div class="tiny mt">Starting fresh replaces the saved library the next time this phone backs up.</div>`
-      :`
-        <div class="tiny">6-digit code sent to <b>${em}</b></div>
-        <input id="vfCode" type="text" inputmode="numeric" maxlength="6" placeholder="123456" style="letter-spacing:6px;font-size:22px;text-align:center">
-        <button class="big mt" onclick="confirmVerifyCode()">Confirm</button>
-        <button class="ghost mt" style="width:100%" onclick="sendVerifyCode()">Send a new code</button>`)}
+        <button class="big mt" onclick="sendVerifyLink()">✉️ &nbsp;Email me a link</button>
+        <div class="tiny mt">One tap in the email and you're done — nothing to type.</div>`
+      :verifyUI.stage===4?`
+        <div class="tiny mb">Sent to <b>${em}</b>. Open the email on this phone and tap the link — that's it.</div>
+        <button class="ghost mt" style="width:100%" onclick="sendVerifyLink()">Send it again</button>
+        <button class="ghost mt" style="width:100%" onclick="verifyUI.stage=0,render()">Use a different email</button>`
+      :'')}
       ${verifyUI.msg?`<div class="tiny mt" style="color:${/^✓/.test(verifyUI.msg)?'var(--green-mid)':'var(--amber-bd,#d19a2f)'};font-weight:600">${esc(verifyUI.msg)}</div>`:''}
       <button class="ghost mt" style="width:100%" onclick="closeVerify()">${done?'Done':(atEnd?'Not now':'Close')}</button>
     </div></div>`;
@@ -8101,6 +8087,7 @@ function vHome(){
   return `<main>
   ${markNotesHTML()}
   <div class="center" style="margin:10px 0 18px"><img src="${art('/banner.jpg')}" alt="Battle Tees" style="width:100%;aspect-ratio:1200/509;display:block;border-radius:14px;border:2px solid var(--green);box-shadow:4px 4px 0 var(--green)" onerror="this.outerHTML='<h1 style=&quot;color:var(--green);font-size:20px&quot;>Battle Tees</h1>'"></div>
+  ${inRound?'':vfNagHTML()}
   ${(!inRound&&S.share&&S.share.on&&S.share.creator&&S.share.code)?`<div class="card" style="border-color:var(--amber)">
     <h2 style="color:var(--amber)">Room open · code ${esc(S.share.code)}</h2>
     <div class="tiny mb">${esc(S.config.groupName||'Your group')} has been invited but the round hasn't started. Pick it back up, or close the room to take the invitation off their phones.</div>
@@ -8506,6 +8493,18 @@ function registerProfile(force){
       // the Pi (Brian, 9/5) - only when the phone has none. Adopting it turns
       // backups on with no code step, exactly as if the code had been entered.
       try{ if(r&&r.ok&&r.email&&r.verified&&!(localStorage.getItem('wolfBackupEmail')||'').trim()) adoptHandedEmail(r.email); }catch(e){}
+      // A LINK OPENED SOMEWHERE ELSE STILL COUNTS (9/17). A tap-to-confirm link from Mail
+      // often opens in the browser, not the installed app — the relay marks the address
+      // verified and this copy never hears, so it goes on refusing to back up. The relay's
+      // answer about OUR OWN address is the truth; take it and start saving.
+      try{
+        const mine=(localStorage.getItem('wolfBackupEmail')||'').trim().toLowerCase();
+        if(r&&r.ok&&r.verified&&mine&&!emailVerified()){
+          localStorage.setItem('btEmailOk',mine);
+          try{stat('verify_ok',{from:'relay-says-so',rounds:(S.history||[]).length});}catch(e){}
+          abFp=null;autoBackupCheck();render();
+        }
+      }catch(e){}
       // ONE GOLFER, ONE ID (9/5): the relay retired this pid and handed back the
       // real one — switch to it everywhere this phone keeps it, then re-announce.
       try{ if(r&&r.ok&&r.adopt&&r.pid&&r.retired===pid&&r.pid!==pid) adoptPid(pid,r.pid); }catch(e){}
@@ -15284,6 +15283,7 @@ function vSettle(){
   if(mysteryPending(gameOn())){
     const g=gameOn(), thru=S.round.holes.filter(r=>r.confirmed).length;
     return topbar('Settlement','','')+`<main>
+    ${vfNagHTML()}
     ${chalInviteHTML()}${chalResultsHTML()}
       <div class="card"><h2>${gameName(g)} · thru ${thru}</h2>
         <div class="center" style="padding:14px 0"><div style="font-size:44px;line-height:1">🎲</div>
@@ -15299,6 +15299,7 @@ function vSettle(){
     const lead=margins[0];
     const verb=thru>=playOrder().length?'wins':'leads';
     return topbar('Settlement','','')+`<main>
+    ${vfNagHTML()}
     ${chalInviteHTML()}${chalResultsHTML()}
       <div class="card"><h2>Quota · thru ${thru}</h2>
         <div class="center mb"><span class="bigscore num">${lead.d>0?'+':''}${lead.d}</span>
@@ -15373,6 +15374,7 @@ function vSettle(){
     </div>`;
   }).join('');
   return topbar('Settlement','','')+`<main>
+    ${vfNagHTML()}
     ${chalInviteHTML()}${chalResultsHTML()}
     ${PAIRS_GAMES.includes(gameOn())&&gameOn()!=='skins'&&actIdx().length>1?`<div class="card"><div class="row"><span class="muted">$ per ${['stroke','scramble'].includes(gameOn())?'stroke':gameOn()==='bestball'?'hole':gameOn()==='nassau'?'bet':'point'} (optional)</span>
       <input id="dpp" type="number" step="0.25" min="0" value="${S.round.dollarPerPt||''}" placeholder="0" style="width:90px" onchange="set(()=>S.round.dollarPerPt=+this.value||0)"></div></div>`:''}
