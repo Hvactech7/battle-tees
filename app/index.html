@@ -497,7 +497,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-centre in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789705307';
+const BUILD='1789708047';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -4814,6 +4814,7 @@ function vMap(){
   <div id="windrose" onclick="toggleWindMode()" onpointerdown="windRosePD(event)" onpointerup="windRosePU()" onpointercancel="windRosePU()" oncontextmenu="return false" style="display:none${manualShown?';bottom:calc(276px + env(safe-area-inset-bottom))':''}"></div>
   ${mapCreditsChipHTML()}
   ${mapStatChipsHTML(hole)}
+  ${greadBtnHTML()}
   ${gpsOnly()?'':`<button id="trackbtn" onclick="trackShotTap()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(112px + env(safe-area-inset-bottom));z-index:6;width:120px;height:46px;background:var(--card);border:2px solid ${trackShot&&trackShot.hole===mapHole?'var(--amber-bd)':'var(--green)'};border-radius:12px;color:${trackShot&&trackShot.hole===mapHole?'var(--amber-bd)':'var(--green-mid)'};font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:19px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">${trackShot&&trackShot.hole===mapHole?'Mark It':'Track It'}</button>`}
   ${gpsOnly()?'':(trackShot&&trackShot.hole===mapHole?`<button id="trackxbtn" onclick="clearTrackStart()" aria-label="Cancel this shot" style="position:fixed;left:max(138px,calc(50vw - 102px));bottom:calc(112px + env(safe-area-inset-bottom));z-index:6;width:46px;height:46px;padding:0;display:flex;align-items:center;justify-content:center;background:var(--card);border:2px solid var(--red,#c0392b);border-radius:12px;color:var(--red,#c0392b);box-shadow:2px 2px 0 rgba(0,0,0,.35)">${XICON}</button>`:'')}
   ${gpsOnly()?'':undoTrackHTML()}
@@ -6800,6 +6801,104 @@ function elevStripPaint(pos){
   el.hidden=false;
   el.innerHTML=`<svg viewBox="0 0 100 ${H}" preserveAspectRatio="none" width="100%" height="${H}" aria-hidden="true"><path d="${line} L100 ${H} L0 ${H} Z" fill="rgba(79,216,255,.13)"/><path d="${line}" fill="none" stroke="#4fd8ff" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>${dot}`;
 }
+// ---------- the green read: slope and break on the green (Nathan 9/17, Hiddenbrooke test) ----------
+// .build/greenread.py fits a plane over every 3 m of the county's 1 ft lidar and writes, per
+// green, a grid of slope % and the way the ball rolls, turned so the fairway is at the bottom
+// (the hole's own line into the green). The green button in the map bar opens it. Premium
+// material like the mountain; open to everyone while PLAYSLIKE_OPEN.
+const HOSTED_GREENS={'hiddenbrooke':'/geo/greens/hiddenbrooke.json'};
+const GREENS={};   // course id -> data | 'none' | Promise
+let greadOpen=false;
+function greensUrlFor(c){return c&&(c.greensUrl||HOSTED_GREENS[c.id])||null;}
+function greensEnsure(course){
+  course=course||S.course;const u=greensUrlFor(course);if(!u)return null;
+  const hit=GREENS[course.id];if(hit)return (hit==='none'||hit instanceof Promise)?null:hit;
+  const viaCache=()=>{try{return caches.open('bt-elev').then(c=>c.match(u)).then(r=>r?r.json():null);}catch(e){return Promise.resolve(null);}};
+  GREENS[course.id]=fetch(u).then(r=>{
+    if(!r.ok)return viaCache();
+    try{const cl=r.clone();caches.open('bt-elev').then(c=>c.put(u,cl)).catch(()=>{});}catch(e){}
+    return r.json();
+  }).catch(viaCache).then(js=>{GREENS[course.id]=js&&js.holes?js:'none';if(greadOpen)greadPaint();},()=>{GREENS[course.id]='none';});
+  return null;
+}
+const GREAD_ICON=`<svg width="40" height="37" viewBox="0 0 32 30" fill="none" aria-hidden="true"><ellipse cx="16" cy="21" rx="14.5" ry="7.5" fill="#2f9d5f" stroke="#7fe3a1" stroke-width="1.5"/><path d="M5.5 22.5 Q11 17.5 16.5 21 T27 19.5" stroke="#fff" stroke-width="1.6" stroke-linecap="round" opacity=".85"/><path d="M24.3 19.8 l2.7 -.3 l-1.4 2.3" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" opacity=".85"/><path d="M13 20.5 V3" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/><path d="M13 3.2 L21.5 6.3 L13 9.4 Z" fill="#ffd25e"/><ellipse cx="13" cy="20.7" rx="1.6" ry=".8" fill="#0c1016"/></svg>`;
+function greadBtnHTML(){
+  if(!playsLikeEntitled()||!greensUrlFor(S.course)||amnesiaOn(S.course.id))return '';
+  greensEnsure();
+  // on the map above Score, not in the bar: a third bar button squeezed the F/M/B yardages at 375 px
+  return `<button id="greadbtn" onclick="openGreenRead()" aria-label="Green slope" style="position:fixed;right:max(10px,calc(50vw - 230px));bottom:calc(220px + env(safe-area-inset-bottom));z-index:6;width:54px;height:54px;padding:0;display:flex;align-items:center;justify-content:center;background:var(--card);border:2px solid #2f9d5f;border-radius:12px;color:#7fe3a1;box-shadow:2px 2px 0 rgba(0,0,0,.35)">${GREAD_ICON}</button>`;
+}
+function greadHole(){const g=greensEnsure();return g&&g.holes[physHole(mapHole)+1]||null;}
+function openGreenRead(){
+  const g=greensEnsure();
+  if(!g){shotToast(GREENS[S.course.id]==='none'?'No green read for this course yet':'Loading the greens — try again in a moment');return;}
+  if(!greadHole()){shotToast('No green read for this hole yet');return;}
+  greadOpen=true;greadPaint();
+  try{stat('green_read',{course:S.course.id,hole:physHole(mapHole)+1});}catch(e){}
+}
+function closeGreenRead(){greadOpen=false;const el=document.getElementById('greadsheet');if(el)el.remove();}
+// slope % -> colour: flat green, 1-2% yellow, 3% orange, 4.5% red, 6%+ deep red (Hiddenbrooke has several)
+const GREAD_STOPS=[[0,[40,150,70]],[1,[120,190,60]],[2,[235,205,50]],[3,[240,130,40]],[4.5,[215,45,40]],[6.5,[140,20,70]]];
+function greadColour(p){
+  for(let i=1;i<GREAD_STOPS.length;i++){const [x0,c0]=GREAD_STOPS[i-1],[x1,c1]=GREAD_STOPS[i];
+    if(p<=x1){const t=Math.max(0,(p-x0)/(x1-x0));return c0.map((v,k)=>Math.round(v+(c1[k]-v)*t));}}
+  return GREAD_STOPS[GREAD_STOPS.length-1][1];
+}
+function greadPaint(){
+  const d=greadHole();if(!greadOpen||!d)return;
+  let el=document.getElementById('greadsheet');
+  if(!el){el=document.createElement('div');el.id='greadsheet';document.body.appendChild(el);}
+  const legend=GREAD_STOPS.map(([x,c],i)=>`<span style="display:flex;flex-direction:column;align-items:center;gap:2px;flex:1"><i style="display:block;width:100%;height:8px;background:rgb(${c})"></i>${x===0?'flat':i===GREAD_STOPS.length-1?x+'%+':x+'%'}</span>`).join('');
+  el.innerHTML=`<div onclick="closeGreenRead()" style="position:fixed;inset:0;z-index:90;background:rgba(5,9,16,.72);display:flex;align-items:center;justify-content:center;padding:16px">
+    <div onclick="event.stopPropagation()" style="position:relative;width:100%;max-width:420px;background:var(--card,#131c2c);border:2px solid #2f7d4f;border-radius:16px;padding:14px 14px 12px;box-shadow:3px 3px 0 rgba(0,0,0,.4)">
+      <button class="ghost xbtn" onclick="closeGreenRead()" aria-label="Close" style="position:absolute;right:10px;top:10px">${XICON}</button>
+      <div style="font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:21px;letter-spacing:.5px">Hole ${physHole(mapHole)+1} green</div>
+      <div class="tiny" style="margin:2px 44px 10px 0;color:var(--ink2,#c8d4e4)">Falls ${esc(d.falls)} · ${d.relief}″ drop</div>
+      <canvas id="greadcv" style="display:block;margin:0 auto;max-width:100%"></canvas>
+      <div class="tiny" style="text-align:center;margin-top:6px;color:var(--ink3,#9fb2cc)">▲ from the fairway · arrows = the way it rolls</div>
+      <div class="tiny" style="display:flex;gap:3px;margin-top:10px;color:var(--ink3,#9fb2cc);font-size:11px">${legend}</div>
+    </div></div>`;
+  greadDraw(document.getElementById('greadcv'),d);
+}
+function greadDraw(cv,d){
+  const sb=atob(d.s),ab=atob(d.a),W=d.w,H=d.h;
+  const maxW=Math.min(392,window.innerWidth-60),maxH=window.innerHeight*.58;
+  const px=Math.max(2,Math.min(maxW/W,maxH/H)),dpr=window.devicePixelRatio||1;
+  cv.style.width=W*px+'px';cv.style.height=H*px+'px';cv.width=Math.round(W*px*dpr);cv.height=Math.round(H*px*dpr);
+  const ctx=cv.getContext('2d');ctx.scale(dpr,dpr);
+  // colour: one pixel per cell, scaled up smooth, cut to the green's outline
+  const off=document.createElement('canvas');off.width=W;off.height=H;
+  const oc=off.getContext('2d'),img=oc.createImageData(W,H);
+  for(let i=0;i<W*H;i++){const b=sb.charCodeAt(i);if(b===255)continue;const c=greadColour(b/25);img.data.set([c[0],c[1],c[2],255],i*4);}
+  oc.putImageData(img,0,0);
+  const outline=()=>{ctx.beginPath();d.o.forEach(([x,y],i)=>ctx[i?'lineTo':'moveTo'](x*px,y*px));ctx.closePath();};
+  ctx.save();outline();ctx.clip();ctx.imageSmoothingEnabled=true;ctx.drawImage(off,0,0,W*px,H*px);ctx.restore();
+  // arrows every 2 m: white, each tail traced along the fall (back up the slope and on down it)
+  // so it bends the way the green moves; longer where it is steeper (Nathan 9/17)
+  const every=Math.max(2,Math.round(2/d.cell));
+  const cellAt=(x,y)=>{const c=Math.floor(x),r=Math.floor(y);if(c<0||r<0||c>=W||r>=H)return -1;return r*W+c;};
+  const trace=(x,y,dir,len)=>{const pts=[];let got=0;
+    while(got<len){const i=cellAt(x,y);if(i<0||sb.charCodeAt(i)===255)break;
+      const t=ab.charCodeAt(i)/255*2*Math.PI,st=Math.min(.25,len-got);
+      x+=dir*Math.sin(t)*st;y-=dir*Math.cos(t)*st;got+=st;pts.push([x,y]);}
+    return pts;};
+  const arrows=[];
+  for(let r=every>>1;r<H;r+=every)for(let c=every>>1;c<W;c+=every){
+    const b=sb.charCodeAt(r*W+c);if(b===255||b/25<.4)continue;
+    const len=every*(.35+.5*Math.min(1,b/25/4));
+    const back=trace(c+.5,r+.5,-1,len*.5).reverse(),fwd=trace(c+.5,r+.5,1,len*.5);
+    const line=[...back,[c+.5,r+.5],...fwd].map(([x,y])=>[x*px,y*px]);
+    if(line.length>2)arrows.push(line);
+  }
+  const drawArrows=(col,w)=>{ctx.strokeStyle=col;ctx.lineWidth=w;ctx.lineCap='round';ctx.lineJoin='round';
+    arrows.forEach(L=>{const [x1,y1]=L[L.length-1],[x0,y0]=L[Math.max(0,L.length-3)],h=Math.atan2(y1-y0,x1-x0);
+      ctx.beginPath();L.forEach(([x,y],i)=>ctx[i?'lineTo':'moveTo'](x,y));
+      for(const sg of [1,-1]){ctx.moveTo(x1,y1);ctx.lineTo(x1-6*Math.cos(h+sg*.55),y1-6*Math.sin(h+sg*.55));}
+      ctx.stroke();});};
+  drawArrows('rgba(0,0,0,.45)',4.2);   // a dark edge so white reads on the yellow
+  drawArrows('#fff',2);
+  outline();ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.stroke();
+}
 // a leg of the sight line: actual yards, or the plays-like number (elevation and/or wind) marked ~
 function legLabel(from,to,suffix){
   let txt=yd(mDist(from,to))+uLbl();
@@ -6895,6 +6994,12 @@ function toggleWindMode(){
   paintWindRose();
   shotToast(windMode?'Wind ON':'Wind OFF');
 }
+// F/M/B at full size ran under the ▶ button on a 375 px phone once the mountain took a slot
+// ("B 435" read "B 43"). Shrink only as far as it needs to fit between the buttons.
+function fmbFit(el){
+  if(!el)return;el.style.fontSize='29px';
+  for(let f=29;f>18&&el.scrollWidth>el.clientWidth+1;)el.style.fontSize=(--f)+'px';
+}
 function updateFMB(pos,label){
   const el=document.getElementById('fmb'),s2=document.getElementById('fmbsub');
   if(!el||!pos)return;
@@ -6910,6 +7015,7 @@ function updateFMB(pos,label){
     ?`<span style="color:var(--ink2);font-size:16px">F</span> ${yd(r.f)} <span style="color:var(--ink2);font-size:16px">M</span> ${yd(r.m)} <span style="color:var(--ink2);font-size:16px">B</span> ${yd(r.b)}`
     :`${yd(r.m)}${uLbl()} to green`;
   if(s2)s2.textContent='';  // label dropped by design — F/M/B speaks for itself
+  fmbFit(el);
   try{paintWindRose();}catch(e){}
   try{elevEnsure();elevBtnPaint();elevStripPaint(pos);}catch(e){}
   try{if(S.round&&S.round.started&&r&&r.m!=null)shellRoundTick(`${yd(r.m)}${uLbl()} to the middle`);}catch(e){}
