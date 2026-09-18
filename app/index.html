@@ -497,7 +497,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-centre in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789714495';
+const BUILD='1789715058';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -8934,12 +8934,31 @@ function bfPillTap(code,t,icon){
   const names=(((o.r||{})[tt]||{})[icon])||[];
   bfSay[c]=`<b>${BF_ICON_NAME[icon]||''}</b> on ${bfWhoFor(c,tt)}: ${names.map(esc).join(', ')}`;render();
 }
-function bfSocLoad(){
+// The cards used to be drawn the moment the round list came back and the reactions and
+// comments a second later, so every open showed bare cards and then the icons "appeared"
+// (Nathan 9/18: looks unprofessional). Now: the last answer is kept on the phone and drawn
+// with the cards at once; with nothing kept for a round, the list waits for this answer
+// (at most BF_SOC_WAIT) so the cards come in whole. `ready` is called exactly once.
+const BF_SOC_WAIT=3000;   // Nathan saw the icons land ~2 s after the cards on his phone
+function bfSocCache(){try{return JSON.parse(localStorage.getItem('btBfSoc')||'{}')||{};}catch(e){return {};}}
+function bfSocLoad(list,ready){
+  let done=false;const go=()=>{if(done)return;done=true;try{ready&&ready();}catch(e){}};
   try{
-    if(!myPid()||previewSandboxed()||!Array.isArray(bfList))return;
-    const codes=bfList.map(e=>e.code).filter(Boolean).slice(0,60);if(!codes.length)return;
-    relayBattle({op:'social',pid:myPid(),codes}).then(r=>{if(r&&r.ok){bfSoc=r.soc||{};if(S.screen==='bfield')render();}}).catch(()=>{});
-  }catch(e){}
+    list=list||bfList;
+    if(!myPid()||previewSandboxed()||!Array.isArray(list))return go();
+    const codes=list.map(e=>e.code).filter(Boolean).slice(0,60);if(!codes.length)return go();
+    const kept=bfSocCache();
+    if(ready){codes.forEach(c=>{if(kept[c]&&!bfSoc[c])bfSoc[c]=kept[c];});
+      if(codes.every(c=>bfSoc[c]))go();else setTimeout(go,BF_SOC_WAIT);}
+    relayBattle({op:'social',pid:myPid(),codes}).then(r=>{
+      if(r&&r.ok){bfSoc=r.soc||{};
+        try{const k=bfSocCache();codes.forEach(c=>{if(bfSoc[c])k[c]=bfSoc[c];else delete k[c];});
+          const keys=Object.keys(k);if(keys.length>200)keys.slice(0,keys.length-200).forEach(x=>delete k[x]);
+          localStorage.setItem('btBfSoc',JSON.stringify(k));}catch(e){}
+        if(done){if(S.screen==='bfield')render();}else go();}
+      else go();
+    }).catch(go);
+  }catch(e){go();}
 }
 function bfSocBump(code,t,d){const o=bfSoc[code];if(!o)return;o.n=o.n||{};o.n[t]=Math.max(0,(o.n[t]||0)+d);if(S.screen==='bfield')render();}
 // comments ----------------------------------------------------------------
@@ -9186,7 +9205,8 @@ function openBattlefield(){
       .map(x=>Object.assign({},x.entry,{live:bfLiveGuess(x.entry),_archived:true}))
       .sort((a,b)=>(b.at||0)-(a.at||0));
     bfStale=false;
-    bfList=[...live,...archived];render();bfSocLoad();
+    const list=[...live,...archived];
+    bfSocLoad(list,()=>{bfList=list;render();});   // the cards arrive with their reactions, not before them
   }).catch(()=>{
     const st=bfStore();
     const archived=Object.values(st).filter(x=>x.entry)
