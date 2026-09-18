@@ -497,7 +497,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-centre in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789711344';
+const BUILD='1789711758';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -6892,8 +6892,25 @@ function greadDraw(cv,d){
   const off=document.createElement('canvas');off.width=W;off.height=H;
   const oc=off.getContext('2d'),img=oc.createImageData(W,H);
   for(let i=0;i<W*H;i++){const b=sb.charCodeAt(i);if(b===255)continue;const c=greadColour(b/25);img.data.set([c[0],c[1],c[2],255],i*4);}
+  // colour one cell past the edge (nearest neighbour, two passes): the smoothed outline below
+  // bows out past the stored corners at concave bends, and must never show a hole there
+  for(let pass=0;pass<2;pass++){
+    const src=new Uint8ClampedArray(img.data);
+    for(let r=0;r<H;r++)for(let c=0;c<W;c++){
+      const i=(r*W+c)*4;if(src[i+3])continue;
+      for(const [dr,dc] of [[0,1],[0,-1],[1,0],[-1,0]]){const rr=r+dr,cc=c+dc;
+        if(rr<0||cc<0||rr>=H||cc>=W)continue;const j=(rr*W+cc)*4;
+        if(src[j+3]){img.data[i]=src[j];img.data[i+1]=src[j+1];img.data[i+2]=src[j+2];img.data[i+3]=255;break;}}
+    }
+  }
   oc.putImageData(img,0,0);
-  const outline=()=>{ctx.beginPath();d.o.forEach(([x,y],i)=>ctx[i?'lineTo':'moveTo'](x*px,y*px));ctx.closePath();};
+  // the stored outline is a few corner points (OSM, or a drawing simplified to 1 m): straight
+  // lines between them read as a cut gem, not a green (Nathan 9/17). Chaikin corner-cutting,
+  // four rounds, gives the natural curve through the same shape.
+  let ring=d.o.map(([x,y])=>[x,y]);
+  for(let k=0;k<4;k++){const nx=[];for(let i=0;i<ring.length;i++){const a=ring[i],b=ring[(i+1)%ring.length];
+    nx.push([a[0]*.75+b[0]*.25,a[1]*.75+b[1]*.25],[a[0]*.25+b[0]*.75,a[1]*.25+b[1]*.75]);}ring=nx;}
+  const outline=()=>{ctx.beginPath();ring.forEach(([x,y],i)=>ctx[i?'lineTo':'moveTo'](x*px,y*px));ctx.closePath();};
   ctx.save();outline();ctx.clip();ctx.imageSmoothingEnabled=true;ctx.drawImage(off,0,0,W*px,H*px);ctx.restore();
   // arrows every 2 m: white, each tail traced along the fall (back up the slope and on down it)
   // so it bends the way the green moves; longer where it is steeper (Nathan 9/17)
@@ -6917,8 +6934,10 @@ function greadDraw(cv,d){
       ctx.beginPath();L.forEach(([x,y],i)=>ctx[i?'lineTo':'moveTo'](x,y));
       for(const sg of [1,-1]){ctx.moveTo(x1,y1);ctx.lineTo(x1-6*Math.cos(h+sg*.55),y1-6*Math.sin(h+sg*.55));}
       ctx.stroke();});};
+  ctx.save();outline();ctx.clip();   // arrows stay on the green; a rim arrow no longer pokes past the curve
   drawArrows('rgba(0,0,0,.45)',4.2);   // a dark edge so white reads on the yellow
   drawArrows('#fff',2);
+  ctx.restore();
   outline();ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.stroke();
 }
 // a leg of the sight line: actual yards, or the plays-like number (elevation and/or wind) marked ~
