@@ -497,7 +497,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-centre in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789715058';
+const BUILD='1789769066';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -6828,7 +6828,19 @@ const HOSTED_GREENS={'darkhorse':'/geo/greens/darkhorse.json',
   'cypress-lakes':'/geo/greens/cypress-lakes.json',
   'stonetree':'/geo/greens/stonetree.json',
   'tilden-park':'/geo/greens/tilden-park.json',
-  'valley-hi':'/geo/greens/valley-hi.json'};
+  'valley-hi':'/geo/greens/valley-hi.json',
+  // near Vacaville (9/18, after Hiddenbrooke read 'pretty spot on'): national records, keyed by their own id;
+  // outlines spot-checked on satellite; Buchanan Fields + Campus Commons left out (loose outlines)
+  'nat947':'/geo/greens/nat947.json',
+  'nat2321':'/geo/greens/nat2321.json',
+  'nat1348':'/geo/greens/nat1348.json',
+  'nat1349':'/geo/greens/nat1349.json',
+  'ogaa6cbb7c9f0ac':'/geo/greens/ogaa6cbb7c9f0ac.json',
+  'nat672':'/geo/greens/nat672.json',
+  'nat982':'/geo/greens/nat982.json',
+  'nat6171':'/geo/greens/nat6171.json',
+  'nat10767':'/geo/greens/nat10767.json',
+  'nat10064':'/geo/greens/nat10064.json'};
 const GREENS={};   // course id -> data | 'none' | Promise
 let greadOpen=false;
 function greensUrlFor(c){return c&&(c.greensUrl||HOSTED_GREENS[c.id])||null;}
