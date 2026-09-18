@@ -497,7 +497,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-centre in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789708047';
+const BUILD='1789708504';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -6806,7 +6806,7 @@ function elevStripPaint(pos){
 // green, a grid of slope % and the way the ball rolls, turned so the fairway is at the bottom
 // (the hole's own line into the green). The green button in the map bar opens it. Premium
 // material like the mountain; open to everyone while PLAYSLIKE_OPEN.
-const HOSTED_GREENS={'hiddenbrooke':'/geo/greens/hiddenbrooke.json'};
+const HOSTED_GREENS={'hiddenbrooke':'/geo/greens/hiddenbrooke.json','rancho-solano':'/geo/greens/rancho-solano.json'};
 const GREENS={};   // course id -> data | 'none' | Promise
 let greadOpen=false;
 function greensUrlFor(c){return c&&(c.greensUrl||HOSTED_GREENS[c.id])||null;}
