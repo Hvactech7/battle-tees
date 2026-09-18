@@ -497,7 +497,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-centre in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789708504';
+const BUILD='1789711344';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -4907,7 +4907,7 @@ function splinePath(path){
 // kept forever, so at load (online only, never mid-round) any hosted map fetched
 // before this stamp is re-fetched in the background and swapped in on success —
 // the old one stays if the fetch fails, so a no-signal round never loses its map.
-const GEO_STAMP=1788912624158;   // 2026-09-08: 284 recovered holes on 202 courses (card-verified), see ~/battletees-national/scorecard
+const GEO_STAMP=1789711400000;   // 2026-09-17: DarkHorse greens drawn by Nathan (the 9/12 marks never bumped this); was 1788912624158 (9/8 recovered holes)
 async function refreshStaleGeo(){
   try{
     if(typeof navigator!=='undefined'&&navigator.onLine===false)return;
@@ -4932,7 +4932,7 @@ const GEO_HELD=new Set(geoHeldIds().split(','));   // records held back by the 2
 // 'darkhorse' is the pre-national built-in every install carries; it never had a
 // map, and the national record that does (nat10762, 13 of 18 holes) was never
 // in anyone's library -- so the course opened as if nothing existed (Nathan 9/12).
-const HOSTED_GEO={'darkhorse':'/geo/nat/ca/10762.json','rancho-solano':'/geo/rancho-solano.json?v=4','lake-chabot':'/geo/lake-chabot.json?v=1','paradise-valley':'/geo/paradise-valley.json?v=1','teal-bend':'/geo/teal-bend.json?v=1','hiddenbrooke':'/geo/hiddenbrooke.json?v=1','green-valley':'/geo/green-valley.json?v=1','silverado-north':'/geo/silverado-north.json?v=1','davis':'/geo/davis.json?v=1','el-macero':'/geo/el-macero.json?v=1','wildhorse':'/geo/wildhorse.json?v=1','wild-wings':'/geo/wild-wings.json?v=2','diablo-creek':'/geo/diablo-creek.json?v=1','bartley-cavanaugh':'/geo/bartley-cavanaugh.json?v=1','yocha-dehe':'/geo/yocha-dehe.json?v=1','franklin-canyon':'/geo/franklin-canyon.json?v=1','boundary-oak':'/geo/boundary-oak.json?v=1','cypress-lakes':'/geo/cypress-lakes.json?v=1','stonetree':'/geo/stonetree.json?v=2','tilden-park':'/geo/tilden-park.json?v=2','valley-hi':'/geo/valley-hi.json?v=2'};
+const HOSTED_GEO={'darkhorse':'/geo/nat/ca/10762.json?v=2','rancho-solano':'/geo/rancho-solano.json?v=4','lake-chabot':'/geo/lake-chabot.json?v=1','paradise-valley':'/geo/paradise-valley.json?v=1','teal-bend':'/geo/teal-bend.json?v=1','hiddenbrooke':'/geo/hiddenbrooke.json?v=1','green-valley':'/geo/green-valley.json?v=1','silverado-north':'/geo/silverado-north.json?v=1','davis':'/geo/davis.json?v=1','el-macero':'/geo/el-macero.json?v=1','wildhorse':'/geo/wildhorse.json?v=1','wild-wings':'/geo/wild-wings.json?v=2','diablo-creek':'/geo/diablo-creek.json?v=1','bartley-cavanaugh':'/geo/bartley-cavanaugh.json?v=1','yocha-dehe':'/geo/yocha-dehe.json?v=1','franklin-canyon':'/geo/franklin-canyon.json?v=1','boundary-oak':'/geo/boundary-oak.json?v=1','cypress-lakes':'/geo/cypress-lakes.json?v=1','stonetree':'/geo/stonetree.json?v=2','tilden-park':'/geo/tilden-park.json?v=2','valley-hi':'/geo/valley-hi.json?v=2'};
 // ---------- offline tile pack ----------
 // Pre-downloads the satellite tiles for every hole view into the SW's bt-tiles
 // cache, so each hole opens instantly even with no signal on the course.
@@ -6806,7 +6806,29 @@ function elevStripPaint(pos){
 // green, a grid of slope % and the way the ball rolls, turned so the fairway is at the bottom
 // (the hole's own line into the green). The green button in the map bar opens it. Premium
 // material like the mountain; open to everyone while PLAYSLIKE_OPEN.
-const HOSTED_GREENS={'hiddenbrooke':'/geo/greens/hiddenbrooke.json','rancho-solano':'/geo/greens/rancho-solano.json'};
+// Every built-in (9/17): read from each survey's RAW lidar tiles (.build/greentiles.py), never the
+// 3DEP ImageServer, which put 16.7% on a 3.5% green at Boundary Oak. A new built-in needs its line.
+const HOSTED_GREENS={'darkhorse':'/geo/greens/darkhorse.json',
+  'rancho-solano':'/geo/greens/rancho-solano.json',
+  'lake-chabot':'/geo/greens/lake-chabot.json',
+  'paradise-valley':'/geo/greens/paradise-valley.json',
+  'teal-bend':'/geo/greens/teal-bend.json',
+  'hiddenbrooke':'/geo/greens/hiddenbrooke.json',
+  'green-valley':'/geo/greens/green-valley.json',
+  'silverado-north':'/geo/greens/silverado-north.json',
+  'davis':'/geo/greens/davis.json',
+  'el-macero':'/geo/greens/el-macero.json',
+  'wildhorse':'/geo/greens/wildhorse.json',
+  'wild-wings':'/geo/greens/wild-wings.json',
+  'diablo-creek':'/geo/greens/diablo-creek.json',
+  'bartley-cavanaugh':'/geo/greens/bartley-cavanaugh.json',
+  'yocha-dehe':'/geo/greens/yocha-dehe.json',
+  'franklin-canyon':'/geo/greens/franklin-canyon.json',
+  'boundary-oak':'/geo/greens/boundary-oak.json',
+  'cypress-lakes':'/geo/greens/cypress-lakes.json',
+  'stonetree':'/geo/greens/stonetree.json',
+  'tilden-park':'/geo/greens/tilden-park.json',
+  'valley-hi':'/geo/greens/valley-hi.json'};
 const GREENS={};   // course id -> data | 'none' | Promise
 let greadOpen=false;
 function greensUrlFor(c){return c&&(c.greensUrl||HOSTED_GREENS[c.id])||null;}
