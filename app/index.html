@@ -497,7 +497,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-centre in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789769066';
+const BUILD='1789786891';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -2617,7 +2617,18 @@ async function pasteRestore(){
   render();
 }
 
+// ?v=KEY rides on a Battlefield email link (Nathan 9/18): the mail reached this person's inbox, so
+// opening it confirms their address on the relay. Nothing comes back but ok — it restores nothing,
+// and the relay burns the key. Their installed app learns it on its next profile check (relay-says-so).
+function battleConfirm(tok){
+  let tries=0;
+  const go=()=>relayBattle({op:'vlink',tok}).then(r=>{if(r&&r.ok)try{stat('verify_ok',{from:'battle-link'});}catch(e){}})
+    .catch(()=>{if(++tries<4)setTimeout(go,8000*tries);});
+  go();
+}
 async function tryMagicLink(){
+  const v = String(location.search||'').match(/[?&]v=([A-Za-z0-9_-]{20,64})/);
+  if(v&&!previewSandboxed()){ try{ history.replaceState(null,'',location.pathname+String(location.search).replace(/[?&]v=[^&]*/,'').replace(/^&/,'?')); }catch(e){} battleConfirm(v[1]); }
   // ?watch=CODE — a Battlefield email link straight into spectating
   const w = String(location.search||'').match(/[?&]watch=([A-Za-z0-9]{4,8})/);
   if(w){
