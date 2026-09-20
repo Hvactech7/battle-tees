@@ -519,7 +519,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-centre in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789891100';
+const BUILD='1789891940';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -8404,7 +8404,7 @@ function vHome(){
     <div style="display:flex;gap:6px;align-items:stretch"><button class="big" style="flex:1;margin:0" onclick="resumeOpenRoom()">Continue setup →</button><button class="ghost danger" style="flex:0 0 auto;margin:0;height:auto;align-self:stretch;display:flex;align-items:center" onclick="leaveShare();render()">Close room</button></div></div>`:''}
   ${inviteCardsHTML()}
   ${!inRound?`
-  <button class="big hb" style="font-family:Cinzel,Rajdhani,Inter,serif;font-weight:700;font-size:26px;letter-spacing:2px;text-shadow:0 1px 0 rgba(0,0,0,.35);padding:20px 0" onclick="startWizard()">⚔️ START ROUND ⚔️</button>
+  <button class="big hb" style="font-family:Cinzel,Rajdhani,Inter,serif;font-weight:700;font-size:min(33px,calc(9.6vw - 5px));letter-spacing:1.6px;text-shadow:0 1px 0 rgba(0,0,0,.35);padding:20px 0" onclick="startWizard()">⚔️ START ROUND ⚔️</button>
   <div style="height:14px"></div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
     <button class="ghost hb" style="padding:12px" onclick="go('courses')">⛳ Courses</button>
