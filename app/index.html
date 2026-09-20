@@ -519,7 +519,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-centre in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789880644';
+const BUILD='1789881585';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -6878,7 +6878,74 @@ const HOSTED_GREENS={'darkhorse':'/geo/greens/darkhorse.json',
   'nat982':'/geo/greens/nat982.json',
   'nat6171':'/geo/greens/nat6171.json',
   'nat10767':'/geo/greens/nat10767.json',
-  'nat10064':'/geo/greens/nat10064.json'};
+  'nat10064':'/geo/greens/nat10064.json',
+  // 35-60 miles out (9/19): outlines spot-checked on satellite, course by course. Left out:
+  // TPC Harding Fleming and Poppy Ridge (outlines on bunkers or bare ground), Olympic/Bodega/Lake
+  // Merced/The Falls/SF Golf Club (too few greens with real outlines to be worth a button).
+  'nat11685':'/geo/greens/nat11685.json',
+  'nat3069':'/geo/greens/nat3069.json',
+  'nat4579':'/geo/greens/nat4579.json',
+  'nat8950':'/geo/greens/nat8950.json',
+  'nat600':'/geo/greens/nat600.json',
+  'nat12379':'/geo/greens/nat12379.json',
+  'nat8855':'/geo/greens/nat8855.json',
+  'nat9189':'/geo/greens/nat9189.json',
+  'nat3070':'/geo/greens/nat3070.json',
+  'nat9323':'/geo/greens/nat9323.json',
+  'nat949':'/geo/greens/nat949.json',
+  'nat10097':'/geo/greens/nat10097.json',
+  'oga2a36d4be31f6':'/geo/greens/oga2a36d4be31f6.json',
+  'oga479e969350dd':'/geo/greens/oga479e969350dd.json',
+  'nat4581':'/geo/greens/nat4581.json',
+  'oga4a540b78721c':'/geo/greens/oga4a540b78721c.json',
+  'nat11608':'/geo/greens/nat11608.json',
+  'nat9202':'/geo/greens/nat9202.json',
+  'nat4580':'/geo/greens/nat4580.json',
+  'nat1341':'/geo/greens/nat1341.json',
+  'nat9230':'/geo/greens/nat9230.json',
+  'nat8803':'/geo/greens/nat8803.json',
+  'nat8805':'/geo/greens/nat8805.json',
+  'nat10283':'/geo/greens/nat10283.json',
+  'nat999':'/geo/greens/nat999.json',
+  'nat1380':'/geo/greens/nat1380.json',
+  'nat3531':'/geo/greens/nat3531.json',
+  'nat7922':'/geo/greens/nat7922.json',
+  'nat3470':'/geo/greens/nat3470.json',
+  'nat10506':'/geo/greens/nat10506.json',
+  'nat1118':'/geo/greens/nat1118.json',
+  'nat2699':'/geo/greens/nat2699.json',
+  'nat11873':'/geo/greens/nat11873.json',
+  'nat10345':'/geo/greens/nat10345.json',
+  'nat3638':'/geo/greens/nat3638.json',
+  'nat1344':'/geo/greens/nat1344.json',
+  'nat6173':'/geo/greens/nat6173.json',
+  'nat22':'/geo/greens/nat22.json',
+  'nat2355':'/geo/greens/nat2355.json',
+  'nat73':'/geo/greens/nat73.json',
+  'nat2354':'/geo/greens/nat2354.json',
+  'nat4013':'/geo/greens/nat4013.json',
+  'oga2ce49f7d9dec':'/geo/greens/oga2ce49f7d9dec.json',
+  'oga5ae10e344746':'/geo/greens/oga5ae10e344746.json',
+  'nat6169':'/geo/greens/nat6169.json',
+  'nat9773':'/geo/greens/nat9773.json',
+  'nat9904':'/geo/greens/nat9904.json',
+  'nat4334':'/geo/greens/nat4334.json',
+  'nat7979':'/geo/greens/nat7979.json',
+  'nat1986':'/geo/greens/nat1986.json',
+  'nat2480':'/geo/greens/nat2480.json',
+  'nat10763':'/geo/greens/nat10763.json',
+  'nat4575':'/geo/greens/nat4575.json',
+  'nat8009':'/geo/greens/nat8009.json',
+  'nat10764':'/geo/greens/nat10764.json',
+  'nat138':'/geo/greens/nat138.json',
+  'nat77':'/geo/greens/nat77.json',
+  'nat78':'/geo/greens/nat78.json',
+  'nat6258':'/geo/greens/nat6258.json',
+  'nat5920':'/geo/greens/nat5920.json',
+  'nat8773':'/geo/greens/nat8773.json',
+  'nat1334':'/geo/greens/nat1334.json',
+  'nat111':'/geo/greens/nat111.json',
+  'nat2457':'/geo/greens/nat2457.json'};
 const GREENS={};   // course id -> data | 'none' | Promise
 let greadOpen=false;
 function greensUrlFor(c){return c&&(c.greensUrl||HOSTED_GREENS[c.id])||null;}
