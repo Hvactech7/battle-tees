@@ -519,7 +519,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-centre in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789887900';
+const BUILD='1789889878';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -643,7 +643,7 @@ function courseDisplayOrder(){
 }
 function defaultConfig(){
   return {
-    lens:'both', allowance:100, carryTies:false, last2LastPlace:true, _v:4,
+    lens:'both', recLens:'net', allowance:100, carryTies:false, last2LastPlace:true, _v:4,
     bf:{broadcast:true,emails:true},
     game:'stroke',
     pts:{partnerWin:1, fieldBeatsPartners:2, loneWin:2, fieldBeatsLone:1, blindWin:3, fieldBeatsBlind:2, ctp:1},   // field beats blind: 2 (Nathan, 9/6)
@@ -903,6 +903,7 @@ function migrateState(s){
       if(s.autoBackup==null)s.autoBackup=true;
       if(s.units!=='m')s.units='yd';        // yards is the default, always
       s.config.lens='both';                  // gross AND net, always — the toggles are viewers
+      if(s.config.recLens!=='gross')s.config.recLens='net';   // the round is declared one or the other
       if(!s.config.game)s.config.game='stroke';
       if(s.config.ctpAll===undefined)s.config.ctpAll=true;
       if(!s.config.ctpMoney)s.config.ctpMoney={amt:0,carry:false};
@@ -3180,7 +3181,27 @@ function dotsOn(pi,h){
   return (s>=si?1:0)+((s-18)>=si?1:0);
 }
 function activeLenses(){return S.config.lens==='both'?['net','gross']:[S.config.lens];}
-function primaryLens(){return S.config.lens==='gross'?'gross':'net';}
+// A round is DECLARED net or gross at setup. This is the one that is shared, so
+// every phone computes the same thing from it: the win-loss record, the season
+// row, and the Wolf comeback rotation, which would otherwise hand two phones two
+// different Wolves on 17.
+function recLens(){return S.config.recLens==='gross'?'gross':'net';}
+// The money card carries its own toggle, because a group flips back and forth
+// over a payout all day. That one is this phone's view of THIS round only: it is
+// pinned to the round it was set in, so the next round opens on its own setting.
+let payPin=(()=>{try{return JSON.parse(localStorage.getItem('btPayLens')||'null');}catch(e){return null;}})();
+function payLens(){
+  try{if(payPin&&payPin.l&&payPin.r===((S.round&&S.round.startedAt)||0))return payPin.l==='gross'?'gross':'net';}catch(e){}
+  return recLens();
+}
+function setPayLens(v){
+  payPin={r:((S.round&&S.round.startedAt)||0),l:(v==='gross'?'gross':'net')};
+  try{localStorage.setItem('btPayLens',JSON.stringify(payPin));}catch(e){}
+  render();
+}
+// Kept as the RECORD lens: every old call site that meant "the one that counts"
+// meant the round's own, not one phone's view. Money call sites take payLens().
+function primaryLens(){return recLens();}
 // Round screens score by the game the round was started as; setup/home follow the picked game.
 const STACKABLE=['nines','stroke','bestball','stableford','quota','sixes','umbrella','bbb','nassau','skins'];
 // Games that can join a stack as a guest but can't host one (their primary
@@ -11612,7 +11633,7 @@ function ledgerKeyFor(p){
 function ledgerRow(entry){
   try{
     if(!entry||!entry.id)return null;
-    const SN=settleNet();
+    const SN=settleNet(recLens());
     if(!SN||!SN.act||SN.act.length<2)return null;   // solo settles nothing
     const holes=S.round.holes.filter(r=>r&&r.confirmed&&r.gross);
     return {
@@ -12244,6 +12265,9 @@ function vRoundOpts(){
     <div class="card"><h2>Scoring options</h2>
       <div class="row"><span class="muted">Handicap allowance</span>
         <div class="stepper"><button onclick="chAllow(-5)">&#8722;</button><span class="val num" style="font-size:17px">${S.config.allowance}%</span><button onclick="chAllow(5)">+</button></div></div>
+      <div class="row"><span class="muted">Scored as</span>
+      <span style="display:flex;gap:6px;flex:none"><button class="ghost ${recLens()==='net'?'sel':''}" onclick="setRecLens('net')">Net</button><button class="ghost ${recLens()==='gross'?'sel':''}" onclick="setRecLens('gross')">Gross</button></span></div>
+      <div class="tiny mt">Sets the win–loss record. The settle screen has its own toggle.</div>
     </div>
     ${wolf?`<div class="card"><h2>Rules</h2>
       <div class="row"><span class="muted">Ties carry over</span>
@@ -12432,6 +12456,9 @@ function gameOptionsHTML(){
   <div class="card"><h2>Scoring options</h2>
     <div class="row"><span class="muted">Handicap allowance</span>
       <div class="stepper"><button onclick="chAllow(-5)">−</button><span class="val num" style="font-size:17px">${S.config.allowance}%</span><button onclick="chAllow(5)">+</button></div></div>
+    <div class="row"><span class="muted">Scored as</span>
+      <span style="display:flex;gap:6px;flex:none"><button class="ghost ${recLens()==='net'?'sel':''}" onclick="setRecLens('net')">Net</button><button class="ghost ${recLens()==='gross'?'sel':''}" onclick="setRecLens('gross')">Gross</button></span></div>
+    <div class="tiny mt">Sets the win–loss record. The settle screen has its own toggle.</div>
   </div>
   ${S.config.game!=='wolf'?'':`<div class="card"><h2>Points (per player)</h2>
     ${pt('partnerWin','Wolf + partner win')}
@@ -13105,6 +13132,9 @@ function chPt(k,d){set(()=>{S.config.pts[k]=Math.max(0,S.config.pts[k]+d);});}
 function chQuotaPt(k,d){set(()=>{S.config.quota.pts[k]=Math.min(10,Math.max(-5,S.config.quota.pts[k]+d));});}
 function chStblPt(k,d){set(()=>{S.config.stbl.pts[k]=Math.min(10,Math.max(-5,S.config.stbl.pts[k]+d));});}
 function chAllow(d){set(()=>{S.config.allowance=Math.min(100,Math.max(50,S.config.allowance+d));});}
+// The round's own net-or-gross. Shared, so the record and the Wolf rotation match
+// on every phone; the settle screen's toggle is a view on top of it.
+function setRecLens(v){set(()=>{S.config.recLens=(v==='gross'?'gross':'net');});}
 let pickingCourse=false;
 function startPick(){pickingCourse=true;finder={status:'idle',choices:[],error:''};S.screen='pickcourse';save();render();}
 function setSpan(count,start){set(()=>{S.config.span={count,start};});}
@@ -13805,7 +13835,7 @@ function bbbCardHTML(rec,act){
 // Skins pot card for the hole screen.
 function skinsCardHTML(){
   const h=S.round.cur,rec=S.round.holes[h];
-  const eng=computeSkins(),L=primaryLens();
+  const eng=computeSkins(),L=payLens();
   const vals=skinsHoleVals();
   const first=i=>esc((S.players[i].name||'').split(' ')[0]);
   const mine=eng.detail[L].find(d=>d.h===h);
@@ -13830,7 +13860,7 @@ function nassauUpTxt(up,thru,fin){
 }
 function nassauCardHTML(){
   const h=S.round.cur,rec=S.round.holes[h];
-  const eng=computeNassau(),L=primaryLens(),T=nassauSides();
+  const eng=computeNassau(),L=payLens(),T=nassauSides();
   const o=playOrder(),pos=Math.max(0,posOf(h));
   const first=i=>esc((S.players[i].name||'').split(' ')[0]);
   const tn=k=>teamLbl(T[k]);
@@ -14347,7 +14377,6 @@ function vHoleVegas(){
   const all=computeVegas();
   const T=all.perHole[h].teams;
   const dots=i=>dotsOn(i,h);
-  const L=primaryLens();
   // the Gross/Net toggle on the totals card drives the whole hole view:
   // steppers still edit gross, but display follows the chosen lens
   const VL=topLens==='net'?'net':'gross';
@@ -15459,8 +15488,23 @@ function setRate(g,v){set(()=>{S.round.rates=S.round.rates||{};S.round.rates[g]=
 //
 // A scramble never reaches the stack branch (it "plays alone" — see the picker),
 // which is why the stack inverts only stroke while the single path inverts both.
-function settleNet(){
-  const G=gamesOn(), act=actIdx(), L=primaryLens();
+// The money toggle, at the top of the settle section. Nothing is hidden by it:
+// it picks which set of numbers the payouts are counted from, and says so when
+// this phone is looking at something other than the round's own setting.
+function payLensCardHTML(){
+  if(isSoloRound())return '';
+  const L=payLens(), R=recLens();
+  const b=(v,t)=>`<button class="ghost ${L===v?'sel':''}" onclick="setPayLens('${v}')">${t}</button>`;
+  return `<div class="card" style="padding:10px 14px"><div class="row" style="border-top:none">
+    <span class="muted">Settling on</span>
+    <span style="display:flex;gap:6px;flex:none">${b('net','Net')}${b('gross','Gross')}</span></div>
+    ${L!==R?`<div class="tiny mt">Your phone only — this round was set up as ${R}.</div>`:''}
+  </div>`;
+}
+// lens: the settle screens pass this phone's money toggle; the season row passes
+// recLens(), because a permanent row can't be one golfer's view.
+function settleNet(lens){
+  const G=gamesOn(), act=actIdx(), L=(lens==='gross'||lens==='net')?lens:payLens();
   const out={act,lens:L,net:act.map(()=>0),per:{},pending:[],priced:false};
   if(act.length<2)return out;
   const multi=G.length>1;
@@ -15490,8 +15534,8 @@ function settleNet(){
 function vSettleStack(G){
   const thru=S.round.holes.filter(r=>r.confirmed).length;
   const act=actIdx();
-  const L=primaryLens();
-  const SN=settleNet(), net=SN.net;
+  const L=payLens();
+  const SN=settleNet(L), net=SN.net;
   const UNIT={stroke:'stroke',bestball:'hole',nassau:'bet',skins:'$',nines:'pt',quota:'pt',stableford:'pt',sixes:'pt',umbrella:'pt',bbb:'pt'};
   const cards=G.map(g=>{
     const eng=computeFor(g);
@@ -15561,6 +15605,7 @@ function vSettleStack(G){
   </div>`;
   return topbar('Settlement — game stack',G.map(gameName).join(' · '),'')+`<main>
     ${chalInviteHTML()}${chalResultsHTML()}
+    ${payLensCardHTML()}
     ${cards}${totCard}
   </main>`+tabs('settle');
 }
@@ -15641,7 +15686,9 @@ function vSettle(){
   const thru=S.round.holes.filter(r=>r.confirmed).length;
   const v=+S.round.dollarPerPt||0;
   const act=actIdx();
-  const blocks=activeLenses().map(LL=>{
+  // ONE settlement table, the one the money toggle picked. Two payout tables on
+  // one screen only ever started an argument about which one was real.
+  const blocks=[payLens()].map(LL=>{
     const led=all.ledgers[LL];
     const gg=gameOn();
     // Fixed 2v2 settles TEAM v TEAM — see fixedTeamsFor().
@@ -15689,6 +15736,7 @@ function vSettle(){
   return topbar('Settlement','','')+`<main>
     ${vfNagHTML()}
     ${chalInviteHTML()}${chalResultsHTML()}
+    ${payLensCardHTML()}
     ${PAIRS_GAMES.includes(gameOn())&&gameOn()!=='skins'&&actIdx().length>1?`<div class="card"><div class="row"><span class="muted">$ per ${['stroke','scramble'].includes(gameOn())?'stroke':gameOn()==='bestball'?'hole':gameOn()==='nassau'?'bet':'point'} (optional)</span>
       <input id="dpp" type="number" step="0.25" min="0" value="${S.round.dollarPerPt||''}" placeholder="0" style="width:90px" onchange="set(()=>S.round.dollarPerPt=+this.value||0)"></div></div>`:''}
     ${blocks}
