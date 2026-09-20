@@ -519,7 +519,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-centre in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789879212';
+const BUILD='1789880644';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -887,10 +887,15 @@ function migrateState(s){
     {
       if(!s.config._v){s.config._v=2;s.config.carryTies=false;}
       if(!s.config.track)s.config.track={bunker:false,chips:false,pen:false};
-      // track flags moved config -> player. Seed each player from the old shared
-      // value so a round already in progress keeps behaving exactly as it did.
+      // track flags moved config -> player (9/13). A round ALREADY IN PROGRESS keeps the old
+      // shared value so it behaves exactly as it did. A fresh roster must not: the old value is
+      // pre-9/13 and can say putts off while the phone's own setting (and the default) say on —
+      // Settings then read Off while every hole still asked for putts (Nathan 9/19, his config
+      // said putts:false from before the split). New rows follow MY setting, or the default.
       (s.players||[]).forEach(p=>{ if(p&&!p.track)
-        p.track=Object.assign(defaultTrack(), s.config.track||{}); });
+        p.track=(s.round&&s.round.started)
+          ? Object.assign(defaultTrack(), s.config.track||{})
+          : Object.assign(defaultTrack(), (s.me&&s.me.track)||{}); });
       if(!s.config.bf)s.config.bf={broadcast:true,emails:true};
       if(!s.share)s.share={on:false,code:null};
       if(!s.me)s.me={name:'',index:10};
@@ -11676,6 +11681,9 @@ function resetRoster(){
   S.players=[1,2,3,4].map(k=>({name:'Player '+k,index:10,chOverride:null,tee}));
   S.config.groupName='';
   ensureMeFirst();
+  // my trackers are mine and survive the round (Nathan 9/19: Settings said putts off after a round
+  // while the next round still asked) — the rest of the roster starts on the app default
+  S.players.forEach((pl,i)=>{pl.track=Object.assign(defaultTrack(), i===myPlayerIdx()?((S.me&&S.me.track)||{}):{});});
   S.players.forEach((pl,i)=>{if(/^Player \d$/.test(pl.name))pl.name='Player '+(i+1);});
   syncGroupCounts();
 }
