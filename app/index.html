@@ -519,7 +519,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-centre in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789889878';
+const BUILD='1789891100';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -11774,6 +11774,10 @@ function resetRoster(){
   // while the next round still asked) — the rest of the roster starts on the app default
   S.players.forEach((pl,i)=>{pl.track=Object.assign(defaultTrack(), i===myPlayerIdx()?((S.me&&S.me.track)||{}):{});});
   S.players.forEach((pl,i)=>{if(/^Player \d$/.test(pl.name))pl.name='Player '+(i+1);});
+  // net or gross is a call this group makes for THIS round, not a standing
+  // preference the way the allowance stepper above it is (Nathan 9/20). Every
+  // round opens on net and somebody has to say gross out loud.
+  S.config.recLens='net';
   syncGroupCounts();
 }
 // A round left open overnight is not a round. Cap it at 8 hours: the clock stops
