@@ -519,7 +519,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-centre in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789882074';
+const BUILD='1789887900';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -4945,7 +4945,7 @@ function splinePath(path){
 // kept forever, so at load (online only, never mid-round) any hosted map fetched
 // before this stamp is re-fetched in the background and swapped in on success —
 // the old one stays if the fetch fails, so a no-signal round never loses its map.
-const GEO_STAMP=1789711400000;   // 2026-09-17: DarkHorse greens drawn by Nathan (the 9/12 marks never bumped this); was 1788912624158 (9/8 recovered holes)
+const GEO_STAMP=1789887200000;   // 2026-09-19: Poppy Ridge held back (rebuilt course, old map); was 1789711400000 (9/17 DarkHorse greens)
 async function refreshStaleGeo(){
   try{
     if(typeof navigator!=='undefined'&&navigator.onLine===false)return;
