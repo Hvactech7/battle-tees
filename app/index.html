@@ -519,7 +519,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-centre in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789963733';
+const BUILD='1789965473';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -2095,11 +2095,18 @@ try{
 // some iPhone did (8/18). First tag wins and sticks to the device (the phone IS
 // the friend); the tag on the link that was actually followed rides the
 // bf_watch event as `f` as well.
-let btFtag='',btLinkTag='';
+let btFtag='',btLinkTag='',btCheerLink=false;
+// Declared HERE, not next to openBattlefieldFrom where it is used: the install gate reads
+// it, the gate paints on the first render, and a `let` that has not been reached yet
+// throws rather than reading undefined (the 9/5 loader wipe was this exact shape).
+let bfCheerIntent=null;
 try{
   const m=/[?&]f=([A-Za-z0-9]{4,12})/.exec(location.search||'');
   if(m){btLinkTag=m[1];if(!localStorage.getItem('btFtag'))localStorage.setItem('btFtag',m[1]);}
   btFtag=localStorage.getItem('btFtag')||'';
+  // A battle cry tapped in an email. Read HERE, at load, because the install gate
+  // paints on the first render — long before tryMagicLink() gets to the query.
+  btCheerLink=/[?&]bf=[A-Za-z0-9]{4,8}/.test(location.search||'');
 }catch(e){}
 function stat(ev,extra){
   // A local preview build shares the live relay, so testing here used to post real
@@ -8184,7 +8191,9 @@ function installGateOn(){
 }
 function installGateSkip(){
   try{localStorage.setItem('btInstallGate','1');}catch(e){}
-  try{stat('a2hs_gate',{skipped:true});}catch(e){}
+  try{stat('a2hs_gate',Object.assign({skipped:true},btCheerLink?{cheer:true}:{}));}catch(e){}
+  // they came to react: take them there, don't drop them on the home screen
+  try{if(bfCheerIntent){const i=bfCheerIntent;return openBattlefieldFrom(i.code,i.t,i.icon,i.comment);}}catch(e){}
   render();
 }
 function vInstallGate(){
@@ -8213,13 +8222,17 @@ function vInstallGate(){
     <div class="center" style="margin-bottom:14px">
       <img src="${art('/banner.jpg')}" style="width:min(320px,80vw);border-radius:14px;border:2px solid var(--gold,#c9a544)" onerror="this.style.display='none'">
     </div>
+    ${(btCheerLink||bfCheerIntent)?`<div class="card" style="border-color:var(--elec,#2b86ec)">
+      <h2 style="font-size:17px;color:var(--elec,#2b86ec)">⚔️ Your battle cry is waiting</h2>
+      <div style="font-size:15.5px;line-height:1.45">Already have Battle Tees on your home screen? Open it there and tap <b>⚔️ Community Battlefield</b>.</div>
+    </div>`:''}
     <div class="card" style="border-color:var(--gold,#c9a544)">
-      <h2 style="font-size:17px;color:var(--gold,#e8c552)">⚔️ Put it on your Home Screen first</h2>
+      <h2 style="font-size:17px;color:var(--gold,#e8c552)">${(btCheerLink||bfCheerIntent)?'⚔️ Not on your phone yet?':'⚔️ Put it on your Home Screen first'}</h2>
       <div style="font-size:15.5px;line-height:1.45;margin-bottom:10px">Battle Tees runs as a real app from your home screen — GPS maps, offline scorecards, the works.</div>
       ${steps}
       <div class="tiny mt" style="color:var(--amber-bd)"><b>Do this before you set up your profile.</b> The browser and the installed app keep separate saves — anything you set up here stays here.</div>
     </div>
-    <button class="ghost" style="width:100%;margin-top:4px" onclick="installGateSkip()">I'll stay in the browser for now</button>
+    <button class="ghost" style="width:100%;margin-top:4px" onclick="installGateSkip()">${(btCheerLink||bfCheerIntent)?'React here in the browser instead':"I'll stay in the browser for now"}</button>
   </main>`;
 }
 function tabs(sel){
@@ -9421,9 +9434,15 @@ function bfListLanded(){
   if(bfArmedIcon(L.code,L.t)){bfPick={code:L.code,t:L.t};render();}
 }
 // ?bf=CODE[&t=TARGET][&react=ICON][&comment=1] — the Battlefield email's react/comment links.
+// The install gate paints INSTEAD of any screen, so opening the Battlefield underneath it
+// would scroll and arm against a card that is not on the page, and toast about a round
+// nobody can see. Hold the intent instead (bfCheerIntent, declared up by btCheerLink);
+// installGateSkip() replays it.
 function openBattlefieldFrom(code,t,icon,comment){
   code=String(code||'').toUpperCase();
   t=String(t||'round').slice(0,40);
+  bfCheerIntent={code,t,icon,comment:!!comment};
+  if(typeof installGateOn==='function'&&installGateOn()){render();return;}
   bfArm=BF_ICON_NAME[icon]?{code,t,icon}:null;
   bfLand={code,t,comment:!!comment};
   openBattlefield();
