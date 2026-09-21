@@ -519,7 +519,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-centre in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789960912';
+const BUILD='1789963733';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -2655,15 +2655,29 @@ function battleConfirm(tok){
   go();
 }
 async function tryMagicLink(){
-  const v = String(location.search||'').match(/[?&]v=([A-Za-z0-9_-]{20,64})/);
+  // Read the query ONCE. Each handler below scrubs the address bar as it goes, so a
+  // handler that read location.search after an earlier one had cleared it would find
+  // nothing — the ?f= friend tag is already safe (parsed at load), the rest is not.
+  const Q = String(location.search||'');
+  const v = Q.match(/[?&]v=([A-Za-z0-9_-]{20,64})/);
   if(v&&!previewSandboxed()){ try{ history.replaceState(null,'',location.pathname+String(location.search).replace(/[?&]v=[^&]*/,'').replace(/^&/,'?')); }catch(e){} battleConfirm(v[1]); }
+  // ?bf=CODE — the react/comment links in a Battlefield email. Lands on the round's
+  // card in the Battlefield, where reacting and commenting live (?watch= below goes
+  // to the live scorecard instead, which carries neither).
+  const bl = Q.match(/[?&]bf=([A-Za-z0-9]{4,8})/);
+  if(bl){
+    const q=new URLSearchParams(Q);
+    const t=q.get('t')||'round', icon=q.get('react')||'', cm=q.get('comment')==='1';
+    try{ history.replaceState(null,'',location.pathname); }catch(e){}
+    setTimeout(()=>openBattlefieldFrom(bl[1],t,icon,cm),400);
+  }
   // ?watch=CODE — a Battlefield email link straight into spectating
-  const w = String(location.search||'').match(/[?&]watch=([A-Za-z0-9]{4,8})/);
+  const w = Q.match(/[?&]watch=([A-Za-z0-9]{4,8})/);
   if(w){
     try{ history.replaceState(null,'',location.pathname); }catch(e){}
     setTimeout(()=>openBfWatch(w[1].toUpperCase()),400);
   }
-  const m = String(location.search||'').match(/[?&]k=([A-Za-z0-9_-]{16,})/);
+  const m = Q.match(/[?&]k=([A-Za-z0-9_-]{16,})/);
   if(!m) return;
   const tok = m[1];
   // Hold off any auto-update reload until this finishes. The token is burned on
@@ -9091,7 +9105,18 @@ function bfWhoFor(code,t){
   const p=((e&&e.sum)||[]).find(x=>bfTarget(x)===t);
   return p?esc(p.name):'this player';
 }
+// AN EMAIL CAN ARM A REACTION. A Battlefield email shows the seven icons; tapping
+// one opens the app here with that icon chosen but NOT sent — it rides in as bfArm,
+// sorts to the front of the picker and lights up, and one tap in the app commits it.
+// Deliberately not a one-tap POST from the inbox: mail scanners and "safe links"
+// services fetch URLs on their own, and a forwarded email would react as its first
+// recipient. Nobody's name goes on a reaction they did not tap.
+let bfArm=null;   // {code,t,icon}
+function bfArmedIcon(code,t){
+  return (bfArm&&bfArm.code===code&&bfArm.t===t&&BF_ICON_NAME[bfArm.icon])?bfArm.icon:null;
+}
 function bfRxHTML(code,t,fit){
+  fit=bfArmedIcon(code,t)||fit;
   const o=bfSoc[code];if(!o)return '';
   const r=(o.r||{})[t]||{},mine=(o.mine||{})[t],n=(o.n||{})[t]||0;
   const C=bfArg(code),T=bfArg(t);
@@ -9381,6 +9406,28 @@ try{
 const BF_LIVE_MAX=6*3600;
 function bfLiveGuess(e){return !!(e&&!e.endedAt&&(Date.now()/1000-(e.at||0))<BF_LIVE_MAX);}
 let bfStale=false;   // the last refresh failed: what follows is the cache, not the relay
+// An email link lands here. The list is fetched async and the reactions after it, so
+// the card cannot be scrolled to — or the picker opened on it — until both are in.
+let bfLand=null;
+function bfListLanded(){
+  const L=bfLand;if(!L)return;bfLand=null;
+  const card=document.getElementById('bfc-'+L.code);
+  if(!card){   // not a round this phone can see: leave them on their own feed, and say so once
+    try{shotToast('That round is not on your Battlefield');}catch(e){}
+    bfArm=null;return;
+  }
+  try{card.scrollIntoView({block:'center',behavior:'smooth'});}catch(e){try{card.scrollIntoView();}catch(e2){}}
+  if(L.comment){try{openBfComments(bfArg(L.code),bfArg(L.t));}catch(e){}return;}
+  if(bfArmedIcon(L.code,L.t)){bfPick={code:L.code,t:L.t};render();}
+}
+// ?bf=CODE[&t=TARGET][&react=ICON][&comment=1] — the Battlefield email's react/comment links.
+function openBattlefieldFrom(code,t,icon,comment){
+  code=String(code||'').toUpperCase();
+  t=String(t||'round').slice(0,40);
+  bfArm=BF_ICON_NAME[icon]?{code,t,icon}:null;
+  bfLand={code,t,comment:!!comment};
+  openBattlefield();
+}
 function openBattlefield(){
   bfPrunePhantoms();
   bfList=null;S.screen='bfield';render();
@@ -9403,7 +9450,7 @@ function openBattlefield(){
       .sort((a,b)=>(b.at||0)-(a.at||0));
     bfStale=false;
     const list=[...live,...archived];
-    bfSocLoad(list,()=>{bfList=list;render();});   // the cards arrive with their reactions, not before them
+    bfSocLoad(list,()=>{bfList=list;render();bfListLanded();});   // the cards arrive with their reactions, not before them
   }).catch(()=>{
     const st=bfStore();
     const archived=Object.values(st).filter(x=>x.entry)
@@ -9454,7 +9501,7 @@ function vBattlefield(){
       // Every card leads with the course; the players are listed below it (Nathan 9/14 for
       // groups, 9/16 for solo rounds too: "Brian Smith" twice on one card). With nobody carded
       // yet there is no player row, so the starter's name rides in the line under the course.
-      return `<div class="card" style="padding:12px 14px;cursor:pointer" onclick="if(!bfPickClose())openBfWatch('${esc(e.code)}')">
+      return `<div class="card" id="bfc-${esc(e.code)}" style="padding:12px 14px;cursor:pointer" onclick="if(!bfPickClose())openBfWatch('${esc(e.code)}')">
       <div class="row" style="border-top:none">
         <div style="flex:1;min-width:0">
           <b style="font-family:Rajdhani,sans-serif;font-size:22px;line-height:1.1">${esc(e.course||'Battle')}</b>
