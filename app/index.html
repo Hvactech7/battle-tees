@@ -519,7 +519,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-centre in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1789891940';
+const BUILD='1789960912';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -4400,6 +4400,7 @@ function mapBounceBack(to){
 function teardownMap(){
   if(mapWatch!=null&&navigator.geolocation){navigator.geolocation.clearWatch(mapWatch);mapWatch=null;}
   if(LMAP){try{LMAP.remove();}catch(e){}LMAP=null;}
+  mapBuiltKey=null;   // nothing to reuse once the map is gone
   mapMarks={};lSpine=null;gmSpine=null;lTee=null;lShots=[];gmShots=[];
 }
 // whose phone is this? self-claimed slot first, then profile-name match, else slot 0
@@ -4611,10 +4612,12 @@ function undoTrackHTML(){
     border-radius:12px;color:var(--amber-bd,#c9922e);font-family:Rajdhani,Inter,sans-serif;font-weight:700;
     font-size:17px;letter-spacing:.4px;white-space:nowrap;box-shadow:2px 2px 0 rgba(0,0,0,.35)">↩ Undo Track It</button>`;
 }
-// Touch the DOM directly rather than calling render(): on the map screen a
-// render schedules initHoleMap(), which tears the Leaflet map down and rebuilds
-// it — that destroyed this button the instant it appeared. The markup still
-// carries undoTrackHTML() so a render for any OTHER reason keeps it.
+// Touch the DOM directly rather than calling render(): a render on the map
+// screen used to rebuild the whole Leaflet map, which destroyed this button the
+// instant it appeared. Since 9/20 a same-hole render only repaints, but this
+// stays hand-placed — a hole change still rebuilds, and the button is a
+// three-second thing that must never blink. The markup still carries
+// undoTrackHTML() so a render for any OTHER reason keeps it.
 function showUndoTrack(entry){
   clearTimeout(undoTimer);
   undoShot=entry;
@@ -5992,12 +5995,15 @@ function withTeeFix(geo,h){
   return Object.assign({},geo,{path:p});
 }
 // ── THE USER'S CAMERA WINS ───────────────────────────────────────────────────
-// initHoleMap() tears the Leaflet map down and rebuilds it on EVERY render, and
-// every rebuild re-framed the hole from scratch — so a zoom or a pan was thrown
-// away seconds after you made it. On an unmapped hole it snapped back to zoom 15
-// again and again (Nathan, Rio Vista 9/9). The renders are ordinary: onStateDoc
-// renders on every incoming sync doc, so in a shared round a partner entering a
-// score reset everyone's map; a relay that cannot connect renders on each retry.
+// initHoleMap() used to tear the Leaflet map down and rebuild it on EVERY
+// render, and every rebuild re-framed the hole from scratch — so a zoom or a pan
+// was thrown away seconds after you made it. On an unmapped hole it snapped back
+// to zoom 15 again and again (Nathan, Rio Vista 9/9). The renders are ordinary:
+// onStateDoc renders on every incoming sync doc, so in a shared round a partner
+// entering a score reset everyone's map; a relay that cannot connect renders on
+// each retry. Since 9/20 those renders no longer rebuild, but this still earns
+// its keep: changing hole and coming back to the screen both rebuild, and the
+// frame you chose has to survive that too.
 // Bearing has been protected this way since 8/16 (_btUserRot) — zoom and centre
 // never were. Ownership is keyed to course+hole and dropped the moment either
 // changes, so a new hole always gets its proper frame.
@@ -6048,11 +6054,56 @@ function camRestore(map){
   }catch(e){return false;}
 }
 let initHoleMapRun=0;
+// ---------- build the map ONCE per hole --------------------------------------
+// render() fires constantly inside a round: a synced score, a GPS fix, the pace
+// clock, the wind strip. Until 9/20 every one of those ran this whole builder —
+// a new L.map on the same div, a fresh tile fetch, the camera re-framed, and the
+// geolocation watch cleared and re-registered. Nathan felt it at Cypress Lakes
+// ("a little bit more re-rendering... makes the screen flicker a bit much"), and
+// it is the last item on the 9/13 battery memo.
+//
+// The div itself already survives a render — #holemap is in MORPH_SKIP_ID, so
+// Leaflet's own DOM is never touched — which means the MAP can survive too. The
+// key below names everything that decides what gets DRAWN. While it holds, a
+// render repaints the moving parts and leaves the map, the tiles, the camera,
+// the rotation and the GPS watch exactly where they are.
+let mapBuiltKey=null;
+function mapBuildKey(){
+  let geoTs=0,hasHole=0;
+  try{const g=S.course&&S.course.geo;geoTs=(g&&g.ts)||0;
+      hasHole=(g&&g.holes&&g.holes[physHole(mapHole)+1])?1:0;}catch(e){}
+  return [S.course&&S.course.id,mapHole,physHole(mapHole),
+    greensIsMode()?1:0,amnesiaOn(S.course&&S.course.id)?1:0,
+    coursePreview?1:0,gpsOnly()?1:0,geoTs,hasHole,S.units].join('|');
+}
+// A map counts as live only if THIS div is the one Leaflet is bound to: the
+// morph leaves #holemap alone, but a screen change and a return build a new div.
+function mapAlive(el){
+  try{return !!(LMAP&&el&&LMAP._container===el&&el._leaflet_id);}catch(e){return false;}
+}
+// Repaint what moves. Deliberately mirrors the watch's own fix handler in
+// startMapGps — same dot, same F/M/B — because that is the one routine already
+// proven to update this map without rebuilding it.
+function refreshHoleMap(){
+  try{if(!coursePreview){drawTrackPin();drawShotLines();}}catch(e){}
+  try{
+    const pos=mapMarks.mePos;
+    if(pos&&mapMarks.setMe){mapMarks.setMe(pos);updateFMB(pos,'yards from you');}
+    else if(mapMarks.ref)updateFMB(mapMarks.ref,'yards from the tee');
+  }catch(e){}
+  try{mapGeoNote();}catch(e){}
+  // the bar above the map grows and shrinks under it (elevation strip, a
+  // two-line location note), so the map's idea of its own height can be stale
+  try{LMAP.invalidateSize(false);}catch(e){}
+}
 async function initHoleMap(){
   try{if(S.round&&S.round.started&&!coursePreview)windFetch();}catch(e){}   // throttled: a cached day is not refetched
   try{setTimeout(paintWindRose,50);}catch(e){}
   const el=document.getElementById('holemap');
   if(!el)return;
+  // Same course, same hole, same mode, map still on this very div: nothing to
+  // build. Repaint and get out — see mapBuildKey.
+  if(mapBuiltKey&&mapBuiltKey===mapBuildKey()&&mapAlive(el)){refreshHoleMap();return;}
   // ONE builder at a time. This is async and awaits geo/Leaflet after the
   // teardown; two renders in one frame (a fresh round's first paint) meant two
   // calls both woke up and both called L.map(el) on the same div — "Map
@@ -6532,6 +6583,9 @@ async function initHoleMap(){
   camRestore(LMAP);   // you framed this hole yourself: put it back exactly
   camArm(LMAP);
   camEnd();
+  // Only THIS path earns the fast lane. The Google fallback and the greens
+  // builder return earlier and leave the key null, so they rebuild as before.
+  mapBuiltKey=mapBuildKey();
 }
 // ---------- wind: NWS observation + hourly forecast → "plays like" ----------
 // Wind comes from the National Weather Service (free, public domain, US): the
@@ -7853,8 +7907,12 @@ function render(){
       if(e2){e2.scrollTop=pos.top;e2.scrollLeft=pos.left;}});
     if(pageY)window.scrollTo(0,pageY);
   }else window.scrollTo(0,0);
+  // The map screen no longer tears its own map down on the way in — initHoleMap
+  // decides whether this render needs a rebuild at all. (The old `if/else` also
+  // meant every map render ran teardownMap() synchronously and then rebuilt in
+  // the next frame: two full teardowns per render.)
   if(scr==='map')requestAnimationFrame(initHoleMap);
-  if(scr==='shotview')requestAnimationFrame(initShotView);
+  else if(scr==='shotview')requestAnimationFrame(initShotView);
   else teardownMap();
   wakeSync();   // a round that just ended, or the switch going off, lets the screen sleep
   try{bfNotePaint();}catch(e){}   // a hole just scored (here or on a partner's phone) releases held notices
