@@ -519,7 +519,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-centre in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1790034253';
+const BUILD='1790042466';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -11244,7 +11244,6 @@ function natFilter(raw){
     list.sort((a,b)=>a._mi-b._mi);
   }else list.sort((a,b)=>a[1].localeCompare(b[1]));
   finder.natList=list.slice(0,25);
-  finder.ghinList=null;finder.ghinErr='';finder.ghinBusy=false;  // new query, old GHIN hits are stale
   // render() rebuilds the field, so carry the text and the caret back across —
   // without this you can only ever type one character
   const live=document.getElementById('natQ');
@@ -11358,22 +11357,6 @@ async function natUse(id,auto){
     render();
   }catch(e){if(!auto){finder={status:'error',error:'Could not load that course — check your signal.'};render();}}
 }
-// Our index ships ~7k courses; USGA/GHIN reaches a few we don't (mostly resort
-// and destination tracks). That's a second pass off the SAME box, not a second
-// button — nobody can tell two "search" buttons apart, and the one that skips
-// our own records is the one that loses hole maps.
-function ghinFallbackHTML(){
-  const q=(finder.natQ||'').trim();
-  const rows=finder.ghinList||[];
-  if(rows.length)return `<div class="tiny mt mb" style="font-weight:700">USGA/GHIN — card only, no hole maps</div>
-    ${rows.map((c,j)=>`<div class="row"><div style="flex:1;min-width:0"><b>${esc(c.name)}</b>
-      <div class="tiny">${esc(c.city||'')}${c.state?`, ${esc(c.state)}`:''}${c.km!=null?` · ${(c.km*0.621).toFixed(c.km>160?0:1)} mi`:''}</div></div>
-      <button class="ghost sel" onclick="useSearchResult(${j})" style="flex:none">Add</button></div>`).join('')}`;
-  if(finder.ghinBusy)return `<div class="tiny mt">⬇ Searching USGA/GHIN…</div>`;
-  if(finder.ghinErr)return `<div class="tiny mt">${esc(finder.ghinErr)}</div>`;
-  if(q.length<3)return '';
-  return `<button class="ghost mt" style="width:100%" onclick="runCourseSearch()">🔎 Not listed? Search USGA/GHIN for “${esc(q)}”</button>`;
-}
 function courseFinderHTML(noBlank){
   return `    ${finder.status==='idle'?`<div class="mt" style="display:flex;gap:6px;flex-wrap:wrap">
       <button class="ghost" onclick="addCourse()">📍 Find nearest</button>
@@ -11385,7 +11368,6 @@ function courseFinderHTML(noBlank){
       ${(finder.natList||[]).map((c,j)=>`<div class="row"><div style="flex:1;min-width:0"><b>${c[5]==='gps'?'⛳ ':''}${esc(c[1])}</b>
         <div class="tiny">${esc((c[2]||'').toUpperCase())} · par ${c[6]}${c[7]?' · 9-hole':''}${c._mi!=null?` · ${c._mi<10?c._mi.toFixed(1):Math.round(c._mi)} mi`:''}</div></div>
         <button class="ghost sel" onclick="natUse('${c[0]}')" style="flex:none">Add</button></div>`).join('')}
-      ${ghinFallbackHTML()}
       <button class="ghost mt" onclick="cancelFind()">Cancel</button></div>`:''}
     ${finder.status==='locating'?'<div class="tiny mt">📍 Locating the nearest course…</div>':''}
     ${finder.status==='fetching'?'<div class="tiny mt">⬇ Downloading hole data…</div>':''}
@@ -12129,73 +12111,14 @@ async function waitForRelay(ms){
     await new Promise(r=>setTimeout(r,300));
   }
 }
-async function piCourseLookup(q,lat,lon){
-  const ws=await waitForRelay(6000);
-  return new Promise((res,rej)=>{
-    if(!ws)return rej(new Error('relay offline'));
-    const rid='r'+Math.random().toString(36).slice(2,8);
-    pendingCourse[rid]={res,timer:setTimeout(()=>{delete pendingCourse[rid];rej(new Error('timeout'));},20000)};
-    try{ws.send(JSON.stringify({t:'course',q,lat,lon,rid}));}
-    catch(e){clearTimeout(pendingCourse[rid].timer);delete pendingCourse[rid];rej(e);}
-  });
-}
-function applyGhinCourse(g){
-  syncLib();
-  S.course={id:'ghin-'+Date.now(),name:g.course.name,
-    teeSets:g.course.teeSets.map((t,i)=>({id:'t'+Date.now()+i,name:t.name,rating:+t.rating||72,slope:+t.slope||113})),
-    holes:g.course.holes};
-  normalizeNine(S.course);
-  S.players.forEach(p=>{p.tee=null;});
-  applyTeePrefs();
-  finder={status:'idle',choices:[],error:''};
-  S.screen=(wiz&&wiz.step==='course')?'start':(pickingCourse?'pickcourse':'course');save();render();
-}
-// second pass on the same query — stays inside the list so the typed text and
-// our own results are still on screen behind it
-async function runCourseSearch(){
-  const el=document.getElementById('natQ');
-  const q=((el&&el.value)||finder.natQ||'').trim();
-  if(q.length<3){finder.ghinErr='Type at least 3 letters of the course name.';render();return;}
-  finder.natQ=q;finder.ghinBusy=true;finder.ghinErr='';finder.ghinList=null;render();
-  try{
-    const r=await piCourseLookup2({mode:'search',q,lat:myCoords?myCoords[0]:null,lon:myCoords?myCoords[1]:null});
-    finder.ghinBusy=false;
-    if(r.ok&&r.list&&r.list.length)finder.ghinList=r.list;
-    else finder.ghinErr=r.error||`No USGA/GHIN match for “${q}”.`;
-  }catch(e){finder.ghinBusy=false;finder.ghinErr='Could not reach USGA/GHIN — check your signal.';}
-  render();
-}
-async function useSearchResult(j){
-  const c=(finder.ghinList||finder.results||[])[j];
-  if(!c)return;
-  finder={status:'fetching',choices:[],results:[],error:''};render();
-  // prefer our own record when we ship this course — GHIN hands back the layout
-  // name alone ("East") and no hole maps
-  try{
-    const natId=await matchNatCourse(c.name,c.lat,c.lon,c.state);
-    if(natId){await natUse(natId);return;}
-  }catch(e){}
-  try{
-    const g=await piCourseLookup2({mode:'get',course_id:c.id,q:c.name});
-    if(g.ok&&g.course&&g.course.holes&&g.course.teeSets.length){
-      g.city=c.city;g.state=c.state;
-      applyGhinCourse(g);
-      return;
-    }
-    finder={status:'error',choices:[],results:[],error:g.error||'Could not load that course.'};
-  }catch(e){finder={status:'error',choices:[],results:[],error:'Could not connect — check your signal and try again.'};}
-  render();
-}
-function piCourseLookup2(payload){
-  return new Promise(async (res,rej)=>{
-    const ws=await waitForRelay(6000);
-    if(!ws)return rej(new Error('relay offline'));
-    const rid='c'+Math.random().toString(36).slice(2,8);
-    pendingCourse[rid]={res,timer:setTimeout(()=>{delete pendingCourse[rid];rej(new Error('timeout'));},20000)};
-    try{ws.send(JSON.stringify({t:'course',rid,...payload}));}
-    catch(e){clearTimeout(pendingCourse[rid].timer);delete pendingCourse[rid];rej(e);}
-  });
-}
+// The USGA/GHIN course lookup was removed 2026-09-21. It logged into api2.ghin.com
+// with Nathan's PERSONAL GHIN account and served every user's course search through
+// it — a private API, one man's credentials, a commercial product — and the USGA had
+// just quoted $6,000 a year for the licensed version of the same thing. Measured
+// before removing: of the 20 courses real players have ever used, 19 were already in
+// the shipped library and the 20th was a test course. The fallback had never once
+// found anybody a course. The library it was backing up carries 10,114 names, 8,148
+// with hole maps. See the memory note usga-gpa-declined.
 // If a found course IS one we ship curated data for (tees/pars/hosted maps),
 // hand back the real record — matched by proximity to the course center, with
 // a normalized-name check as backup. Custom lookalikes are the #1 way users
@@ -12273,14 +12196,7 @@ async function useFoundCourse(idx){
   // hole maps, which the GHIN record below has neither of
   const natId=await matchNatCourse(c.name,c.lat,c.lon);
   if(natId){await natUse(natId);return;}
-  // 2) USGA/GHIN via the Pi — authoritative pars, stroke indexes, ratings, slopes
-  let g=null;
-  try{g=await piCourseLookup(c.name,c.lat,c.lon);}catch(e){}
-  if(g&&g.ok&&g.course&&g.course.holes&&g.course.teeSets.length){
-    applyGhinCourse(g);
-    return;
-  }
-  // 3) fallback: OpenStreetMap hole data
+  // 2) fallback: OpenStreetMap hole data
   try{
     const q=`[out:json][timeout:15];way["golf"="hole"](around:2000,${c.lat},${c.lon});out tags;`;
     const js=await overpassQuery(q);
