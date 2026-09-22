@@ -519,7 +519,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-centre in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1790102588';
+const BUILD='1790102973';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -4991,6 +4991,65 @@ function splinePath(path){
 // before this stamp is re-fetched in the background and swapped in on success —
 // the old one stays if the fetch fails, so a no-signal round never loses its map.
 const GEO_STAMP=1790047673826;   // 2026-09-21: 21,190 generated placeholder rings replaced with OpenStreetMap's real green outlines, 10 greens Nathan traced by hand, and 186 tees moved onto the OSM tee box the scorecard agrees with. NOTE the stamp is the EARLIEST ts of the batch, never 'now': a phone refreshes a course whose geo.ts is BELOW the stamp, so a stamp later than the files it ships leaves every one of them permanently stale and re-fetched on every launch.
+// A COURSE RECORD ON A PHONE WAS NEVER REFRESHED. natUse() is the only thing that reads
+// /courses/<id>.json and it only runs when ADDING a course that is not already saved —
+// preCourseApply deliberately keeps the saved record when the id matches. So a par we
+// confirmed or a stroke index we corrected reached a phone only if that phone had never
+// saved the course. 14,628 stroke indexes were corrected against published scorecards on
+// 2026-09-22 and not one of them would have reached a library already holding the course.
+//
+// The stamp works like GEO_STAMP but from the other end: geo files carry their own ts, a
+// course record does not, so the phone writes the stamp of the build that fetched it into
+// _cardRev and a later build with a higher CARD_STAMP re-fetches once. Raise this when a
+// batch of course records changes.
+const CARD_STAMP=1790102800000;   // 2026-09-22: stroke indexes off the published cards, and 509 confirmed pars
+async function refreshStaleCards(){
+  try{
+    if(typeof navigator!=='undefined'&&navigator.onLine===false)return;
+    if(S.round&&S.round.started&&!isReview())return;        // never rewrite a card in play
+    let changed=0;
+    for(const c of (S.courses||[])){
+      if(!c||!c.id||(c._cardRev||0)>=CARD_STAMP)continue;
+      if(!/^(nat|oga)/.test(String(c.id)))continue;         // only records we actually ship
+      let rec=null;
+      try{
+        const r=await fetch('/courses/'+c.id+'.json');
+        if(!r.ok)continue;
+        rec=await r.json();
+      }catch(e){continue;}
+      if(!rec||!Array.isArray(rec.holes)||rec.holes.length!==(c.holes||[]).length)continue;
+      // HIS ANSWERS WIN, EVERY TIME. A par somebody typed on the "what's the par?" sheet
+      // and a stroke index somebody corrected are the most reliable facts we hold about
+      // that course — better than the card, because a person was standing on the hole.
+      (c.holes||[]).forEach((hd,i)=>{
+        const fresh=rec.holes[i]||{};
+        if(!hd.parOk&&fresh.par){hd.par=fresh.par;if(fresh.parOk){hd.parOk=true;hd.parSrc=fresh.parSrc||'card';}}
+        if(!hd.siOk&&fresh.si){hd.si=fresh.si;if(fresh.siSrc)hd.siSrc=fresh.siSrc;}
+      });
+      if(!c.teeEdit&&Array.isArray(rec.teeSets)){
+        const t=rec.teeSets.filter(x=>x&&x.rating&&x.slope)
+          .map(x=>({id:x.id,name:x.name,rating:x.rating,slope:x.slope,yds:x.yds||null}));
+        // a player is assigned to a tee BY ID; dropping the id he is on would leave him
+        // handicapped off whatever sorted first, so on the course that is loaded the swap
+        // only happens when every tee in use still exists in the new set
+        const mine=!!(S.course&&S.course.id===c.id);
+        const inUse=mine?(S.players||[]).map(p=>p&&p.tee).filter(Boolean):[];
+        if(t.length&&inUse.every(id=>t.some(x=>x.id===id)))c.teeSets=t;
+      }
+      if(!c.nameEdit&&rec.name)c.name=rec.name;
+      if(!rec.cardGuess)delete c._cardGuess;
+      else if((c.holes||[]).some(h=>h&&!h.parOk))c._cardGuess=true;
+      c._cardRev=CARD_STAMP;
+      changed++;
+      if(S.course&&S.course.id===c.id&&!(S.round&&S.round.started)){
+        const keepGeo=S.course.geo;
+        S.course=clone(c);
+        if(keepGeo&&!S.course.geo)S.course.geo=keepGeo;
+      }
+    }
+    if(changed)save();
+  }catch(e){}
+}
 async function refreshStaleGeo(){
   try{
     if(typeof navigator!=='undefined'&&navigator.onLine===false)return;
@@ -12254,7 +12313,7 @@ function vCourse(){
     <button class="ghost danger xbtn" aria-label="Delete tee" onclick="delTee(${i})">${XICON}</button></div>`).join('');
   return topbar('Course setup','','courses')+`<main>
   ${c._note?`<div class="banner ${c._noteOk?'ok':'wolf'}">${c._noteOk?'✓ ':''}${esc(c._note)} <button class="ghost" style="margin-left:6px" onclick="set(()=>{delete S.course._note;delete S.course._noteOk;})">Got it</button></div>`:''}
-  <div class="card"><h2>Name</h2><input id="cname" type="text" value="${esc(c.name)}" onchange="set(()=>S.course.name=this.value)" oninput="S.course.name=this.value;save()">
+  <div class="card"><h2>Name</h2><input id="cname" type="text" value="${esc(c.name)}" onchange="set(()=>{S.course.name=this.value;S.course.nameEdit=true;})" oninput="S.course.name=this.value;S.course.nameEdit=true;save()">
     ${courseMapStatusHTML(c)}
     ${c.geo?`<button class="ghost mt" id="tilebtn" onclick="preloadCourseTiles(true)">${tilePackFresh()?'✓ Offline maps ready — tap to refresh':'⬇ Download offline hole maps'}</button>
     <div class="tiny mt">Grab the satellite tiles on wifi and every hole opens instantly, even with no signal on the course.</div>
@@ -12294,10 +12353,14 @@ async function fetchMapNow(){
 }
 function chPar(i,d){set(()=>{const hd=S.course.holes[i];hd.par=Math.min(6,Math.max(3,hd.par+d));hd.parOk=true;
   if((S.course.holes||[]).every(x=>x&&x.parOk))delete S.course._cardGuess;});}
-function chSI(i,v){set(()=>{S.course.holes[i].si=Math.min(18,Math.max(1,Math.round(+v||1)));});}
-function chTee(i,k,v){set(()=>{S.course.teeSets[i][k]=k==='name'?v:+v;});}
-function addTee(){set(()=>{S.course.teeSets.push({id:'t'+Date.now(),name:'New',rating:72.0,slope:120});});}
-function delTee(i){if(S.course.teeSets.length<=1)return;set(()=>{S.course.teeSets.splice(i,1);});}
+function chSI(i,v){set(()=>{const hd=S.course.holes[i];
+  hd.si=Math.min(18,Math.max(1,Math.round(+v||1)));hd.siOk=true;});}   // siOk: his, never overwritten by a refresh
+// teeEdit / nameEdit / siOk / parOk are the four marks that say A PERSON DECIDED THIS.
+// refreshStaleCards leaves anything carrying one alone; without them it cannot tell a
+// rating somebody measured from one we shipped, and would quietly overwrite his work.
+function chTee(i,k,v){set(()=>{S.course.teeSets[i][k]=k==='name'?v:+v;S.course.teeEdit=true;});}
+function addTee(){set(()=>{S.course.teeSets.push({id:'t'+Date.now(),name:'New',rating:72.0,slope:120});S.course.teeEdit=true;});}
+function delTee(i){if(S.course.teeSets.length<=1)return;set(()=>{S.course.teeSets.splice(i,1);S.course.teeEdit=true;});}
 
 // ----- round setup -----
 
@@ -15863,6 +15926,7 @@ healUnfinishedRound();   // rescue a round stranded between _finished and archiv
 try{if(S.round&&S.round.started&&!isReview())shellRound('started',shellRoundInfo());}catch(e){}   // relaunch mid-round: the shell's round service comes back
 autoEndStaleRound();
 setTimeout(refreshStaleGeo,4000);
+setTimeout(refreshStaleCards,7000);   // corrected pars and stroke indexes reach a library that already holds the course
 setTimeout(()=>{try{autoBackupCheck();}catch(e){}},6000);   // a change that never got backed up (missed window, closed app) goes on the next launch
 if(loadFailure){try{stat('js_error',{msg:'load: '+loadFailure,line:0,screen:'boot',hole:0});}catch(e){}}   // corrected map files reach phones that cached the old ones
 // A cold relaunch on the GPS screen — iOS killed the app while you were in
