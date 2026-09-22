@@ -519,7 +519,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-centre in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1790042997';
+const BUILD='1790044024';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -4990,7 +4990,7 @@ function splinePath(path){
 // kept forever, so at load (online only, never mid-round) any hosted map fetched
 // before this stamp is re-fetched in the background and swapped in on success —
 // the old one stays if the fetch fails, so a no-signal round never loses its map.
-const GEO_STAMP=1790023800427;   // 2026-09-21: full-fleet audit — 327 holes that belonged to another course and 48 copied lines removed
+const GEO_STAMP=1790043662794;   // 2026-09-21: 45 double greens split so each hole measures to its own half
 async function refreshStaleGeo(){
   try{
     if(typeof navigator!=='undefined'&&navigator.onLine===false)return;
