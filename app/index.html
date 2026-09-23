@@ -519,7 +519,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-centre in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1790102973';
+const BUILD='1790191615';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1097,7 +1097,8 @@ function abPayload(){
     teeFix:S.teeFix||{},
     chal:S.chal||{},
     tomb:S.tomb||{},          // Personal Challenges were in NO backup at all (9/5 wipe took Nathan's)
-    shotLog:trimShotLog(S.shotLog),shotLast:S.shotLast||{},bag:S.bag||null};
+    shotLog:trimShotLog(S.shotLog),shotLast:S.shotLast||{},bag:S.bag||null,
+    retention:retentionRead()};
 }
 // ...and the same for a newly placed tee: without this the payload would carry
 // teeFix but nothing would ever notice it changed, so the backup would not fire.
@@ -2135,6 +2136,39 @@ function statFlush(){
   }catch(x){}
 }
 function devId(){let d=localStorage.getItem('wolfDevId');if(!d){d='d'+Math.random().toString(36).slice(2,10);localStorage.setItem('wolfDevId',d);}return d;}
+// HOW LONG THIS PERSON HAS HAD THE APP, kept where a restore can reach it. Both keys are
+// plain localStorage, so re-adding the app to the home screen wipes them; the backup now
+// carries them and retentionMerge() folds the older history back in. The device id is
+// deliberately NOT restored -- restoring it onto a second phone would make two live
+// phones report as one.
+function retentionTouch(){
+  let first=0,seen=[];
+  try{
+    first=+localStorage.getItem('btFirstSeen')||0;
+    if(!first){first=Date.now();localStorage.setItem('btFirstSeen',String(first));}
+    try{seen=JSON.parse(localStorage.getItem('btSeenDays')||'[]');}catch(e){}
+    const today=new Date().toISOString().slice(0,10);
+    if(seen.indexOf(today)<0){seen.push(today);localStorage.setItem('btSeenDays',JSON.stringify(seen.slice(-60)));}
+  }catch(e){}
+  return {firstSeen:first,seenDays:seen,
+    ageDays:first?Math.floor((Date.now()-first)/86400000):0,activeDays:seen.length};
+}
+function retentionRead(){
+  try{return {firstSeen:+localStorage.getItem('btFirstSeen')||0,
+    seenDays:JSON.parse(localStorage.getItem('btSeenDays')||'[]')};}catch(e){return {firstSeen:0,seenDays:[]};}
+}
+// EARLIEST wins and the days are a union: a restore must never make someone look NEWER
+// than they are, and a phone that was offline for a week still knows the days it ran.
+function retentionMerge(b){
+  try{
+    if(!b)return;
+    const now=retentionRead();
+    const first=[now.firstSeen,+b.firstSeen||0].filter(Boolean).sort((x,y)=>x-y)[0];
+    if(first)localStorage.setItem('btFirstSeen',String(first));
+    const all=[...new Set([].concat(now.seenDays||[],b.seenDays||[]).filter(d=>/^\d{4}-\d{2}-\d{2}$/.test(d)))].sort();
+    if(all.length)localStorage.setItem('btSeenDays',JSON.stringify(all.slice(-60)));
+  }catch(e){}
+}
 function kmBetween(a,b,c,d){const R=6371,dl=(c-a)*Math.PI/180,dn=(d-b)*Math.PI/180;const x=Math.sin(dl/2)**2+Math.cos(a*Math.PI/180)*Math.cos(c*Math.PI/180)*Math.sin(dn/2)**2;return 2*R*Math.asin(Math.sqrt(x));}
 function sendHello(){
   if(!lobbySock||lobbySock.readyState!==1||!S.me||!S.me.name)return;
@@ -2465,7 +2499,7 @@ async function doBackup(){
     // shot lines were local-only until now: a cleared cache or a new phone lost
     // every tracked shot, including the per-course "last time out" ghost lines
     const r=await relayBackup({op:'save',email:em,data:{me:S.me,playerLib:S.playerLib,courses,history:S.history||[],ledger:S.ledger||[],groups:S.groupLib||[],teams:S.teamLib||[],
-      shotLog:trimShotLog(S.shotLog),shotLast:S.shotLast||{},bag:S.bag||null}});
+      shotLog:trimShotLog(S.shotLog),shotLast:S.shotLast||{},bag:S.bag||null,retention:retentionRead()}});
     if(r&&r.ok){const d=abPayload();abStamp(JSON.stringify([d.me,d.playerLib,d.courses,d.history.map(h=>h.id)]));}
     const nh=(S.history||[]).length;
     backupUI.msg=r.ok?`✓ ${S.playerLib.length} player${S.playerLib.length===1?'':'s'} + ${S.courses.length} course${S.courses.length===1?'':'s'}${nh?` + ${nh} round${nh===1?'':'s'}`:''} safely backed up${r.emailed?' — confirmation emailed':''}.`:(r.error||'Backup failed.');
@@ -2814,6 +2848,7 @@ function applyLibrary(d){
       });
       if(d.me&&d.me.pid&&!(S.me&&S.me.pid))S.me.pid=d.me.pid;
     });
+  retentionMerge(d.retention);
   return {added, updated, cAdded, hAdded, lAdded};
 }
 
@@ -15894,17 +15929,14 @@ setInterval(()=>{
 // days since this device first opened the app, and how many separate days it has
 // been opened on. A beta lives or dies on whether people come BACK.
 (function(){
-  let first=0,days=0;
-  try{
-    first=+localStorage.getItem('btFirstSeen')||0;
-    if(!first){first=Date.now();localStorage.setItem('btFirstSeen',String(first));}
-    const today=new Date().toISOString().slice(0,10);
-    let seen=[];try{seen=JSON.parse(localStorage.getItem('btSeenDays')||'[]');}catch(e){}
-    if(seen[seen.length-1]!==today){seen.push(today);localStorage.setItem('btSeenDays',JSON.stringify(seen.slice(-60)));}
-    days=seen.length;
-  }catch(e){}
+  const r=retentionTouch();
+  // pid, not just dev: DELETING AND RE-ADDING THE APP TO THE HOME SCREEN GIVES iOS A FRESH
+  // STORAGE BUCKET. Nathan did exactly that on 2026-09-19 at 21:49 to see the new icon —
+  // new wolfDevId, welcome screen, ageDays back to 0 — and restored his library two minutes
+  // later. Nothing was lost, but every retention number restarted and the fleet gained a
+  // phantom device. Counted by pid it is one person either way.
   stat('open',{ua:(navigator.userAgent.match(/iPhone OS [0-9_]+|Android [0-9.]+/)||[''])[0],
-    ageDays:first?Math.floor((Date.now()-first)/86400000):0, activeDays:days,
+    ageDays:r.ageDays, activeDays:r.activeDays, pid:myPid()||'',
     installed:btMode()==='app'});
 })();
 // A JS error mid-round is invisible today: the round just stops and the device
