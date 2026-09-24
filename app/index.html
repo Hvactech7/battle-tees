@@ -519,7 +519,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-centre in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1790191615';
+const BUILD='1790217009';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -2141,13 +2141,20 @@ function devId(){let d=localStorage.getItem('wolfDevId');if(!d){d='d'+Math.rando
 // carries them and retentionMerge() folds the older history back in. The device id is
 // deliberately NOT restored -- restoring it onto a second phone would make two live
 // phones report as one.
+// THE PHONE'S OWN DATE, not UTC. toISOString() is UTC, and 5 PM Pacific is already
+// tomorrow in UTC -- so a golfer who played at 8 AM and checked the settle at 6 PM was
+// counted as two active days. Nathan's own beacon, 2026-09-23: activeDays 4 -> 5 between
+// 08:19 and 17:28 on the same day. Days already stored were keyed the old way and cannot
+// be re-keyed (the time of day was never kept); from here on a day is the golfer's day.
+function localDay(t){const d=new Date(t==null?Date.now():t);
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 function retentionTouch(){
   let first=0,seen=[];
   try{
     first=+localStorage.getItem('btFirstSeen')||0;
     if(!first){first=Date.now();localStorage.setItem('btFirstSeen',String(first));}
     try{seen=JSON.parse(localStorage.getItem('btSeenDays')||'[]');}catch(e){}
-    const today=new Date().toISOString().slice(0,10);
+    const today=localDay(Date.now());
     if(seen.indexOf(today)<0){seen.push(today);localStorage.setItem('btSeenDays',JSON.stringify(seen.slice(-60)));}
   }catch(e){}
   return {firstSeen:first,seenDays:seen,
