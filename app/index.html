@@ -519,7 +519,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-centre in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1790308296';
+const BUILD='1790369663';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -5825,6 +5825,30 @@ function mapTapAt(t){
   // the yardage pills on the map carry the leg distances — nothing else to show
   if(mapMarks.setTap)mapMarks.setTap(t);
 }
+let refAdoptSeen={};
+function adoptMeAsRef(pos){
+  const was=mapMarks.ref,synth=!!mapMarks._synthRef;
+  mapMarks.ref=pos;mapMarks._synthRef=false;
+  // the card ring was drawn around the same stale point: it belongs around him
+  try{if(mapMarks._ring&&mapMarks._ring.setLatLng)mapMarks._ring.setLatLng(pos);}catch(e){}
+  // one report per hole per round, so the field can tell us how often this fires
+  try{const k=((S.round&&S.round.startedAt)||0)+':'+physHole(mapHole);
+    if(!refAdoptSeen[k]){refAdoptSeen[k]=1;
+      stat('map_ref_adopt',{hole:physHole(mapHole)+1,synth,km:was?Math.round(mDist(pos,was)/100)/10:null});}}catch(e){}
+  // his frame is his — unless it is still sitting on the stale point being replaced,
+  // which no golfer chose: that "ownership" was the map framing itself around it
+  if(camOwnHere()){
+    const stale=was&&camOwn&&camOwn.center&&mDist(camOwn.center,was)<2000;
+    if(!stale)return;
+    camOwn=null;
+  }
+  try{
+    if(LMAP){
+      if(mapMarks._ring&&mapMarks._ring.getBounds)LMAP.fitBounds(mapMarks._ring.getBounds().pad(0.12),{animate:false});
+      else LMAP.setView(pos,LMAP.getZoom()||16,{animate:false});
+    }else if(GMAP){GMAP.setCenter({lat:pos[0],lng:pos[1]});}
+  }catch(e){}
+}
 function startMapGps(){
   if(!navigator.geolocation){geoState='denied';mapGeoNote();return;}
   if(!geoPrimed)primeGeo();          // reached the map without going through openMap
@@ -5845,6 +5869,16 @@ function startMapGps(){
       if(mapMarks.setMe)mapMarks.setMe(pos);
       return;
     }
+    // AN UNMAPPED HOLE HAS NOTHING TO BE NEAR. A hole map built before the course's
+    // geometry reached the phone takes "near here" from the PHONE: the last saved GPS
+    // position (wolfLastCoords — could be home, or yesterday's course) or, with none, a
+    // hard-coded placeholder near Davis. The guard below then measured every real fix
+    // against that point, threw them all away, and left the golfer with no dot and a
+    // map centred somewhere else until ◀▶ rebuilt it. Brian Smith, Butte Creek, 9/25:
+    // three ◀▶ bounces with fixes 0-1 s old at 2-7 m accuracy and no dot. So when the
+    // reference came from the phone and the guard would reject a fix, the fix wins.
+    if(!mapMarks.greenC&&!mapMarks._preview&&mapMarks._refFromMe&&
+       (mapMarks._synthRef||!mapMarks.ref||mDist(pos,mapMarks.ref)>1400))adoptMeAsRef(pos);
     // sanity guard: if you're nowhere near this hole (browsing from home),
     // ignore GPS — measure from the tee like a yardage book instead
     const near=mapMarks.greenC||mapMarks.ref;
@@ -5929,7 +5963,7 @@ function initGoogleHoleMap(el,geo,geoErr){
   }else{
     GMAP.setCenter(P(myCoords||[38.6972,-121.6173]));GMAP.setZoom(16);
     try{if(GMAP.setHeading)GMAP.setHeading(0);}catch(e){}
-    mapMarks={greenC:null,greenPoly:null,ref:myCoords||null,mePos:null};
+    mapMarks={greenC:null,greenPoly:null,ref:myCoords||null,mePos:null,_synthRef:!myCoords,_refFromMe:true};
     const s2=document.getElementById('fmbsub');
     if(s2)s2.textContent=geoErr||'Hole lines not mapped here — rangefinder still works.';
   }
@@ -6481,7 +6515,7 @@ async function initHoleMap(){
     // genuinely unmapped hole in a normal round keeps the framing it always had.
     const amnFrame=amnesiaOn(S.course.id);
     if(!(amnFrame&&myCoords&&frameAround(c,FRAME_YDS,el)))LMAP.setView(c,16);
-    mapMarks={greenC:null,greenPoly:null,ref:c,mePos:null,aimC:null,_synthRef:synthRef};
+    mapMarks={greenC:null,greenPoly:null,ref:c,mePos:null,aimC:null,_synthRef:synthRef,_refFromMe:true};
     // CARD RING: unmapped hole + known card yardage = the green MUST sit on a
     // ring of that radius around the tee. Eye walks the ring; tap the green
     // when you spot it — becomes the live target AND a crowdsourced capture.
@@ -6495,7 +6529,10 @@ async function initHoleMap(){
       // out to walk it — a predictable frame beats a visible ring. In normal
       // play: unchanged, the view fits the ring exactly as it always did.
       if(!(amnFrame&&frameAround(c,FRAME_YDS,el))){
-        try{LMAP.fitBounds(mapMarks._ring.getBounds().pad(0.12));}catch(e){}
+        // NOT ANIMATED. An animated fit ends after camEnd()'s 250 ms window, so its zoomend
+        // was booked as the golfer framing the hole himself — and camOwn then froze the view
+        // on it for the rest of the hole (found 9/25 chasing Brian's missing dot).
+        try{LMAP.fitBounds(mapMarks._ring.getBounds().pad(0.12),{animate:false});}catch(e){}
       }
       mapMarks._ringMode=true;mapMarks._cardY=cardY;
       // the frame is a hard 300 yards across, so on anything but a short hole
