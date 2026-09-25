@@ -519,7 +519,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-centre in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1790371944';
+const BUILD='1790372726';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -3982,19 +3982,29 @@ function crosshairHTML(cls){
 function crosshairIcon(cls){
   return L.divIcon({className:'',html:crosshairHTML(cls),iconSize:[35,35],iconAnchor:[17.5,17.5]});
 }
+// TWO KINDS OF LINE, AND ONLY ONE WAS MEANT TO GO. 9/14 Nathan asked for the mountain
+// to replace "the spine on/off button" and for "the spines always off (visually)" — but
+// the real spine (the hole's route line, lSpine) was already retired; the button he knew
+// as the spine toggled THESE. Both went dark under one flag, so from 9/14 a shot he
+// tracked drew nothing at all (Nathan 9/25: "it is not displaying the line to represent
+// my tracked shot"). The dashed blue LAST-TIME-OUT lines look like a spine and stay off;
+// the shots he tracks THIS round always draw.
 function drawShotLines(){
   lShots.forEach(l=>{try{LMAP.removeLayer(l);}catch(e){}});lShots=[];
   if(!LMAP)return;
+  const ghost=[],mine=[];
   lastLinesFor(mapHole).forEach(e=>{
-    lShots.push(L.polyline([e.a,e.b],{color:'#0a1220',weight:4.5,opacity:.35,interactive:false}));
-    lShots.push(L.polyline([e.a,e.b],{color:'#6ecbff',weight:2.4,opacity:.75,dashArray:'7 5',interactive:false}));
+    ghost.push(L.polyline([e.a,e.b],{color:'#0a1220',weight:4.5,opacity:.35,interactive:false}));
+    ghost.push(L.polyline([e.a,e.b],{color:'#6ecbff',weight:2.4,opacity:.75,dashArray:'7 5',interactive:false}));
   });
   shotsForHole(mapHole).forEach(e=>{
-    lShots.push(L.polyline([e.a,e.b],{color:'#0a1220',weight:5,opacity:.4,interactive:false}));
-    lShots.push(L.polyline([e.a,e.b],{color:'#e8604f',weight:2.5,opacity:.92,interactive:false}));
-    lShots.push(L.circleMarker(e.b,{radius:4,color:'#0a1220',weight:1.5,fillColor:'#e8604f',fillOpacity:1,interactive:false}));
+    mine.push(L.polyline([e.a,e.b],{color:'#0a1220',weight:5,opacity:.4,interactive:false}));
+    mine.push(L.polyline([e.a,e.b],{color:'#e8604f',weight:2.5,opacity:.92,interactive:false}));
+    mine.push(L.circleMarker(e.b,{radius:4,color:'#0a1220',weight:1.5,fillColor:'#e8604f',fillOpacity:1,interactive:false}));
   });
-  if(showShots)lShots.forEach(l=>l.addTo(LMAP));
+  lShots=ghost.concat(mine);
+  mine.forEach(l=>l.addTo(LMAP));
+  if(showShots)ghost.forEach(l=>l.addTo(LMAP));
 }
 function toggleShots(){
   showShots=!showShots;localStorage.btShots=showShots?'on':'off';
@@ -5923,7 +5933,7 @@ function initGoogleHoleMap(el,geo,geoErr){
       gmOverlays.push(gl);gmShots.push(gl);
     });
     shotsForHole(mapHole).forEach(e=>{
-      const ln=new gm.Polyline({path:[P(e.a),P(e.b)],strokeColor:'#e8604f',strokeOpacity:.92,strokeWeight:2.5,clickable:false,map:showShots?GMAP:null});
+      const ln=new gm.Polyline({path:[P(e.a),P(e.b)],strokeColor:'#e8604f',strokeOpacity:.92,strokeWeight:2.5,clickable:false,map:GMAP});   // tracked this round: always (see drawShotLines)
       gmOverlays.push(ln);gmShots.push(ln);
     });
     const pathEnd=geo.path[geo.path.length-1];
