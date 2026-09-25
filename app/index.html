@@ -519,7 +519,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-centre in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1790217009';
+const BUILD='1790308296';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -7146,7 +7146,26 @@ const HOSTED_GREENS={'darkhorse':'/geo/greens/darkhorse.json',
   'oga61fb03c874fc':'/geo/greens/oga61fb03c874fc.json'};
 const GREENS={};   // course id -> data | 'none' | Promise
 let greadOpen=false;
-function greensUrlFor(c){return c&&(c.greensUrl||HOSTED_GREENS[c.id])||null;}
+// THE FLEET'S GREEN READS LIVE IN R2, behind the same public relay route as the elevation
+// grids (/elev/greens/<id>.json) — at ~100 KB a course the whole country is the best part of
+// a gigabyte, which is not a thing to commit to the website. A small manifest on the site
+// says which courses have one; HOSTED_GREENS (the original 96, served from the site) still
+// wins where both exist. Built 2026-09-23 when reads went from 96 courses to the fleet.
+let GREENS_MANIFEST=null,greensManifestP=null;
+function greensManifestLoad(){
+  if(GREENS_MANIFEST||greensManifestP)return greensManifestP;
+  greensManifestP=fetch('/geo/greens/index.json').then(r=>r.ok?r.json():{}).then(m=>{
+    GREENS_MANIFEST=m&&typeof m==='object'?m:{};
+    if(S.screen==='map'&&greensUrlFor(S.course))render();
+  }).catch(()=>{greensManifestP=null;});
+  return greensManifestP;
+}
+function greensUrlFor(c){
+  if(!c)return null;
+  if(c.greensUrl||HOSTED_GREENS[c.id])return c.greensUrl||HOSTED_GREENS[c.id];
+  if(!GREENS_MANIFEST){greensManifestLoad();return null;}
+  return GREENS_MANIFEST[c.id]?ELEV_REMOTE+GREENS_MANIFEST[c.id]:null;
+}
 function greensEnsure(course){
   course=course||S.course;const u=greensUrlFor(course);if(!u)return null;
   const hit=GREENS[course.id];if(hit)return (hit==='none'||hit instanceof Promise)?null:hit;
