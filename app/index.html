@@ -519,7 +519,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-centre in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1790369663';
+const BUILD='1790371944';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -12108,7 +12108,10 @@ function autoEndStaleRound(){
 function endRound(){
   if(!S.round.started){S.screen='home';save();render();return;}
   shellRound('ended');   // the Android shell drops its round notification + background GPS
-  try{chalCheerCheck(true);cheerSummaryQueue();}catch(e){}   // the horn: every challenge is settled, then the roll call
+  // the horn: every challenge is settled, then the roll call — for a round that is ENDING.
+  // closeReview() leaves a past round through here too, and pressing Done on a round you
+  // were only looking at replayed the whole lightning celebration (Nathan, 9/25).
+  if(!S.round.reopened){try{chalCheerCheck(true);cheerSummaryQueue();}catch(e){}}
   if(!S.round.myEndedAt)S.round.myEndedAt=Date.now();  // clock stops once, forever
   // closeReview() ends a REOPENED round through here too, and that is not a
   // round ending: the clock stopped hours ago, so round_end reported the very
@@ -15129,7 +15132,7 @@ function cheerNext(){
 }
 // red AND blue — the whole battlefield lights up, not one team's sky
 function cheerBolts(){try{lightningRain(TEAM_BOLT,{z:9100});setTimeout(()=>{if(cheerShown)lightningRain(TEAM_BOLT,{z:9100});},2600);}catch(e){}}
-function cheerSummaryQueue(){try{if(S.round._cheerSummaryShown)return;if(!(S.round.cheers||[]).some(c=>c&&!c.summary))return;S.round._cheerSummaryShown=1;cheerQueue.push({summary:true,id:'summary'});cheerNext();}catch(e){}}
+function cheerSummaryQueue(){try{if(S.round._cheerSummaryShown||S.round.reopened)return;if(!(S.round.cheers||[]).some(c=>c&&!c.summary))return;S.round._cheerSummaryShown=1;cheerQueue.push({summary:true,id:'summary'});cheerNext();}catch(e){}}
 function cheerDismiss(){clearTimeout(cheerTimer);cheerShown=null;try{const c=document.getElementById('boltrain');if(c)c.remove();}catch(e){}render();setTimeout(cheerNext,350);}
 function cheerSplashHTML(){
   const c=cheerShown;if(!c)return '';
