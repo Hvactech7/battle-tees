@@ -554,7 +554,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-centre in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1790405121';
+const BUILD='1790407338';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -5077,7 +5077,7 @@ function splinePath(path){
 // kept forever, so at load (online only, never mid-round) any hosted map fetched
 // before this stamp is re-fetched in the background and swapped in on success —
 // the old one stays if the fetch fails, so a no-signal round never loses its map.
-const GEO_STAMP=1790047673826;   // 2026-09-21: 21,190 generated placeholder rings replaced with OpenStreetMap's real green outlines, 10 greens Nathan traced by hand, and 186 tees moved onto the OSM tee box the scorecard agrees with. NOTE the stamp is the EARLIEST ts of the batch, never 'now': a phone refreshes a course whose geo.ts is BELOW the stamp, so a stamp later than the files it ships leaves every one of them permanently stale and re-fetched on every launch.
+const GEO_STAMP=1790407310209;   // 2026-09-26: 584 recovered holes on 398 courses (214 now complete), gated on length vs the card's longest tee + the fleet audit. Before that, 2026-09-21: 21,190 placeholder rings replaced with OpenStreetMap's real green outlines, 10 traced greens, 186 tees moved onto the OSM tee box. The stamp is the moment the files were written: fetchCourseGeo stamps ts=Date.now() at fetch, so a phone that fetched before it re-fetches once in the background and never again.
 // A COURSE RECORD ON A PHONE WAS NEVER REFRESHED. natUse() is the only thing that reads
 // /courses/<id>.json and it only runs when ADDING a course that is not already saved —
 // preCourseApply deliberately keeps the saved record when the id matches. So a par we
