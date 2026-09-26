@@ -554,7 +554,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-centre in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1790407338';
+const BUILD='1790450848';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -5077,7 +5077,7 @@ function splinePath(path){
 // kept forever, so at load (online only, never mid-round) any hosted map fetched
 // before this stamp is re-fetched in the background and swapped in on success —
 // the old one stays if the fetch fails, so a no-signal round never loses its map.
-const GEO_STAMP=1790407310209;   // 2026-09-26: 584 recovered holes on 398 courses (214 now complete), gated on length vs the card's longest tee + the fleet audit. Before that, 2026-09-21: 21,190 placeholder rings replaced with OpenStreetMap's real green outlines, 10 traced greens, 186 tees moved onto the OSM tee box. The stamp is the moment the files were written: fetchCourseGeo stamps ts=Date.now() at fetch, so a phone that fetched before it re-fetches once in the background and never again.
+const GEO_STAMP=1790450804276;   // 2026-09-26 (2nd): 3,347 holes on 622 courses — map-less courses matched to OSM holes inside a boundary carrying their own name, text-numbered OSM holes ("Bayonet - 12"), partly mapped courses filled, Bayonet added from its card. 2026-09-26: 584 recovered holes on 398 courses. The stamp is the moment the files were written: fetchCourseGeo stamps ts=Date.now() at fetch, so a phone that fetched before it re-fetches once in the background and never again.
 // A COURSE RECORD ON A PHONE WAS NEVER REFRESHED. natUse() is the only thing that reads
 // /courses/<id>.json and it only runs when ADDING a course that is not already saved —
 // preCourseApply deliberately keeps the saved record when the id matches. So a par we
@@ -5089,7 +5089,7 @@ const GEO_STAMP=1790407310209;   // 2026-09-26: 584 recovered holes on 398 cours
 // course record does not, so the phone writes the stamp of the build that fetched it into
 // _cardRev and a later build with a higher CARD_STAMP re-fetches once. Raise this when a
 // batch of course records changes.
-const CARD_STAMP=1790102800000;   // 2026-09-22: stroke indexes off the published cards, and 509 confirmed pars
+const CARD_STAMP=1790450804276;   // 2026-09-26: 622 courses got holes or a first map (geoUrl + tier), Bayonet added from its published card, 178 came off the 9/5 held list; 2026-09-22: stroke indexes off the published cards, and 509 confirmed pars
 async function refreshStaleCards(){
   try{
     if(typeof navigator!=='undefined'&&navigator.onLine===false)return;
@@ -5126,12 +5126,23 @@ async function refreshStaleCards(){
       if(!c.nameEdit&&rec.name)c.name=rec.name;
       if(!rec.cardGuess)delete c._cardGuess;
       else if((c.holes||[]).some(h=>h&&!h.parOk))c._cardGuess=true;
+      // A MAP THAT ARRIVED AFTER THE COURSE WAS SAVED (9/26: 355 courses matched to OSM holes
+      // inside a boundary carrying their own name, 178 of them held back on 9/5). The saved
+      // record has no geoUrl, or cached the held file's "no map", or the live-OSM guess —
+      // none of which would ever be fetched again. Adopt the url and drop that cache so the
+      // next map open loads the vetted file. A course still held keeps its "no map".
+      let newMap=false;
+      const g0=c.geo;
+      if(rec.geoUrl&&!GEO_HELD.has(String(c.id))&&(c.geoUrl!==rec.geoUrl||(g0&&!g0.amn&&(g0.none||g0.empty)))){
+        c.geoUrl=rec.geoUrl;if(g0&&!g0.amn)delete c.geo;newMap=true;
+      }
+      if(rec.tier&&!GEO_HELD.has(String(c.id)))c.tier=rec.tier;
       c._cardRev=CARD_STAMP;
       changed++;
       if(S.course&&S.course.id===c.id&&!(S.round&&S.round.started)){
         const keepGeo=S.course.geo;
         S.course=clone(c);
-        if(keepGeo&&!S.course.geo)S.course.geo=keepGeo;
+        if(keepGeo&&!S.course.geo&&!newMap)S.course.geo=keepGeo;
       }
     }
     if(changed)save();
@@ -5156,7 +5167,7 @@ async function refreshStaleGeo(){
     if(changed)save();
   }catch(e){}
 }
-function geoHeldIds(){return 'nat10008,nat1001,nat10046,nat10091,nat10103,nat10104,nat10106,nat10109,nat10110,nat10112,nat10159,nat10162,nat10174,nat10190,nat102,nat1020,nat10209,nat1021,nat1022,nat10253,nat10259,nat10263,nat10280,nat10356,nat10357,nat10361,nat10373,nat10382,nat10419,nat10444,nat10459,nat10517,nat10523,nat10550,nat10555,nat10580,nat10584,nat10688,nat10693,nat10725,nat1077,nat10770,nat10802,nat10815,nat10819,nat10835,nat1085,nat10870,nat10883,nat10888,nat10949,nat10965,nat10979,nat10981,nat10984,nat11,nat11001,nat11037,nat11064,nat11091,nat11133,nat11160,nat11195,nat11274,nat11309,nat11333,nat11398,nat114,nat11414,nat11497,nat11499,nat11512,nat11515,nat11588,nat1159,nat11596,nat11609,nat1164,nat11658,nat11670,nat11674,nat11680,nat11709,nat11711,nat11720,nat11724,nat11733,nat11749,nat11752,nat11796,nat11805,nat11837,nat11853,nat11855,nat11879,nat11897,nat11929,nat11964,nat11965,nat12059,nat12162,nat12178,nat12181,nat12237,nat12248,nat12250,nat12286,nat12292,nat12301,nat12313,nat12321,nat12342,nat12355,nat12365,nat12374,nat12392,nat12394,nat12418,nat12439,nat1244,nat12455,nat12458,nat125,nat1266,nat129,nat1295,nat1328,nat1338,nat135,nat1370,nat1386,nat14,nat140,nat1420,nat1432,nat1453,nat1492,nat153,nat1530,nat156,nat1628,nat1650,nat1666,nat1673,nat1683,nat1684,nat1715,nat1717,nat1721,nat1752,nat1775,nat1846,nat1854,nat1855,nat194,nat1952,nat1964,nat1975,nat2079,nat2136,nat2143,nat2161,nat2169,nat2215,nat2221,nat2238,nat2240,nat2250,nat226,nat2260,nat2273,nat2285,nat2286,nat2315,nat2337,nat2393,nat2406,nat2418,nat2476,nat250,nat2519,nat252,nat2531,nat2532,nat2533,nat2545,nat2570,nat2574,nat2604,nat2621,nat2624,nat2700,nat2738,nat2744,nat275,nat2769,nat2781,nat2789,nat2792,nat2805,nat2835,nat2840,nat2895,nat2897,nat2923,nat2939,nat2940,nat2951,nat2955,nat2959,nat2988,nat2992,nat3008,nat3018,nat3022,nat3056,nat3134,nat3140,nat3154,nat3155,nat3177,nat3268,nat3297,nat332,nat3340,nat3362,nat3396,nat3401,nat3406,nat3419,nat3451,nat348,nat3563,nat3573,nat3581,nat3598,nat3614,nat3686,nat37,nat3710,nat3716,nat3718,nat3758,nat3772,nat3812,nat3843,nat3847,nat3891,nat392,nat398,nat3983,nat4040,nat4055,nat4059,nat4063,nat41,nat4130,nat4153,nat4202,nat4206,nat4252,nat4267,nat4271,nat4391,nat4397,nat4413,nat4451,nat4455,nat454,nat4582,nat4605,nat462,nat4651,nat4666,nat4700,nat4710,nat4749,nat4803,nat4804,nat482,nat4821,nat4823,nat4856,nat4906,nat4911,nat4947,nat4953,nat5019,nat5026,nat5043,nat5048,nat5081,nat5091,nat5136,nat5148,nat5232,nat5257,nat5261,nat5282,nat5297,nat530,nat5305,nat5350,nat5355,nat5409,nat5410,nat5411,nat5437,nat5481,nat5510,nat5524,nat5538,nat5570,nat5575,nat5582,nat5622,nat5663,nat5664,nat5684,nat5720,nat5736,nat5784,nat5792,nat5800,nat5807,nat5813,nat5825,nat585,nat5913,nat5917,nat5945,nat61,nat6113,nat6117,nat612,nat6148,nat6175,nat6194,nat62,nat6223,nat6279,nat6293,nat632,nat6330,nat6343,nat6369,nat64,nat6488,nat6495,nat6530,nat656,nat6597,nat660,nat6637,nat6652,nat6658,nat6697,nat6700,nat671,nat6725,nat6751,nat6763,nat68,nat6819,nat6869,nat6903,nat7041,nat707,nat7082,nat7091,nat7120,nat7137,nat7164,nat7168,nat7187,nat722,nat7235,nat7240,nat7272,nat7280,nat7299,nat7356,nat7385,nat7424,nat7435,nat7559,nat7571,nat7607,nat762,nat7635,nat7648,nat7755,nat7763,nat7821,nat7833,nat784,nat786,nat7883,nat7897,nat790,nat7905,nat7914,nat7970,nat8002,nat8003,nat8005,nat8054,nat807,nat8076,nat8094,nat8103,nat8123,nat8126,nat818,nat8182,nat8188,nat8243,nat8252,nat8289,nat8326,nat835,nat8380,nat839,nat8408,nat8485,nat8574,nat8579,nat8594,nat8603,nat8624,nat865,nat8654,nat8658,nat8669,nat8693,nat8698,nat8699,nat8703,nat8724,nat8748,nat8755,nat8765,nat8936,nat8944,nat8958,nat8989,nat9002,nat9058,nat9072,nat912,nat913,nat9148,nat9173,nat9190,nat9215,nat9238,nat934,nat9356,nat9357,nat9360,nat9365,nat9385,nat941,nat9413,nat943,nat9462,nat9467,nat9549,nat955,nat9588,nat959,nat9610,nat9616,nat9622,nat963,nat9685,nat974,nat9741,nat9810,nat9848,nat9870,nat9903,nat992,nat9924,nat9926,nat9935,nat9974,oga14229f7ecdf1,oga9b4a7f70331c,ogaa83f7d0c5332,ogadd07c64be1fa';}
+function geoHeldIds(){return 'nat10008,nat10046,nat10091,nat10104,nat10106,nat10109,nat10110,nat10162,nat10174,nat1020,nat10209,nat1022,nat10263,nat10357,nat10361,nat10373,nat10444,nat10555,nat10580,nat10584,nat10693,nat10725,nat10802,nat10815,nat10819,nat1085,nat10870,nat10979,nat10981,nat10984,nat11001,nat11037,nat11091,nat11160,nat11309,nat11333,nat11398,nat114,nat11414,nat11497,nat11499,nat11512,nat11515,nat11588,nat1159,nat11596,nat11670,nat11720,nat11733,nat11749,nat11752,nat11855,nat11897,nat11929,nat12059,nat12162,nat12178,nat12248,nat12292,nat12301,nat12313,nat12342,nat12355,nat12374,nat12392,nat12394,nat12418,nat12455,nat12458,nat1266,nat129,nat1295,nat1338,nat1370,nat1386,nat14,nat140,nat1420,nat1453,nat153,nat156,nat1628,nat1673,nat1683,nat1721,nat1752,nat1846,nat1854,nat1964,nat2079,nat2215,nat2221,nat2240,nat2250,nat2260,nat2285,nat2286,nat2315,nat2337,nat2393,nat2406,nat2418,nat2476,nat250,nat2519,nat252,nat2532,nat2545,nat2570,nat2621,nat2700,nat2738,nat2744,nat275,nat2789,nat2792,nat2835,nat2840,nat2897,nat2988,nat2992,nat3022,nat3056,nat3134,nat3154,nat3155,nat3177,nat3268,nat332,nat3340,nat3401,nat3451,nat3563,nat3581,nat37,nat3710,nat3716,nat3718,nat3758,nat3772,nat3847,nat3891,nat392,nat3983,nat4040,nat4055,nat4059,nat4153,nat4202,nat4252,nat4267,nat4391,nat4397,nat4413,nat4455,nat4605,nat4651,nat4700,nat4710,nat4749,nat4803,nat4804,nat482,nat4906,nat4911,nat4947,nat4953,nat5019,nat5026,nat5048,nat5091,nat5136,nat5148,nat5232,nat5257,nat5261,nat530,nat5305,nat5350,nat5355,nat5411,nat5437,nat5481,nat5510,nat5524,nat5538,nat5570,nat5664,nat5684,nat5720,nat5784,nat5800,nat5807,nat5825,nat5917,nat61,nat6117,nat612,nat6148,nat6175,nat6194,nat62,nat6279,nat632,nat6369,nat6488,nat6530,nat6637,nat6658,nat6700,nat6725,nat6751,nat6763,nat68,nat6819,nat6869,nat6903,nat7041,nat707,nat7082,nat7091,nat7120,nat7137,nat7168,nat7187,nat722,nat7235,nat7240,nat7272,nat7280,nat7299,nat7356,nat7385,nat7424,nat7559,nat7607,nat762,nat7635,nat7648,nat7755,nat7763,nat7821,nat7833,nat784,nat786,nat7883,nat7897,nat790,nat7905,nat7914,nat7970,nat8003,nat8005,nat8054,nat8076,nat8103,nat8123,nat8126,nat818,nat8188,nat8326,nat835,nat8380,nat8408,nat8485,nat8574,nat8579,nat8594,nat8603,nat865,nat8654,nat8669,nat8693,nat8698,nat8699,nat8703,nat8724,nat8765,nat8936,nat8944,nat9002,nat9058,nat912,nat913,nat9148,nat9190,nat9215,nat9238,nat934,nat9356,nat9360,nat9365,nat941,nat9413,nat943,nat9462,nat9467,nat9549,nat9588,nat959,nat9616,nat9622,nat963,nat9685,nat9741,nat9848,nat9870,nat9903,nat9935,oga14229f7ecdf1,oga9b4a7f70331c,ogaa83f7d0c5332,ogadd07c64be1fa';}
 const GEO_HELD=new Set(geoHeldIds().split(','));   // records held back by the 2026-09-05 map audit (see ~/battletees-national/audit-2026-09-05)
 // 'darkhorse' is the pre-national built-in every install carries; it never had a
 // map, and the national record that does (nat10762, 13 of 18 holes) was never
