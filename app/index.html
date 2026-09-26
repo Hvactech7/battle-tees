@@ -62,9 +62,16 @@
     --line:#38445e; --bg:#0f1522; --card:#1b2433;
     --red:#e8604f; --red-lt:#391410;
     --elec:#4aa8ff; --elec-mid:#7cc3ff; --elec-dk:#0e3d75; --elec-lt:#122a44;
+    /* text colours that must flip with the theme (9/25 contrast sweep: Doug plays in
+       Light, and these were hard-coded for a dark screen) */
+    --field:#0d1420; --green-ink:#c9a227; --good:#7fd49a; --good2:#9fe8b8; --warm:#ff9b3d;
+    --rk1:#e8c552; --rk2:#b8c2d4; --rk3:#c98d5a; --rk4:#7d8494;
   }
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
   html,body{height:100%}
+  /* the first-paint style in <head> paints html navy; html keeps that background, so the
+     body's cream stops at one screen and every long Light page turned navy below the fold */
+  html{background:var(--bg)}
   body{font-family:Inter,-apple-system,sans-serif;background:var(--bg);color:var(--ink);
     -webkit-user-select:none;user-select:none;overscroll-behavior:none;
     -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility}
@@ -113,7 +120,7 @@
      whole app -- 16px -> 19.2px and 13px -> 15.6px, +20%. */
   button.hb.big{font-size:19.2px}
   button.hb.ghost{font-size:15.6px}
-  button.ghost{background:var(--card);border:2px solid var(--green);border-radius:8px;padding:8px 13px;font-size:13px;font-weight:600;color:var(--green);font-family:inherit;box-shadow:2px 2px 0 var(--green)}
+  button.ghost{background:var(--card);border:2px solid var(--green);border-radius:8px;padding:8px 13px;font-size:13px;font-weight:600;color:var(--green-ink);font-family:inherit;box-shadow:2px 2px 0 var(--green)}
   button.ghost:active{transform:translate(1px,1px);box-shadow:1px 1px 0 var(--green)}
   button.ghost.sel{background:var(--elec-lt);border-color:var(--elec);color:var(--elec-mid);box-shadow:2px 2px 0 var(--elec-dk)}
   button.ghost.danger{background:var(--red);color:#fff2ef;border-color:#7f1f16;box-shadow:2px 2px 0 #7f1f16}
@@ -144,7 +151,7 @@
   .welcome-card{border-width:3px;padding:20px 18px;box-shadow:6px 6px 0 var(--green),0 0 0 6px rgba(74,222,128,.10);
     animation:wcRise .5s cubic-bezier(.2,.8,.25,1) both}
   .card h2.welcome-h{font-size:27px;line-height:1.12;letter-spacing:.2px;margin:0 0 7px;
-    color:var(--green);text-transform:none}
+    color:var(--green-ink);text-transform:none}
   .welcome-card input{font-size:17px;padding:13px 12px}
   .welcome-go{font-size:19px;padding:16px;letter-spacing:.3px;
     box-shadow:0 0 0 0 rgba(74,222,128,.55);animation:wcPulse 2.4s ease-out 1.1s infinite}
@@ -161,7 +168,7 @@
   .vfCard{width:min(430px,100%);background:var(--card);border:3px solid var(--green);
     border-radius:14px;padding:18px;box-shadow:6px 6px 0 var(--green);
     animation:vfRise .26s cubic-bezier(.2,.8,.25,1) both}
-  .card h2.vfTitle,.vfTitle{font-size:23px;color:var(--green);text-transform:none;
+  .card h2.vfTitle,.vfTitle{font-size:23px;color:var(--green-ink);text-transform:none;
     letter-spacing:.2px;margin:0 0 8px;line-height:1.15}
   .vfCard input{font-size:17px;padding:13px 12px;width:100%}
   /* yardage flash after marking a shot */
@@ -184,7 +191,7 @@
   .cheer-sub{font-size:14px;color:var(--ink3)}
   .cheer-what{font-size:18px;font-weight:600;color:var(--ink);margin-top:2px}
   .cheer-nums{display:flex;align-items:baseline;justify-content:center;gap:10px;margin:6px 0 4px}
-  .cheer-nums .num{font-size:48px;font-weight:700;color:#7fd49a;line-height:1}
+  .cheer-nums .num{font-size:48px;font-weight:700;color:var(--good);line-height:1}
   .cheer-vs{font-size:15px;color:var(--ink3)}
   .cheer-tap{font-size:12px;color:var(--ink3);margin-top:10px;letter-spacing:1px;text-transform:uppercase}
   .cheer-ratio{font-family:Rajdhani,sans-serif;font-weight:700;font-size:17px;color:var(--gold);margin-top:2px}
@@ -200,7 +207,7 @@
   details.faq summary::after{content:'+';position:absolute;right:4px;top:8px;color:var(--ink3);font-weight:700;font-size:18px}
   details.faq[open] summary::after{content:'\2212'}
   .wdial{position:relative;width:164px;height:164px;margin:14px auto 8px;border-radius:50%;border:2px solid var(--line)}
-  .wdial .wdir{position:absolute;width:36px;height:36px;border-radius:50%;border:2px solid var(--green);background:var(--card);color:var(--green);font-size:15px;line-height:1;padding:0;margin:0;display:flex;align-items:center;justify-content:center}
+  .wdial .wdir{position:absolute;width:36px;height:36px;border-radius:50%;border:2px solid var(--green);background:var(--card);color:var(--green-ink);font-size:15px;line-height:1;padding:0;margin:0;display:flex;align-items:center;justify-content:center}
   .wdial .wdir.on{background:#4fd8ff;border-color:#4fd8ff;color:#06101c}
   .wdial .wdarrow{position:absolute;left:50%;top:50%;width:56px;height:56px;margin:-28px 0 0 -28px;transition:transform .15s}
   .wdial .wdgreen{position:absolute;left:50%;top:-11px;transform:translateX(-50%);font-size:15px;line-height:1;background:var(--card);padding:0 3px}
@@ -284,6 +291,12 @@
     background:rgba(74,168,255,.09);border-radius:0 8px 8px 0;font-size:14.5px;color:var(--ink2)}
   .rsec .netnote b{color:#9ccfff}
   .rsec .netnote .lede{color:#9ccfff}
+  html.light .six-ph{color:#5a7a10}
+  html.light .quota-ph{color:#2a7d8a}
+  html.light .rsec.k-strat h3{color:#164f9a}
+  html.light .rsec.k-fun h3{color:#b3540f}
+  html.light .rsec.k-wager h3,html.light .rsec .stake span{color:#8a6414}
+  html.light .rsec .netnote b,html.light .rsec .netnote .lede{color:#164f9a}
   .rsec .tune{margin-top:14px;padding:12px 15px;border-left:3px solid var(--green);
     background:rgba(46,160,67,.09);border-radius:0 8px 8px 0;font-size:14.5px;color:var(--ink2)}
   .rsec .tune b{color:var(--ink)}
@@ -338,7 +351,7 @@
   .banner.wolf{background:var(--amber-lt);color:var(--amber);border-color:var(--amber-bd);box-shadow:2px 2px 0 var(--amber-bd)}
   .banner.ok{background:var(--elec-lt);color:var(--elec-mid);border-color:var(--elec);box-shadow:2px 2px 0 var(--elec-dk)}
   .banner.carry{background:var(--red-lt);color:var(--red);border-color:var(--red);box-shadow:2px 2px 0 var(--red)}
-  .banner.ham{background:rgba(184,115,51,.14);color:#e0995c;border-color:#b87333;box-shadow:2px 2px 0 #6e4418}
+  .banner.ham{background:rgba(184,115,51,.14);color:var(--ham-ink,#e0995c);border-color:#b87333;box-shadow:2px 2px 0 #6e4418}
   .hamcard{border-color:#b87333;box-shadow:5px 5px 0 #6e4418}
   .dots{color:var(--elec);letter-spacing:2px;font-size:11px}
   .pill{display:inline-block;border-radius:999px;padding:2px 9px;font-size:11.5px;font-weight:600}
@@ -362,7 +375,7 @@
   nav.tabs .ic{display:block;font-size:19px;margin-bottom:1px}
   .holegrid{display:grid;grid-template-columns:repeat(6,1fr);gap:5px}
   .holegrid button{border:1.5px solid var(--line);background:var(--card);border-radius:8px;padding:6px 0;font-family:Rajdhani,sans-serif;font-weight:700;font-size:16px;color:var(--ink2)}
-  .holegrid button.done{background:var(--green-lt);color:var(--green);border-color:var(--green)}
+  .holegrid button.done{background:var(--green-lt);color:var(--green-ink);border-color:var(--green)}
   .holegrid button.cur{outline:2px solid var(--elec);outline-offset:1px}
   .pickcard{border:2px solid var(--elec);border-radius:10px;padding:11px 12px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--card);box-shadow:2px 2px 0 var(--elec-dk)}
   .pickcard:active{transform:translate(1px,1px);box-shadow:1px 1px 0 var(--elec-dk)}
@@ -378,13 +391,15 @@
   /* checkbox skin for the rules-card grid when it is used as the multi-game
      picker — the ::before becomes the first flex item, so it reads as a box */
   .gamebtn.gpick::before{content:'\25CB';font-size:30px;line-height:1;flex:none;color:var(--ink2)}
-  .gamebtn.gpick.gpon::before{content:'\25CF';color:var(--green)}
-  .gamebtn.gpick.gpmain::before{content:'\26F3';font-size:26px;color:var(--green)}
-  .gamebtn.gpick.gpdis{opacity:.42;filter:grayscale(.7)}
+  .gamebtn.gpick.gpon::before{content:'\25CF';color:var(--green-ink)}
+  .gamebtn.gpick.gpmain::before{content:'\26F3';font-size:26px;color:var(--green-ink)}
+  .gamebtn.gpick.gpdis{filter:grayscale(.7)}
+  .gamebtn.gpick.gpdis img,.gamebtn.gpick.gpdis [class$="-ph"]{opacity:.42}
+  .gamebtn.gpick.gpdis .gname{opacity:.62}
   /* flex:none or the column flexbox shrinks the bar and clips the button */
   .puttrow{display:flex;gap:8px;margin-top:6px}
   .puttbtn{flex:1;padding:16px 0;font-size:22px;font-weight:700;font-family:inherit;
-    background:var(--card);color:var(--green);border:2px solid var(--green);border-radius:10px;
+    background:var(--card);color:var(--green-ink);border:2px solid var(--green);border-radius:10px;
     box-shadow:2px 2px 0 var(--green);cursor:pointer}
   .puttbtn:active{transform:translate(2px,2px);box-shadow:0 0 0 var(--green)}
   .gpbar{flex:none;max-height:0;overflow:hidden;transition:max-height .2s ease-out}
@@ -429,7 +444,11 @@
   .gamebtn.solo{margin-bottom:0}
   /* A game the crew is the wrong size for. Still readable -- you can see it
      exists and why it is off -- but plainly not a thing you can tap. */
-  .seatoff{opacity:.5;filter:grayscale(.8);box-shadow:none;cursor:default}
+  .seatoff{filter:grayscale(.8);box-shadow:none;cursor:default}
+  /* a wrong-size game is dulled, but "4 players only" is the one line that says why --
+     it has to stay readable (9/25 contrast sweep measured it at 2:1) */
+  .seatoff img,.seatoff [class$="-ph"]{opacity:.45}
+  .seatoff .gname{opacity:.62}
   .gamebtn .seatwhy{color:var(--amber);font-weight:700;letter-spacing:.3px;margin-top:2px}
   .gamebtn.seatoff .seatwhy{color:var(--ink2)}
   .pickedbar{display:flex;align-items:center;gap:12px;margin:0 0 14px;padding:8px 12px 8px 10px;
@@ -437,6 +456,8 @@
     background:color-mix(in srgb,var(--pc) 12%,var(--card));box-shadow:3px 3px 0 rgba(0,0,0,.25)}
   .pickedbar img{height:54px;width:auto;flex:none}
   .pickedname{font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:23px;line-height:1.1;color:var(--pc)}
+  html.light .pickedname{color:color-mix(in srgb,var(--pc) 58%,#000)}
+  html:not(.light) .pickedbar[data-g=nassau] .pickedname{color:color-mix(in srgb,var(--pc) 70%,#fff)}
   .gamesplit{display:flex;align-items:center;gap:10px;margin:16px 2px 14px;
     color:var(--ink3);font-size:12px;letter-spacing:1.2px;text-transform:uppercase;font-weight:700}
   .gamesplit::before,.gamesplit::after{content:'';flex:1;height:2px;background:var(--line);border-radius:2px}
@@ -483,8 +504,8 @@
   .sc td.tt{font-weight:700;color:var(--gold,#e8c552);font-size:19px}
   /* paper-card marks: ○ birdie · ◎ eagle · □ bogey · ▣ double+ (Nathan 8/20) */
   .sc .scm{display:inline-flex;align-items:center;justify-content:center;width:29px;height:29px;line-height:1}
-  .sc .scm.bir{border:1.8px solid #7fd49a;border-radius:50%;color:#7fd49a}
-  .sc .scm.eag{border:1.8px solid #9fe8b8;border-radius:50%;box-shadow:0 0 0 2.2px var(--card),0 0 0 3.8px #9fe8b8;color:#9fe8b8}
+  .sc .scm.bir{border:1.8px solid var(--good);border-radius:50%;color:var(--good)}
+  .sc .scm.eag{border:1.8px solid var(--good2);border-radius:50%;box-shadow:0 0 0 2.2px var(--card),0 0 0 3.8px var(--good2);color:var(--good2)}
   .sc .scm.bog{border:1.8px solid var(--amber);color:var(--amber)}
   .sc .scm.dbl{border:1.8px solid var(--red);box-shadow:0 0 0 2.2px var(--card),0 0 0 3.8px var(--red);color:var(--red)}
   .sc td.e{color:var(--ink3);font-weight:400}
@@ -492,15 +513,29 @@
     --green:#a8823a; --green-mid:#8a6414; --green-lt:#f3e8c8;
     --green-dk:#6e5716;
     --amber:#7c4a00; --amber-bd:#c76a1d; --amber-lt:#faeeda; --amber-dk:#7c3f00;
-    --ink:#2a2416; --ink2:#6b6350; --ink3:#98917d;
+    --ink:#2a2416; --ink2:#6b6350; --ink3:#736c58;
     --line:#d8cba4; --bg:#f3eee0; --card:#fffdf6;
     --red:#c0392b; --red-lt:#f7e3e0;
     --elec:#1f6fd0; --elec-mid:#164f9a; --elec-dk:#0e3d75; --elec-lt:#dbe9fb;
+    --field:#ffffff; --green-ink:#7f6214; --good:#1c7a3e; --good2:#0f5c2e; --warm:#b3540f; --gold:#8a6414;
+    --rk1:#8a6414; --rk2:#5d6878; --rk3:#8a5a2e; --rk4:#6b7280;
+    --ham-ink:#8a4a12; --warn-ink:#8a5a00; --gread-ink:#1c7a3e; --sight-ink:#0d6f91;
+    --team1:#1f6fd0; --team2:#b8322a;
   }
   html.light button.big{color:#f4f9ff}
+  /* a ghost big button sits on the card, not on blue: white-on-cream was invisible (Doug) */
+  html.light button.big.ghost{color:var(--green-mid)}
+  /* the top bar, the install bar and the map's floating buttons are dark in BOTH themes */
+  html.light header.top,html.light #a2hsBar,html.light #mapconfirm,html.light #mapfw,html.light #mapgir{
+    --ink:#eae3cf; --ink2:#b0a88f; --ink3:#807a67; --gold:#e8c552; --good:#7fd49a; --good2:#9fe8b8;
+    --warm:#ff9b3d; --amber:#ffb454}
+  /* ...and the map's chips sit over satellite imagery at 82% navy: the idle label reads brighter */
+  html.light #mapconfirm,html.light #mapfw,html.light #mapgir{--ink3:#b0a88f}
+  /* a grey pill in the dark top bar keeps the dark pill (PREVIEW tag, click walk 9/25) */
+  html.light header.top .pill.gray{background:#2a3348}
   html.light header.top{color:#e8c552}
   html.light header.top .sub{color:#b8ac8d}
-  html.light button.big:disabled{background:#c9cfd8;border-color:#aab3c0;color:#f5f7fa}
+  html.light button.big:disabled{background:#c9cfd8;border-color:#aab3c0;color:#4b5260}
   html.light .pill.gray{background:#ece6d4}
   html.light .sc td.bir{background:#e3efe3;color:#1c5c34}
   html.light .sc td.eag{background:#cde5d2;color:#1c5c34}
@@ -519,7 +554,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-centre in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1790372726';
+const BUILD='1790405121';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -3359,7 +3394,7 @@ function runningTotalsCard(){
   const first=i=>esc((S.players[i].name||'').split(' ')[0]);
   // HERO TILES — ranked left→right, rank-colored top edge, leader glows,
   // everyone else sees exactly how far back they are.
-  const RANK=['#e8c552','#b8c2d4','#c98d5a','#7d8494'];
+  const RANK=['var(--rk1)','var(--rk2)','var(--rk3)','var(--rk4)'];
   const tile=(label,val,chip,ri,valCol,bc)=>{
     const rc=bc||RANK[Math.min(ri,3)];
     return `<div style="flex:1;min-width:0;text-align:center;background:rgba(128,150,190,.06);border-radius:10px;padding:8px 2px 6px;border:2px solid ${rc};box-shadow:2px 2px 0 ${rc}${ri===0?',0 0 14px rgba(232,197,82,.25)':''}">
@@ -3368,8 +3403,8 @@ function runningTotalsCard(){
       <div class="tiny" style="color:${rc};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${chip}</div>
     </div>`;
   };
-  const sgnCol=v=>v>0?'#7fd49a':v<0?'#ff9b3d':'var(--ink)';
-  const parCol=d=>d<0?'#7fd49a':d>0?'var(--amber-bd)':'var(--ink2)';
+  const sgnCol=v=>v>0?'var(--good)':v<0?'var(--warm)':'var(--ink)';
+  const parCol=d=>d<0?'var(--good)':d>0?'var(--amber-bd)':'var(--ink2)';
   let tiles='',foot='';
   // MYSTERY PARTNERS: show plain per-player strokes. Not just the team tiles --
   // a team ledger gives BOTH partners the same number, so even a "per player"
@@ -3398,7 +3433,7 @@ function runningTotalsCard(){
     const rows=actIdx().map(i=>({label:first(i),v:q.ledgers.gross[i],d:q.ledgers.gross[i]-q.targets[i]}));
     rows.sort((a,b)=>b.d-a.d);
     const tiedQ=rows.every(r=>r.d===rows[0].d);
-    tiles=rows.map((r,ri)=>tile(r.label,String(r.v),`${r.d>0?'+':''}${r.d} vs quota`,tiedQ?3:ri,r.d>0?'#7fd49a':r.d<0?'var(--amber-bd)':'var(--ink2)')).join('');
+    tiles=rows.map((r,ri)=>tile(r.label,String(r.v),`${r.d>0?'+':''}${r.d} vs quota`,tiedQ?3:ri,r.d>0?'var(--good)':r.d<0?'var(--amber-bd)':'var(--ink2)')).join('');
     foot='points';
   }else if(g==='bestball'){
     const bb=computeBestBall(),m=computeMatch(L),T=m.T;
@@ -3438,7 +3473,7 @@ function runningTotalsCard(){
     const rank=r=>rows.filter(x=>x.v>r.v).length;
     tiles=rows.map(r=>tile(r.label,f(r.v),tiedAll?'all square':(r.v===lead?(tiedLead?'tied lead':'leader'):`${back(r.v)} back`),tiedAll?3:rank(r),sgnCol(r.v))).join('');
     if(g==='sixes'){const T=sixesTeamsFor(S.round.cur);
-      foot=`<b style="color:${TEAM_BOLT[0]}">\u26a1 ${teamLbl(T[0])}</b> v <b style="color:${TEAM_BOLT[1]}">\u26a1 ${teamLbl(T[1])}</b>`;}
+      foot=`<b style="color:var(--team1,${TEAM_BOLT[0]})">\u26a1 ${teamLbl(T[0])}</b> v <b style="color:var(--team2,${TEAM_BOLT[1]})">\u26a1 ${teamLbl(T[1])}</b>`;}
     else if(g==='nassau'){const sgn=x=>x===0?'AS':(x>0?'+':'')+x;
       foot=eng.bets[L].filter(b=>!b.press).map(b=>`${b.seg[0].toUpperCase()} ${sgn(b.up)}`).join(' · ');}
     else if(g==='skins'){foot=eng.pot[L]>0?fmtMoney(eng.pot[L])+' riding':'dollars won';}
@@ -3850,7 +3885,7 @@ function segPickerHTML(k){
       <div style="display:flex;gap:6px;flex-wrap:wrap">${PAIRINGS.map((T,pi)=>
         `<button class="ghost ${p===pi?'sel':''}" onclick="setSegPairing('${k}',${seg},${pi})">${nm(T[0][0])}+${nm(T[0][1])} v ${nm(T[1][0])}+${nm(T[1][1])}</button>`).join('')}</div>`;
   }).join('')}
-  ${dup?`<div class="tiny mt" style="color:#d19a2f">A pairing repeats — with this set, two players never partner each other.</div>`:''}</div>`;
+  ${dup?`<div class="tiny mt" style="color:var(--warn-ink,#d19a2f)">A pairing repeats — with this set, two players never partner each other.</div>`:''}</div>`;
 }
 function sixesTeamsFor(h){return PAIRINGS[segPairings('sixes')[segOf(h)]%3];}
 function computeSixes(){
@@ -4407,7 +4442,7 @@ function scoreNagToast(){
   d.style.cssText='position:fixed;right:max(10px,calc(50vw - 230px));bottom:calc(226px + env(safe-area-inset-bottom));z-index:90;width:min(300px,80vw);background:var(--card);border:2px solid var(--amber-bd,#c9922e);border-radius:12px;padding:10px 12px;box-shadow:3px 3px 0 rgba(0,0,0,.4)';
   d.innerHTML='<div style="display:flex;align-items:flex-start;gap:8px">'
     +'<div class="tiny" style="flex:1;font-size:14.5px;text-align:center;padding-top:3px"><b>Score this hole first</b><br>close this and ▶ moves on</div>'
-    +'<button onclick="clearScoreNag(true)" aria-label="Close" style="flex:none;border:1px solid var(--line);background:#1b2433;color:var(--ink2);border-radius:8px;width:40px;height:40px;padding:0;display:flex;align-items:center;justify-content:center">'+XICON+'</button></div>'
+    +'<button onclick="clearScoreNag(true)" aria-label="Close" style="flex:none;border:1px solid var(--line);background:var(--card);color:var(--ink2);border-radius:8px;width:40px;height:40px;padding:0;display:flex;align-items:center;justify-content:center">'+XICON+'</button></div>'
     // the arrow hangs over the word Score on the button below
     +'<div style="font-size:26px;line-height:1;margin-top:5px;text-align:right;padding-right:50px">⬇</div>';
   document.body.appendChild(d);
@@ -4806,7 +4841,7 @@ function paintMapConfirm(){
   b.textContent=mapConfirmLabel();
   b.style.background=st==='in'?'var(--green-lt)':st==='armed'?'#2b86ec':'rgba(15,21,34,.82)';
   b.style.borderColor=st==='in'?'var(--green)':st==='armed'?'var(--elec-dk,#1c5eb0)':'var(--line)';
-  b.style.color=st==='in'?'var(--green)':st==='armed'?'#eef6ff':'var(--ink3)';
+  b.style.color=st==='in'?'var(--green-ink)':st==='armed'?'#eef6ff':'var(--ink3)';
   b.style.fontSize=st==='in'?'15px':'19px';
 }
 function showMapConfirm(){mapScoreHole=mapHole;paintMapConfirm();}
@@ -4938,7 +4973,7 @@ function vMap(){
   // showing, the badge steps aside (the game is on every other screen) and margins tighten.
   const codeShown=!!(S.share&&S.share.on&&S.share.creator&&S.share.code);
   const myScore=(myPar>0&&!gpsOnly())?`<div style="text-align:center;flex:none;margin:0 ${codeShown?'6px 0 4px':'14px 0 10px'}">
-    <div class="num" style="font-size:38px;line-height:1;font-weight:700;color:${d<0?'#7fd49a':d>0?'var(--amber-bd)':'var(--ink)'};text-shadow:0 0 10px rgba(0,0,0,.5)">${d===0?'E':(d>0?'+':'')+d}</div>
+    <div class="num" style="font-size:38px;line-height:1;font-weight:700;color:${d<0?'var(--good)':d>0?'var(--amber-bd)':'var(--ink)'};text-shadow:0 0 10px rgba(0,0,0,.5)">${d===0?'E':(d>0?'+':'')+d}</div>
     <div class="tiny" style="color:var(--ink2);white-space:nowrap;font-size:12px">${myTot} strokes</div></div>`:'';
   return topbar(`Hole ${mapHole+1} · Par ${hole.par}${(!gpsOnly()&&(S.round.holes[mapHole]||{}).confirmed)?' ✓':''}`,
     gpsOnly()?`Handicap ${hole.si} · rangefinder`
@@ -4972,7 +5007,7 @@ function vMap(){
       return `<button id="manualbtn" onclick="manualModeTap()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(220px + env(safe-area-inset-bottom));z-index:6;height:46px;padding:0 14px;background:var(--card);border:2px solid var(--elec,#2b86ec);border-radius:12px;color:var(--elec,#2b86ec);font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:17px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">${lbl}</button>`;
     }catch(e){return '';}})()}
   <button onclick="go(gpsOnly()?'setup':'hole')" style="position:fixed;right:max(10px,calc(50vw - 230px));top:calc(100px + env(safe-area-inset-top));z-index:6;background:rgba(15,21,34,.82);border:1.5px solid var(--line);border-radius:12px;color:#fff;padding:10px 17px;font-size:17px;font-weight:600;font-family:inherit">Back</button>
-  ${gpsOnly()?'':`<button id="mapconfirm" onclick="mapConfirm()" style="position:fixed;right:max(10px,calc(50vw - 230px));bottom:calc(166px + env(safe-area-inset-bottom));z-index:6;width:126px;height:46px;background:${mapScoreState()==='in'?'var(--green-lt)':mapScoreState()==='armed'?'#2b86ec':'rgba(15,21,34,.82)'};border:2px solid ${mapScoreState()==='in'?'var(--green)':mapScoreState()==='armed'?'var(--elec-dk,#1c5eb0)':'var(--line)'};border-radius:12px;color:${mapScoreState()==='in'?'var(--green)':mapScoreState()==='armed'?'#eef6ff':'var(--ink3)'};font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:${mapScoreState()==='in'?'15px':'19px'};box-shadow:2px 2px 0 rgba(0,0,0,.35)">${mapConfirmLabel()}</button>
+  ${gpsOnly()?'':`<button id="mapconfirm" onclick="mapConfirm()" style="position:fixed;right:max(10px,calc(50vw - 230px));bottom:calc(166px + env(safe-area-inset-bottom));z-index:6;width:126px;height:46px;background:${mapScoreState()==='in'?'var(--green-lt)':mapScoreState()==='armed'?'#2b86ec':'rgba(15,21,34,.82)'};border:2px solid ${mapScoreState()==='in'?'var(--green)':mapScoreState()==='armed'?'var(--elec-dk,#1c5eb0)':'var(--line)'};border-radius:12px;color:${mapScoreState()==='in'?'var(--green-ink)':mapScoreState()==='armed'?'#eef6ff':'var(--ink3)'};font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:${mapScoreState()==='in'?'15px':'19px'};box-shadow:2px 2px 0 rgba(0,0,0,.35)">${mapConfirmLabel()}</button>
   <div style="position:fixed;right:max(10px,calc(50vw - 230px));bottom:calc(112px + env(safe-area-inset-bottom));z-index:6;display:flex;align-items:center;background:var(--card);border:2px solid var(--green);border-radius:12px;overflow:hidden;box-shadow:2px 2px 0 rgba(0,0,0,.35)">
     <button onclick="mapChScore(-1)" style="width:42px;height:46px;background:none;border:none;color:var(--elec);font-size:24px;font-weight:800">−</button>
     <div id="mapsc" class="num" onclick="showMapConfirm()" style="min-width:36px;text-align:center;font-size:26px;cursor:pointer">${(()=>{const r=S.round.holes[mapHole];if(!r||!r.gross)return hole.par;
@@ -4986,7 +5021,7 @@ function vMap(){
   <div class="mapbar">${mapCreditsChipHTML()}
     <div class="row" style="border:none;padding:2px 0">
       <button class="ghost" onclick="mapPrev()">◀</button>
-      ${(playsLikeEntitled()&&elevUrlFor(S.course))?`<button id="elevbtn" class="ghost" onclick="toggleElevMode()" aria-label="Elevation" aria-pressed="${elevReady()}" style="width:40px;height:40px;padding:0;display:flex;align-items:center;justify-content:center;opacity:${elevReady()?'1':'.45'};${elevReady()?'border-color:#4fd8ff;color:#4fd8ff':''}">
+      ${(playsLikeEntitled()&&elevUrlFor(S.course))?`<button id="elevbtn" class="ghost" onclick="toggleElevMode()" aria-label="Elevation" aria-pressed="${elevReady()}" style="width:40px;height:40px;padding:0;display:flex;align-items:center;justify-content:center;opacity:${elevReady()?'1':'.45'};${elevReady()?'border-color:#4fd8ff;color:var(--sight-ink,#4fd8ff)':''}">
         <svg width="24" height="20" viewBox="0 0 24 20" fill="none" aria-hidden="true"><path d="M1.5 18 L8.5 6.5 L12.5 12 L15.5 8 L22.5 18 Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
       </button>`:''}
       <div class="center" style="flex:1;min-width:0">
@@ -7052,7 +7087,7 @@ function toggleElevMode(){
 function elevBtnPaint(){
   const b=document.getElementById('elevbtn');if(!b)return;
   const on=elevReady();
-  b.style.opacity=on?'1':'.45';b.style.borderColor=on?'#4fd8ff':'';b.style.color=on?'#4fd8ff':'';
+  b.style.opacity=on?'1':'.45';b.style.borderColor=on?'#4fd8ff':'';b.style.color=on?'var(--sight-ink,#4fd8ff)':'';
   b.setAttribute('aria-pressed',on?'true':'false');
 }
 // the hole's rise and fall along its centre line, tee on the left, you on it —
@@ -7229,7 +7264,7 @@ function greadBtnHTML(){
   if(!playsLikeEntitled()||!greensUrlFor(S.course)||amnesiaOn(S.course.id))return '';
   greensEnsure();
   // on the map above Score, not in the bar: a third bar button squeezed the F/M/B yardages at 375 px
-  return `<button id="greadbtn" onclick="openGreenRead()" aria-label="Green slope" style="position:fixed;right:max(10px,calc(50vw - 230px));bottom:calc(220px + env(safe-area-inset-bottom));z-index:6;width:54px;height:54px;padding:0;display:flex;align-items:center;justify-content:center;background:var(--card);border:2px solid #2f9d5f;border-radius:12px;color:#7fe3a1;box-shadow:2px 2px 0 rgba(0,0,0,.35)">${GREAD_ICON}</button>`;
+  return `<button id="greadbtn" onclick="openGreenRead()" aria-label="Green slope" style="position:fixed;right:max(10px,calc(50vw - 230px));bottom:calc(220px + env(safe-area-inset-bottom));z-index:6;width:54px;height:54px;padding:0;display:flex;align-items:center;justify-content:center;background:var(--card);border:2px solid #2f9d5f;border-radius:12px;color:var(--gread-ink,#7fe3a1);box-shadow:2px 2px 0 rgba(0,0,0,.35)">${GREAD_ICON}</button>`;
 }
 function greadHole(){const g=greensEnsure();return g&&g.holes[physHole(mapHole)+1]||null;}
 function openGreenRead(){
@@ -7370,7 +7405,7 @@ function windDialHTML(){
     <h2 class="vfTitle">Your wind</h2>
     <div class="tiny mb">Tap where it's blowing <b>to</b> — green at the top, like the map. Your wind replaces the forecast for the rest of the round.</div>
     <div class="wdial"><span class="wdgreen">\u26f3</span>${btns}
-      <svg class="wdarrow" viewBox="0 0 40 40" style="transform:rotate(${d.a==null?0:d.a}deg);opacity:${d.a==null?.25:1}"><path d="M20 34 V10" stroke="#4fd8ff" stroke-width="5" stroke-linecap="round"/><polygon points="9,15 20,3 31,15" fill="#4fd8ff"/></svg></div>
+      <svg class="wdarrow" viewBox="0 0 40 40" style="transform:rotate(${d.a==null?0:d.a}deg);opacity:${d.a==null?.25:1}"><path d="M20 34 V10" style="stroke:var(--sight-ink,#4fd8ff)" stroke-width="5" stroke-linecap="round"/><polygon points="9,15 20,3 31,15" style="fill:var(--sight-ink,#4fd8ff)"/></svg></div>
     <div class="row" style="justify-content:center;gap:16px;border:none;padding:4px 0">
       <button class="ghost" style="width:56px;font-size:24px" onclick="windDialMph(-1)">&#8722;</button>
       <b class="num" style="font-size:30px;min-width:120px;text-align:center">${d.mph} mph</b>
@@ -8319,7 +8354,7 @@ function gamePickSheetHTML(){
   try{grid=gameGridHTML('pickToggleGame');}finally{gridDeco=null;}
   const off=['wolf','vegas','skins','matchplay','stroke','nines','bestball','scramble','sixes','umbrella','quota','stableford','bbb','nassau']
     .map(k=>[k,gamePick.sel[k]?'':gamePickWhy(k)]).filter(([,r])=>r);
-  const why=off.length?`<div class="tiny mt" style="opacity:.75">Greyed out — ${off.map(([k,r])=>`${gameName(k)} <span style="opacity:.7">(${r})</span>`).join(' · ')}</div>`:'';
+  const why=off.length?`<div class="tiny mt">Greyed out — ${off.map(([k,r])=>`${gameName(k)} <span style="color:var(--ink3)">(${r})</span>`).join(' · ')}</div>`:'';
   return `<div class="vfWrap" role="dialog" aria-modal="true" aria-labelledby="gpTitle">
     <div class="vfCard" style="width:min(480px,100%);max-height:92vh;display:flex;flex-direction:column">
       <h2 id="gpTitle" class="vfTitle">Choose game(s)</h2>
@@ -8423,7 +8458,7 @@ function pickedBannerHTML(){
   try{
     const g=currentGameKey();
     const art_=gameArtFile(g), col=gameColor(g);
-    return `<div class="pickedbar" style="--pc:${col}">
+    return `<div class="pickedbar" data-g="${g}" style="--pc:${col}">
       ${art_?`<img src="${art(art_)}" alt="" onerror="this.style.display='none'">`:''}
       <div style="flex:1;min-width:0"><div class="tiny" style="letter-spacing:1px;text-transform:uppercase">You picked</div>
         <div class="pickedname">${gameName(g)}</div></div>
@@ -8593,7 +8628,7 @@ function vPickGame(){
 // ----- first run -----
 function vWelcome(){
   return `<main class="welcome">
-  <div class="center" style="margin:18px 0 26px"><img src="${art('/banner.jpg')}" alt="Battle Tees" style="width:100%;aspect-ratio:1200/509;display:block;border-radius:14px;border:2px solid var(--green);box-shadow:4px 4px 0 var(--green)" onerror="this.outerHTML='<h1 style=&quot;color:var(--green);font-size:26px&quot;>Battle Tees</h1>'"></div>
+  <div class="center" style="margin:18px 0 26px"><img src="${art('/banner.jpg')}" alt="Battle Tees" style="width:100%;aspect-ratio:1200/509;display:block;border-radius:14px;border:2px solid var(--green);box-shadow:4px 4px 0 var(--green)" onerror="this.outerHTML='<h1 style=&quot;color:var(--green-ink);font-size:26px&quot;>Battle Tees</h1>'"></div>
   <div class="card welcome-card">
     <h2 class="welcome-h">Create Your Profile</h2>
     <div class="tiny mb">Takes a few seconds. Your name is all that's required — it's how nearby phones add you to a round.</div>
@@ -8648,7 +8683,7 @@ function vHome(){
   }
   return `<main>
   ${markNotesHTML()}
-  <div class="center" style="margin:10px 0 18px"><img src="${art('/banner.jpg')}" alt="Battle Tees" style="width:100%;aspect-ratio:1200/509;display:block;border-radius:14px;border:2px solid var(--green);box-shadow:4px 4px 0 var(--green)" onerror="this.outerHTML='<h1 style=&quot;color:var(--green);font-size:20px&quot;>Battle Tees</h1>'"></div>
+  <div class="center" style="margin:10px 0 18px"><img src="${art('/banner.jpg')}" alt="Battle Tees" style="width:100%;aspect-ratio:1200/509;display:block;border-radius:14px;border:2px solid var(--green);box-shadow:4px 4px 0 var(--green)" onerror="this.outerHTML='<h1 style=&quot;color:var(--green-ink);font-size:20px&quot;>Battle Tees</h1>'"></div>
   ${inRound?'':vfNagHTML()}
   ${(!inRound&&S.share&&S.share.on&&S.share.creator&&S.share.code)?`<div class="card" style="border-color:var(--amber)">
     <h2 style="color:var(--amber)">Room open · code ${esc(S.share.code)}</h2>
@@ -9680,7 +9715,7 @@ function vBattlefield(){
           <div style="flex:1;min-width:0"><b style="font-size:16px">${esc(x.name)}</b>
             <div class="tiny">${hl(x)||'<span class="muted">no highlights yet</span>'}</div></div>
           <div style="text-align:right;flex:none">
-            <div class="num" style="font-size:28px;line-height:1;color:${x.toPar<0?'#7fd49a':x.toPar>0?'var(--amber-bd)':'var(--ink)'}">${tp(x.toPar)}</div>
+            <div class="num" style="font-size:28px;line-height:1;color:${x.toPar<0?'var(--good)':x.toPar>0?'var(--amber-bd)':'var(--ink)'}">${tp(x.toPar)}</div>
             <div class="tiny">${x.gross} · thru ${x.thru}</div></div>
         </div>${bfRxHTML(e.code,bfTarget(x),bfFitIcon(x,ppl))}`).join('')
         :`<div class="tiny" style="padding-top:6px;color:var(--ink3)">${e.live?'No holes carded yet.':'No scores were recorded.'}</div>`;
@@ -9907,8 +9942,8 @@ function roundStatsCardHTML(act,holes,course,shotMap,players,title){
     if(x.front&&x.back)cells.push(cell('Front / Back',`${x.front.g} / ${x.back.g}`));
     if(x.best&&x.holes>1)cells.push(cell('Best hole',`h${x.best.h+1}`,x.best.d===0?'par':(x.best.d>0?'+':'')+x.best.d));
     const mix=[];
-    if(x.eag)mix.push(`<span style="color:#9fe8b8">◎ ${x.eag}</span>`);
-    if(x.bird)mix.push(`<span style="color:#7fd49a">○ ${x.bird}</span>`);
+    if(x.eag)mix.push(`<span style="color:var(--good2)">◎ ${x.eag}</span>`);
+    if(x.bird)mix.push(`<span style="color:var(--good)">○ ${x.bird}</span>`);
     if(x.pars)mix.push(`<span>${x.pars} par${x.pars===1?'':'s'}</span>`);
     if(x.bog)mix.push(`<span style="color:var(--amber)">□ ${x.bog}</span>`);
     if(x.dbl)mix.push(`<span style="color:var(--red)">▣ ${x.dbl}</span>`);
@@ -9916,7 +9951,7 @@ function roundStatsCardHTML(act,holes,course,shotMap,players,title){
       <div style="display:flex;align-items:center;gap:10px">${avatarHTML(p,36)}
         <div style="flex:1;min-width:0"><b style="font-family:Rajdhani,sans-serif;font-size:19px">${esc(p.name)}</b>${idxLbl(p)}
           <div class="tiny">${mix.join(' · ')||'—'}</div></div>
-        <div style="text-align:right"><b class="num" style="font-size:26px">${x.gross}</b> <span class="num" style="font-size:16px;color:${x.toPar<0?'#7fd49a':x.toPar>0?'var(--amber)':'var(--ink3)'}">${tp}</span>
+        <div style="text-align:right"><b class="num" style="font-size:26px">${x.gross}</b> <span class="num" style="font-size:16px;color:${x.toPar<0?'var(--good)':x.toPar>0?'var(--amber)':'var(--ink3)'}">${tp}</span>
           <div class="tiny">${x.holes<((course&&course.holes)||[]).length?`thru ${x.holes}`:'18 holes'}</div></div></div>
       ${cells.length?`<div class="rsg">${cells.join('')}</div>`:''}
     </div>`;}).filter(Boolean).join('');
@@ -10188,7 +10223,7 @@ function preCourseHTML(){
   if(preCourse.status==='looking')return `<div class="tiny mb">📍 Finding the nearest course…</div>`;
   const p=preCourse.pick;
   if(!p||!S.course||S.course.id!==p.id)return '';
-  return `<div class="tiny mb" style="color:var(--green);font-weight:700">📍 Nearest — ${esc(p.name)}, ${preMi(p.mi)}. Pick another below to change it.</div>`;
+  return `<div class="tiny mb" style="color:var(--green-ink);font-weight:700">📍 Nearest — ${esc(p.name)}, ${preMi(p.mi)}. Pick another below to change it.</div>`;
 }
 // ── GPS RANGEFINDER ONLY ────────────────────────────────────────────────────
 // A round with no game and no card: yardages, the map and the wind, nothing to
@@ -10322,7 +10357,7 @@ function vStart(){
       <button class="big ${sp.count===9&&sp.start<9?'':'ghost'}" style="flex:1;margin:0${sp.count===9&&sp.start<9?'':';background:var(--card)'}" onclick="setSpan(9,0);render()">Front 9</button>
       <button class="big ${sp.count===9&&sp.start>=9?'':'ghost'}" style="flex:1;margin:0${sp.count===9&&sp.start>=9?'':';background:var(--card)'}" onclick="setSpan(9,9);render()">Back 9</button></div>
     <div class="card mt"><div class="row"><span class="muted">First tee</span>
-      <select onchange="setSpan(${sp.count},+this.value)" style="background:#0d1420;border:2px solid var(--line);border-radius:10px;color:var(--ink);font:600 16px Rajdhani,Inter,sans-serif;padding:8px 10px">
+      <select onchange="setSpan(${sp.count},+this.value)" style="background:var(--field);border:2px solid var(--line);border-radius:10px;color:var(--ink);font:600 16px Rajdhani,Inter,sans-serif;padding:8px 10px">
         ${Array.from({length:n},(_,k)=>first+k).map(h=>`<option value="${h}" ${sp.start===h?'selected':''}>Hole ${h+1}</option>`).join('')}</select></div>
       <div class="tiny">Start from any tee — play wraps around.</div></div>
     <button class="big" onclick="wiz.step=wiz.preGame?'count':'kind';render()">Next \u2192</button>
@@ -10738,7 +10773,7 @@ function vSeason(){
   const rows=seasonRows(y), tab=seasonTable(rows);
   const mine=tab.find(e=>seasonIsMe(e.k));
   const money=v=>`${v>0.004?'+':''}${fmtMoney(v).replace('$-','-$')}`;
-  const col=v=>v>0.004?'#7fd49a':v<-0.004?'var(--red)':'var(--ink2)';
+  const col=v=>v>0.004?'var(--good)':v<-0.004?'var(--red)':'var(--ink2)';
   const picker=ys.length>1?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin:0 4px 10px">
     ${ys.map(v=>`<button class="ghost${v===y?' sel':''}" style="margin:0" onclick="setSeason(${v})">${v}</button>`).join('')}</div>`:'';
   if(!rows.length)return topbar('Season standings',String(y),'home')+`<main>${picker}
@@ -11166,7 +11201,7 @@ function vStats(){
   const scoring=rounds.length?`
     <div class="row"><span class="muted">Rounds played</span><b class="num" style="font-size:24px">${rounds.length}</b></div>
     <div class="row"><span class="muted">Holes scored</span><b class="num" style="font-size:24px">${holesN}</b></div>
-    ${toPar18!=null?`<div class="row"><span class="muted">Average vs par (per 18)</span><b class="num" style="font-size:24px;color:${toPar18<0?'#7fd49a':'var(--amber-bd)'}">${toPar18>=0?'+':''}${Math.round(toPar18*10)/10}</b></div>`:''}
+    ${toPar18!=null?`<div class="row"><span class="muted">Average vs par (per 18)</span><b class="num" style="font-size:24px;color:${toPar18<0?'var(--good)':'var(--amber-bd)'}">${toPar18>=0?'+':''}${Math.round(toPar18*10)/10}</b></div>`:''}
     ${best?`<div class="row"><span class="muted">Best full round</span><b class="num" style="font-size:24px">${best.gross}</b></div>
     <div class="tiny" style="text-align:right">${esc(best.e.courseName||'')}</div>`:''}`
     :'<div class="tiny">Finish a round and your numbers start building here.</div>';
@@ -11245,7 +11280,7 @@ function vStats(){
       <div class="row"><span class="muted">Won · lost${t?' · tied':''}</span>
         <b class="num" style="font-size:24px">${w} · ${l}${t?` · ${t}`:''}</b></div>
       <div class="row"><span class="muted">Win rate</span>
-        <b class="num" style="font-size:24px;color:${rate>=50?'#7fd49a':'var(--amber-bd)'}">${rate}%</b></div>
+        <b class="num" style="font-size:24px;color:${rate>=50?'var(--good)':'var(--amber-bd)'}">${rate}%</b></div>
       <div class="tiny mt">${played.length} round${played.length===1?'':'s'} with someone to play against — solo rounds are not counted either way.</div>
     </div>`;})();
   return topbar('My stats',S.me.name?esc(S.me.name):'','home')+`<main>
@@ -11552,10 +11587,10 @@ function courseRowHTML(x,forPick){
   const active=c.id===S.course.id;
   const miTag=mi!=null?`<span class="tiny" style="flex:none;color:var(--ink3);margin-left:8px">${mi<10?mi.toFixed(1):Math.round(mi)} mi</span>`:'';
   if(forPick)return `<div class="row" onclick="pickCourse(${i})" style="cursor:pointer;${active?'background:var(--green-lt);border-radius:10px;padding:9px 12px;border-top:none;margin:2px 0':''}">
-    <div style="flex:1;min-width:0"><b${active?' style="color:var(--green)"':''}>${active?'✓ ':''}${esc(c.name)}</b><div class="tiny">Par ${par}</div></div>${miTag}
+    <div style="flex:1;min-width:0"><b${active?' style="color:var(--green-ink)"':''}>${active?'✓ ':''}${esc(c.name)}</b><div class="tiny">Par ${par}</div></div>${miTag}
   </div>`;
   return `<div class="row" style="${active?'background:var(--green-lt);border-radius:10px;padding:9px 12px;border-top:none;margin:2px 0':''}">
-    <div onclick="pickCourse(${i})" style="flex:1;min-width:0;cursor:pointer"><b${active?' style="color:var(--green)"':''}>${esc(c.name)}</b><div class="tiny">Par ${par} · ${c.teeSets.map(t=>esc(t.name)).join(' / ')}</div></div>${miTag}
+    <div onclick="pickCourse(${i})" style="flex:1;min-width:0;cursor:pointer"><b${active?' style="color:var(--green-ink)"':''}>${esc(c.name)}</b><div class="tiny">Par ${par} · ${c.teeSets.map(t=>esc(t.name)).join(' / ')}</div></div>${miTag}
     <button class="ghost" onclick="openCoursePreview(${i})" style="flex:none;margin-right:6px">View</button>
     ${active?`<button class="ghost sel" onclick="go('course')" style="flex:none">Edit</button>`
       :S.courses.length>1?`<button class="ghost danger xbtn" aria-label="Delete course" onclick="delCourse(${i})">${armDelCourse===i?'Delete?':XICON}</button>`:''}
@@ -12536,7 +12571,7 @@ function gameOptionsHTML(){
   ${(bestball||sixes)?`<div class="card hamcard" style="padding:0;overflow:hidden">
     <div style="display:flex;align-items:center;gap:14px;padding:14px 16px;background:linear-gradient(90deg,rgba(184,115,51,.28),rgba(184,115,51,.06))">
       <img src="${art('/hammer.png')}" style="height:84px;flex:none;filter:drop-shadow(0 0 12px rgba(232,150,60,.45))" onerror="this.style.display='none'">
-      <div style="flex:1;min-width:0"><h2 style="margin:0;font-size:20px;color:#e8a95a;text-transform:none;letter-spacing:.3px">🔨 Add The Hammer?</h2>
+      <div style="flex:1;min-width:0"><h2 style="margin:0;font-size:20px;color:var(--ham-ink,#e8a95a);text-transform:none;letter-spacing:.3px">🔨 Add The Hammer?</h2>
         <div class="tiny" style="margin-top:3px">Battle modifier for ${bestball&&sixes?'Best Ball & Sixes':bestball?'Best Ball':'Sixes'} — double-or-fold, any time mid-hole</div></div></div>
     <div style="padding:12px 16px 14px">
     <div style="display:flex;gap:8px">
@@ -12976,7 +13011,7 @@ function joinSpanSheetHTML(){
        <span style="color:var(--elec);text-decoration:underline;cursor:pointer" onclick="joinSpanPick(${g.count},${g.start})">match them</span></div>`:'';
   const first=a.count===18?0:(a.start<9?0:9), n=a.count===18?18:9;
   const holes=`<select onchange="joinSpanPick(${a.count},+this.value)"
-      style="width:100%;margin-top:4px;background:#0d1420;border:2px solid var(--line);border-radius:10px;color:var(--ink);font:600 17px Rajdhani,Inter,sans-serif;padding:11px 12px">
+      style="width:100%;margin-top:4px;background:var(--field);border:2px solid var(--line);border-radius:10px;color:var(--ink);font:600 17px Rajdhani,Inter,sans-serif;padding:11px 12px">
     ${Array.from({length:n},(_,k)=>first+k).map(h=>
       `<option value="${h}" ${a.start===h?'selected':''}>Hole ${h+1}</option>`).join('')}
   </select>`;
@@ -15173,7 +15208,7 @@ function cheerSummaryHTML(){
     return `<div class="cheer-row">${avatarHTML(who,34)}<div style="flex:1;min-width:0;text-align:left">
       <div class="cheer-rname">${esc(g.name||'')} <span class="cheer-rn">${g.list.length} of ${g.list[0].of||g.list.length}</span></div>
       ${g.list.map(c=>{const d=CHAL_DEF(c.k);const fmt=d?d[6]:(v=>String(v));
-        return `<div class="cheer-rline">✓ ${esc(d?d[1]:c.nm||'')} <span class="num" style="color:#7fd49a">${esc(fmt(c.got))}</span><span class="cheer-rn"> · goal ${esc(fmt(c.goal))}</span></div>`;}).join('')}
+        return `<div class="cheer-rline">✓ ${esc(d?d[1]:c.nm||'')} <span class="num" style="color:var(--good)">${esc(fmt(c.got))}</span><span class="cheer-rn"> · goal ${esc(fmt(c.goal))}</span></div>`;}).join('')}
     </div></div>`;}).join('');
   return `<div class="cheer" onclick="cheerDismiss()"></div><div class="cheer cheer-top" onclick="cheerDismiss()">
     <div class="cheer-card">
@@ -15220,13 +15255,13 @@ function vChal(){
     const k=d[0],c=chalOf(k),off=!c.on;
     return `<div style="padding:10px 0;${off?'':''}border-top:1px solid var(--line)">
       <div style="display:flex;align-items:center;gap:10px">
-        <div style="flex:1;${off?'opacity:.45':''}">
+        <div style="flex:1;${off?'opacity:.9':''}">
           <div style="font-size:15px;font-weight:600">${esc(d[1])}</div>
           <div class="tinier">${esc(d[2])}</div>
         </div>
         <button class="ghost ${c.on?'sel':''}" style="flex:none;min-width:64px" onclick="chalToggle('${k}')">${c.on?'On':'Off'}</button>
       </div>
-      <div style="display:flex;align-items:center;gap:8px;margin-top:8px;${off?'opacity:.3;pointer-events:none':''}">
+      <div style="display:flex;align-items:center;gap:8px;margin-top:8px;${off?'opacity:.8;pointer-events:none':''}">
         <button class="ghost" style="width:40px;padding:8px 0;text-align:center" onclick="chalBump('${k}',-1)">−</button>
         <div class="num" style="min-width:78px;text-align:center;font-size:20px;color:var(--green-mid)">${d[6](c.val)}</div>
         <button class="ghost" style="width:40px;padding:8px 0;text-align:center" onclick="chalBump('${k}',1)">+</button>
@@ -15431,7 +15466,7 @@ function vStandings(){
     return `<div class="card"><h2>${title} · thru ${thru}</h2>
       <table class="st"><tr><th>Player</th><th class="r">Pts</th><th class="r">Quota</th><th class="r">+/−</th></tr>
       ${rows.map(i=>{const d=q.ledgers.gross[i]-q.targets[i];
-        const col=d>0?'#7fd49a':d<0?'var(--amber-bd)':'var(--ink2)';
+        const col=d>0?'var(--good)':d<0?'var(--amber-bd)':'var(--ink2)';
         return `<tr><td>${esc(S.players[i].name)}</td><td class="r num" style="font-size:30px">${q.ledgers.gross[i]}</td>
         <td class="r num" style="font-size:20px;color:var(--ink2)">${q.targets[i]}</td>
         <td class="r num" style="font-size:34px;font-weight:700;color:${col}">${d>0?'+':''}${d}</td></tr>`;}).join('')}
@@ -15489,7 +15524,7 @@ function vStandings(){
       <table class="st"><tr><th>Team</th>${cols.map(L=>`<th class="r">${lbl(L)} holes</th>`).join('')}</tr>
       ${bord.map(k=>`<tr><td>${BT[k].map(i=>esc(S.players[i].name)).join(' &amp; ')}</td>${cols.map(L=>{
         const lead=bb.ledgers[L][BT[k][0]]>=bb.ledgers[L][BT[1-k][0]];
-        return `<td class="r num" style="font-size:34px;color:${lead?'#7fd49a':'var(--ink2)'}">${bb.ledgers[L][BT[k][0]]}</td>`;
+        return `<td class="r num" style="font-size:34px;color:${lead?'var(--good)':'var(--ink2)'}">${bb.ledgers[L][BT[k][0]]}</td>`;
         }).join('')}</tr>`).join('')}
       </table>${teamPickerRow('bestball')+mysteryRowHTML('bestball')}
       <div class="tiny mt">Better ball of each team wins the hole.${hammerLive('bestball')?' <b>🔨 Hammer live</b> — totals include doubled and folded holes.':''}</div></div>`;
@@ -15515,7 +15550,7 @@ function vStandings(){
       <table class="st"><tr><th>Team</th>${cols.map(L=>`<th class="r">${lbl(L)}</th>`).join('')}</tr>
       ${uord.map(k=>`<tr><td>${UT[k].map(i=>esc(S.players[i].name)).join(' &amp; ')}</td>${cols.map(L=>{
         const lead=u.ledgers[L][UT[k][0]]>=u.ledgers[L][UT[1-k][0]];
-        return `<td class="r num" style="font-size:34px;color:${lead?'#7fd49a':'var(--ink2)'}">${u.ledgers[L][UT[k][0]]}</td>`;
+        return `<td class="r num" style="font-size:34px;color:${lead?'var(--good)':'var(--ink2)'}">${u.ledgers[L][UT[k][0]]}</td>`;
         }).join('')}</tr>`).join('')}
       </table>${teamPickerRow('umbrella')+mysteryRowHTML('umbrella')}
       <div class="tiny mt">Six points a hole: 2 low ball · 2 low team total · 1 closest to pin · 1 gross birdie.
@@ -15560,7 +15595,7 @@ function vStandings(){
       <table class="st"><tr><th>Team</th>${cols.map(L=>`<th class="r">${lbl(L)}</th>`).join('')}</tr>
       ${order.map((k,ri)=>`<tr><td>${VT[k].map(i=>esc(S.players[i].name)).join(' &amp; ')}</td>${cols.map(L=>{
         const lead=won(L,k)>=won(L,1-k);
-        return `<td class="r num" style="font-size:34px;color:${lead?'#7fd49a':'var(--ink2)'}">${thru?won(L,k):'–'}</td>`;
+        return `<td class="r num" style="font-size:34px;color:${lead?'var(--good)':'var(--ink2)'}">${thru?won(L,k):'–'}</td>`;
         }).join('')}</tr>`).join('')}
       </table>${(S.config.vegas&&S.config.vegas.rotate==='six')?segPickerHTML('vegas'):teamPickerRow('vegas')+mysteryRowHTML('vegas')}
       <div class="tiny mt">Points won as a team. Team digits pair low-first; the low number
@@ -15653,7 +15688,7 @@ function vStandings(){
   const shotsCard=S.round.started?trackedShotsCardHTML(shotsForShare(),S.players,S.course,S.round.holes):'';
   const extra=(thru>0?`
     <div class="card" onclick="openFullCard()" style="cursor:pointer"><h2>Scorecard · gross strokes <span class="tiny" style="font-weight:400">— tap for all 18</span></h2>${scorecardHTML()}
-      <div class="tiny mt"><span style="color:#7fd49a">○</span> birdie · <span style="color:#9fe8b8">◎</span> eagle · <span style="color:var(--amber)">□</span> bogey · <span style="color:var(--red)">▣</span> double+ · HCP = hole handicap. Swipe the card sideways.</div></div>`:'')+shotsCard+statsCard;
+      <div class="tiny mt"><span style="color:var(--good)">○</span> birdie · <span style="color:var(--good2)">◎</span> eagle · <span style="color:var(--amber)">□</span> bogey · <span style="color:var(--red)">▣</span> double+ · HCP = hole handicap. Swipe the card sideways.</div></div>`:'')+shotsCard+statsCard;
   // "who hasn't ended yet" belongs here: this is where the last hole lands you
   const stillIn=(()=>{try{
     // my card is in but a hole waits on another phone: say so, and who
@@ -15780,7 +15815,7 @@ function vSettleStack(G){
         <table class="st"><tr><th>Team</th><th class="r">${unit==='stroke'?'Strokes':unit==='hole'?'Holes':unit==='bet'?'Bets':'Pts'}</th><th class="r">This game</th></tr>
         ${ord.map(k=>`<tr><td>${FT[k].map(i=>esc(S.players[i].name)).join(' &amp; ')}</td>
           <td class="r num" style="font-size:18px">${ptsTxt(led[FT[k][0]])}</td>
-          <td class="r num" style="font-size:18px;color:${!rate?'var(--ink2)':k===winT?'#7fd49a':'var(--red)'}">${!rate?'—':(k===winT?'+':'')+fmtMoney(k===winT?pot:-pot).replace('$-','-$')}</td></tr>`).join('')}</table>
+          <td class="r num" style="font-size:18px;color:${!rate?'var(--ink2)':k===winT?'var(--good)':'var(--red)'}">${!rate?'—':(k===winT?'+':'')+fmtMoney(k===winT?pot:-pot).replace('$-','-$')}</td></tr>`).join('')}</table>
         ${rate?`<div class="row mt" style="border-top:1px solid var(--line)"><span class="muted">Pot this game</span><b class="num" style="font-size:18px">${fmtMoney(pot)}</b></div>`:''}
         <div class="row mt"><span class="muted">$ per ${unit}</span>
           <input id="rate_${g}" type="number" step="0.25" min="0" value="${(S.round.rates||{})[g]||''}" placeholder="0" style="width:90px" onchange="setRate('${g}',this.value)"></div>
@@ -15797,7 +15832,7 @@ function vSettleStack(G){
     return `<div class="card"><h2>${gameName(g)} · thru ${thru}</h2>
       <table class="st"><tr><th>Player</th><th class="r">${unit==='$'?'$ won':unit==='stroke'?'Strokes':unit==='hole'?'Holes':unit==='bet'?'Bets':'Pts'}</th><th class="r">This game</th></tr>
       ${order.map(i=>`<tr><td>${esc(S.players[i].name)}</td><td class="r num" style="font-size:18px">${fmt(led[i])}</td>
-        <td class="r num" style="font-size:18px;color:${!priced?'var(--ink2)':gn[i]>0.004?'#7fd49a':gn[i]<-0.004?'var(--red)':'var(--ink2)'}">${!priced?'—':(gn[i]>0.004?'+':'')+fmtMoney(gn[i]).replace('$-','-$')}</td></tr>`).join('')}</table>
+        <td class="r num" style="font-size:18px;color:${!priced?'var(--ink2)':gn[i]>0.004?'var(--good)':gn[i]<-0.004?'var(--red)':'var(--ink2)'}">${!priced?'—':(gn[i]>0.004?'+':'')+fmtMoney(gn[i]).replace('$-','-$')}</td></tr>`).join('')}</table>
       ${priced?`<div class="row mt" style="border-top:1px solid var(--line)"><span class="muted">Pot this game</span><b class="num" style="font-size:18px">${fmtMoney(pot)}</b></div>`:''}
       ${g==='skins'?'<div class="tiny mt">Already dollars — each skin collects from every other player.</div>'
         :`<div class="row mt"><span class="muted">$ per ${unit}</span>
@@ -15821,7 +15856,7 @@ function vSettleStack(G){
   }
   const anyRate=G.some(g=>settleRate(g)>0);
   const totCard=`<div class="card" style="border-color:var(--green)"><h2>⚔️ The whole pile · ${L}</h2>
-    ${act.map((i,ai)=>`<div class="row"><b>${esc(S.players[i].name)}</b><b class="num" style="font-size:20px;color:${net[ai]>0.004?'#7fd49a':net[ai]<-0.004?'var(--red)':'var(--ink2)'}">${net[ai]>0?'+':''}${fmtMoney(net[ai]).replace('$-','-$')}</b></div>`).join('')}
+    ${act.map((i,ai)=>`<div class="row"><b>${esc(S.players[i].name)}</b><b class="num" style="font-size:20px;color:${net[ai]>0.004?'var(--good)':net[ai]<-0.004?'var(--red)':'var(--ink2)'}">${net[ai]>0?'+':''}${fmtMoney(net[ai]).replace('$-','-$')}</b></div>`).join('')}
     ${owe.length?`<div class="mt"><h2>One payout</h2>${owe.map(o=>`<div class="row">${o}</div>`).join('')}</div>`:'<div class="tiny mt">All square across the stack.</div>'}
     ${anyRate?'':'<div class="tiny mt">Set a $ rate on each game above to fold it into the pile — Skins is already money.</div>'}
   </div>`;
