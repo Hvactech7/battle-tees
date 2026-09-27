@@ -554,7 +554,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-centre in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1790469931';
+const BUILD='1790470993';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -5120,7 +5120,7 @@ const GEO_STAMP=1790465706833;   // 2026-09-26 (3rd): 889 holes on 121 courses (
 // course record does not, so the phone writes the stamp of the build that fetched it into
 // _cardRev and a later build with a higher CARD_STAMP re-fetches once. Raise this when a
 // batch of course records changes.
-const CARD_STAMP=1790469923578;   // 2026-09-26 (4th): 14,802 women's tee sets carry their own par (3,249 differ from the card's), used for Course Handicap; earlier 9/26: OSM stroke indexes, guessed pars, 622 courses mapped, Bayonet; 2026-09-22: published-card stroke indexes + 509 confirmed pars
+const CARD_STAMP=1790470984233;   // 2026-09-26 (5th): 31 pars from published scorecards (confirmed), 625 holes marked parDoubt so the par sheet asks the group; earlier 9/26: women's tee pars, OSM stroke indexes, 622 courses mapped, Bayonet; 2026-09-22: published-card stroke indexes + 509 confirmed pars
 async function refreshStaleCards(){
   try{
     if(typeof navigator!=='undefined'&&navigator.onLine===false)return;
@@ -5142,6 +5142,7 @@ async function refreshStaleCards(){
       (c.holes||[]).forEach((hd,i)=>{
         const fresh=rec.holes[i]||{};
         if(!hd.parOk&&fresh.par){hd.par=fresh.par;if(fresh.parOk){hd.parOk=true;hd.parSrc=fresh.parSrc||'card';}}
+        if(!hd.parOk){if(fresh.parDoubt)hd.parDoubt=true;else delete hd.parDoubt;}else delete hd.parDoubt;
         if(!hd.siOk&&fresh.si){hd.si=fresh.si;if(fresh.siSrc)hd.siSrc=fresh.siSrc;}
       });
       if(!c.teeEdit&&Array.isArray(rec.teeSets)){
@@ -7547,8 +7548,13 @@ let splash=null,splashTimer=null;
 // meta doc, untouched prefills re-dress, and the Pi logs a parmark.
 let parAsk=null,parAskSeen={};
 function parHoleConfirmed(h){
-  try{const c=S.course;if(!c||!c._cardGuess)return true;
-    const hd=c.holes[physHole(h)]||{};return !!hd.parOk;}catch(e){return true;}
+  try{const c=S.course;if(!c)return true;
+    const hd=c.holes[physHole(h)]||{};
+    if(hd.parOk)return true;
+    // PAR IN DOUBT (9/26): our card and the course map disagree on this hole and nothing we hold
+    // can settle it (hole length is right only ~80% of the time), so the group on the tee is
+    // asked once — their answer is the truth, and it comes back to us as a parmark
+    return !(c._cardGuess||hd.parDoubt);}catch(e){return true;}
 }
 function maybeAskPar(){
   try{
@@ -7573,7 +7579,7 @@ function setParPick(v){
   const h=parAsk.h,ph=physHole(h);
   set(()=>{
     const hd=S.course.holes[ph];if(!hd)return;
-    hd.par=v;hd.parOk=true;
+    hd.par=v;hd.parOk=true;delete hd.parDoubt;
     if((S.course.holes||[]).every(x=>x&&x.parOk))delete S.course._cardGuess;
     // a prefill dressed in the guessed par re-dresses; a typed or ratified
     // score is somebody's golf and is never touched
