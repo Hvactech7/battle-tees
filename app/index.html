@@ -554,7 +554,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-centre in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1790465743';
+const BUILD='1790469931';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -3113,7 +3113,11 @@ function courseHandicaps(){
   const pt=parTotal();
   return S.players.map(p=>{
     const t=teeOf(p)||{};   // a course with no tee sets plays as par/113
-    return Math.round(p.index*((+t.slope||113)/113)+((+t.rating||pt)-pt));
+    // A TEE'S OWN PAR (9/26). Course Handicap = Index x Slope/113 + (Rating - Par), and the par is
+    // the TEE's: 3,272 women's tee sets play to a different par than the card's men's holes
+    // (Lake Shore CC White (W): 73 vs 71), so her strokes came out off by the difference.
+    const tp=+t.par||pt;
+    return Math.round(p.index*((+t.slope||113)/113)+((+t.rating||tp)-tp));
   });
 }
 // ============ THE HANDICAP ENGINE (USGA/WHS, Nathan's seeding) ==============
@@ -3150,13 +3154,14 @@ function hcpDiffFor(entry,mi){
       :Array.from({length:18},(_,i)=>({par:4,si:i+1}));
     const pt=hs.reduce((a,h)=>a+(h.par||4),0);
     const tee=(course&&(course.teeSets||[]).find(t=>t.id===snap.tee))||(course&&(course.teeSets||[])[0])||null;
-    const rating=(tee&&isFinite(+tee.rating)&&+tee.rating>40)?+tee.rating:pt;
+    const tp=(tee&&+tee.par>=27)?+tee.par:pt;              // the tee's own par (women's tees differ)
+    const rating=(tee&&isFinite(+tee.rating)&&+tee.rating>40)?+tee.rating:tp;
     const slope=(tee&&isFinite(+tee.slope)&&+tee.slope>=55)?+tee.slope:113;
     const sp=(entry.round&&entry.round.span)||{count:18,start:0};
     const span=sp.count===9?Array.from({length:9},(_,k)=>(sp.start||0)+k):[...Array(18).keys()];
     const holes=(entry.round&&entry.round.holes)||[];
     const idx=+snap.index;
-    const ch=isFinite(idx)?Math.round(idx*(slope/113)+(rating-pt)):null;
+    const ch=isFinite(idx)?Math.round(idx*(slope/113)+(rating-tp)):null;
     const strokes=h=>{const si=(hs[h%hs.length]||{}).si||((h%18)+1);
       if(ch==null)return 0;
       return (ch>=si?1:0)+((ch-18)>=si?1:0)+((ch-36)>=si?1:0);};
@@ -5115,7 +5120,7 @@ const GEO_STAMP=1790465706833;   // 2026-09-26 (3rd): 889 holes on 121 courses (
 // course record does not, so the phone writes the stamp of the build that fetched it into
 // _cardRev and a later build with a higher CARD_STAMP re-fetches once. Raise this when a
 // batch of course records changes.
-const CARD_STAMP=1790465706833;   // 2026-09-26 (3rd): 71 stroke indexes from OSM, 38 guessed pars from OSM (still asked); earlier 9/26: 622 courses got maps, Bayonet added, 178 off the held list; 2026-09-22: published-card stroke indexes + 509 confirmed pars
+const CARD_STAMP=1790469923578;   // 2026-09-26 (4th): 14,802 women's tee sets carry their own par (3,249 differ from the card's), used for Course Handicap; earlier 9/26: OSM stroke indexes, guessed pars, 622 courses mapped, Bayonet; 2026-09-22: published-card stroke indexes + 509 confirmed pars
 async function refreshStaleCards(){
   try{
     if(typeof navigator!=='undefined'&&navigator.onLine===false)return;
@@ -5141,7 +5146,7 @@ async function refreshStaleCards(){
       });
       if(!c.teeEdit&&Array.isArray(rec.teeSets)){
         const t=rec.teeSets.filter(x=>x&&x.rating&&x.slope)
-          .map(x=>({id:x.id,name:x.name,rating:x.rating,slope:x.slope,yds:x.yds||null}));
+          .map(x=>Object.assign({id:x.id,name:x.name,rating:x.rating,slope:x.slope,yds:x.yds||null},x.par?{par:x.par}:{}));
         // a player is assigned to a tee BY ID; dropping the id he is on would leave him
         // handicapped off whatever sorted first, so on the course that is loaded the swap
         // only happens when every tee in use still exists in the new set
@@ -10981,8 +10986,9 @@ function exFullStrokes(e,cs,me){
     const parTot=holes.reduce((a,h)=>a+((h&&h.par)||0),0);
     const ts=cs.teeSets||[];
     const tee=ts.find(t=>t.id===me.tee)||ts[0]||null;
-    const slope=(tee&&+tee.slope)||113, rating=(tee&&+tee.rating)||parTot;
-    const ch=Math.round((+me.index)*(slope/113)+(rating-parTot));
+    const tp=(tee&&+tee.par)||parTot;
+    const slope=(tee&&+tee.slope)||113, rating=(tee&&+tee.rating)||tp;
+    const ch=Math.round((+me.index)*(slope/113)+(rating-tp));
     const allow=(e.config&&e.config.allowance!=null)?+e.config.allowance:100;
     return Math.max(0,Math.round(ch*allow/100));
   }catch(err){return null;}
@@ -11582,7 +11588,7 @@ async function natUse(id,auto){
     if(!r.ok)throw new Error('record '+r.status);
     const rec=await r.json();
     const course={id:rec.id,name:rec.name,loc:rec.loc,
-      teeSets:(rec.teeSets||[]).filter(t=>t.rating&&t.slope).map(t=>({id:t.id,name:t.name,rating:t.rating,slope:t.slope,yds:t.yds||null})),
+      teeSets:(rec.teeSets||[]).filter(t=>t.rating&&t.slope).map(t=>Object.assign({id:t.id,name:t.name,rating:t.rating,slope:t.slope,yds:t.yds||null},t.par?{par:t.par}:{})),
       holes:rec.holes,geoUrl:rec.geoUrl||null,tier:rec.tier};
     // a record whose scorecard was PROVEN wrong ships without it (fix-wrong-cards.py,
     // 9/16): its pars are guesses, so the group is asked each hole's par as they play
