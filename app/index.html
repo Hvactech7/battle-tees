@@ -554,7 +554,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-centre in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1790661856';
+const BUILD='1790662260';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -2821,9 +2821,9 @@ function applyLibrary(d){
       // copy as an archive; the tombstone only stops a restore from resurrecting it.
       if(d.tomb&&typeof d.tomb==='object'){
         const T=tomb();
-        Object.keys(d.tomb.players||{}).forEach(k=>{if(!S.playerLib.some(x=>tombName(x.name)===k))T.players[k]=Math.max(T.players[k]||0,+d.tomb.players[k]||0);});
-        Object.keys(d.tomb.courses||{}).forEach(k=>{if(!(S.courses||[]).some(x=>x&&x.id===k))T.courses[k]=Math.max(T.courses[k]||0,+d.tomb.courses[k]||0);});
-        Object.keys(d.tomb.rounds||{}).forEach(k=>{if(!(S.history||[]).some(x=>x&&x.id===k))T.rounds[k]=Math.max(T.rounds[k]||0,+d.tomb.rounds[k]||0);});
+        Object.keys(d.tomb.players||{}).forEach(k=>{if(!S.playerLib.some(x=>tombName(x.name)===k))T.players[k]=tombNewest(T.players[k],d.tomb.players[k]);});
+        Object.keys(d.tomb.courses||{}).forEach(k=>{if(!(S.courses||[]).some(x=>x&&x.id===k))T.courses[k]=tombNewest(T.courses[k],d.tomb.courses[k]);});
+        Object.keys(d.tomb.rounds||{}).forEach(k=>{if(!(S.history||[]).some(x=>x&&x.id===k))T.rounds[k]=tombNewest(T.rounds[k],d.tomb.rounds[k]);});
       }
       if(d.chal&&typeof d.chal==='object'){
         const C=chalAll();
@@ -9228,9 +9228,15 @@ function registerProfile(force){
 // Adding the same thing again lifts its tombstone.
 function tomb(){if(!S.tomb||typeof S.tomb!=='object')S.tomb={};['players','courses','rounds'].forEach(k=>{if(!S.tomb[k]||typeof S.tomb[k]!=='object')S.tomb[k]={};});return S.tomb;}
 const tombName=n=>String(n||'').trim().toLowerCase();
+// A MARK IS THE LAST THING THAT HAPPENED TO THAT KEY (9/28): +t = removed at t, -t = added back at t.
+// A lift used to DELETE the mark, and a deletion never reaches the cloud -- the relay keeps the newest
+// mark it has ever seen per key (mergeBackup), and an absent key is no event at all -- so a name Nathan
+// removed and then added back on purpose would still have been skipped by every later restore. Now the
+// add-back is a mark of its own and the newest |t| wins, here (tombNewest) and in the relay.
 function tombAdd(kind,key){if(!key)return;tomb()[kind][key]=Date.now();}
-function tombLift(kind,key){if(!key)return;delete tomb()[kind][key];}
-function tombHas(kind,key){return !!(key&&tomb()[kind][key]);}
+function tombLift(kind,key){if(!key)return;const T=tomb()[kind];if(+T[key]>0)T[key]=-Date.now();}
+function tombHas(kind,key){return !!(key&&+tomb()[kind][key]>0);}
+const tombNewest=(a,b)=>Math.abs(+b||0)>Math.abs(+a||0)?(+b||0):(+a||0);
 function adoptPid(oldPid,newPid){
   if(!newPid||oldPid===newPid)return false;
   if(S.me&&S.me.pid===oldPid)S.me.pid=newPid;
