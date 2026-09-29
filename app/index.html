@@ -554,7 +554,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-centre in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1790667022';
+const BUILD='1790667497';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -3513,7 +3513,7 @@ function runningTotalsCard(){
     foot='to par';
   }else if(g==='quota'){
     const q=computeQuota();
-    const rows=actIdx().map(i=>({label:first(i),v:q.ledgers.gross[i],d:q.ledgers.gross[i]-q.targets[i]}));
+    const rows=actIdx().map(i=>({label:first(i),v:q.pts[i],d:q.ledgers.gross[i]}));
     rows.sort((a,b)=>b.d-a.d);
     const tiedQ=rows.every(r=>r.d===rows[0].d);
     tiles=rows.map((r,ri)=>tile(r.label,String(r.v),`${r.d>0?'+':''}${r.d} vs quota`,tiedQ?3:ri,r.d>0?'var(--good)':r.d<0?'var(--amber-bd)':'var(--ink2)')).join('');
@@ -3811,16 +3811,21 @@ function quotaTargets(){
   const ch=courseHandicaps(),n=playOrder().length;
   return ch.map(c=>Math.round(n*2-c*(n/18)));
 }
+// THE MONEY IS THE +/- (Nathan 9/29). Quota's score is points OVER your quota -- 41 points on a 22 quota
+// (+19) against 8 on a 0 quota (+8) is 11 up, not 33 -- but the ledgers settleNet pays on were the raw
+// points. Ledgers are now points minus quota; `pts` keeps the raw points for the PTS columns.
 function computeQuota(){
   const P=quotaPts();
-  const led=[0,0,0,0];
+  const pts=[0,0,0,0];
   for(const h of playOrder()){
     const rec=S.round.holes[h];if(!rec.confirmed)continue;
     const par=S.course.holes[h].par;
     actIdx().forEach(i=>{const g=rec.gross[i];if(g==null)return;const d=g-par;
-      led[i]+=d<=-3?P.alba:d===-2?P.eagle:d===-1?P.birdie:d===0?P.par:d===1?P.bogey:0;});
+      pts[i]+=d<=-3?P.alba:d===-2?P.eagle:d===-1?P.birdie:d===0?P.par:d===1?P.bogey:0;});
   }
-  return {ledgers:{net:led.slice(),gross:led.slice()},targets:quotaTargets(),perHole:null,carries:{net:0,gross:0},lenses:['net','gross']};
+  const targets=quotaTargets(), pm=[0,0,0,0];
+  actIdx().forEach(i=>{pm[i]=pts[i]-(targets[i]||0);});
+  return {ledgers:{net:pm.slice(),gross:pm.slice()},pts,targets,perHole:null,carries:{net:0,gross:0},lenses:['net','gross']};
 }
 // Bingo Bango Bongo: three taps a hole — first ball ON the green, closest to
 // the pin once ALL balls are on, first ball IN the cup. Pure tap game (no
@@ -10036,7 +10041,7 @@ function vBfWatch(){
     ${games.map(g=>{const led=ledgers[g];if(!led)return '';
       const order=act.slice().sort((a,b)=>['stroke','stableford'].includes(g)?(led[L][a]-led[L][b]):(led[L][b]-led[L][a]));
       return `<div class="card"><h2>${gameName(g)}</h2>
-        ${order.map(i=>`<div class="row"><span>${esc((S.players[i]||{}).name||'?')}${idxLbl(S.players[i])}</span><b class="num" style="font-size:24px">${g==='nines'?fmtPts(led[L][i]):led[L][i]}</b></div>`).join('')}
+        ${order.map(i=>`<div class="row"><span>${esc((S.players[i]||{}).name||'?')}${idxLbl(S.players[i])}</span><b class="num" style="font-size:24px">${g==='nines'?fmtPts(led[L][i]):g==='quota'?(led[L][i]>0?'+':'')+led[L][i]:led[L][i]}</b></div>`).join('')}
       </div>`;}).join('')}
     ${roundStatsCardHTML(act,S.round.holes,course,meta.shots,S.players,'Round stats')}
     ${wolfBits.length?`<div class="card"><h2>🐺 Lone wolves</h2><div class="tiny">${wolfBits.join('<br>')}</div></div>`:''}
@@ -15705,12 +15710,12 @@ function vStandings(){
   };
   const quotaCard=title=>{
     const q=computeQuota();
-    const rows=actIdx().slice().sort((a,b)=>(q.ledgers.gross[b]-q.targets[b])-(q.ledgers.gross[a]-q.targets[a]));
+    const rows=actIdx().slice().sort((a,b)=>q.ledgers.gross[b]-q.ledgers.gross[a]);
     return `<div class="card"><h2>${title} · thru ${thru}</h2>
       <table class="st"><tr><th>Player</th><th class="r">Pts</th><th class="r">Quota</th><th class="r">+/−</th></tr>
-      ${rows.map(i=>{const d=q.ledgers.gross[i]-q.targets[i];
+      ${rows.map(i=>{const d=q.ledgers.gross[i];
         const col=d>0?'var(--good)':d<0?'var(--amber-bd)':'var(--ink2)';
-        return `<tr><td>${esc(S.players[i].name)}</td><td class="r num" style="font-size:30px">${q.ledgers.gross[i]}</td>
+        return `<tr><td>${esc(S.players[i].name)}</td><td class="r num" style="font-size:30px">${q.pts[i]}</td>
         <td class="r num" style="font-size:20px;color:var(--ink2)">${q.targets[i]}</td>
         <td class="r num" style="font-size:34px;font-weight:700;color:${col}">${d>0?'+':''}${d}</td></tr>`;}).join('')}
       </table><div class="tiny mt">Beat your own number — most over quota wins. Points from gross scores${(()=>{const P=quotaPts();return `: par ${P.par} · birdie ${P.birdie} · eagle ${P.eagle} · bogey ${P.bogey}`;})()}.</div></div>`;
@@ -16071,9 +16076,9 @@ function vSettleStack(G){
     const pot=act.reduce((a,i)=>a+Math.max(0,gn[i]||0),0);
     const priced=(g==='skins')||rate>0;
     const order=act.slice().sort((a,b)=>(led[b]-led[a])*inv);
-    const fmt=v=>g==='skins'?fmtMoney(v):g==='nines'?fmtPts(v):String(v);
+    const fmt=v=>g==='skins'?fmtMoney(v):g==='nines'?fmtPts(v):g==='quota'?(v>0?'+':'')+v:String(v);
     return `<div class="card"><h2>${gameName(g)} · thru ${thru}</h2>
-      <table class="st"><tr><th>Player</th><th class="r">${unit==='$'?'$ won':unit==='stroke'?'Strokes':unit==='hole'?'Holes':unit==='bet'?'Bets':'Pts'}</th><th class="r">This game</th></tr>
+      <table class="st"><tr><th>Player</th><th class="r">${unit==='$'?'$ won':unit==='stroke'?'Strokes':unit==='hole'?'Holes':unit==='bet'?'Bets':g==='quota'?'+/−':'Pts'}</th><th class="r">This game</th></tr>
       ${order.map(i=>`<tr><td>${esc(S.players[i].name)}</td><td class="r num" style="font-size:18px">${fmt(led[i])}</td>
         <td class="r num" style="font-size:18px;color:${!priced?'var(--ink2)':gn[i]>0.004?'var(--good)':gn[i]<-0.004?'var(--red)':'var(--ink2)'}">${!priced?'—':(gn[i]>0.004?'+':'')+fmtMoney(gn[i]).replace('$-','-$')}</td></tr>`).join('')}</table>
       ${priced?`<div class="row mt" style="border-top:1px solid var(--line)"><span class="muted">Pot this game</span><b class="num" style="font-size:18px">${fmtMoney(pot)}</b></div>`:''}
@@ -16153,7 +16158,7 @@ function vSettle(){
     const q=computeQuota();
     const thru=S.round.holes.filter(r=>r.confirmed).length;
     const act=actIdx();
-    const margins=act.map(i=>({i,d:q.ledgers.gross[i]-q.targets[i]})).sort((a,b)=>b.d-a.d);
+    const margins=act.map(i=>({i,d:q.ledgers.gross[i]})).sort((a,b)=>b.d-a.d);
     const lead=margins[0];
     const verb=thru>=playOrder().length?'wins':'leads';
     return topbar('Settlement','','')+`<main>
@@ -16163,7 +16168,7 @@ function vSettle(){
         <div class="center mb"><span class="bigscore num">${lead.d>0?'+':''}${lead.d}</span>
         <div class="muted">${act.length===1?(lead.d>=0?'Quota beaten!':'Short of quota'):esc(S.players[lead.i].name)+' '+verb+' — furthest over quota'}</div></div>
         <table class="st"><tr><th>Player</th><th class="r">Pts</th><th class="r">Quota</th><th class="r">+/−</th></tr>
-        ${margins.map(({i,d})=>`<tr><td>${esc(S.players[i].name)}</td><td class="r num" style="font-size:22px">${q.ledgers.gross[i]}</td><td class="r num" style="font-size:18px;color:var(--ink2)">${q.targets[i]}</td><td class="r num" style="font-size:26px;font-weight:700">${d>0?'+':''}${d}</td></tr>`).join('')}
+        ${margins.map(({i,d})=>`<tr><td>${esc(S.players[i].name)}</td><td class="r num" style="font-size:22px">${q.pts[i]}</td><td class="r num" style="font-size:18px;color:var(--ink2)">${q.targets[i]}</td><td class="r num" style="font-size:26px;font-weight:700">${d>0?'+':''}${d}</td></tr>`).join('')}
         </table></div>
     </main>`+tabs('settle');
   }
