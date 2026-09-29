@@ -554,7 +554,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-centre in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1790644307';
+const BUILD='1790657469';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -5108,7 +5108,7 @@ function splinePath(path){
 // kept forever, so at load (online only, never mid-round) any hosted map fetched
 // before this stamp is re-fetched in the background and swapped in on success —
 // the old one stays if the fetch fails, so a no-signal round never loses its map.
-const GEO_STAMP=1790644256447;   // 2026-09-28 (3rd): 390 card-only courses get a green pool (the greens-only rangefinder) from greens a U-Net found on Esri imagery (tracing rights), inside the OSM outline carrying their name or an unnamed outline with no other listing within 3 km.
+const GEO_STAMP=1790657325999;   // 2026-09-28 (4th): gap batch — 17 missing holes on partly mapped courses where the imagery green, OSM's own hole and the card agree; green lists for their other unmapped holes; short green lists completed; Hartefeld National holes 1-6 numbered as the club card.
 // A COURSE RECORD ON A PHONE WAS NEVER REFRESHED. natUse() is the only thing that reads
 // /courses/<id>.json and it only runs when ADDING a course that is not already saved —
 // preCourseApply deliberately keeps the saved record when the id matches. So a par we
@@ -5120,7 +5120,7 @@ const GEO_STAMP=1790644256447;   // 2026-09-28 (3rd): 390 card-only courses get 
 // course record does not, so the phone writes the stamp of the build that fetched it into
 // _cardRev and a later build with a higher CARD_STAMP re-fetches once. Raise this when a
 // batch of course records changes.
-const CARD_STAMP=1790644256447;   // 2026-09-28: geoUrl/tier of the 390 imagery pools; 40 listings off search (38 closed courses, 2 driving ranges). 2026-09-27 (6th): 19 listings renamed to the club's current name (web-verified: Harbor City, The Golf Club of Edmond, Knollwood Woodland/Meadow...), 13 moved listings' loc/state/tier. 5th: geoUrl/tier of the 196 courses in batch 3 (191 pools, 5 maps). 4th: line counts of the 35 listings that lost a neighbour's lines. 3rd: geoUrl/tier/line counts of the 480 courses in category batch 1. 2nd: tiers/line counts of the 583 courses in the combined holes/course-name/greens ship. 1st: tiers/line counts of the 639 courses in missing-holes pass 2. 2026-09-26 (15th): The Patterson Club's CURRENT card (USGA ratings for all 9 tees + women's; hole yardages Black/Sarazen/Palmer/Orange): 6 is a 199 y par 3, 17 and 18 are par 4s of 426/450 — the old vendor card had 17 a 600 y par 5 and 18 a 235 y par 3. Pars and stroke indexes confirmed from the published card. 14th: 7 scorecards' nines exchanged to the published order (Elk River, Ogden, Patterson, Basin Harbor, Hueston Woods, El Rio, Diamond Creek) — pars, stroke indexes and every tee's yardages move with their hole; tiers/line counts of the 19 swapped-nine courses. 13th: tiers/line counts of the 434 courses in missing-holes pass 1. 12th: the two EMPTY scorecards filled (The Jewel Woods Nine from OSM 10-18; Cherry Ridge's own 9, par 35). 11th: tiers/line counts of the 191 courses that took freed holes. 10th: tiers/line counts of the 235 courses in the holes-in-another-course review. 9th: tiers/line counts of the 25 courses that took freed holes. 8th: split/unnamed-boundary review — tiers of the 85 touched courses, pars read off dropped or pulled lines now asked. 7th: rebuilt courses' pars/tiers (OSM pars on guessed cards, still asked) and 3 copies back with their own card. 6th: wrong-course review — 55 maps pulled (another course's lines; 84 pars read off those lines now asked), 126 copies of a neighbour course taken off search. 5th: 31 pars from published scorecards (confirmed), 625 holes marked parDoubt so the par sheet asks the group; earlier 9/26: women's tee pars, OSM stroke indexes, 622 courses mapped, Bayonet; 2026-09-22: published-card stroke indexes + 509 confirmed pars
+const CARD_STAMP=1790657325999;   // 2026-09-28 (2nd): tier/line counts of the gap batch courses. 2026-09-28 (3rd): Hartefeld National card = the club's (handicaps, Gold/Black/White/Blue/Red tees). 2026-09-28: geoUrl/tier of the 390 imagery pools; 40 listings off search (38 closed courses, 2 driving ranges). 2026-09-27 (6th): 19 listings renamed to the club's current name (web-verified: Harbor City, The Golf Club of Edmond, Knollwood Woodland/Meadow...), 13 moved listings' loc/state/tier. 5th: geoUrl/tier of the 196 courses in batch 3 (191 pools, 5 maps). 4th: line counts of the 35 listings that lost a neighbour's lines. 3rd: geoUrl/tier/line counts of the 480 courses in category batch 1. 2nd: tiers/line counts of the 583 courses in the combined holes/course-name/greens ship. 1st: tiers/line counts of the 639 courses in missing-holes pass 2. 2026-09-26 (15th): The Patterson Club's CURRENT card (USGA ratings for all 9 tees + women's; hole yardages Black/Sarazen/Palmer/Orange): 6 is a 199 y par 3, 17 and 18 are par 4s of 426/450 — the old vendor card had 17 a 600 y par 5 and 18 a 235 y par 3. Pars and stroke indexes confirmed from the published card. 14th: 7 scorecards' nines exchanged to the published order (Elk River, Ogden, Patterson, Basin Harbor, Hueston Woods, El Rio, Diamond Creek) — pars, stroke indexes and every tee's yardages move with their hole; tiers/line counts of the 19 swapped-nine courses. 13th: tiers/line counts of the 434 courses in missing-holes pass 1. 12th: the two EMPTY scorecards filled (The Jewel Woods Nine from OSM 10-18; Cherry Ridge's own 9, par 35). 11th: tiers/line counts of the 191 courses that took freed holes. 10th: tiers/line counts of the 235 courses in the holes-in-another-course review. 9th: tiers/line counts of the 25 courses that took freed holes. 8th: split/unnamed-boundary review — tiers of the 85 touched courses, pars read off dropped or pulled lines now asked. 7th: rebuilt courses' pars/tiers (OSM pars on guessed cards, still asked) and 3 copies back with their own card. 6th: wrong-course review — 55 maps pulled (another course's lines; 84 pars read off those lines now asked), 126 copies of a neighbour course taken off search. 5th: 31 pars from published scorecards (confirmed), 625 holes marked parDoubt so the par sheet asks the group; earlier 9/26: women's tee pars, OSM stroke indexes, 622 courses mapped, Bayonet; 2026-09-22: published-card stroke indexes + 509 confirmed pars
 async function refreshStaleCards(){
   try{
     if(typeof navigator!=='undefined'&&navigator.onLine===false)return;
@@ -5199,8 +5199,9 @@ async function refreshStaleGeo(){
       if(S.course&&S.course.id===c.id&&!S.round.started){S.course.geo=clone(fresh);fixLoop9(S.course);}
     }
     if(S.course&&S.course.geo&&!S.course.geo.none&&!S.course.geo.amn&&(S.course.geo.ts||0)<GEO_STAMP&&!S.round.started){
+      const cid=S.course.id;           // still the same course when the answer lands? (geoFor, 9/28)
       const fresh=await fetchCourseGeo(S.course);
-      if(fresh){S.course.geo=fresh;changed++;}
+      if(fresh&&S.course&&S.course.id===cid){S.course.geo=fresh;changed++;}
     }
     if(changed)save();
   }catch(e){}
@@ -5336,7 +5337,21 @@ function amnesiaToggle(){
     else amnesiaSet(v||'1');
   }catch(e){}
 })();
+// A MAP BELONGS TO THE COURSE IT WAS FETCHED FOR (9/28). The fetches below await the
+// network, and meanwhile the player can switch course — add one from the finder, then
+// "View" another before its map lands. Writing the answer to whatever S.course is BY
+// THEN put Moss Creek North's holes on Westlake, and closing the preview saved them
+// there for good (syncLib). So: the course that asked gets it; if that course is no
+// longer on screen, its library entry does (closeCoursePreview and every open read
+// the entry's map); if it is in neither, nobody. Returns true when it was on screen.
+function geoFor(cid,geo,after){
+  if(S.course&&S.course.id===cid){S.course.geo=geo;if(after)after(S.course);return true;}
+  const lib=(S.courses||[]).find(c=>c&&c.id===cid);
+  if(lib){lib.geo=clone(geo);if(after)after(lib);}
+  return false;
+}
 async function ensureCourseGeo(){
+  const cid=S.course.id;             // who this fetch is FOR — see geoFor
   if(amnesiaOn(S.course.id)){
     // TRUE BLACKOUT. This used to re-query Overpass, which meant a course OSM
     // has tagged — 6,699 of our 7,185 baked maps — handed its holes straight
@@ -5361,7 +5376,7 @@ async function ensureCourseGeo(){
           // course or scrambled (Wild Wings opened on Yolo Fliers' hole 1). The
           // hosted file now says "no map": card + rangefinder only, and NEVER the
           // OSM fallback below — that is the same wrong source these came from.
-          set(()=>{S.course.geo={ts:Date.now(),holes:{},empty:true,none:true};});
+          set(()=>{geoFor(cid,{ts:Date.now(),holes:{},empty:true,none:true});});
           return;
         }
         if(js&&js.holes&&Object.keys(js.holes).length){
@@ -5369,15 +5384,14 @@ async function ensureCourseGeo(){
           // some hole lines used to lose its whole unnumbered pool — the file could only be one
           // or the other — so its unmapped holes lost the greens rangefinder. Now the lined
           // holes use the normal map and the rest fall back to the pool (greensIsMode(h)).
-          set(()=>{S.course.geo={ts:Date.now(),holes:js.holes};
-            if(js.greens&&js.greens.length)S.course.geo.greens=js.greens;
-            fixLoop9(S.course);});
-          preloadCourseTiles(false);   // fire-and-forget: grab the tile pack while we have signal
+          const g=Object.assign({ts:Date.now(),holes:js.holes},js.greens&&js.greens.length?{greens:js.greens}:{});
+          let mine=false;set(()=>{mine=geoFor(cid,g,fixLoop9);});
+          if(mine)preloadCourseTiles(false);   // fire-and-forget: grab the tile pack while we have signal
           return;
         }
         if(js&&js.greens&&js.greens.length){
-          set(()=>{S.course.geo={ts:Date.now(),holes:{},greens:js.greens};});
-          preloadCourseTiles(false);
+          let mine=false;set(()=>{mine=geoFor(cid,{ts:Date.now(),holes:{},greens:js.greens});});
+          if(mine)preloadCourseTiles(false);
           return;
         }
       }
@@ -5409,7 +5423,7 @@ async function ensureCourseGeo(){
     greens.forEach(g=>{const d=mDist(end,centroidOf(g));if(d<bd){bd=d;best=g;}});
     hh.green=best;
   });
-  set(()=>{S.course.geo={ts:Date.now(),holes,empty:found===0};});
+  set(()=>{geoFor(cid,{ts:Date.now(),holes,empty:found===0});});
   if(!found)throw new Error("This course isn't hole-mapped yet — the rangefinder still works.");
 }
 
@@ -12569,10 +12583,12 @@ function courseMapStatusHTML(c){
 async function fetchMapNow(){
   const note=document.getElementById('mapNowNote');
   if(note)note.textContent=' downloading…';
+  const cid=S.course.id;             // the course the button was pressed on (geoFor, 9/28)
   const fresh=await fetchCourseGeo(S.course);
   if(!fresh){if(note)note.textContent=' could not download — try again with signal.';return;}
-  set(()=>{S.course.geo=fresh;const k=(S.courses||[]).find(x=>x&&x.id===S.course.id);if(k)k.geo=clone(fresh);});
-  try{preloadCourseTiles(false);}catch(e){}
+  let mine=false;
+  set(()=>{mine=geoFor(cid,fresh);const k=(S.courses||[]).find(x=>x&&x.id===cid);if(k)k.geo=clone(fresh);});
+  if(mine)try{preloadCourseTiles(false);}catch(e){}
 }
 function chPar(i,d){set(()=>{const hd=S.course.holes[i];hd.par=Math.min(6,Math.max(3,hd.par+d));hd.parOk=true;
   if((S.course.holes||[]).every(x=>x&&x.parOk))delete S.course._cardGuess;});}
