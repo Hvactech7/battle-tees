@@ -554,7 +554,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-centre in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1790662260';
+const BUILD='1790664091';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -2626,7 +2626,7 @@ async function magRequestNew(){
 // sign-in, which is the moment the app has just proved itself.
 let btInstallEvt = null;
 window.addEventListener('beforeinstallprompt', (e)=>{ e.preventDefault(); btInstallEvt = e; });
-window.addEventListener('appinstalled', ()=>{ btInstallEvt = null; if(magUI){magUI.install=false;render();} });
+window.addEventListener('appinstalled', ()=>{ btInstallEvt = null; try{stat('a2hs_installed',{via:'event'});}catch(e){} if(magUI){magUI.install=false;render();} });
 
 function btStandalone(){
   try{ return window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true; }
@@ -2656,6 +2656,22 @@ function installCtaHTML(){
     return wrap('Keep it one tap away: press <b>Share</b> &#8679; at the bottom of Safari, then <b>Add to Home Screen</b>.');
   }
   return '';
+}
+// THE HOME SCREEN AGAIN, BEFORE THE FIRST ROUND (Nathan 9/28, after Drew Irwin scanned a sticker, skipped
+// the install screen and stayed in Safari). An iPhone keeps Safari and the home-screen app in separate
+// storage, so a round played in Safari never shows up in the installed app (Teal Bend 8/15). The first round
+// started in an iPhone browser tab shows the SAME install screen again -- not a screen of its own (Nathan:
+// "I didn't ask for a whole new splash screen") -- and its "stay in the browser" button starts the round and
+// never asks again. Android shares storage between Chrome and the installed app, and its bar offers a
+// one-tap Install, so it is not asked. Asked/answered are stats (a2hs_round).
+let a2hsRoundGate=false;
+function a2hsRoundAskDue(){
+  try{
+    if(btMode()==='app')return false;
+    if(!/iPhone|iPad|iPod/.test(navigator.userAgent||''))return false;
+    if(localStorage.getItem('btA2HSRound'))return false;
+  }catch(e){return false;}
+  return true;
 }
 async function btDoInstall(){
   if(!btInstallEvt) return;
@@ -8488,6 +8504,7 @@ function go(scr){S.screen=scr;save();render();}
 // a separate storage container for the installed app (Teal Bend, 8/15, twice).
 // So the one thing this screen asks is: install now, set up there.
 function installGateOn(){
+  if(a2hsRoundGate)return true;                    // the same screen, again, before the first round (a2hsRoundAskDue)
   try{
     if(navigator.standalone===true)return false;
     if(matchMedia('(display-mode: standalone)').matches===true)return false;
@@ -8500,6 +8517,12 @@ function installGateOn(){
   return true;
 }
 function installGateSkip(){
+  if(a2hsRoundGate){                               // "stay in the browser" at round start: play, and never ask again
+    a2hsRoundGate=false;
+    try{localStorage.setItem('btA2HSRound','1');}catch(e){}
+    try{stat('a2hs_round',{answer:'here'});}catch(e){}
+    return startRound();
+  }
   try{localStorage.setItem('btInstallGate','1');}catch(e){}
   try{stat('a2hs_gate',Object.assign({skipped:true},btCheerLink?{cheer:true}:{}));}catch(e){}
   // they came to react: take them there, don't drop them on the home screen
@@ -8537,7 +8560,8 @@ function vInstallGate(){
       <div style="font-size:15.5px;line-height:1.45">Already have Battle Tees on your home screen? Open it there and tap <b>⚔️ Community Battlefield</b>.</div>
     </div>`:''}
     <div class="card" style="border-color:var(--gold,#c9a544)">
-      <h2 style="font-size:17px;color:var(--gold,#e8c552)">${(btCheerLink||bfCheerIntent)?'⚔️ Not on your phone yet?':'⚔️ Put it on your Home Screen first'}</h2>
+      ${''/* the header's two lines fill the card at any phone width (Nathan 9/28: 17px left "a big gap of empty space to the right"): the card is 60px narrower than the page (max 480), and "⚔️ FOR FULL APP EXPERIENCE" is ~14.67 x the font size + its letter-spacing */}
+      <h2 style="font-size:${(btCheerLink||bfCheerIntent)?'17px':'calc((min(100vw,480px) - 82px) / 14.67)'};color:var(--gold,#e8c552)">${(btCheerLink||bfCheerIntent)?'⚔️ Not on your phone yet?':'<span style="display:inline-block;text-wrap:balance">⚔️ For Full App Experience</span> <span style="display:inline-block;text-wrap:balance">Add To your Home Screen</span>'}</h2>
       <div style="font-size:15.5px;line-height:1.45;margin-bottom:10px">Battle Tees runs as a real app from your home screen — GPS maps, offline scorecards, the works.</div>
       ${steps}
       <div class="tiny mt" style="color:var(--amber-bd)"><b>Do this before you set up your profile.</b> The browser and the installed app keep separate saves — anything you set up here stays here.</div>
@@ -13838,6 +13862,7 @@ function pairGroups(){
   if(err)err.textContent='';
 }
 function startRound(){
+  if(a2hsRoundAskDue()){a2hsRoundGate=true;try{stat('a2hs_round',{asked:true});}catch(e){}render();return;}   // before tees and location: they may leave to install
   primeGeo();   // iOS may re-ask each session — get it over with here, not on hole 1
   // rangefinder mode is meant to be one tap from the home screen to the map, and
   // nothing in it is scored off a tee — so it skips the tee-confirm sheet and
@@ -16223,6 +16248,16 @@ setInterval(()=>{
   stat('open',{ua:(navigator.userAgent.match(/iPhone OS [0-9_]+|Android [0-9.]+/)||[''])[0],
     ageDays:r.ageDays, activeDays:r.activeDays, pid:myPid()||'',
     installed:btMode()==='app'});
+  // WHO MOVED TO THE HOME SCREEN (Nathan 9/28): a browser tab stamps the day it was first used; the
+  // first launch as an installed app reports whether it saw that stamp. Android shares storage between
+  // Chrome and the installed app, so it is exact there; an iPhone's installed app has storage of its own
+  // and never sees it -- those are matched by name and time in the report. ageDays tells a phone that
+  // installed long before this shipped (it reports once too) from a new one.
+  try{
+    if(btMode()==='web'){if(!localStorage.getItem('btWebSince'))localStorage.setItem('btWebSince',localDay());}
+    else if(!localStorage.getItem('btAppSince')){localStorage.setItem('btAppSince',localDay());
+      stat('a2hs_first_app',{afterWeb:localStorage.getItem('btWebSince')||'',ageDays:r.ageDays});}
+  }catch(e){}
 })();
 // A JS error mid-round is invisible today: the round just stops and the device
 // looks like it wandered off. Report each distinct message once per session so a
@@ -16273,8 +16308,12 @@ else lobbyConnect();
 (function(){
 try{
   if(navigator.standalone===true||matchMedia('(display-mode: standalone)').matches)return;
-  if(localStorage.getItem('btA2HS'))return;
-  let deferred=null;
+  // CLOSING IT MEANS "NOT TODAY" (Nathan 9/28). The ✕ hid it for good, so one tap on a first visit ended
+  // every reminder. Now it stays down for the rest of the phone's day and comes back on the next.
+  // 'installed' (an accepted Android install) is for good; an old '1' reads as closed long ago.
+  const a2v=localStorage.getItem('btA2HS');
+  if(a2v==='installed'||a2v==='day:'+localDay())return;
+  let deferred=null,a2hsShownSaid=false;
   window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferred=e;
     const b=document.getElementById('a2hsGo');if(b)b.textContent='Install';});
   const droid=/android/i.test(navigator.userAgent);
@@ -16296,17 +16335,21 @@ try{
   // container, so following it cost two new players their profile and their
   // joined round at Teal Bend (8/15). Pitch installs between rounds only.
   window.__a2hsSync=function(){
-    try{bar.style.display=((typeof S!=='undefined'&&S.round&&S.round.started)
-      ||(typeof installGateOn==='function'&&installGateOn()))?'none':'flex';}catch(e){}
+    try{const show=!((typeof S!=='undefined'&&S.round&&S.round.started)
+      ||(typeof installGateOn==='function'&&installGateOn()));
+      bar.style.display=show?'flex':'none';
+      if(show&&!a2hsShownSaid){a2hsShownSaid=true;stat('a2hs_bar',{shown:true});}   // once per visit: the reminders' denominator
+    }catch(e){}
   };
   window.__a2hsSync();
   const go=document.getElementById('a2hsGo');
   if(go)go.onclick=async()=>{
     if(deferred){deferred.prompt();const r=await deferred.userChoice.catch(()=>null);deferred=null;
-      if(r&&r.outcome==='accepted'){localStorage.setItem('btA2HS','1');bar.remove();}}
+      if(r&&r.outcome==='accepted'){localStorage.setItem('btA2HS','installed');try{stat('a2hs_installed',{via:'bar'});}catch(e){}bar.remove();}}
     else alert('In Chrome: tap the ⋮ menu (top right), then "Add to Home screen".');
   };
-  document.getElementById('a2hsX').onclick=()=>{localStorage.setItem('btA2HS','1');bar.remove();};
+  window.__a2hsClose=()=>{localStorage.setItem('btA2HS','day:'+localDay());try{stat('a2hs_bar',{closed:true});}catch(e){}bar.remove();};
+  document.getElementById('a2hsX').onclick=window.__a2hsClose;
 }catch(e){}
 })();
 </script>
