@@ -554,7 +554,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-centre in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1790659930';
+const BUILD='1790661856';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -2417,15 +2417,18 @@ function bfBroadcastEnd(){
     // battle closes when the card is COMPLETE, or when the LAST phone leaves --
     // a joiner walking in early, or a phone auto-ending a stale round the next
     // morning, still cannot stamp a round the rest of the group is playing.
-    if(!roundComplete()&&!lastOneOut())return;
+    // ...and a round only THIS phone keeps (broadcast to the Battlefield, nobody joined: S.share.bf)
+    // has no group to wait for -- its end is the round's end. lastOneOut() needs another phone, so
+    // a solo golfer's End at hole 12 never reached the Battlefield at all (Doug, Paradise Valley 9/26).
+    if(!roundComplete()&&!lastOneOut()&&!S.share.bf)return;
     const endedAt=S.round.myEndedAt||Date.now();
     const ws=(sockOpen&&sock)||((lobbySock&&lobbySock.readyState===1)?lobbySock:null);
     if(ws&&ws.readyState===1){
-      ws.send(JSON.stringify({t:'battle',op:'end',code:S.share.code,endedAt,
+      ws.send(JSON.stringify({t:'battle',op:'end',code:S.share.code,endedAt,byTime:!!S.round._endedByTime,
         rid:'f'+Math.random().toString(36).slice(2,8)}));
       return;
     }
-    relayBattle({op:'end',code:S.share.code,endedAt}).catch(()=>{});   // no socket: best effort
+    relayBattle({op:'end',code:S.share.code,endedAt,byTime:!!S.round._endedByTime}).catch(()=>{});   // no socket: best effort
   }catch(e){}
 }
 // ---- the native shells (battle-tees-ios / battle-tees-android) ----
@@ -2940,7 +2943,7 @@ function savePresencePlayer(j){
   if(!n)return;
   set(()=>{
     let e=S.playerLib.find(x=>x.name.trim().toLowerCase()===n.name.trim().toLowerCase());
-    if(!e){e={id:'pl'+Date.now()+Math.floor(Math.random()*1e4)};S.playerLib.push(e);tombLift('players',tombName(nm));}
+    if(!e){e={id:'pl'+Date.now()+Math.floor(Math.random()*1e4)};S.playerLib.push(e);tombLift('players',tombName(n.name));}   // was tombName(nm): nm is not defined here, so Save threw and saved nobody (9/28)
     e.name=n.name;
     e.index=+n.index||10;
     if(n.tee)e.teeName=n.tee;
@@ -8207,7 +8210,7 @@ function render(){
   const sameScreen=window.__lastScr===scr;
   window.__lastScr=scr;
   try{if(window.__a2hsSync)window.__a2hsSync();}catch(e){}
-  const full=magBanner()+html+holeSplash()+verifySheetHTML()+joinWaitSheetHTML()+teeAskSheetHTML()+joinSpanSheetHTML()+pairsAskSheetHTML()+wolfOrderSheetHTML()+endAskSheetHTML()+exportSheetHTML()+mapInviteHTML()+greenClashHTML()+gamePickSheetHTML()+(S.screen!=='map'?puttAskSheetHTML():'')+(S.screen!=='map'?parAskSheetHTML():'')+photoCropHTML()+cheerSplashHTML();
+  const full=magBanner()+html+holeSplash()+verifySheetHTML()+joinWaitSheetHTML()+teeAskSheetHTML()+joinSpanSheetHTML()+pairsAskSheetHTML()+wolfOrderSheetHTML()+endAskSheetHTML()+idleAskSheetHTML()+exportSheetHTML()+mapInviteHTML()+greenClashHTML()+gamePickSheetHTML()+(S.screen!=='map'?puttAskSheetHTML():'')+(S.screen!=='map'?parAskSheetHTML():'')+photoCropHTML()+cheerSplashHTML();
   // Four phones syncing means render() fires constantly. Blowing away innerHTML
   // each time repainted the whole screen — that was the flicker on the course.
   // Identical output is a no-op; otherwise patch only the nodes that differ.
@@ -9132,6 +9135,12 @@ function bfStorePut(code,entry,doc){
 // ends, the entry turns Final on the next list — but the cached doc still stops
 // at whatever hole the watcher last saw (KNNB9 8/19: "Final · thru 12" while
 // the relay held all 18). The doc is final only if fetched after the end.
+// ended for time (the relay after 2 idle hours, or the phone) short of the round's last hole
+function bfUnfinished(e,thru){
+  if(!e||!e.endedAt||e.endedBy!=='time')return false;
+  const t=thru!=null?thru:Math.max(0,...((e.sum||[]).map(x=>(x&&x.thru)||0)));
+  return t<(e.holes||18);
+}
 function bfDocFinal(entryEndedAt,doc,docAt){
   return !!(entryEndedAt&&doc&&(docAt||0)>=entryEndedAt*1000);
 }
@@ -9800,7 +9809,7 @@ function vBattlefield(){
    :!L.length?'<div class="card center muted">No battles right now. Start a round and yours shows up here for your friends.</div>'
    :L.map(e=>{
       const day=e.at?new Date(e.at*1000).toLocaleDateString(undefined,{month:'short',day:'numeric'}):'';
-      const when=e.live?'<span style="color:var(--elec)">● live</span> · playing '+dur(e)+(day?' · '+day:''):'finished · '+dur(e)+(day?' · '+day:'');
+      const when=e.live?'<span style="color:var(--elec)">● live</span> · playing '+dur(e)+(day?' · '+day:''):(bfUnfinished(e)?'unfinished · ':'finished · ')+dur(e)+(day?' · '+day:'');
       // one card per PLAYER in the round — gross to par where they stand right
       // now, and the same highlights the end-of-round splash shows. Zero
       // counts are omitted, exactly as on the splash.
@@ -9970,7 +9979,7 @@ function vBfWatch(){
     return topbar(esc(e.starter||'Battle'),`${esc(course.name)} · ${games.map(g=>gameName(g)).join(' + ')}`,'bfield')+`<main>
     ${scCard}
     <div class="card" style="padding:10px 14px"><div class="row" style="border-top:none">
-      <span>${e.endedAt?'Final':'<span style="color:var(--elec)">● LIVE</span>'} · thru ${confirmed} ${mins?`· ${mins>=60?Math.floor(mins/60)+'h '+mins%60+'m':mins+' min'}`:''}</span>
+      <span>${e.endedAt?(bfUnfinished(e,confirmed)?'Unfinished':'Final'):'<span style="color:var(--elec)">● LIVE</span>'} · thru ${confirmed} ${mins?`· ${mins>=60?Math.floor(mins/60)+'h '+mins%60+'m':mins+' min'}`:''}</span>
       <span class="seg" style="display:inline-flex;gap:4px">
         <button class="ghost ${L==='gross'?'sel':''}" style="${L==='gross'?'':';color:var(--ink3);border-color:var(--line);box-shadow:2px 2px 0 rgba(0,0,0,.2)'}" onclick="bfLens='gross';render()">Gross</button>
         <button class="ghost ${L==='net'?'sel':''}" style="${L==='net'?'':';color:var(--ink3);border-color:var(--line);box-shadow:2px 2px 0 rgba(0,0,0,.2)'}" onclick="bfLens='net';render()">Net</button>
@@ -12089,7 +12098,8 @@ function archiveRound(){
   const entry={
     id:S.round._histId,
     startedAt:(prev&&prev.startedAt)||S.round.startedAt||null,
-    endedAt:(S.round.reopened&&prev)?prev.endedAt:Date.now(),
+    // ended for time: filed at its real end (last score + 20 min), not at the moment the app reopened
+    endedAt:(S.round.reopened&&prev)?prev.endedAt:((S.round._endedByTime&&S.round.myEndedAt)||Date.now()),
     // a reopened round's DURATION is history too — recomputing it from the
     // review's clocks is how 152 minutes became 480 overnight
     game:S.round.game||S.config.game,courseId:S.course.id,courseName:S.course.name,
@@ -12194,11 +12204,62 @@ function resetRoster(){
   S.config.recLens='net';
   syncGroupCounts();
 }
-// A round left open overnight is not a round. Cap it at 8 hours: the clock stops
-// at the 8-hour mark rather than wherever the app happened to be reopened, so a
-// forgotten round can't post a 3,000-minute pace. Rounds with no confirmed holes
-// are dropped rather than archived — they were never played.
+// A round left open overnight is not a round. Rounds with no confirmed holes are
+// dropped rather than archived — they were never played.
 const MAX_ROUND_MS=8*60*60*1000;
+// A ROUND THAT STOPS (Nathan 9/28). Doug's Saturday round at Paradise Valley stopped
+// after 12 holes and sat "● LIVE" on the Battlefield for two days, because only his
+// phone could end it and he never opened the app again. Now the relay ends it on the
+// Battlefield after 2 hours with no new score (cloud/src/books.js), and this phone,
+// the next time it comes to the front: 2 hours without a score ASKS "Still playing?"
+// (a rain delay, or a card kept on paper and typed in later, must not lose its round
+// -- Nathan chose asking), 8 hours without one ends it quietly. Either way the clock
+// stops 20 minutes after the last score (Nathan's rule for every end "due to time"),
+// never at the moment the app happened to reopen, never start + 8 h.
+const IDLE_ASK_MS=2*60*60*1000, IDLE_END_MS=MAX_ROUND_MS, IDLE_TAIL_MS=20*60*1000;
+// the last thing entered on the card: every score, confirm and stat carries its moment
+function lastScoreAt(){
+  let t=0;
+  for(const r of (S.round&&S.round.holes)||[]){
+    if(!r)continue;
+    for(const v of [r._ts,...(r.gts||[]),...(r.cfts||[]),...(r.sts||[])]){const x=Math.abs(+v||0);if(x>t)t=x;}
+  }
+  return Math.max(t,S.round.myStartedAt||S.round.startedAt||0);
+}
+// "Keep playing" restarts the wait, but never the end time: that stays 20 minutes after the last SCORE
+function idleSince(){return Math.max(lastScoreAt(),S.round._idleOkAt||0);}
+let idleAsk=null;   // {since} while "Still playing?" is up
+function endRoundForTime(how){
+  const last=lastScoreAt();
+  const thru=(S.round.holes||[]).filter(r=>r&&r.confirmed).length;
+  S.round.myEndedAt=Math.min(last+IDLE_TAIL_MS,Date.now());
+  S.round._autoEnded=true;S.round._endedByTime=true;
+  idleAsk=null;
+  try{stat('round_autoend',{game:S.round.game,thru,how,idleMin:Math.round((Date.now()-last)/60000)});}catch(e){}
+  if(!thru){                              // nothing was ever scored — discard it
+    const wasShared=S.share.on;
+    S.round=blankRound();S.screen='home';stView=null;resetRoster();save();
+    if(wasShared)leaveShare();else render();
+    return true;
+  }
+  endRound();
+  return true;
+}
+function idleAskSheetHTML(){
+  if(!idleAsk)return '';
+  if(!S.round||!S.round.started||(typeof isReview==='function'&&isReview())||Date.now()-idleSince()<IDLE_ASK_MS){idleAsk=null;return '';}   // a score came in meanwhile
+  const at=new Date(lastScoreAt()).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
+  const scored=(S.round.holes||[]).some(r=>r&&r.confirmed);
+  return `<div class="vfWrap" role="dialog" aria-modal="true" aria-labelledby="iaTitle">
+    <div class="vfCard">
+      <h2 id="iaTitle" class="vfTitle">Still playing?</h2>
+      <div class="tiny mb">${scored?'No scores since '+at+'.':'No scores yet — started '+at+'.'}</div>
+      <button class="big mt" onclick="idleKeep()">Keep playing</button>
+      <button class="big mt" style="background:var(--card);color:var(--ink2);border-color:var(--line);box-shadow:3px 3px 0 var(--line)" onclick="idleEnd()">End the round</button>
+    </div></div>`;
+}
+function idleKeep(){idleAsk=null;try{stat('round_idle',{answer:'keep'});}catch(e){}set(()=>{S.round._idleOkAt=Date.now();});}
+function idleEnd(){try{stat('round_idle',{answer:'end'});}catch(e){}endRoundForTime('asked');}
 // A round left half-finished — _finished set, archive never run — cannot be
 // ended from the UI and cannot be resumed. Complete it on the next boot rather
 // than making the player start over and lose the card.
@@ -12241,20 +12302,15 @@ function autoEndStaleRound(){
     }
     return true;
   }
-  const t0=S.round.myStartedAt||S.round.startedAt;
-  if(!t0||Date.now()-t0<MAX_ROUND_MS)return false;
-  const thru=(S.round.holes||[]).filter(r=>r&&r.confirmed).length;
-  S.round.myEndedAt=t0+MAX_ROUND_MS;      // cap the clock, don't use "now"
-  S.round._autoEnded=true;
-  try{stat('round_autoend',{game:S.round.game,thru,hours:8});}catch(e){}
-  if(!thru){                              // nothing was ever scored — discard it
-    const wasShared=S.share.on;
-    S.round=blankRound();S.screen='home';stView=null;resetRoster();save();
-    if(wasShared)leaveShare();else render();
-    return true;
+  if(!(S.round.myStartedAt||S.round.startedAt))return false;
+  const idle=Date.now()-idleSince();
+  if(idle>=IDLE_END_MS)return endRoundForTime('8h');
+  if(idle>=IDLE_ASK_MS&&!idleAsk){
+    idleAsk={since:lastScoreAt()};
+    try{stat('round_idle',{asked:true,idleMin:Math.round(idle/60000)});}catch(e){}
+    render();
   }
-  endRound();
-  return true;
+  return false;
 }
 function endRound(){
   if(!S.round.started){S.screen='home';save();render();return;}
@@ -13520,7 +13576,11 @@ function loadGroup(id){
     S.config.groupName=g2.name;
     ensureMeFirst();
     const meNm=(S.me&&S.me.name||'').trim().toLowerCase();
-    const others=g2.members.filter(m=>m.name.trim().toLowerCase()!==meNm);
+    // A PLAYER YOU REMOVED STAYS REMOVED (Nathan 9/28). Nathan deleted his doubled-up players (Justin
+    // Breeding, Tyler Breeding, Nate: typed-in copies of Justin, Tyler's and NateBall's real profiles),
+    // but "The Boyz!" still listed them, and loading it ran each name through upsertLib() -- which put
+    // them back in the library and lifted their tombstones. Their seats now stay open to fill.
+    const others=g2.members.filter(m=>m.name.trim().toLowerCase()!==meNm&&!tombHas('players',tombName(m.name)));
     const mine=g2.members.find(m=>m.name.trim().toLowerCase()===meNm);
     const list=mine?[mine,...others]:[...others];
     list.slice(0,4).forEach((m,i)=>{
