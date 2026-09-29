@@ -554,7 +554,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-centre in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1790664091';
+const BUILD='1790666325';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1028,6 +1028,23 @@ function migrateState(s){
           if(mep&&e.pid===mep&&n!==men){delete e.pid;return;}
           if(seenPid[e.pid]&&seenPid[e.pid]!==n){delete e.pid;return;}
           seenPid[e.pid]=n;
+        });
+      }catch(e){}
+      // 9/28 library repair: ONE ID ON TWO PLAYERS. Nathan's NateBall and Justin shared one (made 7/18; most
+      // likely the 9/6 Apple Mountain roster race renamed the entry, and the cloud merge -- which matches
+      // players by NAME -- kept the old name too), and loadPlayer finds by id, so Saved -> Justin seated
+      // NateBall. Every later copy of an id gets a fresh one; a roster row that points at it BY THAT NAME follows.
+      try{
+        const seenId={};
+        (s.playerLib||[]).forEach((e,k)=>{
+          if(!e)return;
+          if(!e.id||seenId[e.id]){
+            const old=e.id, nid='pl'+Date.now()+String(k).padStart(3,'0')+Math.floor(Math.random()*1e4);
+            e.id=nid;
+            const n=(e.name||'').trim().toLowerCase();
+            (s.players||[]).forEach(p=>{if(p&&old&&p.libId===old&&(p.name||'').trim().toLowerCase()===n)p.libId=nid;});
+          }
+          seenId[e.id]=true;
         });
       }catch(e){}
       [...s.courses,s.course].forEach(c=>{
@@ -2856,7 +2873,8 @@ function applyLibrary(d){
         // this phone already holds — the local one was confirmed on this device.
         if(ex){ex.index=e.index;if(e.teeName)ex.teeName=e.teeName;if(e.pid&&!ex.pid)ex.pid=e.pid;updated++;}
         else if(tombHas('players',tombName(e.name))){/* you removed this one — stays removed */}
-        else{S.playerLib.push({id:e.id||('pl'+Date.now()+Math.floor(Math.random()*1e4)),name:e.name,index:e.index,teeName:e.teeName,pid:e.pid||undefined});added++;}
+        else{const idFree=e.id&&!S.playerLib.some(x=>x.id===e.id);   // an id already on another player here gets a fresh one (9/28)
+          S.playerLib.push({id:idFree?e.id:('pl'+Date.now()+String(added)+Math.floor(Math.random()*1e4)),name:e.name,index:e.index,teeName:e.teeName,pid:e.pid||undefined});added++;}
       });
       if(!S.me.name&&d.me&&d.me.name)S.me=d.me;
       // Restoring YOUR OWN backup restores your identity: the pid friends and the
@@ -10450,10 +10468,16 @@ function resumeOpenRoom(){
 function wizPickGroup(id){
   const g2=(S.groupLib||[]).find(x=>x.id===id);
   if(!g2)return;
+  // SEATS THE GROUP AND STAYS (Nathan 9/28). It opened the room and jumped straight to the game picker, so the
+  // names never showed; and with the room open the groups card hides, so Back found no groups. Now the names
+  // fill the seats here, and the room opens at Start (startRound), as the card has always said.
   loadGroup(id);                                   // me + the members, ids seeded from the library
-  try{if(!S.share.on)shareRound();}catch(e){}      // the room and its invitation, exactly like "Start the group round"
-  wiz.n=Math.min(4,Math.max(2,(S.players||[]).filter(isRealPl).length));
-  wizToGame();
+  wiz.n=Math.min(4,Math.max(wiz.n||2,(S.players||[]).filter(isRealPl).length));
+  wiz.group=id;
+  // members removed from your players are not seated (loadGroup) -- say who, and offer the group's editor
+  const meNm=(S.me&&S.me.name||'').trim().toLowerCase();
+  wiz.grpSkipped=g2.members.filter(m=>m&&m.name&&m.name.trim().toLowerCase()!==meNm&&tombHas('players',tombName(m.name))).map(m=>m.name);
+  render();
 }
 function wizToGame(){
   try{gatePick.open=false;clearInterval(gatePick.timer);}catch(e){}
@@ -10530,12 +10554,19 @@ function vStart(){
   }
 
   if(step==='who'){
+    // SEATS, NUMBERED (Nathan 9/28): you are Player 1, and the round's other seats -- 2, 3 or 4 by the count
+    // picked a step earlier -- are listed as Player 2..N, open until filled, so it is plain who is still to add.
+    const want=wiz.n||4, full=nFilled>=want;
+    const seatTag=k=>`<div class="tiny" style="text-transform:uppercase;letter-spacing:.6px;color:var(--ink3)">Player ${k}</div>`;
+    let seat=0;
     const slotRows=S.players.map((p,i)=>{
       if(!isRealPl(p))return '';
       const isMe=low(p.name)===meNm;
-      return `<div class="row"><div style="flex:1;min-width:0"><b style="font-size:17px">${esc(p.name)}</b>${isMe?' <span class="pill gray">you</span>':''}
+      seat++;
+      return `<div class="row"><div style="flex:1;min-width:0">${seatTag(seat)}<b style="font-size:17px">${esc(p.name)}</b>${isMe?' <span class="pill gray">you</span>':''}
           <div class="tiny">Index ${p.index}${p.nearby?' · <span style="color:var(--amber)">◌ invited when you start</span>':(!isMe?' · <span class="muted">✎ you\'ll score them</span>':'')}</div></div>
-        ${isMe?'':`<button class="ghost danger xbtn" aria-label="Remove player" onclick="removeGolfer(${i})">${XICON}</button>`}</div>`;}).join('');
+        ${isMe?'':`<button class="ghost danger xbtn" aria-label="Remove player" onclick="removeGolfer(${i})">${XICON}</button>`}</div>`;}).join('')
+      +Array.from({length:Math.max(0,want-nFilled)},(_,k)=>`<div class="row" style="opacity:.55"><div>${seatTag(nFilled+k+1)}<span class="muted">Open</span></div></div>`).join('');
     const nearbyRows=(gatePick.list||[]).filter(n=>!inRoster(n.name)).map(n=>`
       <div class="row" style="cursor:pointer" onclick="gateAddOne('${esc(n.id)}')">
         <div><b>${n.near?'📍':'🌐'} ${esc(n.name)}</b><div class="tiny">Index ${n.index!=null?n.index:'?'} · ${n.near?'nearby':'online'}</div></div>
@@ -10544,17 +10575,19 @@ function vStart(){
       <div class="row" style="cursor:pointer" onclick="addFromLib('${e.id}')">
         <div><b>${esc(e.name)}</b><div class="tiny">Index ${e.index}${e.teeName?` · ${esc(e.teeName)}`:''}</div></div>
         <span class="pill wolf">+ add</span></div>`).join('');
-    const want=wiz.n||4, full=nFilled>=want;
     // SAVED GROUPS BELONG HERE TOO (Apple Mountain 9/6): Nathan walked 18 → multiplayer →
     // 4 players → this screen, and The Boyz! was not on it — the chips lived only on
     // the group screen. One tap seats the group, opens the room and sends the invitation.
     const grpChips=(S.groupLib&&S.groupLib.length&&!S.share.on)?`<div class="card" style="border-color:var(--amber)"><h2 style="color:var(--amber)">👥 Your groups</h2>
       <div style="display:flex;flex-wrap:wrap;gap:6px">${S.groupLib.map(g2=>`<button class="ghost sel" onclick="wizPickGroup('${g2.id}')">👥 ${esc(g2.name)} <span class="tiny">· ${g2.members.length}</span></button>`).join('')}</div>
-      <div class="tiny mt">Tap one — everyone is seated and the invitation goes to their phones the moment you start.</div></div>`:'';
-    return head('Who\'s playing?',`${nFilled} of ${want} — the rest can join with the code`)+`<main>
-    ${grpChips}
+      <div class="tiny mt">Tap one — everyone is seated and the invitation goes to their phones the moment you start.</div>
+      ${wiz.group&&wiz.grpSkipped&&wiz.grpSkipped.length?`<div class="tiny mt" style="color:var(--amber)">Not seated — removed from your players: ${wiz.grpSkipped.map(esc).join(', ')}.</div>
+      <button class="ghost mt" onclick="wizEditGroup('${wiz.group}')">✎ Edit group</button>`:''}</div>`:'';
+    const pickSay=want===2?'Pick Player 2':want===3?'Pick Players 2 and 3':'Pick Players 2\u20134';
+    return head('Who\'s playing?',`${pickSay} \u2014 ${nFilled} of ${want} in`)+`<main>
     <div class="card">${slotRows}
-      ${!full?`<div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
+      ${!full?`<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--line)"><div class="tiny" style="text-transform:uppercase;letter-spacing:.6px;color:var(--ink3)">Add Player ${nFilled+1}</div></div>
+      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
         <button class="ghost ${addMode==='nearby'?'sel':''}" onclick="setAddMode('nearby')">📍 Nearby</button>
         <button class="ghost ${addMode==='lib'?'sel':''}" onclick="setAddMode('lib')">👥 Saved</button>
         <button class="ghost ${addMode==='type'?'sel':''}" onclick="setAddMode('type')">⌨️ Type a name</button></div>
@@ -10568,6 +10601,7 @@ function vStart(){
         <div class="tiny mt">No phone needed \u2014 you'll enter their scores.</div>`:''}`
       :`<div class="tiny mt">That's everyone.</div>`}
     </div>
+    ${grpChips}
     <button class="big" onclick="wizToGame()">Move on to pick the game \u2192</button>
     ${!full?`<div class="tiny mt center">Missing someone? Go on anyway \u2014 they join with the code.</div>`:''}
     </main>`;
@@ -13722,8 +13756,11 @@ function saveGroupEdit(){
   });
   const wantLoad=t.loadOnSave,gid=newId||t.id;
   closeGroupEditor();
+  if(t.wizRepick&&gid&&wiz&&wiz.step==='who'){wizPickGroup(gid);return;}   // edited from Who's playing: seat the group as saved
   if(wantLoad&&gid)loadGroup(gid);
 }
+// "✎ Edit group" on Who's playing (a picked group with removed members): Save seats the group again right there
+function wizEditGroup(id){openGroupEditor(id);if(grpEditTarget)grpEditTarget.wizRepick=true;}
 function closeGroupEditor(){const d=document.getElementById('grpeditor');if(d)d.remove();grpEditTarget=null;}
 function groupNameCommit(v){
   set(()=>{S.config.groupName=v;});
@@ -13877,6 +13914,7 @@ function startRound(){
   // The 2v2 partner sheet no longer fires HERE — at start the seats may be
   // empty. It fires (maybeAskPairs) the moment the fourth real player is in,
   // by join or by name, on the captain's phone.
+  const grpPicked=!!(wiz&&wiz.group);   // a saved group picked in setup: its room opens now (wizPickGroup)
   startRound._confirmed=false;startRound._pairsOk=false;wiz=null;
   setTimeout(()=>{try{maybeAskWolfOrder();}catch(e){}try{maybeAskPairs();}catch(e){}},0);
   pickingCourse=false;
@@ -13935,7 +13973,7 @@ function startRound(){
       :S.round.game==='skins'?{n:S.config.skins.n,amt:S.config.skins.amt,carry:S.config.skins.carry!==false,custom:!!S.config.skins.per}
       :S.round.game==='umbrella'?{pairing:S.config.vegas.pairing}
       :S.round.game==='wolf'?{carry:S.config.carryTies,last2:S.config.last2LastPlace}:{}});
-  if(withNearby&&!S.share.on)shareRound();
+  if((withNearby||grpPicked)&&!S.share.on)shareRound();
   chalApplyTrackers();   // a putts goal is worthless if the tracker is off
   shellRound('started',shellRoundInfo());   // the Android shell raises its round notification + background GPS
 }
