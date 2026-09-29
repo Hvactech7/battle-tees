@@ -554,7 +554,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-centre in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1790666325';
+const BUILD='1790667022';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -11929,18 +11929,24 @@ function vPlayers(){
         : sug.length
           ? sug.map(x=>`<button class="ghost" style="flex:none" onclick="confirmFriend('${e.id}','${esc(x.pid)}')">Yes — ${esc((x.name||'').split(' ')[0])}</button>`).join('')
           : `<button class="ghost" style="flex:none" onclick="inviteToBattle('${esc(e.name)}')">Invite</button>`;
-      return `<div class="row">
-      <div style="flex:1;min-width:0;display:flex;align-items:center;gap:10px">${avatarHTML(e,36)}<div style="min-width:0"><b>${linked?'<span title="Battle friend">⚔️</span> ':''}${esc(e.name)}</b>
+      // BUTTONS NEVER CRUSH THE NAME (Nathan 9/29). Keep + Confirm Delete beside Invite squeezed the name and
+      // status to one word per line, and even at rest three buttons left the status 4-7 lines tall. The
+      // details get at least 200px; when the buttons don't fit beside that (every phone) they take their own
+      // line underneath, right-aligned. Armed, the two answers always get that line and Invite/Edit step aside.
+      const armed=armDelPlayer===e.id;
+      return `<div class="row" style="flex-wrap:wrap;row-gap:8px">
+      <div style="flex:1 1 200px;min-width:0;display:flex;align-items:center;gap:10px">${avatarHTML(e,36)}<div style="min-width:0"><b>${linked?'<span title="Battle friend">⚔️</span> ':''}${esc(e.name)}</b>
         <div class="tiny">Index ${e.index}${(e.stdTee||e.teeName)?` · ${esc(e.stdTee||e.teeName)} tees`:''}</div>
         ${status}</div></div>
-      <span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+      ${armed
+        ?`<div style="flex-basis:100%;display:flex;gap:6px;justify-content:flex-end">
+            <button class="ghost" onclick="delPlayerCancel()">Keep</button>
+            <button class="ghost danger" style="font-weight:700" onclick="delPlayer('${e.id}')">Confirm Delete</button></div>`
+        :`<span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;margin-left:auto">
         ${action}
-        ${armDelPlayer===e.id
-          ?`<button class="ghost" onclick="delPlayerCancel()">Keep</button>
-            <button class="ghost danger" style="font-weight:700" onclick="delPlayer('${e.id}')">Confirm Delete</button>`
-          :`<button class="ghost" onclick="startEditPlayer('${e.id}')">Edit</button>
-            <button class="ghost danger xbtn" aria-label="Delete player" onclick="delPlayer('${e.id}')">${XICON}</button>`}
-      </span></div>`;})()).join('')
+            <button class="ghost" onclick="startEditPlayer('${e.id}')">Edit</button>
+            <button class="ghost danger xbtn" aria-label="Delete player" onclick="delPlayer('${e.id}')">${XICON}</button>
+      </span>`}</div>`;})()).join('')
     :'<div class="tiny">Golfers you set up in a round are saved here automatically.</div>';})()}
     ${backupBlockHTML()}
   </div>
