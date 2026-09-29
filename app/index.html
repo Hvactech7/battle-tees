@@ -554,7 +554,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-centre in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1790667497';
+const BUILD='1790668026';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -7050,13 +7050,16 @@ function windArrowsSVG(w,mapB,active){
   const head=y=>`72,${y-10} 88,${y} 72,${y+10} 77,${y}`;
   // solid (Nathan, 9/2): one flat colour, no gradient, no glow — just a hairline
   // white edge so the arrows stay crisp over dark trees
-  const hc='#4fd8ff';   // always blue (Nathan, 9/2) — the w badge alone says the line is wind-adjusted
-  const edge=rows.map(y=>`<path d="${wave(y)}" fill="none" stroke="#ffffff" stroke-width="8" stroke-linecap="round"/><polygon points="${head(y)}" fill="#ffffff" stroke="#ffffff" stroke-width="2" stroke-linejoin="round"/>`).join('');
+  // WIND ON LOOKS ON (Nathan 9/29): the arrows were always blue, so on and off looked the same. Now they
+  // are dim gray while wind is left out of the numbers and the highlighted cyan while it counts -- the
+  // way the mountain button lights up. No ring or box (Nathan: "lose the blue box around it").
+  const hc=active?'#4fd8ff':'#8a93a2', ec=active?'#ffffff':'#4b5364';
+  const edge=rows.map(y=>`<path d="${wave(y)}" fill="none" stroke="${ec}" stroke-width="8" stroke-linecap="round"/><polygon points="${head(y)}" fill="${ec}" stroke="${ec}" stroke-width="2" stroke-linejoin="round"/>`).join('');
   const bright=rows.map(y=>`<path d="${wave(y)}" fill="none" stroke="${hc}" stroke-width="6" stroke-linecap="round"/><polygon points="${head(y)}" fill="${hc}"/>`).join('');
   const calm=mph<1?'opacity=".55"':'';
   return `<svg viewBox="0 0 96 112" width="84" height="98" style="overflow:visible">
     <g transform="rotate(${ang-90} 48 66)" ${calm}>${edge}${bright}</g>
-    ${w?`<g><rect x="${w.src==='manual'?12:20}" y="0" rx="7" ry="7" width="${w.src==='manual'?72:56}" height="19" fill="rgba(4,10,22,.88)"/><text x="48" y="14.2" text-anchor="middle" font-family="Rajdhani,Inter,sans-serif" font-weight="700" font-size="14.4" fill="#bff6ff">${mph<1?'calm':mph+' mph'}${w.src==='manual'?' \u270e':''}</text></g>`:''}
+    ${w?`<g><rect x="${w.src==='manual'?12:20}" y="0" rx="7" ry="7" width="${w.src==='manual'?72:56}" height="19" fill="rgba(4,10,22,.88)"/><text x="48" y="14.2" text-anchor="middle" font-family="Rajdhani,Inter,sans-serif" font-weight="700" font-size="14.4" fill="${active?'#bff6ff':'#aab2bf'}">${mph<1?'calm':mph+' mph'}${w.src==='manual'?' \u270e':''}</text></g>`:''}
   </svg>`;
 }
 function paintWindRose(){
