@@ -554,7 +554,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-centre in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1790657763';
+const BUILD='1790659930';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1159,7 +1159,7 @@ function emailVerified(){
 // never retried until the NEXT change. Now: a pending change can wait at most
 // 45 s however busy the app is, failures retry with backoff, launch/foreground/
 // reconnect re-check, and every skip or failure is a stat the Pi can see.
-let abFirstPending=0,abRetryTimer=null,abRetryMs=30000,abSkipSaid='';
+let abFirstPending=0,abRetryTimer=null,abRetryMs=30000,abSkipSaid='',abBusy=false;
 function abFingerprint(){const d=abPayload();return JSON.stringify([d.me,d.playerLib,d.courses,d.history.map(h=>h.id),d.groups,d.teams,shotFp(),teeFixFp()]);}
 // NOT SAVED ANYWHERE YET (Nathan 9/17). A modal 450 ms after End Round is dismissed while
 // the golfer is walking off — nobody has ever confirmed an address from it (the relay's
@@ -1202,6 +1202,13 @@ function autoBackupCheck(){
     if(abSkipSaid!==why){abSkipSaid=why;try{stat('backup_skip',{why});}catch(e){}}
     return;
   }
+  // A FAILED BACKUP WAITS OUT ITS BACKOFF (9/28). A failure leaves abFp stale, so every later
+  // save() looked like a fresh change -- and once the 45 s cap below had passed, each one sent at
+  // once. In a shared round every incoming update saves: on 9/27 Nathan's phone re-sent its whole
+  // ~210 KB library ~1,550 times, about every 2 s through two rounds, while the room relay dropped
+  // each one unanswered (fixed there too: cloud/test/roombackup.mjs). Now one send at a time, and
+  // after a failure only the retry timer (30 s doubling to 5 min) or abKick() tries again.
+  if(abBusy||abRetryTimer)return;
   let fp;try{fp=abFingerprint();}catch(e){try{stat('backup_fail',{why:'fingerprint: '+e.message});}catch(x){}return;}
   if(fp===abFp){abFirstPending=0;return;}
   const now=Date.now();
@@ -1211,23 +1218,31 @@ function autoBackupCheck(){
   abTimer=setTimeout(()=>abSend(em),wait);
 }
 async function abSend(em){
+  if(abBusy)return;                      // one backup on the wire at a time
   clearTimeout(abRetryTimer);abRetryTimer=null;
+  abBusy=true;
+  let sent=false;
   try{
     const data=abPayload();
     const fp=abFingerprint();
     const r=await relayBackup({op:'save',email:em,data,quiet:true});
     if(r&&r.ok){
-      abStamp(fp);abFirstPending=0;abRetryMs=30000;
+      abStamp(fp);abFirstPending=0;abRetryMs=30000;sent=true;
       try{stat('backup_ok',{rounds:(data.history||[]).length,players:(data.playerLib||[]).length});}catch(e){}
       if(S.screen==='players'||S.screen==='courses')render();
-      return;
     }
-    try{stat('backup_fail',{why:(r&&r.error)||'refused'});}catch(e){}
-    if(r&&r.needVerify)return;   // a stale verified flag: no point retrying until the address is confirmed again
+    // a stale verified flag (needVerify) backs off like any failure: it used to return with no
+    // timer, and every later save() sent again. Confirming the address kicks it (abKick).
+    else try{stat('backup_fail',{why:(r&&r.error)||'refused'});}catch(e){}
   }catch(e){try{stat('backup_fail',{why:e&&e.message||'error'});}catch(x){}}
+  abBusy=false;
+  if(sent){autoBackupCheck();return;}    // a change made while this one was on the wire goes next
   abRetryTimer=setTimeout(()=>{abRetryTimer=null;autoBackupCheck();},abRetryMs);
   abRetryMs=Math.min(abRetryMs*2,300000);
 }
+// A moment worth trying again NOW, backoff or not: back in front, the relay reconnected, the
+// address just confirmed. (These called autoBackupCheck() before, which now waits out a backoff.)
+function abKick(){clearTimeout(abRetryTimer);abRetryTimer=null;abRetryMs=30000;autoBackupCheck();}
 function toggleAutoBackup(){set(()=>{S.autoBackup=!S.autoBackup;});}
 function agoTxt(ts){
   if(!ts)return 'never';
@@ -1679,7 +1694,7 @@ function justResumed(){return Date.now()-cameBackAt<800;}
 document.addEventListener('visibilitychange',()=>{
   if(document.hidden){wakeLock=null;gpsPauseHidden();return;}   // the OS already released it
   cameBackAt=Date.now();
-  wakeOn();gpsResumeVisible();autoEndStaleRound();kickSync();statFlush();try{autoBackupCheck();}catch(e){}
+  wakeOn();gpsResumeVisible();autoEndStaleRound();kickSync();statFlush();try{abKick();}catch(e){}
 });
 wakeOn();
 // In a shared round, each phone claims the player slot matching its profile
@@ -2979,7 +2994,7 @@ function lobbyConnect(){
   try{lobbySock=new WebSocket(RELAY);}catch(e){lobbySock=null;setTimeout(lobbyConnect,10000);return;}
   if(!lobbyDownSince)lobbyDownSince=Date.now();
   setTimeout(()=>{if(!relayUp()&&lobbyDownSince)render();},8500);   // flip "Connecting…" into the plain warning
-  lobbySock.onopen=()=>{const wasDown=!!lobbyDownSince;lobbyDownSince=0;try{lobbySock.send('{"t":"lobby"}');}catch(e){}sendHello();statFlush();try{autoBackupCheck();}catch(e){}registerProfile();loadMarkNotes();bfReannounce();libWhois();if(wasDown)render();};
+  lobbySock.onopen=()=>{const wasDown=!!lobbyDownSince;lobbyDownSince=0;try{lobbySock.send('{"t":"lobby"}');}catch(e){}sendHello();statFlush();try{abKick();}catch(e){}registerProfile();loadMarkNotes();bfReannounce();libWhois();if(wasDown)render();};
   lobbySock.onmessage=ev=>{
     let m;try{m=JSON.parse(ev.data);}catch(e){return;}
     if(m.t==='invites'){invites=m.list||[];inviteFixCheck();render();}
@@ -9189,7 +9204,7 @@ function registerProfile(force){
         if(r&&r.ok&&r.verified&&mine&&!emailVerified()){
           localStorage.setItem('btEmailOk',mine);
           try{stat('verify_ok',{from:'relay-says-so',rounds:(S.history||[]).length});}catch(e){}
-          abFp=null;autoBackupCheck();render();
+          abFp=null;abKick();render();
         }
       }catch(e){}
       // ONE GOLFER, ONE ID (9/5): the relay retired this pid and handed back the
