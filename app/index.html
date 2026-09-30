@@ -554,7 +554,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-centre in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1790726204';
+const BUILD='1790732955';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -5165,7 +5165,7 @@ function splinePath(path){
 // kept forever, so at load (online only, never mid-round) any hosted map fetched
 // before this stamp is re-fetched in the background and swapped in on success —
 // the old one stays if the fetch fails, so a no-signal round never loses its map.
-const GEO_STAMP=1790725210989;   // 2026-09-29 (2nd): maps re-fitted to the RIGHT card on 67 courses (672 -> 1123 lines: OSM's numbered holes that fit the corrected card -- Bridges 9 -> 18, 27-hole clubs on the nines their card names, Brookhaven on the Championship, Richland/Rich Harvest/Putnam/Rochester/Tupelo nines in today's order); Chenal: the Bear Den lines move to the Bear Den listing, Founders keeps a green list; 8 held maps come back.
+const GEO_STAMP=1790732850781;   // 2026-09-29 (3rd): Chenal CC - Founders gets all 18 holes (it had only a green list): tees and greens placed hole by hole from the club's own hole drawings against Esri imagery, lines along the fairways, 9 and 18 split their shared green (Nathan checked each hole).
 // A COURSE RECORD ON A PHONE WAS NEVER REFRESHED. natUse() is the only thing that reads
 // /courses/<id>.json and it only runs when ADDING a course that is not already saved —
 // preCourseApply deliberately keeps the saved record when the id matches. So a par we
