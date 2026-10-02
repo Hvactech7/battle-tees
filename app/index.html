@@ -199,7 +199,7 @@
   .cheer-rname{font-family:Rajdhani,sans-serif;font-weight:700;font-size:19px;line-height:1.1}
   .cheer-rn{font-size:13px;color:var(--ink3);font-weight:400}
   .cheer-rline{font-size:14px;margin-top:3px}
-  #windrose{position:fixed;left:max(28px,calc(50vw - 212px));bottom:calc(204px + env(safe-area-inset-bottom));z-index:6;width:84px;height:98px;cursor:pointer;-webkit-tap-highlight-color:transparent;filter:drop-shadow(0 1px 2px rgba(0,0,0,.55))}
+  #windrose{position:fixed;left:max(28px,calc(50vw - 212px));bottom:calc(236px + env(safe-area-inset-bottom));z-index:6;width:84px;height:98px;cursor:pointer;-webkit-tap-highlight-color:transparent;filter:drop-shadow(0 1px 2px rgba(0,0,0,.55))}
   #windrose.on{filter:drop-shadow(0 1px 2px rgba(0,0,0,.55))}
   details.faq{border-top:1px solid var(--line);padding:2px 0}
   details.faq summary{cursor:pointer;list-style:none;padding:10px 26px 10px 0;font-weight:600;font-size:16px;position:relative;line-height:1.3}
@@ -554,7 +554,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-centre in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1790951285';
+const BUILD='1790985024';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -4253,6 +4253,12 @@ function makeOrientFromMe(greenC,greenPoly,el,noTee){
         frame(from);
         return;
       }
+      // your frame lasts 30 yards: walked that far from where you took it, you are off to the next shot and the
+      // rules below follow you again (taken before the first fix: counted from the first one after)
+      if(camOwnHere()){
+        if(!camOwn.at)camOwn.at=from.slice();
+        else if(mDist(from,camOwn.at)>=CAM_OWN_WALK_M){camOwn=null;meChip(false);}
+      }
       // fire the deepest checkpoint this fix is inside, and everything shallower
       // it skipped past — one frame, then silence until the next checkpoint
       let hit=-1;
@@ -5046,10 +5052,11 @@ function vMap(){
       if(mine){myTot+=r.gross[mi];myPar+=(S.course.holes[hh]||{par:4}).par;}});
   }
   // The left column stacks Track It (bottom 112) → FW/GIR (166) → Manual
-  // (220, 46 tall, so up to 266). The wind rose sits at 204: clear of the chips,
-  // but buried under the Manual button on any UNMAPPED hole — and that is true
-  // in a normal round as much as in rangefinder mode (Nathan, 9/9). Lift the
-  // rose clear of the whole stack whenever that button is on screen.
+  // (220, 46 tall, so up to 266). The wind rose sits at 236, a thumb's width
+  // above the chips: at 204 it sat 6 px over FW/GIR, and a tap that just missed
+  // them flipped the wind (Nathan, Rancho 10/2). On any UNMAPPED hole the
+  // Manual button takes that space — in a normal round as much as in
+  // rangefinder mode (Nathan, 9/9) — so the rose lifts clear of the whole stack.
   let manualShown=false;
   try{
     const gg=amnesiaOn(S.course.id)?null:(S.course.geo&&S.course.geo.holes&&S.course.geo.holes[physHole(mapHole)+1]);
@@ -5071,7 +5078,7 @@ function vMap(){
         <div style="font-size:10px;font-weight:600;opacity:.85;letter-spacing:.5px">${S.share.bf?'TAP TO INVITE':'JOIN CODE'}</div>
         <div class="num" style="font-size:22px;letter-spacing:3px">${esc(S.share.code)}</div></div>`:''}${codeShown?'':gameBadgeHTML()}</div>`)+`
   <div id="holemap"></div>
-  <div id="windrose" onclick="toggleWindMode()" onpointerdown="windRosePD(event)" onpointerup="windRosePU()" onpointercancel="windRosePU()" oncontextmenu="return false" style="display:none${manualShown?';bottom:calc(276px + env(safe-area-inset-bottom))':''}"></div>
+  <div id="windrose" onclick="toggleWindMode()" onpointerdown="windRosePD(event)" onpointerup="windRosePU()" onpointercancel="windRosePU()" oncontextmenu="return false" style="display:none${manualShown?';bottom:calc(306px + env(safe-area-inset-bottom))':''}"></div>
   ${mapStatChipsHTML(hole)}
   ${greadBtnHTML()}
   ${gpsOnly()?'':`<button id="trackbtn" onclick="trackShotTap()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(112px + env(safe-area-inset-bottom));z-index:6;width:120px;height:46px;background:var(--card);border:2px solid ${trackShot&&trackShot.hole===mapHole?'var(--amber-bd)':'var(--green)'};border-radius:12px;color:${trackShot&&trackShot.hole===mapHole?'var(--amber-bd)':'var(--green-mid)'};font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:19px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">${trackShot&&trackShot.hole===mapHole?'Mark It':'Track It'}</button>`}
@@ -5928,7 +5935,25 @@ function placeManualTee(t){
   const sb=document.getElementById('fmbsub');
   if(sb)sb.textContent='tee set — tap the pin to clear it. Now find the green and tap “⛳ Set Green”.';
 }
-function mapTapAt(t){
+// NEAR MISSES (Nathan, Rancho 10/2: "I try to press FW/GIR and I slightly miss, so it puts a crosshair right above
+// the buttons"). A map tap within MAP_TAP_GUARD_PX of a button floating over the map is a thumb that missed the
+// button, not a spot to measure to, so it drops no crosshair. Marking a tee or a green is exempt: those taps are aimed.
+const MAP_TAP_GUARD_PX=28;
+function nearMapButton(ev){
+  try{
+    const x=ev&&ev.clientX,y=ev&&ev.clientY;
+    if(!isFinite(x)||!isFinite(y))return false;
+    const m=document.getElementById('holemap');
+    for(const el of document.querySelectorAll('#app button,#app [onclick]')){
+      if(m&&(m.contains(el)||el.contains(m)))continue;          // the map's own pins, or a box around the whole map
+      const b=el.getBoundingClientRect();if(!b.width||!b.height)continue;
+      const dx=Math.max(b.left-x,0,x-b.right),dy=Math.max(b.top-y,0,y-b.bottom);
+      if(dx*dx+dy*dy<=MAP_TAP_GUARD_PX*MAP_TAP_GUARD_PX)return true;
+    }
+  }catch(e){}
+  return false;
+}
+function mapTapAt(t,ev){
   if(mapMarks._teeMode){placeManualTee(t.slice());return;}
   if(mapMarks._ringMode&&!mapMarks.greenC){
     // ring mode: this tap IS the green. Live target + crowdsourced capture.
@@ -5990,6 +6015,7 @@ function mapTapAt(t){
     if(mapMarks._snapSub){const sb2=document.getElementById('fmbsub');if(sb2)sb2.textContent=mapMarks._snapSub;}
     return;
   }
+  if(ev&&nearMapButton(ev))return;   // a thumb that just missed FW/GIR, Track It, Score...
   // the yardage pills on the map carry the leg distances — nothing else to show
   if(mapMarks.setTap)mapMarks.setTap(t);
 }
@@ -6240,7 +6266,7 @@ function greensSetTarget(i){
 function initGreensMap(el){
   greensState=greensLoad();
   const pts=greensPts();
-  LMAP=L.map(el,{zoomControl:false,attributionControl:false});
+  LMAP=L.map(el,{zoomControl:false,attributionControl:false,doubleClickZoom:false});   // no double-tap zoom in a round (Nathan 10/2); a pinch zooms
   camBegin();
   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
     {maxZoom:20,maxNativeZoom:19}).addTo(LMAP);
@@ -6349,11 +6375,18 @@ let camProgUntil=0;   // WE are moving the map until this moment: our moves are 
 function camKey(){try{return (S.course&&S.course.id)+'#'+physHole(mapHole)+(greensIsMode()?'g':'');}catch(e){return null;}}
 function camBegin(){camProgUntil=Date.now()+4000;}   // a build never takes this long; it expires on its own
 function camEnd(){camProgUntil=Date.now()+250;}      // our own zoomend/moveend land first
+// A SLIDE IS NOT A TAKEOVER (Nathan, Rancho 10/2: the 📍 Me chip up on holes 1, 5 and 10, his dot creeping up the
+// screen). Leaflet starts a drag at 3 px, so a thumb that slid a little while tapping a crosshair away made the hole
+// "yours" and the map stopped following him. Only a real drag (the finger travels CAM_DRAG_PX) or a pinch takes it.
+// The frame you take remembers where you stood: CAM_OWN_WALK_M later the map follows you again (makeOrientFromMe).
+const CAM_DRAG_PX=40, CAM_OWN_WALK_M=27.4;   // 27.4 m = 30 yards
 function camArm(map){
   if(!map)return;
-  const note=()=>{
+  const note=e=>{
     if(Date.now()<camProgUntil)return;       // a frame WE set is not a frame you chose
-    try{const c=map.getCenter();camOwn={key:camKey(),center:[c.lat,c.lng],zoom:map.getZoom()};}catch(e){}
+    if(e&&e.type==='dragend'&&!(e.distance>=CAM_DRAG_PX))return;   // a tap that slid: the map keeps following you
+    try{const c=map.getCenter(),p=mapMarks&&mapMarks.mePos;
+      camOwn={key:camKey(),center:[c.lat,c.lng],zoom:map.getZoom(),at:p?p.slice():null};}catch(e){}
   };
   map.on('zoomend',note);map.on('dragend',note);
 }
@@ -6493,7 +6526,9 @@ async function initHoleMap(){
   manualOn=false;   // every hole starts in normal (locked) mode
   const canRotate=!!L.Map.prototype.setBearing;
   // no Leaflet attribution banner — the ⓘ chip in vMap carries the credits
-  LMAP=L.map(el,canRotate?{zoomControl:false,attributionControl:false,rotate:true,rotateControl:false,touchRotate:false,zoomSnap:0}:{zoomControl:false,attributionControl:false});
+  // NO DOUBLE-TAP ZOOM (Nathan 10/2): two quick taps -- a crosshair that did not seem to clear -- zoomed the map a step
+  // and made the view yours. A pinch still zooms.
+  LMAP=L.map(el,canRotate?{zoomControl:false,attributionControl:false,doubleClickZoom:false,rotate:true,rotateControl:false,touchRotate:false,zoomSnap:0}:{zoomControl:false,attributionControl:false,doubleClickZoom:false});
   camBegin();   // everything this builder frames is OURS, not the user's
   const sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
     {maxZoom:20,maxNativeZoom:19}).addTo(LMAP);   // credits live on the ⓘ chip
@@ -6925,7 +6960,7 @@ async function initHoleMap(){
     drawTrackPin();
     drawShotLines();                 // residual shot lines — geo or no geo
   }
-  LMAP.on('click',e=>{if(mapMarks._suppress&&mapMarks._suppress())return;mapTapAt([e.latlng.lat,e.latlng.lng]);});
+  LMAP.on('click',e=>{if(mapMarks._suppress&&mapMarks._suppress())return;mapTapAt([e.latlng.lat,e.latlng.lng],e.originalEvent);});
   camRestore(LMAP);   // you framed this hole yourself: put it back exactly
   camArm(LMAP);
   camEnd();
