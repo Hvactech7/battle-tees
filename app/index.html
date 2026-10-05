@@ -554,7 +554,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-center in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1791171285';
+const BUILD='1791172893';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -9503,7 +9503,7 @@ function bfHomeBtnHTML(){
 // a popup. The relay (books.js bfSocialOp) decides who may see a round and owns
 // the word filter, report and block; the filter is mirrored here so a swear
 // never makes the trip. The icons are our own drawings (9/14 mockup), not emoji.
-const BF_ICONS=[['fire','On Fire'],['splash','Splash'],['beer','Buy a Round'],['trophy','Champ'],['axe','Battle Time'],['shield','Shield Up'],['pirate','Going Down']];
+const BF_ICONS=[['fire','On Fire'],['splash','Splash'],['beer','Cheers!'],['trophy','Champ'],['axe','Battle Time'],['shield','Shield Up'],['pirate','Going Down']];
 const BF_ICON_NAME=Object.fromEntries(BF_ICONS);
 const BF_SPRITE='<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><g id="bfi-dimples" fill="#cfc7ae"><circle cx="-3" cy="-2" r="1"/><circle cx="2" cy="-3" r="1"/><circle cx="0" cy="2" r="1"/><circle cx="4" cy="1.5" r="1"/><circle cx="-4" cy="3" r="1"/></g><symbol id="bfi-fire" viewBox="0 0 48 48"><path d="M9 31c-2-8 1-14 5-18 0 4 2 6 4 7-1-6 2-12 6-18 1 6 4 10 6 13 1-3 1-5 0-8 5 4 9 11 8 18-1 4-2 6-4 8z" fill="#ff8a2b" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M14 30c-1-5 1-8 3-10 0 3 1 4 3 5 0-4 1-8 4-11 1 4 3 6 4 8 1-2 1-3 1-5 3 3 4 7 3 11z" fill="#ffd66b"/><circle cx="24" cy="33" r="12" fill="#f4efe0" stroke="currentColor" stroke-width="2.2"/><use href="#bfi-dimples" transform="translate(24 34) scale(1.5)"/><path d="M12.5 38c1 3 3 5 5 6.5M35.5 38c-1 3-3 5-5 6.5" stroke="#ff8a2b" stroke-width="2.2" stroke-linecap="round" fill="none"/></symbol><symbol id="bfi-splash" viewBox="0 0 48 48"><path d="M14 26c-3-6-6-9-10-11M34 26c3-6 6-9 10-11M18 22c-1-6-2-9-5-13M30 22c1-6 2-9 5-13" stroke="#4aa8ff" stroke-width="2.6" stroke-linecap="round" fill="none"/><g fill="#7cc3ff"><circle cx="5" cy="10" r="1.8"/><circle cx="43" cy="10" r="1.8"/><circle cx="11" cy="5" r="1.4"/><circle cx="37" cy="5" r="1.4"/></g><path d="M2 30q5.5-3 11 0t11 0t11 0t11 0V46H2z" fill="#0e3d75" stroke="#4aa8ff" stroke-width="1.6"/><circle cx="24" cy="27" r="8" fill="#f4efe0" stroke="currentColor" stroke-width="2"/><use href="#bfi-dimples" transform="translate(24 25) scale(1.1)"/><path d="M2 32q5.5-3 11 0t11 0t11 0t11 0V46H2z" fill="#1d5fb0" stroke="#7cc3ff" stroke-width="1.8" stroke-linejoin="round"/><path d="M8 40q4-2 8 0M28 39q4-2 8 0" stroke="#7cc3ff" stroke-width="1.4" fill="none" stroke-linecap="round"/></symbol><symbol id="bfi-beer" viewBox="0 0 48 48"><g transform="rotate(-14 16 30)"><path d="M6 25H3a3 3 0 0 0-3 3v4a3 3 0 0 0 3 3h3" fill="none" stroke="currentColor" stroke-width="2.4"/><rect x="6" y="19" width="16" height="23" rx="2" fill="#e8b23a" stroke="currentColor" stroke-width="2.2"/><path d="M11 25v11M17 25v11" stroke="#a87a18" stroke-width="1.8" stroke-linecap="round"/><path d="M5 21a4 4 0 0 1 4-6 4 4 0 0 1 8-1 4 4 0 0 1 6 3v4z" fill="#f4efe0" stroke="currentColor" stroke-width="1.8"/></g><g transform="rotate(14 32 30)"><path d="M42 25h3a3 3 0 0 1 3 3v4a3 3 0 0 1-3 3h-3" fill="none" stroke="currentColor" stroke-width="2.4"/><rect x="26" y="19" width="16" height="23" rx="2" fill="#e8b23a" stroke="currentColor" stroke-width="2.2"/><path d="M31 25v11M37 25v11" stroke="#a87a18" stroke-width="1.8" stroke-linecap="round"/><path d="M25 21v-4a4 4 0 0 1 6-3 4 4 0 0 1 8 1 4 4 0 0 1 4 6z" fill="#f4efe0" stroke="currentColor" stroke-width="1.8"/></g><g fill="#f4efe0"><circle cx="24" cy="8" r="2.3"/><circle cx="18" cy="4" r="1.5"/><circle cx="30" cy="4" r="1.5"/></g></symbol><symbol id="bfi-trophy" viewBox="0 0 48 48"><path d="M14 9H8a6 6 0 0 0 6 11M34 9h6a6 6 0 0 1-6 11" fill="none" stroke="currentColor" stroke-width="2.6"/><path d="M14 5h20v13a10 10 0 0 1-20 0z" fill="#e8c552" stroke="currentColor" stroke-width="2.2"/><path d="M18 8v9" stroke="#fff4c2" stroke-width="1.6" stroke-linecap="round"/><path d="M24 9.5l1.6 3.3 3.6.5-2.6 2.5.6 3.6L24 17.7l-3.2 1.7.6-3.6-2.6-2.5 3.6-.5z" fill="#fff4c2"/><path d="M22 28h4v6h-4z" fill="#e8c552" stroke="currentColor" stroke-width="1.6"/><path d="M15 34h18v5H15z" fill="#6e5716" stroke="currentColor" stroke-width="2"/><path d="M12 39h24v5H12z" fill="#2a3448" stroke="currentColor" stroke-width="2"/></symbol><symbol id="bfi-axe" viewBox="0 0 48 48"><g transform="translate(24 24) rotate(-22) scale(.9) translate(-24 -24)"><rect x="22.4" y="4" width="3.6" height="41" rx="1.6" fill="#b07a45" stroke="currentColor" stroke-width="1.8"/><rect x="22" y="35" width="4.4" height="2" fill="#6e4a26"/><rect x="22" y="39" width="4.4" height="2" fill="#6e4a26"/><path d="M22 10C15 8 9 6 4 4c-2.5 7-2.5 15 0 22 5-2 11-4 18-6z" fill="#c9d1de" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/><path d="M26.4 10c7-2 13-4 18-6 2.5 7 2.5 15 0 22-5-2-11-4-18-6z" fill="#c9d1de" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/><path d="M6.2 7.5c-1.4 6-1.4 12 0 16M42.2 7.5c1.4 6 1.4 12 0 16" stroke="#eef2f7" stroke-width="1.4" fill="none" stroke-linecap="round"/><rect x="20.4" y="8.5" width="7.6" height="13" rx="1.5" fill="#9aa6b8" stroke="currentColor" stroke-width="1.8"/><path d="M24.2 0.5l2.2 4.5h-4.4z" fill="#c9d1de" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><circle cx="24.2" cy="15" r="2" fill="#e8c552"/><circle cx="24.2" cy="45.6" r="2.2" fill="#e8c552" stroke="currentColor" stroke-width="1.2"/></g></symbol><symbol id="bfi-shield" viewBox="0 0 48 48"><clipPath id="bfShA"><path d="M24 3L42 8v14c0 11-8 19-18 23C14 41 6 33 6 22V8z"/></clipPath><path d="M24 3L42 8v14c0 11-8 19-18 23C14 41 6 33 6 22V8z" fill="#0e3d75"/><g clip-path="url(#bfShA)" fill="#e8c552"><rect x="0" y="0" width="24" height="23"/><rect x="24" y="23" width="24" height="25"/></g><path d="M24 7L38.5 11v11c0 9-6.3 15.5-14.5 19C15.8 37.5 9.5 31 9.5 22V11z" fill="none" stroke="#6e5716" stroke-width="1.2"/><path d="M24 3L42 8v14c0 11-8 19-18 23C14 41 6 33 6 22V8z" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/><circle cx="24" cy="23" r="6" fill="#f4efe0" stroke="currentColor" stroke-width="1.8"/><use href="#bfi-dimples" transform="translate(24 23) scale(.9)"/></symbol><symbol id="bfi-pirate" viewBox="0 0 48 48"><path d="M6 44L42 30M6 30l36 14" stroke="#e8c552" stroke-width="3" stroke-linecap="round"/><g fill="#e8c552"><circle cx="5" cy="44.5" r="2.4"/><circle cx="43" cy="29.5" r="2.4"/><circle cx="5" cy="29.5" r="2.4"/><circle cx="43" cy="44.5" r="2.4"/></g><path d="M15 29h18v8a3 3 0 0 1-3 3H18a3 3 0 0 1-3-3z" fill="#f4efe0" stroke="currentColor" stroke-width="2.2"/><path d="M20 33v6M24 33v6M28 33v6" stroke="currentColor" stroke-width="1.6"/><circle cx="24" cy="19" r="15" fill="#f4efe0" stroke="currentColor" stroke-width="2.2"/><use href="#bfi-dimples" transform="translate(30 10)"/><use href="#bfi-dimples" transform="translate(15 10) scale(.8)"/><circle cx="30" cy="21" r="4" fill="#141c2a"/><path d="M6 15Q18 11 42 12" stroke="#0b0f18" stroke-width="2.2" fill="none"/><ellipse cx="18" cy="21" rx="5.5" ry="4.8" fill="#0b0f18"/><path d="M24 26l-2.2 3.2h4.4z" fill="#141c2a"/></symbol></defs></svg>';
 const BF_BUBBLE='<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg>';
@@ -9523,7 +9523,7 @@ function bfFitIcon(x,ppl){
   return null;
 }
 function bfWhoFor(code,t){
-  if(t==='round')return 'the round';
+  if(t==='round')return 'the group';
   const e=(Array.isArray(bfList)?bfList:[]).find(x=>x.code===code);
   const p=((e&&e.sum)||[]).find(x=>bfTarget(x)===t);
   return p?esc(p.name):'this player';
@@ -9554,7 +9554,7 @@ function bfRxHTML(code,t,fit){
 }
 function bfRoundHTML(code){
   if(!bfSoc[code])return '';
-  return `<div class="bfround"><div class="bfroundT">THE WHOLE ROUND</div>${bfRxHTML(code,'round',null)}${bfSay[code]?`<div class="bfsay">${bfSay[code]}</div>`:''}</div>`;
+  return `<div class="bfround"><div class="bfroundT">THE WHOLE GROUP</div>${bfRxHTML(code,'round',null)}${bfSay[code]?`<div class="bfsay">${bfSay[code]}</div>`:''}</div>`;
 }
 function bfPickToggle(code,t){code=decodeURIComponent(code);t=decodeURIComponent(t);
   bfPick=(bfPick&&bfPick.code===code&&bfPick.t===t)?null:{code,t};render();}
@@ -9658,7 +9658,7 @@ function openBfComments(code,t,rp){
   bfPick=null;closeBfComments(true);
   bfCm={code,t,list:null,menu:null,blocked:[],note:'',noteK:(rp&&rp.note)||'',replyTo:(rp&&rp.replyTo)||'',sending:false};
   bfNotePaint();
-  const who=rp?esc(rp.replyName||'them'):t==='round'?'the whole round':bfWhoFor(code,t);
+  const who=rp?esc(rp.replyName||'them'):t==='round'?'the whole group':bfWhoFor(code,t);
   const d=document.createElement('div');
   d.className='vfWrap';d.id='bfcm';d.setAttribute('role','dialog');d.setAttribute('aria-modal','true');d.setAttribute('aria-labelledby','bfcmT');
   d.onclick=ev=>{if(ev.target===d)closeBfComments();};
@@ -9699,7 +9699,7 @@ function bfCmSend(){
     if(r&&r.ok&&r.comment){
       if(c.noteK){const k=c.noteK;bfAck(encodeURIComponent(k));closeBfComments();return;}   // answered: that notice is done
       // posting closes the popup (Nathan 9/14); the card's count and caption say it landed
-      bfSay[c.code]=c.replyTo&&c.replyName?`Reply sent to ${esc(c.replyName)}.`:`Comment posted on ${c.t==='round'?'the round':bfWhoFor(c.code,c.t)}.`;
+      bfSay[c.code]=c.replyTo&&c.replyName?`Reply sent to ${esc(c.replyName)}.`:`Comment posted on ${c.t==='round'?'the group':bfWhoFor(c.code,c.t)}.`;
       closeBfComments();bfSocBump(c.code,c.t,1);
     }else bfCmErr((r&&r.error)||'Could not post. Try again.');
   }).catch(()=>{c.sending=false;bfCmErr('Could not post. Check your signal.');});
@@ -9777,7 +9777,7 @@ function bfNoteHTML(){
   const list=bfShowable();
   if(!list.length)return '';
   return list.slice(0,3).map(x=>{
-    const where=x.round?"your group's round":'your round';
+    const where=x.round?'your group':'your round';   // the whole-group row (Nathan 10/4: 'The Whole Group')
     const icon=x.kind==='r'?bfIcon(x.icon):`<span style="color:var(--green-mid);flex:none;display:flex">${BF_BUBBLE.replace('width="15" height="15"','width="34" height="34"')}</span>`;
     const main=x.kind==='r'?`<b>${esc(x.from)}</b> · ${esc(BF_ICON_NAME[x.icon]||'Reaction')}`:`<b>${esc(x.from)}</b>: “${esc(x.text||'')}”`;
     const sub=x.kind==='r'?`Reacted to ${where}`:x.reply?`Replied to you${x.starter?` on ${esc(x.starter)}'s round`:''}`:`Commented on ${where}`;
