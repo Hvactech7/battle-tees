@@ -554,7 +554,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-center in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1791172893';
+const BUILD='1791176488';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -2277,6 +2277,7 @@ function saveMe(){
   setTimeout(registerProfile,0);          // the pid exists now — tell the Pi
   set(()=>{
     S.me={name,index:parseIdx(x&&x.value,10),pid:(S.me&&S.me.pid)||('u'+Date.now().toString(36)+Math.random().toString(36).slice(2,8)),...(S.me&&S.me.track?{track:S.me.track}:{})};
+    hcpTypedMine(S.me.index);   // the original typed index: it plays until the scores take over, and fills their empty slots
     upsertLib({name,index:S.me.index,libId:null});   // no tee yet: the first tee sheet decides, not the default course's tips
   });
   try{localStorage.setItem('btOnboarded','1');}catch(x3){}
@@ -2307,7 +2308,9 @@ function saveEditMe(){
     const pid=(S.me&&S.me.pid)||('u'+Date.now().toString(36)+Math.random().toString(36).slice(2,8));
     const photo=S.me&&S.me.photo;   // the photo rides through a profile save (8/20: Save wiped it back to initials)
     const track=S.me&&S.me.track;   // ...and so do my trackers (putts), which live on the phone since 9/13
+    const was=S.me.index;
     S.me={name,index:parseIdx(x&&x.value,S.me.index),pid};
+    if(S.me.index!=null&&+S.me.index!==+was)hcpTypedMine(S.me.index);   // a newly typed index plays my next round
     if(photo)S.me.photo=photo;
     if(track)S.me.track=track;
     // my library card — by pid first, old name as the grandfathered fallback
@@ -3247,13 +3250,24 @@ function hcpDiffFor(entry,mi){
 const HCP_MIN_ROUNDS=8;
 function hcpFullRounds(list){return (list||[]).filter(x=>x&&isFinite(x.d)&&(x.n||18)>=18).length;}
 function hcpEnough(list){return hcpFullRounds(list)>=HCP_MIN_ROUNDS;}
-function hcpIndexFromLog(list){
+// A TYPED INDEX PLAYS THE NEXT ROUND (Nathan 10/4: Nate typed his newer index and the calculated 33.0 came back on
+// the next sync). Typing it -- in the profile, or on my own row in Setup -- holds it through every sync until a round
+// is scored with it; then the calculated index takes over again. And the calculation's empty slots (a book under 20
+// rounds) carry the latest TYPED index instead of the average of the real ones, so what he typed keeps counting.
+// The relay keeps the same typed index on the book (hcp op 'typed'), so every phone computes the same number.
+function hcpMine(){if(!S.hcpMine||typeof S.hcpMine!=='object')S.hcpMine={};return S.hcpMine;}
+function hcpTypedMine(ix){
+  if(ix==null||!isFinite(+ix))return;
+  const m=hcpMine();m.typed={ix:Math.round(+ix*10)/10,at:Date.now()};m.hold=true;m.push=true;
+}
+function hcpIndexFromLog(list,fill){
   const real=(list||[]).map(x=>x.d).filter(d=>isFinite(d));
   if(!real.length)return null;
   if(!hcpEnough(list))return null;   // not enough golf yet — whatever was typed stands
   const avg=real.reduce((a,b)=>a+b,0)/real.length;
   const window=real.slice(-20);
-  while(window.length<20)window.push(avg);
+  const filler=(fill!=null&&isFinite(+fill))?+fill:avg;   // the typed index fills the empty slots; no typed index: the average
+  while(window.length<20)window.push(filler);
   const best8=window.slice().sort((a,b)=>a-b).slice(0,8);
   const ix=Math.round(best8.reduce((a,b)=>a+b,0)/8*10)/10;
   return Math.max(-10,Math.min(54,ix));
@@ -3289,11 +3303,17 @@ function hcpAfterArchive(entry){
         if(pi>=0)S.hcpPending[pi]=row;else S.hcpPending.push(row);
         if(S.hcpPending.length>200)S.hcpPending.splice(0,S.hcpPending.length-200);
       }
-      const ix=hcpIndexFromLog(log);if(ix==null)return;
       const low=snap.name.trim().toLowerCase();
+      const mine=(S.me&&S.me.pid&&S.me.pid===snap.pid)||(S.me&&(S.me.name||'').trim().toLowerCase()===low);
+      const hm=hcpMine();
+      // the typed index has now played its round (one that ENDED after it was typed -- never an old round replayed or
+      // reopened) -- back to the calculated index
+      if(mine&&hm.hold&&hm.typed&&(entry.endedAt||0)>=hm.typed.at)hm.hold=false;
+      const ix=hcpIndexFromLog(log,mine&&hm.typed?hm.typed.ix:null);if(ix==null)return;
+      if(mine&&hm.hold)return;   // typed for a round not played yet: it stands
       const lib=S.playerLib.find(e=>(snap.pid&&e.pid===snap.pid))||S.playerLib.find(e=>(e.name||'').trim().toLowerCase()===low);
       if(lib)lib.index=ix;
-      if((S.me&&S.me.pid&&S.me.pid===snap.pid)||(S.me&&(S.me.name||'').trim().toLowerCase()===low))S.me.index=ix;
+      if(mine)S.me.index=ix;
     });
   }catch(e){}
 }
@@ -3312,10 +3332,13 @@ async function hcpSync(force){
     hcpSyncBusy=true;
     const push=pend.slice(0,50);
     const pids=[...new Set([S.me&&S.me.pid].concat((S.playerLib||[]).map(e=>e&&e.pid)).filter(Boolean))];
-    const r=await relayBattle({op:'hcp',push,pull:pids});
+    const hm=hcpMine();
+    const typed=(hm.push&&hm.typed&&S.me&&S.me.pid)?{pid:S.me.pid,ix:hm.typed.ix,at:hm.typed.at}:null;
+    const r=await relayBattle(Object.assign({op:'hcp',push,pull:pids},typed?{typed}:{}));
     hcpSyncAt=Date.now();
     if(r&&r.ok){
       if(!r.testMuted&&push.length)S.hcpPending=pend.slice(push.length);
+      if(!r.testMuted&&typed&&hm.typed&&hm.typed.at===typed.at)hm.push=false;
       const idx=r.idx||{};
       let changed=false;
       Object.entries(idx).forEach(([pid,v])=>{
@@ -3323,10 +3346,11 @@ async function hcpSync(force){
         // the book is the union of every phone's rounds, so IT decides whether
         // the floor is met — not this phone's partial log
         if(!(+v.n18>=HCP_MIN_ROUNDS))return;
+        if(S.me&&S.me.pid===pid&&hm.hold)return;   // my typed index waits for its round
         (S.playerLib||[]).forEach(e=>{if(e&&e.pid===pid&&e.index!==v.ix){e.index=v.ix;changed=true;}});
         if(S.me&&S.me.pid===pid&&S.me.index!==v.ix){S.me.index=v.ix;changed=true;}
       });
-      if(changed||push.length){save();if(S.screen==='players'||S.screen==='home')render();}
+      if(changed||push.length||typed){save();if(S.screen==='players'||S.screen==='home')render();}
     }
   }catch(e){}finally{hcpSyncBusy=false;}
 }
@@ -13571,7 +13595,11 @@ function setPl(i,k,v){set(()=>{
     return;
   }
   if(k==='name')v=uniqueRosterName(v,i);
-  if(k==='index')S.players[i][k]=parseIdx(v,+S.players[i][k]||0);
+  if(k==='index'){
+    S.players[i][k]=parseIdx(v,+S.players[i][k]||0);
+    const p=S.players[i];
+    if(S.me&&((S.me.pid&&p.pid===S.me.pid)||p.ownerDev===devId())&&+p.index!==+S.me.index){S.me.index=+p.index;hcpTypedMine(S.me.index);}
+  }
   else if(k==='chOverride')S.players[i][k]=v===''?null:+v;
   else S.players[i][k]=v;
   if(k==='name'){
