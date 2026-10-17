@@ -554,7 +554,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-center in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1792192214';
+const BUILD='1792221127';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -9154,6 +9154,12 @@ function faqHTML(){
     ${groups}
   </div>`;
 }
+// Where players reach Nathan (10/16). Every relay email carries the same address (cloud/src/books.js CONTACT).
+const CONTACT_EMAIL='hello@battletees.app';
+function contactMail(){
+  try{stat('contact_tap',{});}catch(e){}
+  location.href='mailto:'+CONTACT_EMAIL+'?subject='+encodeURIComponent('Battle Tees feedback');
+}
 function vSettings(){
   const bf=S.config.bf||{broadcast:true,emails:true};
   const row=(label,sub,key)=>`<div class="row"><div style="flex:1;min-width:0"><b>${label}</b>
@@ -9168,6 +9174,10 @@ function vSettings(){
         <div style="font-size:15.5px;line-height:1.45">Let a friend scan this to get the app.</div>
         <div class="tiny mt">Installs from this code are counted separately from the email one, so we learn where new players actually come from.</div>
         <button class="ghost mt" style="width:100%" onclick="shareAppLink()">Send the link instead</button></div></div>
+  </div>
+  <div class="card"><h2>✉️ Contact us</h2>
+    <div class="tiny">Questions or feedback? We read every email.</div>
+    <button class="ghost mt" style="width:100%" onclick="contactMail()">${CONTACT_EMAIL}</button>
   </div>
   ${faqHTML()}
   <div class="card"><h2>⚔️ Battlefield</h2>
