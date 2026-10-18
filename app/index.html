@@ -554,7 +554,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-center in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1792274624';
+const BUILD='1792364812';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -3465,6 +3465,16 @@ function NP(){
   return 4;
 }
 function actIdx(){return [0,1,2,3].slice(0,NP());}
+// PLAYERS PAST THE GAME'S SEATS (Nathan 10/18 at Blue Rock: David joined a Match Play round -- the match is
+// 1v1, so he took the room's third spot and synced his scores, yet was on nobody's Score or Standings screen).
+// They score on the card like anyone else and play stroke against the course; the game itself never sees them,
+// and a hole never waits on them to confirm.
+function extraIdx(){
+  if(!S.round||!S.round.started)return [];
+  const n=NP();
+  return S.players.map((p,i)=>i).filter(i=>i>=n&&i<4&&isRealPl(S.players[i]));
+}
+function cardIdx(){return actIdx().concat(extraIdx());}
 // Round span: which holes are in play (full 18, front/back 9) and the first tee.
 // Hole records stay indexed 0-17 (sync keys unchanged); the span just limits
 // navigation and position-based rules (wolf rotation, match clinches).
@@ -4986,7 +4996,7 @@ function mapConfirm(){
   set(()=>{
     const rec=S.round.holes[h];if(!rec)return;
     const mi=myPlayerIdx(),par=(S.course.holes[h]||{par:4}).par;
-    commitStage(h,groupShare()?myRows(h):actIdx());
+    commitStage(h,groupShare()?myRows(h).concat(extraMine(h)):cardIdx());
     if(!rec.gts)rec.gts=[0,0,0,0];
     if(rec.gross[mi]==null){rec.gross[mi]=par;rec.gts[mi]=Date.now();}
     if(groupShare()){
@@ -11863,11 +11873,77 @@ function courseRowHTML(x,forPick){
       :S.courses.length>1?`<button class="ghost danger xbtn" aria-label="Delete course" onclick="delCourse(${i})">${armDelCourse===i?'Delete?':XICON}</button>`:''}
   </div>`;
 }
+// THE PICKER'S NEAREST LIST IS EVERY COURSE AROUND YOU, saved or not (Nathan 10/18 at Blue Rock: the
+// pre-pick took East, West was never saved on Nate's phone, so it was nowhere in "Nearest" -- they had
+// to back out to Courses and search it). An unsaved course is one tap: natUse adds it and makes it
+// current. A club's other courses ride along (East + West, the three Dutch pairings), so the sister
+// course is always one tap away. Saved copies win: a course already in the library shows as saved.
+const NEAR_NAT_MI=5;
+function clubKey(n){return courseCore(String(n||'').split(' - ')[0]);}
+function natNearIdx(){
+  if(!window.__natIdx&&!window.__natIdxLoading){
+    window.__natIdxLoading=1;
+    fetch('/courses-index.json').then(r=>r.ok?r.json():null).then(j=>{if(j){window.__natIdx=j;render();}}).catch(()=>{}).finally(()=>{window.__natIdxLoading=0;});
+  }
+  return window.__natIdx||[];
+}
+// a saved course with the same core name within 3 km is the same course (built-in StoneTree and its
+// national copy sit 2.3 km apart; sameCourseIdx's 400 m is for the library itself)
+function savedTwin(r){
+  const core=courseCore(r[1]);if(!core)return false;
+  return S.courses.some(c=>c&&c.loc&&courseCore(c.name)===core&&kmBetween(c.loc[0],c.loc[1],r[3],r[4])<=3);
+}
+function pickNearList(near){
+  try{
+    if(!myCoords||!isFinite(myCoords[0]))return near;
+    const mi=(a,b)=>kmBetween(myCoords[0],myCoords[1],a,b)*0.621371;
+    const saved=new Set(S.courses.map(c=>c&&c.id));
+    const idx=natNearIdx();
+    const nat=[];
+    idx.forEach(r=>{
+      if(!r||saved.has(r[0])||!isFinite(r[3]))return;
+      const d=mi(r[3],r[4]);if(d>NEAR_NAT_MI)return;
+      if(savedTwin(r))return;   // already in the library under another id (a built-in and its national copy)
+      nat.push({nat:r,mi:d,name:r[1]});
+    });
+    let all=near.map(x=>Object.assign({name:x.c.name},x)).concat(nat).sort((a,b)=>a.mi-b.mi);
+    const top=all.slice(0,5);
+    // sister courses: same club name (the part before ' - '), within 3 km of a listed one
+    const keys=new Set(top.map(x=>clubKey(x.name)).filter(Boolean));
+    const near3=(x,y)=>{const p=x.nat?[x.nat[3],x.nat[4]]:x.c.loc,q=y.nat?[y.nat[3],y.nat[4]]:y.c.loc;return p&&q&&kmBetween(p[0],p[1],q[0],q[1])<=3;};
+    all.slice(5).forEach(x=>{if(keys.has(clubKey(x.name))&&top.some(t=>clubKey(t.name)===clubKey(x.name)&&near3(t,x)))top.push(x);});
+    // sisters just past the 5-mile ring still come along (a cheap box test first: this runs on render)
+    const anchors=top.map(t=>t.nat?[t.nat[3],t.nat[4]]:t.c.loc).filter(Boolean);
+    idx.forEach(r=>{
+      if(!r||saved.has(r[0])||!anchors.some(p=>Math.abs(p[0]-r[3])<0.03&&Math.abs(p[1]-r[4])<0.04))return;
+      if(top.some(t=>t.nat&&t.nat[0]===r[0]))return;
+      if(savedTwin(r))return;   // the national twin of a saved course is not a sister
+      if(top.some(t=>courseCore(t.name)===courseCore(r[1])))return;
+      const y={nat:r,mi:mi(r[3],r[4]),name:r[1]};
+      if(keys.has(clubKey(r[1]))&&top.some(t=>clubKey(t.name)===clubKey(r[1])&&near3(t,y)))top.push(y);
+    });
+    return top.sort((a,b)=>a.mi-b.mi);
+  }catch(e){return near;}
+}
+function natNearRowHTML(x){
+  const r=x.nat;
+  return `<div class="row" onclick="natUse('${r[0]}')" style="cursor:pointer">
+    <div style="flex:1;min-width:0"><b>${esc(r[1])}</b><div class="tiny">Par ${r[6]}${r[7]?' · 9 holes':''} · tap to add</div></div>
+    <span class="tiny" style="flex:none;color:var(--ink3);margin-left:8px">${x.mi<10?x.mi.toFixed(1):Math.round(x.mi)} mi</span>
+  </div>`;
+}
 function courseListHTML(forPick){
   if(!window.__coordsAsk||Date.now()-window.__coordsAsk>60000){window.__coordsAsk=Date.now();grabCoords();}
-  const {near,rest}=courseDisplayOrder();
+  let {near,rest}=courseDisplayOrder();
+  if(forPick){
+    const merged=pickNearList(near);
+    const savedNear=new Set(merged.filter(x=>!x.nat).map(x=>x.c.id));
+    // a saved course that dropped out of the top list goes back to A-Z, so nothing is lost
+    rest=rest.concat(near.filter(x=>!savedNear.has(x.c.id))).sort((a,b)=>a.c.name.localeCompare(b.c.name));
+    near=merged;
+  }
   return `${near.length?`<div class="tiny" style="margin:4px 0 2px;font-weight:700">📍 Nearest</div>`:''}
-    ${near.map(x=>courseRowHTML(x,forPick)).join('')}
+    ${near.map(x=>x.nat?natNearRowHTML(x):courseRowHTML(x,forPick)).join('')}
     ${rest.length?`<div style="display:flex;align-items:center;gap:10px;margin:18px 0 8px">
       <div style="flex:1;height:2px;background:var(--line);border-radius:1px"></div>
       <span class="tiny" style="font-weight:700;letter-spacing:.08em;color:var(--ink2)">ALL COURSES A–Z</span>
@@ -14084,7 +14160,8 @@ function prefillNines(h){
     r.gross=r.gross.map((g,i)=>(capt.includes(i)&&g==null)?fill(i):g);
     return;
   }
-  r.gross=r.gross.map((g,i)=>(i<NP()&&g==null)?fill(i):g);
+  const xs=extraIdx();   // "Everyone" means everyone on the card, the stroke-only player too
+  r.gross=r.gross.map((g,i)=>((i<NP()||xs.includes(i))&&g==null)?fill(i):g);
 }
 
 // ----- hole screen -----
@@ -14826,7 +14903,7 @@ function maybeBroadcastRound(){
     setTimeout(bfBroadcastStart,300);
   }catch(e){}
 }
-function confirmHole(){const h=S.round.cur;if(wolfPickGate(h,confirmHole))return;if(greensIsMode(h))greensConsumeTarget();set(()=>{commitStage(h,actIdx());S.round.holes[h].confirmed=true;if(!isReview())advanceToNext();});maybeBroadcastRound();askPutts(h,()=>showSplash(h,true));try{setTimeout(()=>chalCheerCheck(false),900);}catch(e){}try{bfHoleDoneTick();bfInboxPoll(true);}catch(e){}}
+function confirmHole(){const h=S.round.cur;if(wolfPickGate(h,confirmHole))return;if(greensIsMode(h))greensConsumeTarget();set(()=>{commitStage(h,cardIdx());S.round.holes[h].confirmed=true;if(!isReview())advanceToNext();});maybeBroadcastRound();askPutts(h,()=>showSplash(h,true));try{setTimeout(()=>chalCheerCheck(false),900);}catch(e){}try{bfHoleDoneTick();bfInboxPoll(true);}catch(e){}}
 // ----- shared rounds: each phone confirms its own rows, then moves on -----
 function myRows(h){
   // A row is mine to confirm if nobody owns it, my phone owns it, OR I have
@@ -14841,6 +14918,12 @@ function myRows(h){
     // so the group can score them without ceremony.
     return !dev||dev===devId()||!!(p&&p.ended)||!!unlockedRows[hh+'-'+i];});
 }
+// an extra player's row (past the game's seats) is mine on the same terms as myRows
+function extraMine(h){
+  const hh=(h==null?S.round.cur:h);
+  return extraIdx().filter(i=>{const p=S.players[i];const dev=p&&(p.ownerDev||p.scorer);
+    return !dev||dev===devId()||!!(p&&p.ended)||!!unlockedRows[hh+'-'+i];});
+}
 function cfOn(rec,i){return !!(rec&&rec.cfts&&rec.cfts[i]>0);}
 function confirmMine(){
   const h=S.round.cur;
@@ -14848,9 +14931,9 @@ function confirmMine(){
   let closed=false;
   set(()=>{
     const rec=S.round.holes[h];
-    commitStage(h,myRows(h));
+    commitStage(h,myRows(h).concat(extraMine(h)));
     if(!rec.cfts)rec.cfts=[0,0,0,0];
-    myRows(h).forEach(i=>{if(rec.gross[i]!=null)rec.cfts[i]=Date.now();});
+    myRows(h).concat(extraMine(h)).forEach(i=>{if(rec.gross[i]!=null)rec.cfts[i]=Date.now();});
     if(!rec.confirmed&&actIdx().every(i=>rec.cfts[i]>0)){rec.confirmed=true;closed=true;}
     if(!isReview())advanceToNext();
   });
@@ -14908,14 +14991,16 @@ function vHoleNines(){
   const all=isN?computeNines():null;
   const dots=i=>dotsOn(i,h);
   const act=actIdx();
+  const xtra=extraIdx();   // on the card, past the game's seats: stroke only (David at Blue Rock, 10/18)
   const holeNav=holeNavHTML();
-  const scoreRows=act.map(i=>{
+  const scoreRows=act.concat(xtra).map(i=>{
     const p=S.players[i], g=stagedG(rec,h,i);
-    const net=g!=null?g-dots(i):null;
+    const isX=xtra.includes(i), dn=isX?fullDotsOn(i,h):dots(i);
+    const net=g!=null?g-dn:null;
     const lk=rowLock(h,i);
     return `<div class="scorebar ${lk==='mine'?'rowmine':lk==='locked'?'rowlocked':''}">
-      <div style="min-width:118px"><b>${esc(p.name)}</b>
-        <div class="tiny" style="font-size:15.5px">${dots(i)>0?`<span class="dots">${'●'.repeat(dots(i))}</span>`:''} ${g!=null&&S.config.lens!=='gross'?`net ${net} · `:''}hcp ${p.index}${(p.ended)?' · <span style="color:var(--amber-bd,#e0a53a)">ended their round — score them here</span>':''}</div></div>
+      <div style="min-width:118px"><b>${esc(p.name)}</b>${isX?' <span class="pill" style="background:var(--line);color:var(--ink)">stroke only</span>':''}
+        <div class="tiny" style="font-size:15.5px">${dn>0?`<span class="dots">${'●'.repeat(dn)}</span>`:''} ${g!=null&&S.config.lens!=='gross'?`net ${net} · `:''}hcp ${p.index}${(p.ended)?' · <span style="color:var(--amber-bd,#e0a53a)">ended their round — score them here</span>':''}</div></div>
       ${lk==='locked'
         ?`<div style="display:flex;align-items:center;gap:12px"><span class="val num" style="font-size:24px">${g==null?'–':g}</span><button class="ghost" onclick="unlockRow(${h},${i})">✎</button></div>`
         :`<div class="stepper">
@@ -15093,7 +15178,7 @@ function scSegTable(idx,segLabel,extraTot){
   let out='<div class="sc-wrap"><table class="sc" style="width:100%"><tr><th class="nm">Hole</th>'+idx.map(i=>`<th>${i+1}</th>`).join('')+`<th>${segLabel}</th>`+(extraTot?'<th>TOT</th>':'')+'</tr>';
   out+='<tr class="parrow"><td class="nm">Par</td>'+idx.map(i=>`<td>${hs[i].par}</td>`).join('')+`<td>${parSeg}</td>`+(extraTot?`<td>${hs.reduce((a,h)=>a+h.par,0)}</td>`:'')+'</tr>';
   out+=scHcpRow(hs,[...idx,null,...(extraTot?[null]:[])]);
-  const rowDefs=gameOn()==='scramble'?scrambleTeams().map(t=>({name:teamNameFor(t)||t.map(i=>S.players[i].name).join(' & '),pi:t[0]})):S.players.slice(0,NP()).map((p,pi)=>({name:p.name,pi}));
+  const rowDefs=gameOn()==='scramble'?scrambleTeams().map(t=>({name:teamNameFor(t)||t.map(i=>S.players[i].name).join(' & '),pi:t[0]})):cardIdx().map(pi=>({name:S.players[pi].name,pi}));   // the stroke-only player past the seats is on the card too
   rowDefs.forEach(({name:rowName,pi})=>{
     const g=i=>S.round.holes[i].confirmed?S.round.holes[i].gross[pi]:null;
     const played=idx.filter(i=>g(i)!=null);
@@ -15153,7 +15238,7 @@ function scorecardHTML(lens){
   html+='<tr class="parrow"><td class="nm">Par</td>'+hs.slice(0,9).map(h=>`<td>${h.par}</td>`).join('')
     +`<td>${parOut}</td>`+hs.slice(9).map(h=>`<td>${h.par}</td>`).join('')+`<td>${parIn}</td><td>${parOut+parIn}</td></tr>`;
   html+=scHcpRow(hs,[...idx.slice(0,9),null,...idx.slice(9),null,null]);
-  const rowDefs=gameOn()==='scramble'?scrambleTeams().map(t=>({name:teamNameFor(t)||t.map(i=>S.players[i].name).join(' & '),pi:t[0]})):S.players.slice(0,NP()).map((p,pi)=>({name:p.name,pi}));
+  const rowDefs=gameOn()==='scramble'?scrambleTeams().map(t=>({name:teamNameFor(t)||t.map(i=>S.players[i].name).join(' & '),pi:t[0]})):cardIdx().map(pi=>({name:S.players[pi].name,pi}));   // the stroke-only player past the seats is on the card too
   rowDefs.forEach(({name:rowName,pi})=>{
     const g=i=>{if(!S.round.holes[i].confirmed)return null;
       const raw=S.round.holes[i].gross[pi];if(raw==null)return null;
@@ -15180,7 +15265,7 @@ function scorecard9HTML(base,lens){
     +idx.map(i=>`<th>${i+1}</th>`).join('')+'<th>TOT</th></tr>';
   html+='<tr class="parrow"><td class="nm">Par</td>'+idx.map(i=>`<td>${hs[i].par}</td>`).join('')+`<td>${parTot}</td></tr>`;
   html+=scHcpRow(hs,[...idx,null]);
-  const rowDefs=gameOn()==='scramble'?scrambleTeams().map(t=>({name:teamNameFor(t)||t.map(i=>S.players[i].name).join(' & '),pi:t[0]})):S.players.slice(0,NP()).map((p,pi)=>({name:p.name,pi}));
+  const rowDefs=gameOn()==='scramble'?scrambleTeams().map(t=>({name:teamNameFor(t)||t.map(i=>S.players[i].name).join(' & '),pi:t[0]})):cardIdx().map(pi=>({name:S.players[pi].name,pi}));   // the stroke-only player past the seats is on the card too
   rowDefs.forEach(({name:rowName,pi})=>{
     const g=i=>{if(!S.round.holes[i].confirmed)return null;
       const raw=S.round.holes[i].gross[pi];if(raw==null)return null;
@@ -16005,6 +16090,25 @@ function vStandings(){
   // In a review, the way OUT sits above everything — the hole screens carry
   // this banner and Standings stranded you without it.
   const tables=reviewBanner()+gamePickCardHTML()+stackOrder.map(x=>cardFor(x)).join('');
+  // Someone on the card past the game's seats (a third player in a 1v1 match): the whole group as
+  // stroke play against the course, full handicap, so the extra player is counted too (Nathan 10/18).
+  const everyCard=(()=>{try{
+    const xs=extraIdx();if(!xs.length)return '';
+    const row=i=>{let gr=0,pr=0,st=0,th=0;
+      S.round.holes.forEach((r,h)=>{const g=r&&r.gross?r.gross[i]:null;if(g==null)return;
+        gr+=g;pr+=(S.course.holes[h]||{par:4}).par;st+=fullDotsOn(i,h);th++;});
+      return {i,th,gross:gr,net:gr-st,par:pr};};
+    const R=cardIdx().map(row);
+    const key=prim==='net'?'net':'gross';
+    R.sort((a,b)=>(a.th?a[key]-a.par:1e9)-(b.th?b[key]-b.par:1e9));
+    const tp=d=>d===0?'E':(d>0?'+':'')+d;
+    return `<div class="card"><h2>Everyone · stroke play</h2>
+      <table class="st"><tr><th>Player</th><th class="r">Thru</th>${cols.map(L=>`<th class="r">${lbl(L)}</th>`).join('')}</tr>
+      ${R.map(x=>`<tr><td>${esc(S.players[x.i].name)}</td><td class="r num" style="font-size:20px;color:var(--ink2)">${x.th}</td>${cols.map(L=>{
+        const v=L==='net'?x.net:x.gross;
+        return `<td class="r num" style="font-size:30px">${x.th?`${v} <span style="font-size:16px">${tp(v-x.par)}</span>`:'–'}</td>`;}).join('')}</tr>`).join('')}
+      </table><div class="tiny mt">${xs.map(i=>esc((S.players[i].name||'').split(' ')[0])).join(' & ')} ${xs.length===1?'is':'are'} on the card but not in the ${gameName(g)} game.</div></div>`;
+  }catch(e){return '';}})();
   const hist=holeHistoryRowsHTML(all,prim,true);
   // Columns are the union of what anyone tracked; a player who did not track a
   // stat shows a dash rather than a misleading zero.
@@ -16039,7 +16143,7 @@ function vStandings(){
     const done=playOrder().every(h=>(S.round.holes[h]||{}).confirmed);
     const anyOut=actIdx().some(i=>S.players[i]&&S.players[i].ended);
     return (done||anyOut)?othersStillInHTML():'';}catch(e){return '';}})();
-  return topbar('Standings',esc(S.course.name),'','','')+`<main>${paceLine()}${stillIn}${tables}${extra}
+  return topbar('Standings',esc(S.course.name),'','','')+`<main>${paceLine()}${stillIn}${tables}${everyCard}${extra}
     ${(all!=null&&all.perHole)?`<div class="card"><h2>Hole history (tap to edit)</h2>${hist||'<div class="muted">No holes confirmed yet.</div>'}</div>`:''}
     ${settleSectionHTML()}
   </main>`+tabs('standings');
