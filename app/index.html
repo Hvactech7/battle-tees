@@ -554,7 +554,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-center in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1792368691';
+const BUILD='1792377072';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -2938,7 +2938,7 @@ function applyLibrary(d){
         Object.keys(d.shotLast).forEach(cid=>{
           const mine=S.shotLast[cid]||{},theirs=d.shotLast[cid]||{};
           Object.keys(theirs).forEach(h=>{
-            if(!mine[h]||(theirs[h].round||0)>(mine[h].round||0))mine[h]=theirs[h];   // newest round's lines win
+            mine[h]=shotMemMerge(mine[h],theirs[h],+h,cid);   // per kind of shot, the newest round's line wins
           });
           S.shotLast[cid]=mine;
         });}
@@ -4114,23 +4114,106 @@ function computeGame(){const g=gameOn();
 let mapHole=0,LMAP=null,mapWatch=null,mapMarks={},leafletP=null;
 let lSpine=null,gmSpine=null,showSpine=false;   // spines retired — always off
 let lTee=null;   // draggable tee marker (mapMarks is reassigned mid-init, so it cannot live there)
-let lShots=[],gmShots=[],showShots=false;   // shot lines never drawn on the map (Nathan 9/14); the mountain took their button
+let lShots=[],gmShots=[],showShots=false;   // the old shots button's flag: nothing reads it to hide a line any more (Nathan 10/18)
 function shotsForHole(h){
   const log=(S.shotLog&&S.shotLog['s'+(S.round.startedAt||0)])||[];
   return log.filter(e=>e&&e.h===h&&e.a&&e.b);
 }
 // residual tracked-shot lines — they stay up all round (and re-appear when a
 // past round is opened, since the log is keyed by the round's start stamp)
+// TRACKED-SHOT MEMORY BY KIND (Nathan 10/18, after Rancho on Friday showed none of his old lines):
+// every hole keeps ONE remembered line per kind of shot -- tee shot, layup, approach -- and a line
+// stays until a new shot of the SAME kind on that hole takes its place. The "spine" he had turned
+// off on 9/14 was the OSM route line's on/off toggle; these dashed lines were never meant to go.
+// The kind comes from where the shot STARTED against the hole's length (his GPS start marks sit
+// 40-80 y off the map's tee point -- forward tees, drift -- so a tee-distance rule misreads drives):
+// started in the first 30% of the hole (or within 80 y of its full length) = tee shot, par 3s too;
+// otherwise ended within 50 y of the green = approach; otherwise = layup. A shot that finished more
+// than 20 y FARTHER from the green than it started was saved on the wrong hole: it stays in the log,
+// never on the map. On his 70 mapped shots: 66 tee shots (incl. three par-3 irons), the two 3-wood
+// second shots = layups, two Cypress Lakes shots = wrong hole.
+const SHOT_KINDS=['tee','layup','approach'];
+function shotKindOf(s,h,cid){   // -> [kind, fromTheMap]
+  try{
+    const c=(!cid||(S.course&&S.course.id===cid))?S.course:(S.courses||[]).find(x=>x&&x.id===cid);
+    const ph=(c&&c.loop9)?h%9:h;
+    const g=c&&c.geo&&c.geo.holes&&c.geo.holes[ph+1];
+    if(g&&g.path&&g.path.length>1&&s&&s.a&&s.b){
+      const path=g.path.slice();
+      if(c===S.course){const tf=teeFixFor(ph);if(tf)path[0]=tf;}
+      const gc=(g.green&&g.green.length>2)?centroidOf(g.green):path[path.length-1];
+      let L=0;for(let i=1;i<path.length;i++)L+=mDist(path[i-1],path[i]);
+      const sg=mDist(s.a,gc), eg=mDist(s.b,gc);
+      if(eg>sg+18)return ['stray',true];               // 18 m = 20 y the wrong way
+      if(sg>=0.7*L||L-sg<=73)return ['tee',true];   // 73 m = 80 y
+      return [eg<=46?'approach':'layup',true];         // 46 m = 50 y
+    }
+  }catch(e){}
+  // no map for that hole: a driver or a par 3 is off the tee, anything else an approach
+  let par=null;try{const c=(S.courses||[]).find(x=>x&&x.id===cid)||S.course;par=+((c.holes||[])[h]||{}).par;}catch(e){}
+  return [(s&&s.club==='Dr')||par===3?'tee':'approach',false];
+}
+// one hole's memory, every shot stamped with its round and kind (older phones saved
+// {round, shots:[...]} with neither); a kind read off the map sticks. Without the map a
+// kind is only a guess, so those shots are all kept until the map can sort them.
+function shotMemNorm(mem,h,cid){
+  if(!mem||!Array.isArray(mem.shots))return null;
+  const by={},guess=[];
+  mem.shots.forEach(x=>{
+    if(!x||!x.a||!x.b)return;
+    if(x.round==null)x.round=mem.round||0;
+    let k=x.kind;
+    if(!k){const r=shotKindOf(x,h,cid);if(!r[1]){guess.push(x);return;}k=x.kind=r[0];}
+    if(!SHOT_KINDS.includes(k))return;              // the wrong hole's shot never stays
+    const o=by[k];
+    if(!o||(x.round||0)>(o.round||0)||((x.round||0)===(o.round||0)&&(x.at||0)>=(o.at||0)))by[k]=x;
+  });
+  mem.shots=SHOT_KINDS.map(k=>by[k]).filter(Boolean).concat(guess);
+  mem.round=mem.shots.reduce((m,x)=>Math.max(m,x.round||0),0);
+  return mem;
+}
+function shotMemMerge(a,b,h,cid){   // a restore / rebuild: per kind, the newest round's line wins
+  const ok=m=>m&&Array.isArray(m.shots);
+  if(!ok(a)&&!ok(b))return a||b;
+  const tag=m=>ok(m)?m.shots.filter(Boolean).map(x=>Object.assign({},x,{round:x.round!=null?x.round:(m.round||0)})):[];
+  return shotMemNorm({round:Math.max((a&&a.round)||0,(b&&b.round)||0),shots:tag(a).concat(tag(b))},h,cid);
+}
+// Once per course on this phone, with its map open: the old rule threw a hole's remembered
+// set away whenever a round tracked ANY shot there (and older rounds predate the memory), so
+// the drives in the shot log come back -- per kind, the newest round's line (34 lines on
+// Nathan's phone, 10/18). Idempotent; the round being played is left to saveShot.
+function shotMemRebuild(cid){
+  try{
+    if(!cid||!S.shotLog||!(S.course&&S.course.id===cid&&S.course.geo&&S.course.geo.holes))return;
+    if(!S.shotMemV)S.shotMemV={};
+    if(S.shotMemV[cid])return;
+    S.shotMemV[cid]=1;
+    const st=(S.round&&S.round.startedAt)||0;
+    (S.history||[]).forEach(e=>{
+      const rs=e&&e.courseId===cid&&e.round&&e.round.startedAt;
+      if(!rs||rs===st)return;
+      (S.shotLog['s'+rs]||[]).forEach(x=>{
+        if(!x||!x.a||!x.b||x.h==null)return;
+        if(!S.shotLast)S.shotLast={};
+        if(!S.shotLast[cid])S.shotLast[cid]={};
+        const m=shotMemMerge(S.shotLast[cid][x.h],{round:rs,shots:[{a:x.a,b:x.b,yds:x.yds,club:x.club,at:x.at,round:rs}]},x.h,cid);
+        if(m&&m.shots.length)S.shotLast[cid][x.h]=m;
+      });
+    });
+    save();
+  }catch(e){}
+}
 function lastLinesFor(h){
-  // course-level memory: the lines from the LAST round that tracked this hole.
-  // Ghosted only in a live round that hasn't tracked the hole itself yet —
-  // the round's own log stays untouched, so past rounds keep their lines.
+  // course-level memory: per kind, the line from the last round that tracked it.
+  // This round's own shots draw red (shotsForHole); a past round opened for
+  // review shows only its own lines.
   const cid=S.course&&S.course.id;
-  const mem=cid&&S.shotLast&&S.shotLast[cid]&&S.shotLast[cid][h];
-  if(!mem||!mem.shots||!mem.shots.length)return [];
+  shotMemRebuild(cid);
+  const mem=cid&&S.shotLast&&S.shotLast[cid]&&shotMemNorm(S.shotLast[cid][h],h,cid);
+  if(!mem||!mem.shots.length)return [];
   if(isReview())return [];
-  if(mem.round===(S.round.startedAt||0))return [];   // it's this round's own set
-  return mem.shots;
+  const st=S.round.startedAt||0;
+  return mem.shots.filter(x=>!st||x.round!==st);
 }
 // White crosshair markers for the distance line — the target on the green and
 // any midpoints. A ring with a gap in the middle and four ticks, dark casing so
@@ -4175,13 +4258,11 @@ function crosshairHTML(cls){
 function crosshairIcon(cls){
   return L.divIcon({className:'',html:crosshairHTML(cls),iconSize:[35,35],iconAnchor:[17.5,17.5]});
 }
-// TWO KINDS OF LINE, AND ONLY ONE WAS MEANT TO GO. 9/14 Nathan asked for the mountain
-// to replace "the spine on/off button" and for "the spines always off (visually)" — but
-// the real spine (the hole's route line, lSpine) was already retired; the button he knew
-// as the spine toggled THESE. Both went dark under one flag, so from 9/14 a shot he
-// tracked drew nothing at all (Nathan 9/25: "it is not displaying the line to represent
-// my tracked shot"). The dashed blue LAST-TIME-OUT lines look like a spine and stay off;
-// the shots he tracks THIS round always draw.
+// TWO KINDS OF LINE, BOTH ON. 9/14 Nathan asked for the mountain to replace "the spine
+// on/off button" and for "the spines always off (visually)". He meant the OSM route line's
+// toggle (Nathan 10/18) -- but one flag hid every shot line: from 9/14 a shot he tracked drew
+// nothing (fixed 9/25), and the dashed blue lines from LAST time stayed hidden until 10/18.
+// Now: red = tracked this round, dashed blue = the remembered line of each kind (lastLinesFor).
 function drawShotLines(){
   lShots.forEach(l=>{try{LMAP.removeLayer(l);}catch(e){}});lShots=[];
   if(!LMAP)return;
@@ -4196,8 +4277,8 @@ function drawShotLines(){
     mine.push(L.circleMarker(e.b,{radius:4,color:'#0a1220',weight:1.5,fillColor:'#e8604f',fillOpacity:1,interactive:false}));
   });
   lShots=ghost.concat(mine);
+  ghost.forEach(l=>l.addTo(LMAP));
   mine.forEach(l=>l.addTo(LMAP));
-  if(showShots)ghost.forEach(l=>l.addTo(LMAP));
 }
 function toggleShots(){
   showShots=!showShots;localStorage.btShots=showShots?'on':'off';
@@ -4904,6 +4985,7 @@ function hideUndoTrack(){
   undoShot=null;
   const b=document.getElementById('trackundobtn');if(b)b.remove();
 }
+let undoReplaced=null;   // {cid,h,at,old}: the remembered line the last saved shot took the place of
 function undoTrackShot(){
   const s=undoShot;hideUndoTrack();
   if(!s)return;
@@ -4915,10 +4997,14 @@ function undoTrackShot(){
   if(mem&&mem.shots){
     for(let i=mem.shots.length-1;i>=0;i--){
       const x=mem.shots[i];
-      if(x.yds===s.yds&&x.club===s.club){mem.shots.splice(i,1);break;}
+      if((x.at&&x.at===s.at)||(!x.at&&x.yds===s.yds&&x.club===s.club)){mem.shots.splice(i,1);break;}
     }
+    // the line it had replaced comes back
+    if(undoReplaced&&undoReplaced.cid===cid&&undoReplaced.h===s.h&&undoReplaced.at===s.at&&undoReplaced.old)mem.shots.push(undoReplaced.old);
     if(!mem.shots.length)delete S.shotLast[cid][s.h];
+    else mem.round=mem.shots.reduce((m,x)=>Math.max(m,x.round||0),0);
   }
+  undoReplaced=null;
   trackShot={hole:s.h,a:s.a};        // back to armed, ready to re-Mark
   pendingShot=null;
   save();
@@ -4932,18 +5018,22 @@ function saveShot(club){
   if(!S.shotLog)S.shotLog={};
   if(!S.shotLog[key])S.shotLog[key]=[];
   const entry={h:pendingShot.hole,a:pendingShot.a,b:pendingShot.b,yds:pendingShot.yds,club,at:Date.now()};
-  S.shotLog[key].push(entry);
-  // course memory: first shot on a hole this round REPLACES the remembered set
-  // (so next time out, the ghost is last time's lines, not an accumulation);
-  // later shots the same round append to it
   const cid=S.course&&S.course.id;
-  if(cid){
+  entry.kind=shotKindOf(entry,entry.h,cid)[0];
+  S.shotLog[key].push(entry);
+  // course memory: a new shot takes the place of the remembered line of its OWN kind
+  // on this hole (tee shot / layup / approach); the other kinds stay (Nathan 10/18)
+  undoReplaced=null;
+  if(cid&&entry.kind!=='stray'){   // saved on the wrong hole: logged, never remembered
     if(!S.shotLast)S.shotLast={};
     if(!S.shotLast[cid])S.shotLast[cid]={};
-    const st=S.round.startedAt||0;
-    if(!S.shotLast[cid][pendingShot.hole]||S.shotLast[cid][pendingShot.hole].round!==st)
-      S.shotLast[cid][pendingShot.hole]={round:st,shots:[]};
-    S.shotLast[cid][pendingShot.hole].shots.push({a:pendingShot.a,b:pendingShot.b,yds:pendingShot.yds,club});
+    const st=S.round.startedAt||0, h=entry.h;
+    const mem=shotMemNorm(S.shotLast[cid][h],h,cid)||{round:st,shots:[]};
+    const old=mem.shots.find(x=>x.kind===entry.kind);
+    undoReplaced={cid,h,at:entry.at,old:old?Object.assign({},old):null};
+    mem.shots=mem.shots.filter(x=>x.kind!==entry.kind).concat([{a:entry.a,b:entry.b,yds:entry.yds,club,at:entry.at,round:st,kind:entry.kind}]);
+    mem.round=Math.max(mem.round||0,st);
+    S.shotLast[cid][h]=mem;
   }
   save();
   pendingShot=null;trackShot=null;
@@ -6182,7 +6272,7 @@ function initGoogleHoleMap(el,geo,geoErr){
     gmOverlays.push(gmSpine);
     gmShots=[];
     lastLinesFor(mapHole).forEach(e=>{
-      const gl=new gm.Polyline({path:[P(e.a),P(e.b)],strokeColor:'#6ecbff',strokeOpacity:.75,strokeWeight:2.4,clickable:false,map:showShots?GMAP:null});
+      const gl=new gm.Polyline({path:[P(e.a),P(e.b)],strokeColor:'#6ecbff',strokeOpacity:.75,strokeWeight:2.4,clickable:false,map:GMAP});   // remembered line: always (see drawShotLines)
       gmOverlays.push(gl);gmShots.push(gl);
     });
     shotsForHole(mapHole).forEach(e=>{
