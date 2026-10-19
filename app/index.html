@@ -554,7 +554,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-center in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1792377732';
+const BUILD='1792378328';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -4206,7 +4206,9 @@ function shotMemRebuild(cid){
 function lastLinesFor(h){
   // course-level memory: per kind, the line from the last round that tracked it.
   // This round's own shots draw red (shotsForHole); a past round opened for
-  // review shows only its own lines.
+  // review shows only its own lines. Settings can switch them off (S.lastLinesOff,
+  // this phone only, Nathan 10/18) -- the memory keeps filling either way.
+  if(S.lastLinesOff)return [];
   const cid=S.course&&S.course.id;
   shotMemRebuild(cid);
   const mem=cid&&S.shotLast&&S.shotLast[cid]&&shotMemNorm(S.shotLast[cid][h],h,cid);
@@ -6600,7 +6602,7 @@ function mapBuildKey(){
       hasHole=(g&&g.holes&&g.holes[physHole(mapHole)+1])?1:0;}catch(e){}
   return [S.course&&S.course.id,mapHole,physHole(mapHole),
     greensIsMode()?1:0,amnesiaOn(S.course&&S.course.id)?1:0,
-    coursePreview?1:0,gpsOnly()?1:0,geoTs,hasHole,S.units].join('|');
+    coursePreview?1:0,gpsOnly()?1:0,geoTs,hasHole,S.units,S.lastLinesOff?1:0].join('|');
 }
 // A map counts as live only if THIS div is the one Leaflet is bound to: the
 // morph leaves #holemap alone, but a screen change and a return build a new div.
@@ -7703,6 +7705,7 @@ function legLabel(from,to,suffix){
   return txt+(suffix||'');
 }
 function windSettingToggle(){set(()=>{S.windHide=!S.windHide;if(S.windHide)windMode=false;});}
+function lastLinesToggle(){set(()=>{S.lastLinesOff=!S.lastLinesOff;});}
 function sightColor(){return ((windMode&&playsLikeEntitled())||elevReady())?'#4fd8ff':'#ffffff';}
 // ---- your own wind: HOLD the arrows → a dial in the hole's own frame ----------
 // Tap where the wind is blowing TO (green at the top, like the map), set the
@@ -9331,6 +9334,11 @@ function vSettings(){
   <div class="card">
     <div class="row" style="border-top:none;padding:0;align-items:center"><h2 style="margin:0">🌬 Wind on the map</h2>
       <button class="ghost ${S.windHide?'':'sel'}" style="margin-left:auto" onclick="windSettingToggle()">${S.windHide?'Off':'On'}</button></div>
+  </div>
+  <div class="card">
+    <div class="row" style="border-top:none;padding:0;align-items:center"><div style="flex:1;min-width:0"><h2 style="margin:0">☄️ Past shot lines</h2>
+      <div class="tiny">Your last tracked shots on each hole, dashed on the map.</div></div>
+      <button class="ghost ${S.lastLinesOff?'':'sel'}" style="margin-left:auto" onclick="lastLinesToggle()">${S.lastLinesOff?'Off':'On'}</button></div>
   </div>
   <div class="card"><h2>☀️ Screen</h2>
     <div class="row"><div style="flex:1;min-width:0"><b>Keep the screen awake during a round</b>
