@@ -554,7 +554,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-center in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1792378328';
+const BUILD='1792387358';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -844,7 +844,7 @@ try{
         if(!scored.length)return;
         const stamps=(r.cfts||[]).filter(t=>t>1);
         const postEnd=stamps.length&&stamps.every(t=>t>e.endedAt+60000);
-        const untyped=scored.every(i=>!(r.gts&&r.gts[i]>1));
+        const untyped=scored.every(i=>!(r.gts&&r.gts[i]>2));
         if(postEnd&&untyped){
           r.confirmed=false;r.cfts=[0,0,0,0];
           scored.forEach(i=>{r.gross[i]=null;if(r.gts)r.gts[i]=0;});
@@ -1314,6 +1314,15 @@ setInterval(discoverRelay,30*60*1000);
 const GMAPS_KEY='AIzaSyDdf3ZpPkQSrw1Ga89Id-1oorFI5tQbZTA';  // Maps JS API key, referrer-restricted to hvactech7.github.io + localhost:8756; Esri fallback if rejected
 const SYNC_KEYS=['meta',...Array.from({length:HOLES},(_,i)=>'h'+i)];
 let sock=null,sockOpen=false,retryMs=1000,applyingRemote=false;
+// READ BEFORE YOU WRITE (stress sim 10/18). On every (re)connect the phone used to push its whole
+// local copy the instant the socket opened -- before the room's state doc arrived. A phone that had
+// reloaded offline still held a hole from BEFORE another phone's score landed; a merged hole keeps
+// the max of the two stamps, so the stale copy carried the SAME _ts and the relay took it (ties are
+// accepted): the room regressed (Nathan's 5 on h18 back to the par prefill, the hole un-closed),
+// then the state doc merged the phone itself back to the truth and it never pushed again -- the
+// room stayed wrong for the Battlefield and anyone rejoining. Now pushes wait for the state doc and
+// go out merged; a relay that never answers releases them after 5 s.
+let sockAwaitState=false;
 const sentCache={},localContent={};
 function makeCode(){const A='ABCDEFGHJKMNPQRSTUVWXYZ23456789';let s='';for(let i=0;i<5;i++)s+=A[Math.floor(Math.random()*A.length)];return s;}
 // Shot lines for SPECTATORS only — a player's own map always draws from his
@@ -1364,6 +1373,11 @@ function shareMeta(){return {course:courseForShare(),players:S.players,config:S.
   capEnd:S.round.capEnd||null,
   since:S.round.since||null,
   _ts:S.shareMetaTs||0};}
+// HYBRID STAMPS (stress sim 10/18): a sync stamp never goes below the newest one this phone has
+// already seen. A phone whose clock ran 5 minutes slow stamped its seat claim "older" than every
+// update it had received; the relay refused it again and again and the joiner never reached the room.
+// The clock still drives the stamp; it just can't move backwards past what is known.
+function stampAfter(prev){return Math.max(Date.now(),(Math.abs(+prev)||0)+1);}
 function contentKey(k){
   if(k==='meta'){const {_ts,...rest}=shareMeta();return JSON.stringify(rest);}
   const {_ts,...rest}=S.round.holes[+k.slice(1)];return JSON.stringify(rest);
@@ -1377,12 +1391,32 @@ function stampChanges(){
     const c=contentKey(k);
     if(localContent[k]===c)return;
     localContent[k]=c;
-    if(k==='meta'){if(S.share.awaitDoc&&!S.share.creator)return;S.shareMetaTs=Date.now();}   // a joiner's own stamp must wait for the room's doc
-    else S.round.holes[+k.slice(1)]._ts=Date.now();
+    if(k==='meta'){if(S.share.awaitDoc&&!S.share.creator)return;S.shareMetaTs=stampAfter(S.shareMetaTs);}   // a joiner's own stamp must wait for the room's doc
+    else{const hh=S.round.holes[+k.slice(1)];hh._ts=stampAfter(hh._ts);}
   });
 }
+// PER-ROW OWNERSHIP (stress sim 10/18). The meta is one last-write-wins record, so an older copy of a
+// player's row riding another phone's newer meta put him back on tees he had not picked (and his
+// course handicap and the money with it). The owner's phone stamps its row (rts) whenever it changes
+// its own fields; any copy carrying a newer stamp for the same player wins those fields, whichever
+// meta is newer. Only the owner writes rts, so the stamps never compare two clocks.
+const ROW_OWN=['tee','index','track','photo','ended'];
+function rowMerge(other){
+  let changed=false;
+  try{
+    if(!Array.isArray(other))return;
+    const same=(a,b)=>a&&b&&((a.pid&&b.pid&&a.pid===b.pid)||((a.name||'').trim().toLowerCase()===(b.name||'').trim().toLowerCase()&&a.name));
+    S.players.forEach((p,i)=>{
+      const q=other.find(o=>same(o,p));
+      if(!q||!(+q.rts>(+p.rts||0)))return;
+      ROW_OWN.forEach(k=>{if(k in q)p[k]=clone(q[k]);else delete p[k];});
+      p.rts=q.rts;changed=true;
+    });
+  }catch(e){}
+  return changed;
+}
 function syncPush(){
-  if(!S.share||!S.share.on||!sockOpen||applyingRemote)return;
+  if(!S.share||!S.share.on||!sockOpen||applyingRemote||sockAwaitState)return;
   SYNC_KEYS.forEach(k=>{
     if(k==='meta'&&S.share.awaitDoc&&!S.share.creator)return;   // the room's doc first, always
     const c=contentKey(k);
@@ -1415,6 +1449,7 @@ function applyOp(k,v,defer){
         const blackout=wasBlack?S.course.geo:null, parked=wasBlack?((v.course&&v.course.geo)||S.course.geoReal):null;
         // mid course-preview the round's course lives in coursePreview.keep —
         // the incoming one lands there, and the preview keeps showing its own
+        const oldPl=S.players;
         if(typeof coursePreview!=='undefined'&&coursePreview){coursePreview.keep=v.course;S.players=v.players;S.config=v.config;}
         else{
           S.course=v.course;S.players=v.players;S.config=v.config;
@@ -1428,6 +1463,7 @@ function applyOp(k,v,defer){
         // so the rest of the group can find it in the nearby list
         try{if(S.share&&S.share.bf&&S.share.creator&&(S.players||[]).some(p=>p&&p.ownerDev&&p.ownerDev!==devId())){
           delete S.share.bf;S.share.near=nearFence();postRoomInvite();}}catch(e){}
+        const rowFix=rowMerge(oldPl);   // a row its owner changed more recently than this meta knows keeps the owner's choice
         S.round.started=v.started;S.round.dollarPerPt=v.dollarPerPt;
         if(v.games)S.round.games=v.games;
         if(v.since){
@@ -1450,12 +1486,13 @@ function applyOp(k,v,defer){
         // synced config's player count — derive it from the roster (grow-only
         // mid-round). A solo round + invite-join left stroke.n=1: both phones
         // rendered one row each and LWW ping-ponged whose it was (PV 7/24).
+        var widened=false;
         if(v.started){
           const realN=Math.min(4,Math.max(1,(v.players||[]).filter(isRealPl).length));
           [['stroke',1],['stbl',1],['quota',1],['bbb',2],['skins',2]].forEach(([g,mn])=>{
-            if(S.config[g]&&(S.config[g].n||0)<Math.max(mn,Math.min(4,realN)))S.config[g].n=Math.max(mn,Math.min(4,realN));
+            if(S.config[g]&&(S.config[g].n||0)<Math.max(mn,Math.min(4,realN))){S.config[g].n=Math.max(mn,Math.min(4,realN));widened=true;}
           });
-          if(S.config.nassau&&realN>=4)S.config.nassau.n=4;
+          if(S.config.nassau&&realN>=4&&S.config.nassau.n!==4){S.config.nassau.n=4;widened=true;}
         }
         if(v.started){libSaveRoster();saveGroupFromRoster();}  // joiners remember the players AND the named group
       if(v.capEnd&&S.round.started&&!S.round.reopened
@@ -1496,6 +1533,34 @@ function applyOp(k,v,defer){
         applyingRemote=false;render();return;
       }
         localContent[k]=sentCache[k]=contentKey(k);
+        // the room's copy lacks a row's newer choice: send ours back, freshly stamped
+        // ...and so does a game this phone had to widen (the room's copy was narrower -- stress sim 10/18)
+        if(rowFix||widened){sentCache[k]='(merge-pending)';S.shareMetaTs=Math.max(Date.now(),(v._ts||0)+1);}
+      }else if(S.round.started&&Array.isArray(v.players)){
+        // AN OLDER META STILL SEATS PEOPLE (stress sim 10/18). A phone that stamped its own meta while
+        // offline (a putt, a tracker) ignored the room's meta when it came back -- "older" -- and so never
+        // saw the friend who had joined into "Player 4" meanwhile; every meta it pushed still carried the
+        // empty seat, and the relay refused each one (a placeholder never replaces a real player once a
+        // round is running). Deadlock: his phone settled the money without that friend. Same rule here:
+        // a real player in a seat beats an empty "Player N" whatever the stamps say; the next push then
+        // carries the full roster and the relay takes it.
+        const ph=p=>p&&/^Player \d$/.test((p.name||'').trim())&&!p.pid&&!p.ownerDev;
+        const has=q=>S.players.some(p=>p&&((q.pid&&p.pid===q.pid)||((p.name||'').trim().toLowerCase()===(q.name||'').trim().toLowerCase())));
+        let seated=false;
+        v.players.forEach((q,i)=>{if(q&&q.name&&!ph(q)&&ph(S.players[i])&&!has(q)){S.players[i]=clone(q);seated=true;}});
+        rowMerge(v.players);   // ...and a row its owner changed since my meta was stamped takes the owner's choice
+        // ...and if the room's copy still differs from my newer one, the room is behind: send mine again
+        // (my phone had pushed it, the room took another phone's later write while I was out of signal,
+        // and nothing would ever re-send -- an owner's tees sat wrong on the relay; stress sim 10/18)
+        try{const {_ts,...rest}=v;if(JSON.stringify(rest)!==contentKey('meta'))sentCache[k]='(merge-pending)';}catch(e){}
+        // ...and the games widen for them exactly as THE DOUG FIX does above (grow-only)
+        if(seated){
+          const realN=Math.min(4,Math.max(1,S.players.filter(isRealPl).length));
+          [['stroke',1],['stbl',1],['quota',1],['bbb',2],['skins',2]].forEach(([g,mn])=>{
+            if(S.config[g]&&(S.config[g].n||0)<Math.max(mn,Math.min(4,realN)))S.config[g].n=Math.max(mn,Math.min(4,realN));
+          });
+          if(S.config.nassau&&realN>=4)S.config.nassau.n=4;
+        }
       }
     }else{
       const i=+k.slice(1);
@@ -1591,22 +1656,24 @@ function syncConnect(){
     // (reading 'send')"). Only the current socket gets to act.
     if(sock!==ws){try{ws.close();}catch(e){}return;}
     sockOpen=true;retryMs=1000;
+    sockAwaitState=true;
     ws.send(JSON.stringify({t:'join',room:S.share.code}));
     postRoomInvite();
-    syncPush();  // catch-up: anything edited while offline goes out immediately
+    // catch-up: anything edited while offline goes out as soon as the room's doc has been merged in
+    setTimeout(()=>{if(sock===ws&&sockAwaitState){sockAwaitState=false;syncPush();}},5000);
     bfReannounce();   // a round the Battlefield never acknowledged goes out now
     render();
   };
   sock.onmessage=ev=>{
     let m;try{m=JSON.parse(ev.data);}catch(e){return;}
-    if(m.t==='state')onStateDoc(m.doc);
+    if(m.t==='state'){sockAwaitState=false;onStateDoc(m.doc);}
     else if(m.t==='op'){
       if(m.k==='meta'&&m.v&&S.share&&S.share.awaitDoc&&!S.share.creator){onStateDoc({meta:m.v});return;}
       applyOp(m.k,m.v,false);
     }
     else if(m.t==='courseResult'||m.t==='backupResult'||m.t==='battleResult'||m.t==='accountResult')handleCourseResult(m);
   };
-  sock.onclose=()=>{sockOpen=false;sock=null;render();scheduleReconnect();};
+  sock.onclose=()=>{sockOpen=false;sockAwaitState=false;sock=null;render();scheduleReconnect();};
   sock.onerror=()=>{try{sock&&sock.close();}catch(e){}};
 }
 function scheduleReconnect(){
@@ -1615,7 +1682,85 @@ function scheduleReconnect(){
 }
 // Dead-zone recovery: the instant the radio returns or the app wakes, reconnect
 // NOW instead of waiting out the backoff timer.
-function kickSync(){if(S.share&&S.share.on&&!sock){retryMs=1000;syncConnect();}}
+function kickSync(){if(S.share&&S.share.on&&!sock){retryMs=1000;syncConnect();}try{endOutboxFlush();}catch(e){}}
+// THE LAST HOLES STILL REACH THE GROUP (stress sim 10/18). Ending a shared round pushed once and
+// left the room on the spot. With no signal on the 18th green (or packets silently dying under an
+// "open" socket), the holes scored since the last good push and the "I'm done" mark never reached
+// the room: the other phones sat "waiting on Nathan" on a hole that would never close, and the room
+// (the Battlefield, anyone rejoining) kept the par prefill instead of his score -- while his own
+// Past Rounds had it right. Now the round's holes ride a small outbox (S.endOutbox) that a separate
+// socket delivers whenever signal comes back: join the room, merge each hole per player the way
+// applyOp does (my newer slots win, nothing of theirs is lost), push only what the room is missing,
+// mark my row ended, and run once more to confirm it landed. Entries expire after three days.
+function outboxMerge(cur,mine){
+  const newer=(mine._ts||0)>(cur._ts||0), base=newer?mine:cur, other=newer?cur:mine;
+  const m=Object.assign({},base);
+  m.gross=(base.gross||[null,null,null,null]).slice();m.gts=(base.gts||[0,0,0,0]).slice();
+  const og=other.gross||[], ot=other.gts||[];
+  for(let p=0;p<4;p++)if((ot[p]||0)>(m.gts[p]||0)){m.gross[p]=og[p];m.gts[p]=ot[p];}
+  m.cfts=(base.cfts||[0,0,0,0]).slice();const oc=other.cfts||[];
+  for(let p=0;p<4;p++)if(Math.abs(oc[p]||0)>Math.abs(m.cfts[p]||0))m.cfts[p]=oc[p];
+  if(base.stats||other.stats){const bs=base.stats||{},os=other.stats||{},bt=base.sts||[0,0,0,0],ot2=other.sts||[0,0,0,0],ms={};
+    Object.keys(bs).concat(Object.keys(os).filter(k=>!(k in bs))).forEach(k=>{const ba=bs[k],oa=os[k];
+      if(!Array.isArray(oa)){ms[k]=ba;return;}if(!Array.isArray(ba)){ms[k]=oa.slice();return;}
+      const out=ba.slice();for(let p=0;p<4;p++)if((ot2[p]||0)>(bt[p]||0))out[p]=oa[p];ms[k]=out;});
+    m.stats=ms;m.sts=[0,1,2,3].map(p=>Math.max(bt[p]||0,ot2[p]||0));}
+  if(!m.confirmed&&other.confirmed&&!m.cfts.some(x=>x<0))m.confirmed=true;
+  m._ts=Math.max(cur._ts||0,mine._ts||0);
+  return m;
+}
+function endOutboxStash(){
+  try{
+    if(!S.share||!S.share.on||!S.share.code||!groupShare())return;
+    const docs={};
+    S.round.holes.forEach((r,h)=>{if(r&&((r.gts||[]).some(x=>x>1)||(r.cfts||[]).some(x=>x)))docs['h'+h]=clone(r);});
+    const me=S.players[myPlayerIdx()]||{};
+    S.endOutbox=(S.endOutbox||[]).filter(x=>x&&x.code!==S.share.code);
+    S.endOutbox.push({code:S.share.code,docs,pid:me.pid||null,dev:devId(),ended:Date.now(),at:Date.now(),tries:0});
+  }catch(e){}
+}
+let endOutboxSock=null;
+function endOutboxFlush(){
+  try{
+    const q=(S.endOutbox||[]).filter(x=>x&&x.code&&Date.now()-(x.at||0)<3*86400e3);
+    if(q.length!==(S.endOutbox||[]).length){S.endOutbox=q;save();}
+    if(!q.length||endOutboxSock||previewSandboxed())return;
+    const job=q[0];
+    // back in that room (a review inside 6 h): its own sync may carry it -- but keep the job until a pass
+    // from OUTSIDE the room finds nothing missing (a review opened and Done'd offline delivered nothing)
+    if(S.share&&S.share.on&&S.share.code===job.code)return;
+    let ws;try{ws=new WebSocket(RELAY+(RELAY.includes('?')?'&':'?')+'room='+encodeURIComponent(job.code));}catch(e){return;}
+    endOutboxSock=ws;
+    const done=()=>{if(endOutboxSock===ws)endOutboxSock=null;try{ws.onclose=null;ws.close();}catch(e){}};
+    const kill=setTimeout(done,15000);
+    ws.onopen=()=>{try{ws.send(JSON.stringify({t:'join',room:job.code}));}catch(e){}};
+    ws.onmessage=ev=>{
+      let m;try{m=JSON.parse(ev.data);}catch(e){return;}
+      if(m.t!=='state')return;
+      clearTimeout(kill);
+      const doc=m.doc||{};let sent=0;
+      if(doc.meta){
+        Object.keys(job.docs||{}).forEach(k=>{
+          const mine=job.docs[k],cur=doc[k],merged=cur?outboxMerge(cur,mine):mine;
+          if(!cur||JSON.stringify(merged)!==JSON.stringify(cur)){try{ws.send(JSON.stringify({t:'op',room:job.code,k,v:merged}));sent++;}catch(e){}}
+        });
+        const pl=doc.meta.players, hit=p=>p&&((job.pid&&p.pid===job.pid)||p.ownerDev===job.dev);
+        if(Array.isArray(pl)&&pl.some(p=>hit(p)&&!p.ended)){
+          const v=JSON.parse(JSON.stringify(doc.meta));v.players.forEach(p=>{if(hit(p))p.ended=job.ended;});
+          v._ts=Math.max(Date.now(),(doc.meta._ts||0)+1);
+          try{ws.send(JSON.stringify({t:'op',room:job.code,k:'meta',v}));sent++;}catch(e){}
+        }
+      }
+      job.tries=(job.tries||0)+1;
+      // nothing missing (or the room is gone, or it keeps refusing): this one is finished
+      if(!sent||job.tries>=6)S.endOutbox=(S.endOutbox||[]).filter(x=>x&&x.code!==job.code);
+      save();
+      setTimeout(()=>{done();if(sent||(S.endOutbox||[]).length)setTimeout(endOutboxFlush,3000);},800);   // a second pass confirms it landed
+    };
+    ws.onclose=()=>{clearTimeout(kill);if(endOutboxSock===ws)endOutboxSock=null;};
+    ws.onerror=()=>{try{ws.close();}catch(e){}};
+  }catch(e){endOutboxSock=null;}
+}
 window.addEventListener('online',kickSync);
 window.addEventListener('online',()=>{try{if(S.round&&S.round.started)windFetch();}catch(e){}});
 // KEEP THE SCREEN ON while the app is in front. iOS blanking the display mid-
@@ -1748,7 +1893,11 @@ function claimMySlot(steal){
     // 6 h, and by then my index has moved because of THIS round (Nathan 10/18, Blue
     // Rock West: Past Rounds re-scored the match at the new 11.5 instead of the 11.7
     // it was played at -- Nate showed 2 strokes on h14 -- and pushed 11.5 to the room)
-    if(match&&p.ownerDev===devId()&&S.me.index!=null&&+p.index!==+S.me.index&&!isReview()&&!S.round.myEndedAt){p.index=+S.me.index;changed=true;}
+    if(match&&p.ownerDev===devId()&&S.me.index!=null&&+p.index!==+S.me.index&&!isReview()&&!S.round.myEndedAt){p.index=+S.me.index;p.rts=stampAfter(p.rts);changed=true;}
+    // ...and on MY TEES for this round (stress sim 10/18): the meta is one last-write-wins record, so a
+    // phone pushing an older copy of my row put me back on the tees I had not picked -- another phone then
+    // carded my course handicap 36 where mine said 38, and the money differed. My phone restores it.
+    if(match&&p.ownerDev===devId()&&S.round.myTee&&p.tee!==S.round.myTee&&!isReview()&&!S.round.myEndedAt){p.tee=S.round.myTee;p.rts=stampAfter(p.rts);changed=true;}
     // ...and on MY trackers (putts etc). A phone that never touched the toggle
     // plays the app default (putts on) — not whatever the starter's phone seeded.
     // First run after this shipped: a choice made before S.me.track existed is
@@ -1769,19 +1918,34 @@ function claimMySlot(steal){
   // carries players+config together, so one stamp propagates the whole seat.
   const seated=S.players.some(p=>p.ownerDev===devId());
   if(!seated){
-    const taken=i=>S.players[i].pid||S.players[i].ownerDev||!/^Player \d$/.test((S.players[i].name||'').trim());
-    const scored=i=>S.round.holes.some(r=>r&&r.confirmed&&r.gross[i]!=null);
+    // a short roster (sim 9/6, stress 10/18): a missing row is a free seat, never a TypeError that aborts applyOp
+    const taken=i=>{const p=S.players[i];return !!(p&&(p.pid||p.ownerDev||!/^Player \d$/.test((p.name||'').trim())));};
+    // An empty "Player N" seat is still EMPTY if its only scores are the par prefill someone confirmed
+    // through (gts<=1 -- nobody typed it). It used to count as "scored": a friend arriving at hole 2
+    // landed past the game's seats while "Player 2" went on playing Skins at par, and a Best Ball
+    // waiting on two friends told them "This round is full" (stress sweep 10/18).
+    const typed=i=>S.round.holes.some(r=>r&&r.gross&&r.gross[i]!=null&&((r.gts||[])[i]||0)>2);
     let free=-1;
-    for(let i=0;i<4;i++)if(!taken(i)&&!scored(i)){free=i;break;}
+    for(let i=0;i<4;i++)if(!taken(i)&&!typed(i)){free=i;break;}
     if(free>=0){
       if(!S.players[free])S.players[free]={name:'Player '+(free+1),index:10,chOverride:null};   // a short roster (sim 9/6) must not throw the joiner off the round
       const p=S.players[free];
       p.name=S.me.name.trim();p.index=S.me.index!=null?+S.me.index:p.index;
       if(S.me.pid)p.pid=S.me.pid;
       p.ownerDev=devId();p.tee=null;
+      // widen to the REAL roster, as THE DOUG FIX does (stress sim 10/18): widening to my own seat number
+      // left a joiner in seat 3 behind a friend already in seat 4 at n=3 -- his phone paid Quota without
+      // that friend for 50 minutes while every other phone counted four
+      {const realN=Math.min(4,Math.max(free+1,S.players.filter(isRealPl).length));
       ['stroke','stbl','quota','skins','bbb'].forEach(k=>{
-        if(S.config[k]&&S.config[k].n!=null)S.config[k].n=Math.max(S.config[k].n,free+1);});
+        if(S.config[k]&&S.config[k].n!=null)S.config[k].n=Math.max(S.config[k].n,realN);});}
       applyTeePrefs();
+      // ...and the prefill pars carded on that seat were nobody's golf: clear them -- Catch up then offers
+      // those holes to the joiner. The blank carries stamp 2: it beats the prefill (stamp 1) in every
+      // phone's per-slot merge but never a TYPED score (a real time) -- the captain may have typed his
+      // friend's first hole under "Player 2" before this phone heard of it, and that score stays his.
+      S.round.holes.forEach(r=>{if(!r||!r.gross||r.gross[free]==null||((r.gts||[])[free]||0)>2)return;
+        r.gross[free]=null;if(!r.gts)r.gts=[0,0,0,0];r.gts[free]=2;if(r.cfts)r.cfts[free]=0;});
       changed=true;
       delete S.share.full;
     }else S.share.full=true;   // four seats taken: this phone watches (roomFullHTML says so)
@@ -1850,7 +2014,7 @@ function openRoomToFriends(){
   S.share.near=nearFence();
   S.round.holes.forEach(r=>{if(!r._ts)r._ts=Date.now();});
   claimMySlot(true);
-  S.shareMetaTs=Date.now();
+  S.shareMetaTs=stampAfter(S.shareMetaTs);
   postRoomInvite();
   primeCaches(false);save();syncPush();
   return true;
@@ -1877,7 +2041,7 @@ function shareRound(){
   }else S.share={on:true,code:makeCode(),creator:true};
   if(midRound)stat('round_share',{side:'host',game:S.round.game,
     thru:S.round.holes.filter(r=>r.confirmed).length,players:NP()});
-  S.shareMetaTs=Date.now();
+  S.shareMetaTs=stampAfter(S.shareMetaTs);
   S.round.holes.forEach(r=>{if(!r._ts)r._ts=Date.now();});
   claimMySlot(true);
   primeCaches(false);
@@ -1977,7 +2141,7 @@ function applyJoinCarry(){
       if(mt.tee&&S.course.teeSets.some(t=>t.id===mt.tee))pl.tee=mt.tee;
       pl.scorer=devId();                       // I score them here too, until their phone claims
       try{syncGroupCounts();}catch(e){}
-      S.shareMetaTs=Date.now();
+      S.shareMetaTs=stampAfter(S.shareMetaTs);
     }
     landRow(slot,mt.holes||[]);
   });
@@ -2028,7 +2192,7 @@ function joinRoundCode(code){
   // A socket still bound to an earlier room (a mistyped code, 9/6 fresh-user
   // sim) never sends the new join — syncConnect keeps any open socket. Drop it
   // so this code gets its own join and its own state doc.
-  if(sock){const s0=sock;sock=null;sockOpen=false;try{s0.onopen=null;s0.onclose=null;s0.onmessage=null;s0.close();}catch(e){}}
+  if(sock){const s0=sock;sock=null;sockOpen=false;sockAwaitState=false;try{s0.onopen=null;s0.onclose=null;s0.onmessage=null;s0.close();}catch(e){}}
   joinErr='';
   save();syncConnect();render();
   try{setTimeout(maybeAskPar,1600);}catch(e){}
@@ -2085,7 +2249,7 @@ function joinWaitSheetHTML(){
 }
 function joinBail(code,msg){
   S.share={on:false,code:null};
-  if(sock){const s0=sock;sock=null;sockOpen=false;try{s0.onopen=null;s0.onclose=null;s0.onmessage=null;s0.close();}catch(e){}}
+  if(sock){const s0=sock;sock=null;sockOpen=false;sockAwaitState=false;try{s0.onopen=null;s0.onclose=null;s0.onmessage=null;s0.close();}catch(e){}}
   teeAsk=null;joinSpanAsk=null;
   // the room's doc may have landed on this phone: a joiner never keeps it
   if(!S.round.started||S.players.every(p=>!p||p.ownerDev!==devId())){S.round=blankRound();resetRoster();}
@@ -2106,7 +2270,7 @@ function leaveShare(){
   }
   S.share={on:false,code:null};
   if(sock){const s=sock;sock=null;try{s.close();}catch(e){}}
-  sockOpen=false;
+  sockOpen=false;sockAwaitState=false;
   save();render();
   lobbyConnect();
 }
@@ -2329,7 +2493,7 @@ function saveEditMe(){
       const mine=(p.ownerDev===devId())||(p.pid===pid)||(i===mi&&(p.name||'').trim().toLowerCase()===old.trim().toLowerCase());
       if(mine){p.name=name;p.index=S.me.index;p.pid=pid;}
     });
-    if(S.share&&S.share.on)S.shareMetaTs=Date.now();   // tell the group
+    if(S.share&&S.share.on)S.shareMetaTs=stampAfter(S.shareMetaTs);   // tell the group
   });
   setTimeout(registerProfile,0);   // the Pi keeps the pid -> current name
   sendHello();
@@ -2375,7 +2539,7 @@ function bfBroadcastStart(){
     if(!S.round.started)return;
     if(!S.share.on){                       // solo round: open a room so spectators have a doc
       S.share={on:true,code:makeCode(),creator:true,bf:true};   // bf: broadcast-only, no lobby invite
-      S.shareMetaTs=Date.now();
+      S.shareMetaTs=stampAfter(S.shareMetaTs);
       S.round.holes.forEach(r=>{if(!r._ts)r._ts=Date.now();});
       save();try{sendHello();}catch(e){}syncConnect();
     }
@@ -3039,7 +3203,7 @@ function lobbyConnect(){
   try{lobbySock=new WebSocket(RELAY);}catch(e){lobbySock=null;setTimeout(lobbyConnect,10000);return;}
   if(!lobbyDownSince)lobbyDownSince=Date.now();
   setTimeout(()=>{if(!relayUp()&&lobbyDownSince)render();},8500);   // flip "Connecting…" into the plain warning
-  lobbySock.onopen=()=>{const wasDown=!!lobbyDownSince;lobbyDownSince=0;try{lobbySock.send('{"t":"lobby"}');}catch(e){}sendHello();statFlush();try{abKick();}catch(e){}registerProfile();loadMarkNotes();bfReannounce();libWhois();if(wasDown)render();};
+  lobbySock.onopen=()=>{const wasDown=!!lobbyDownSince;lobbyDownSince=0;try{lobbySock.send('{"t":"lobby"}');}catch(e){}sendHello();statFlush();try{abKick();}catch(e){}registerProfile();loadMarkNotes();bfReannounce();libWhois();try{endOutboxFlush();}catch(e){}if(wasDown)render();};
   lobbySock.onmessage=ev=>{
     let m;try{m=JSON.parse(ev.data);}catch(e){return;}
     if(m.t==='invites'){invites=m.list||[];inviteFixCheck();render();}
@@ -3228,7 +3392,7 @@ function hcpDiffFor(entry,mi){
     const ch=isFinite(idx)?Math.round(idx*(slope/113)+(rating-tp)):null;
     const strokes=h=>{const si=(hs[h%hs.length]||{}).si||((h%18)+1);
       if(ch==null)return 0;
-      return (ch>=si?1:0)+((ch-18)>=si?1:0)+((ch-36)>=si?1:0);};
+      return holeDots(ch,si);};
     let ags=0,scored=0;
     span.forEach(h=>{
       const r=holes[h],par=(hs[h%hs.length]||{}).par||4;
@@ -3375,8 +3539,8 @@ function hcpBackfill(){
 let engineGame=null;
 function playingStrokes(){
   const ch=courseHandicaps();
-  if((engineGame||gameOn())==='stroke') // stroke play: net against the course — full handicap
-    return ch.map(c=>Math.max(0,Math.round(c*S.config.allowance/100)));
+  if((engineGame||gameOn())==='stroke') // stroke play: net against the course — full handicap (a plus player gives strokes back)
+    return ch.map(c=>Math.round(c*S.config.allowance/100));
   if((engineGame||gameOn())==='matchplay'){   // each match gives strokes off ITS low man (10/18: it was the empty seat's)
     const pr=i=>(mp2On()&&i>=2)?[2,3]:[0,1];
     return ch.map((c,i)=>{const lo=Math.min(...pr(i).map(k=>ch[k]));return Math.max(0,Math.round((c-lo)*S.config.allowance/100));});
@@ -3388,15 +3552,27 @@ function playingStrokes(){
 // Game engines keep using playingStrokes (off the low man) for points.
 function fullStrokes(){
   const ch=courseHandicaps();
-  return ch.map(c=>Math.max(0,Math.round(c*S.config.allowance/100)));
+  return ch.map(c=>Math.round(c*S.config.allowance/100));   // a plus handicap is negative: strokes given back
 }
 function fullDotsOn(pi,h){
   const st=fullStrokes()[pi], si=S.course.holes[h].si;
-  return (st>=si?1:0)+((st-18)>=si?1:0);
+  return holeDots(st,si);
 }
+// A THIRD STROKE from a course handicap of 37 up, a fourth from 55 (stress sweep 10/18): every stroke
+// table here stopped at two, so an index 40 off a 72/113 card (CH 43) carded 36 dots and a net 7 strokes
+// too high. An index-54 beginner on a steep course carries a CH in the 60s. One rule for any number:
+// s strokes over 18 holes = floor(s/18) on every hole, plus one on the s%18 hardest.
+// A PLUS handicap gives strokes BACK, on the easiest holes (Nathan 10/18: "apply it properly"): a CH of
+// -2 adds one stroke on SI 18 and SI 17 -- net = gross + 1 there. Same rule mirrored: |s|/18 on every
+// hole, plus one on the |s|%18 easiest.
+function fmtIdx(v){const n=+v;if(v==null||v===''||!isFinite(n))return v==null?'':String(v);return n<0?'+'+(Math.round(-n*10)/10):String(Math.round(n*10)/10);}
+function dotsHTML(d){return d>0?`<span class="dots">${'●'.repeat(d)}</span>`:d<0?`<span class="dots" title="gives a stroke back">+${-d}</span>`:'';}
+function holeDots(s,si){s=Math.trunc(+s||0);if(s===0)return 0;
+  if(s>0)return Math.floor(s/18)+((s%18)>=si?1:0);
+  const a=-s;return -(Math.floor(a/18)+((a%18)>=19-si?1:0));}
 function dotsOn(pi,h){
   const s=playingStrokes()[pi], si=S.course.holes[h].si;
-  return (s>=si?1:0)+((s-18)>=si?1:0);
+  return holeDots(s,si);
 }
 function activeLenses(){return S.config.lens==='both'?['net','gross']:[S.config.lens];}
 // A round is DECLARED net or gross at setup. This is the one that is shared, so
@@ -3510,7 +3686,14 @@ function settlePairs(g,seats){
 // navigation and position-based rules (wolf rotation, match clinches).
 // mySpan is a JOINER'S personal card — chosen at join time, never synced, and
 // senior to the group's span on this phone only.
-function roundSpan(){return (S.round.started&&(S.round.mySpan||S.round.span))||S.config.span||{count:18,start:0};}
+// A joiner's personal card (mySpan) is HIS card -- his scorecard and his walk round the holes. The
+// GAMES are the group's: inside an engine the group's span rules, so the money is the same on every
+// phone (stress sim 10/18: a joiner's All-18 card around a back-nine group doubled his Quota targets
+// and his phone said $60 where the captain's said $38, on identical scores).
+let engineDepth=0;
+function roundSpan(){
+  if(engineDepth>0&&S.round.started&&S.round.span)return S.round.span;
+  return (S.round.started&&(S.round.mySpan||S.round.span))||S.config.span||{count:18,start:0};}
 function playOrder(){
   const {count,start}=roundSpan();
   if(count===9){const base=start<9?0:9;return Array.from({length:9},(_,k)=>base+((start-base+k)%9));}
@@ -3792,7 +3975,10 @@ function computeVegas(){
           diff=Math.abs(nums[0]-nums[1]);
           T[winner].forEach(i=>ledgers[L][i]+=diff);
         }
-        if(S.config.vegas.ctp&&par===3&&rec.ctp!=null&&rec.ctp>=0)ledgers[L][rec.ctp]+=1;
+        // the CTP point is a TEAM point, carried by both partners like every Vegas point -- credited to the
+        // winner alone, the team settle (which reads one player per side) paid it only when he was the
+        // first-listed partner: $0.50 each, or nothing, for the same shot (stress sweep 10/18)
+        if(S.config.vegas.ctp&&par===3&&rec.ctp!=null&&rec.ctp>=0){const tm=T.find(t=>t.includes(rec.ctp))||[rec.ctp];tm.forEach(i=>ledgers[L][i]+=1);}
         info.results[L]={nums,flips,winner,diff};
       }
     }
@@ -3854,13 +4040,13 @@ function scrambleStrokes(){
     // of teams -- a two-man team here takes the same 35/15 it takes in 2v2.
     const c=T[0].map(i=>ch[i]).sort((a,b)=>a-b);
     const pct=c.length===2?[0.35,0.15]:[0.25,0.20,0.15,0.10];
-    return [Math.max(0,Math.round(c.reduce((s,v,i)=>s+v*(pct[i]||0),0)*S.config.allowance/100))];
+    return [Math.round(c.reduce((s,v,i)=>s+v*(pct[i]||0),0)*S.config.allowance/100)];   // a plus team gives strokes back
   }
   const tch=T.map(t=>{const a=ch[t[0]],b=ch[t[1]];return Math.round((0.35*Math.min(a,b)+0.15*Math.max(a,b))*S.config.allowance/100);});
   const m=Math.min(...tch);
   return tch.map(c=>Math.max(0,c-m));
 }
-function scrambleDots(k,h){const st=scrambleStrokes()[k],si=S.course.holes[h].si;return (st>=si?1:0)+((st-18)>=si?1:0);}
+function scrambleDots(k,h){const st=scrambleStrokes()[k],si=S.course.holes[h].si;return holeDots(st,si);}
 function computeScramble(){
   const T=scrambleTeams(),capt=T.map(t=>t[0]);
   const ledgers={net:[0,0,0,0],gross:[0,0,0,0]},par={net:[0,0,0,0],gross:[0,0,0,0]};
@@ -3953,7 +4139,9 @@ function computeSkins(){
 // holes of a nine: rec.press=side marks a manual press starting at that hole;
 // 'auto2' spawns one press per bet the first time it reaches exactly 2 down.
 // A 9-hole round collapses to a single overall match.
-function nassauSides(){return (S.config.nassau&&S.config.nassau.n===2&&NP()===2)?[[0],[1]]:matchTeams('nassau');}
+// the NASSAU's own seats decide (stress sweep 10/18): NP() answers for whichever game is in view, so a
+// 1v1 Nassau beside a foursome's main game was drawn 2v2 on Standings (the money was right)
+function nassauSides(){return (S.config.nassau&&S.config.nassau.n===2&&withEngine('nassau',()=>NP())===2)?[[0],[1]]:matchTeams('nassau');}
 function computeNassau(){
   const T=nassauSides();
   const o=playOrder();
@@ -5125,7 +5313,7 @@ function mapConfirm(){
     if(rec.gross[mi]==null){rec.gross[mi]=par;rec.gts[mi]=Date.now();}
     if(groupShare()){
       if(!rec.cfts)rec.cfts=[0,0,0,0];
-      myRows(h).forEach(i=>{if(rec.gross[i]!=null)rec.cfts[i]=Date.now();});
+      myRows(h).forEach(i=>{if(rec.gross[i]!=null)rec.cfts[i]=stampAfter(rec.cfts[i]);});
       if(!rec.confirmed&&actIdx().every(i=>rec.cfts[i]>0)){rec.confirmed=true;closed=true;}
     }else if(!rec.confirmed&&actIdx().every(i=>rec.gross[i]!=null)){
       rec.confirmed=true;closed=true;
@@ -7873,7 +8061,7 @@ function setParPick(v){
     if(rec&&rec.gross)rec.gross.forEach((g,i)=>{
       if(g!=null&&(!rec.gts||(rec.gts[i]||0)<=1)&&(!rec.cfts||!(rec.cfts[i]>0)))rec.gross[i]=v;});
     syncLib();
-    if(S.share&&S.share.on)S.shareMetaTs=Date.now();
+    if(S.share&&S.share.on)S.shareMetaTs=stampAfter(S.shareMetaTs);
   });
   try{stat('parmark',{course:S.course.id,courseName:S.course.name,hole:ph+1,par:v});}catch(e){}
   closeParAsk();
@@ -10254,7 +10442,8 @@ function vBfWatch(){
       </span></div>
       ${teamLine?`<div class="tiny mt">⚔️ ${teamLine}</div>`:''}</div>
     ${games.map(g=>{const led=ledgers[g];if(!led)return '';
-      const order=act.slice().sort((a,b)=>['stroke','stableford'].includes(g)?(led[L][a]-led[L][b]):(led[L][b]-led[L][a]));
+      // strokes: low wins; Stableford is POINTS -- high wins (stress sweep 10/18: the leader was listed last)
+      const order=act.slice().sort((a,b)=>['stroke','scramble'].includes(g)?(led[L][a]-led[L][b]):(led[L][b]-led[L][a]));
       return `<div class="card"><h2>${gameName(g)}</h2>
         ${order.map(i=>`<div class="row"><span>${esc((S.players[i]||{}).name||'?')}${idxLbl(S.players[i])}</span><b class="num" style="font-size:24px">${g==='nines'?fmtPts(led[L][i]):g==='quota'?(led[L][i]>0?'+':'')+led[L][i]:led[L][i]}</b></div>`).join('')}
       </div>`;}).join('')}
@@ -10784,7 +10973,7 @@ function vStart(){
       const isMe=low(p.name)===meNm;
       seat++;
       return `<div class="row"><div style="flex:1;min-width:0">${seatTag(seat)}<b style="font-size:17px">${esc(p.name)}</b>${isMe?' <span class="pill gray">you</span>':''}
-          <div class="tiny">Index ${p.index}${p.nearby?' · <span style="color:var(--amber)">◌ invited when you start</span>':(!isMe?' · <span class="muted">✎ you\'ll score them</span>':'')}</div></div>
+          <div class="tiny">Index ${fmtIdx(p.index)}${p.nearby?' · <span style="color:var(--amber)">◌ invited when you start</span>':(!isMe?' · <span class="muted">✎ you\'ll score them</span>':'')}</div></div>
         ${isMe?'':`<button class="ghost danger xbtn" aria-label="Remove player" onclick="removeGolfer(${i})">${XICON}</button>`}</div>`;}).join('')
       +Array.from({length:Math.max(0,want-nFilled)},(_,k)=>`<div class="row" style="opacity:.55"><div>${seatTag(nFilled+k+1)}<span class="muted">Open</span></div></div>`).join('');
     const nearbyRows=(gatePick.list||[]).filter(n=>!inRoster(n.name)).map(n=>`
@@ -10793,7 +10982,7 @@ function vStart(){
         <span class="pill wolf">+ add</span></div>`).join('');
     const libRows=(S.playerLib||[]).filter(e=>e.name&&!inRoster(e.name)&&low(e.name)!==meNm).map(e=>`
       <div class="row" style="cursor:pointer" onclick="addFromLib('${e.id}')">
-        <div><b>${esc(e.name)}</b><div class="tiny">Index ${e.index}${e.teeName?` · ${esc(e.teeName)}`:''}</div></div>
+        <div><b>${esc(e.name)}</b><div class="tiny">Index ${fmtIdx(e.index)}${e.teeName?` · ${esc(e.teeName)}`:''}</div></div>
         <span class="pill wolf">+ add</span></div>`).join('');
     // SAVED GROUPS BELONG HERE TOO (Apple Mountain 9/6): Nathan walked 18 → multiplayer →
     // 4 players → this screen, and The Boyz! was not on it — the chips lived only on
@@ -10932,7 +11121,7 @@ function vGate(){
       :'<span class="muted">✎ you\'ll score them</span>';
     return `<div class="row">
       <div style="flex:1;min-width:0"><b style="font-size:17px">${esc(p.name)}</b>${isMe?' <span class="pill gray">you</span>':''}
-        <div class="tiny">Index ${p.index}${st2?' · '+st2:''}</div></div>
+        <div class="tiny">Index ${fmtIdx(p.index)}${st2?' · '+st2:''}</div></div>
       ${isMe?'':`<button class="ghost danger xbtn" aria-label="Remove player" onclick="removeGolfer(${i})">${XICON}</button>`}
     </div>`;
   }).join('');
@@ -10943,7 +11132,7 @@ function vGate(){
     </div>`).join('');
   const libRows=(S.playerLib||[]).filter(e=>e.name&&!inRoster(e.name)&&low(e.name)!==meNm).map(e=>`
     <div class="row" style="cursor:pointer" onclick="addFromLib('${e.id}')">
-      <div><b>${esc(e.name)}</b><div class="tiny">Index ${e.index}${e.teeName?` · ${esc(e.teeName)}`:''}</div></div>
+      <div><b>${esc(e.name)}</b><div class="tiny">Index ${fmtIdx(e.index)}${e.teeName?` · ${esc(e.teeName)}`:''}</div></div>
       <span class="pill wolf">+ add</span>
     </div>`).join('');
   return topbar('Your group',S.round.started?'Add whoever is with you — the round keeps going':'Build the crew — then pick your game','home')+`<main>
@@ -11333,7 +11522,7 @@ function exFullStrokes(e,cs,me){
     const slope=(tee&&+tee.slope)||113, rating=(tee&&+tee.rating)||tp;
     const ch=Math.round((+me.index)*(slope/113)+(rating-tp));
     const allow=(e.config&&e.config.allowance!=null)?+e.config.allowance:100;
-    return Math.max(0,Math.round(ch*allow/100));
+    return Math.round(ch*allow/100);
   }catch(err){return null;}
 }
 function exportTables(only){
@@ -11386,7 +11575,7 @@ function exportTables(only){
       const d=gross-p;
       if(netOk){
         const si=hole.si!=null?hole.si:18;
-        net+=gross-((fullSt>=si?1:0)+((fullSt-18)>=si?1:0));
+        net+=gross-(holeDots(fullSt,si));
       }
       if(d<=-2)eag++;else if(d===-1)bird++;else if(d===0)prs++;else if(d===1)bog++;else dbl++;
       n++;g+=gross;par+=p;
@@ -12131,7 +12320,7 @@ function vPlayers(){
         <div style="flex:1">
           <div class="grid2">
             <div><div class="tiny">Your name</div><input id="meEName" data-rec="me" type="text" value="${esc(S.me.name)}"></div>
-            <div><div class="tiny">Handicap index</div><input id="meEIdx" data-rec="me" type="text" inputmode="decimal" value="${S.me.index}"></div>
+            <div><div class="tiny">Handicap index</div><input id="meEIdx" data-rec="me" type="text" inputmode="decimal" value="${fmtIdx(S.me.index)}"></div>
           </div>
           <div class="mt"><div class="tiny">Email — backups &amp; restore</div><input id="meEEmail" data-rec="me" type="text" inputmode="email" autocapitalize="off" placeholder="you@email.com" value="${esc(localStorage.getItem('wolfBackupEmail')||'')}"></div>
           ${PHOTOS_ON?`<div class="mt" style="display:flex;align-items:center;gap:10px">${avatarHTML(S.me,59)}
@@ -12154,7 +12343,7 @@ function vPlayers(){
         <button class="ghost" onclick="cancelEditMe()">Cancel</button>
       </div>`
     :(()=>{const meLib=S.playerLib.find(e=>e.name.trim().toLowerCase()===S.me.name.trim().toLowerCase());
-      return `<div class="row"><div style="display:flex;align-items:center;gap:10px;min-width:0">${avatarHTML(S.me,54)}<div style="min-width:0"><b>${esc(S.me.name)}</b><div class="tiny">Index ${S.me.index}${meLib&&(meLib.stdTee||meLib.teeName)?` · ${esc(meLib.stdTee||meLib.teeName)} tees`:''}</div></div></div>
+      return `<div class="row"><div style="display:flex;align-items:center;gap:10px;min-width:0">${avatarHTML(S.me,54)}<div style="min-width:0"><b>${esc(S.me.name)}</b><div class="tiny">Index ${fmtIdx(S.me.index)}${meLib&&(meLib.stdTee||meLib.teeName)?` · ${esc(meLib.stdTee||meLib.teeName)} tees`:''}</div></div></div>
       <button class="ghost" onclick="editMe()">Edit</button></div>`;})()):''}
     ${S.me.name?chalProfileHTML():''}
     ${scanOpen?`
@@ -12183,7 +12372,7 @@ function vPlayers(){
       <div class="row" style="background:var(--green-lt);border-radius:10px;padding:9px 12px;border-top:none;margin:2px 0">
         <div class="grid2" style="flex:1">
           <div><div class="tiny">Name</div><input id="epName" data-rec="${esc(e.id)}" type="text" value="${esc(e.name)}"></div>
-          <div><div class="tiny">Handicap index</div><input id="epIdx" data-rec="${esc(e.id)}" type="text" inputmode="decimal" value="${e.index}"></div>
+          <div><div class="tiny">Handicap index</div><input id="epIdx" data-rec="${esc(e.id)}" type="text" inputmode="decimal" value="${fmtIdx(e.index)}"></div>
         </div>
       </div>
       <div class="row" style="border-top:none;display:block">${stdTeePicker(e.id,e.stdTee||stdTeeOf(e.teeName))}</div>
@@ -12230,7 +12419,7 @@ function vPlayers(){
       const armed=armDelPlayer===e.id;
       return `<div class="row" style="flex-wrap:wrap;row-gap:8px">
       <div style="flex:1 1 200px;min-width:0;display:flex;align-items:center;gap:10px">${avatarHTML(e,36)}<div style="min-width:0"><b>${linked?'<span title="Battle friend">⚔️</span> ':''}${esc(e.name)}</b>
-        <div class="tiny">Index ${e.index}${(e.stdTee||e.teeName)?` · ${esc(e.stdTee||e.teeName)} tees`:''}</div>
+        <div class="tiny">Index ${fmtIdx(e.index)}${(e.stdTee||e.teeName)?` · ${esc(e.stdTee||e.teeName)} tees`:''}</div>
         ${status}</div></div>
       ${armed
         ?`<div style="flex-basis:100%;display:flex;gap:6px;justify-content:flex-end">
@@ -12362,7 +12551,7 @@ function roundSummary(){
     try{
       const st=fullStrokes()[mi];
       const dots=h=>{const si=(S.course.holes[h]||{si:18}).si;
-        return (st>=si?1:0)+((st-18)>=si?1:0);};
+        return holeDots(st,si);};
       net=holes.reduce((t,h)=>t+S.round.holes[h].gross[mi]-dots(h),0);
     }catch(e){}
     // WIN/LOSS is only meaningful against somebody. A solo round records neither.
@@ -12372,9 +12561,13 @@ function roundSummary(){
         const g=gameOn(), eng=computeFor(g), L=primaryLens();
         const led=eng&&eng.ledgers&&eng.ledgers[L];
         if(led){
-          const lower=['stroke','stableford'].includes(g)?true:false;
+          // Stableford is POINTS (high wins); Scramble is strokes (low wins). In a TEAM game my partner
+          // carries my number, so I am judged against the other side only -- every team win used to
+          // record a tie (stress sweep 10/18)
+          const lower=['stroke','scramble'].includes(g);
           const mine=led[mi];
-          const others=act.filter(i=>i!==mi).map(i=>led[i]);
+          let mates=[mi];try{const FT=withEngine(g,()=>fixedTeamsFor(g));const t=FT&&FT.find(t=>t.includes(mi));if(t)mates=t;}catch(e){}
+          const others=act.filter(i=>!mates.includes(i)).map(i=>led[i]);
           const best=lower?Math.min(...others):Math.max(...others);
           result=(mine===best)?'tie':((lower?mine<best:mine>best)?'win':'loss');
         }
@@ -12504,10 +12697,10 @@ function reviewCommit(){
     // ancient stamp), and on 8/14 this pass ratified one — hole 10, never
     // played, confirmed a day after the round ended. A repair may only card a
     // hole somebody actually typed a score on.
-    if(act.length&&act.every(i=>r.gross&&r.gross[i]!=null&&r.gts&&r.gts[i]>1)){
+    if(act.length&&act.every(i=>r.gross&&r.gross[i]!=null&&r.gts&&r.gts[i]>2)){
       r.confirmed=true;
       if(!r.cfts)r.cfts=[0,0,0,0];
-      act.forEach(i=>{if(!r.cfts[i])r.cfts[i]=Date.now();});
+      act.forEach(i=>{if(!r.cfts[i])r.cfts[i]=stampAfter(r.cfts[i]);});
     }
   });
   const e=(S.history||[]).find(x=>x.id===S.round._histId);
@@ -12533,7 +12726,7 @@ function cancelRound(){
   // capEnd with cancel:true tears them down without archiving
   try{
     S.round.capEnd={by:(S.me&&S.me.name)||'',at:Date.now(),startedAt:S.round.startedAt,cancel:true};
-    S.shareMetaTs=Date.now();
+    S.shareMetaTs=stampAfter(S.shareMetaTs);
     syncPush();
   }catch(e){}
   bfBroadcastEnd();          // closes the Battlefield room and retires the invite
@@ -12693,12 +12886,13 @@ function endRound(){
     stat('round_end',{game:S.round.game,thru:S.round.holes.filter(r=>r.confirmed).length,
       mins:t0?Math.round((S.round.myEndedAt-t0)/60000):null});}
   bfBroadcastEnd();
+  if(S.share&&S.share.on){try{if(!isReview()){const mi=myPlayerIdx();if(S.players[mi]&&!S.players[mi].ended)S.players[mi].ended=Date.now();}}catch(e){}endOutboxStash();}
   archiveRound();
   const wasShared=S.share.on, wasReview=!!S.round.reopened;
   S.round=blankRound();S.screen='home';stView=null;
   resetRoster();   // next round starts with just you — pick a fresh group
   save();
-  if(wasShared)leaveShare();else render();
+  if(wasShared){leaveShare();setTimeout(()=>{try{endOutboxFlush();}catch(e){}},1500);}else render();
   // Playing never requires a confirmed address — but once the round is in the books,
   // ask, because nothing has been saved anywhere yet.
   // ...but closing a PAST round you reopened to review is not a round ending: it was
@@ -13283,9 +13477,9 @@ function vSetup(){
     const isMe=!!(S.me.name&&(p.name||'').trim().toLowerCase()===S.me.name.trim().toLowerCase());
     const pickSel=(nbShown.length||S.playerLib.length)?`<span style="position:relative;flex:none;width:42px;border:2px solid var(--elec);border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--elec);background:var(--card);font-size:15px;box-shadow:2px 2px 0 var(--elec-dk)">▾<select style="position:absolute;inset:0;opacity:0;width:100%;height:100%" onchange="pickPlayerOpt(${i},this.value)">
         <option value="">Pick a player…</option>
-        ${nbShown.some(n=>n.near)?`<optgroup label="Nearby — on the course">${nbShown.map((n,j)=>n.near?`<option value="nb:${j}">📍 ${esc(n.name)}${n.index!=null?` · ${n.index}`:''}</option>`:'').join('')}</optgroup>`:''}
-        ${nbShown.some(n=>!n.near)?`<optgroup label="Online — elsewhere">${nbShown.map((n,j)=>!n.near?`<option value="nb:${j}">🌐 ${esc(n.name)}${n.index!=null?` · ${n.index}`:''}</option>`:'').join('')}</optgroup>`:''}
-        ${S.playerLib.length?`<optgroup label="Saved players">${S.playerLib.map(e=>`<option value="lib:${e.id}">${esc(e.name)} · ${e.index}${e.teeName?` · ${esc(e.teeName)}`:''}</option>`).join('')}</optgroup>`:''}
+        ${nbShown.some(n=>n.near)?`<optgroup label="Nearby — on the course">${nbShown.map((n,j)=>n.near?`<option value="nb:${j}">📍 ${esc(n.name)}${n.index!=null?` · ${fmtIdx(n.index)}`:''}</option>`:'').join('')}</optgroup>`:''}
+        ${nbShown.some(n=>!n.near)?`<optgroup label="Online — elsewhere">${nbShown.map((n,j)=>!n.near?`<option value="nb:${j}">🌐 ${esc(n.name)}${n.index!=null?` · ${fmtIdx(n.index)}`:''}</option>`:'').join('')}</optgroup>`:''}
+        ${S.playerLib.length?`<optgroup label="Saved players">${S.playerLib.map(e=>`<option value="lib:${e.id}">${esc(e.name)} · ${fmtIdx(e.index)}${e.teeName?` · ${esc(e.teeName)}`:''}</option>`).join('')}</optgroup>`:''}
       </select></span>`:'';
     return `<div class="card">
       <div class="row"><b>Golfer ${i+1}${isMe?' <span class="pill gray">you</span>':''}${(!isMe&&p.scorer===devId()&&(S.share.on||S.players.some(x=>x.nearby)))?' <span class="pill gray">you score them</span>':''}${S.config.game==='wolf'?` — tees off ${['1st','2nd','3rd','4th'][i]}`:''}</b>
@@ -13295,7 +13489,7 @@ function vSetup(){
         <div><div class="tiny">Tees</div><select style="width:100%;padding:9px;border:2px solid var(--line);border-radius:8px;font-size:15px;background:var(--card)" onchange="setPl(${i},'tee',this.value)">${teeOpts}</select></div>
         <div><div class="tiny">Handicap index</div>${ownedElsewhere(p)
           ?`<div style="padding:9px 2px;font-weight:700;font-size:17px">${esc(String(p.index))} <span class="tiny muted">🔒 set on their phone</span></div>`
-          :`<input id="plIdx${i}" data-rec="${esc(p.name)}" type="text" inputmode="decimal" value="${p.index}" onfocus="tapClear(this)" onblur="commitPl(this,${i},'index')">`}</div>
+          :`<input id="plIdx${i}" data-rec="${esc(p.name)}" type="text" inputmode="decimal" value="${fmtIdx(p.index)}" onfocus="tapClear(this)" onblur="commitPl(this,${i},'index')">`}</div>
         <div></div>
       </div>
       <div class="tiny mt">Course hcp <b>${ch[i]}</b> → plays with <b>${st[i]}</b> stroke${st[i]===1?'':'s'} (off the low man).${i===0?' Handicaps adjust themselves as rounds are saved.':''}</div>
@@ -13444,8 +13638,9 @@ function askTee(then,title,sub){
 function teeAskPick(id){
   set(()=>{
     const me=S.players[myPlayerIdx()]||S.players[0];
+    if(S.round&&S.round.started&&!isReview())S.round.myTee=id;   // this phone's word on its own tees (claimMySlot)
     if(me){
-      me.tee=id;
+      me.tee=id;if(S.share&&S.share.on&&me.ownerDev===devId())me.rts=stampAfter(me.rts);
       upsertLib({name:me.name,index:me.index,tee:id,libId:me.libId,pid:me.pid});
     }
   });
@@ -13515,7 +13710,10 @@ function pairsAskSheetHTML(){
 let joinSpanAsk=null;
 function askJoinSpan(){
   if(!S.share.on||S.share.creator)return;
-  joinSpanAsk={count:18,start:0};render();
+  // the GROUP's card is the default (Nathan 10/18, after the stress runs): tapping straight through
+  // matches the group; All 18 / a different nine stays one tap away
+  const g=S.round.span||{count:18,start:0};
+  joinSpanAsk={count:g.count||18,start:g.start||0};render();
 }
 function joinSpanPick(count,start){
   joinSpanAsk={count,start};render();
@@ -13710,7 +13908,7 @@ function applyMyPhoto(dataUrl){
     const low=(S.me.name||'').trim().toLowerCase();
     const lib=S.playerLib.find(e=>(S.me.pid&&e.pid===S.me.pid))||S.playerLib.find(e=>(e.name||'').trim().toLowerCase()===low);
     if(lib){if(dataUrl)lib.photo=dataUrl;else delete lib.photo;}
-    if(S.share&&S.share.on)S.shareMetaTs=Date.now();
+    if(S.share&&S.share.on)S.shareMetaTs=stampAfter(S.shareMetaTs);
   });
 }
 function removeMyPhoto(){applyMyPhoto(null);}
@@ -13797,7 +13995,8 @@ function uniqueRosterName(nm,exceptIdx){
 function parseIdx(v,fallback){
   const t=String(v==null?'':v).trim().replace(',','.');
   if(t==='')return fallback;
-  const x=parseFloat(t);
+  // golfers write a plus handicap "+2"; it is stored negative (-2), as it always was when typed "-2"
+  let x=parseFloat(t.replace(/^\+/,''));if(/^\+/.test(t))x=-x;
   if(!isFinite(x))return fallback;
   return Math.round(Math.max(-10,Math.min(54,x))*10)/10;
 }
@@ -14004,7 +14203,7 @@ function renderGroupEditor(){
       const on=t.sel.has(e.name.trim().toLowerCase());
       const dis=!on&&full;
       return `<div class="row" data-nm="${esc(e.name.trim().toLowerCase())}" style="cursor:pointer;${dis?'opacity:.4':''}" onclick="grpEdToggle('${esc(e.name.trim().toLowerCase())}')">
-        <div><b>${esc(e.name)}</b><div class="tiny">Index ${e.index}</div></div>
+        <div><b>${esc(e.name)}</b><div class="tiny">Index ${fmtIdx(e.index)}</div></div>
         <input type="checkbox" style="width:24px;height:24px;accent-color:var(--elec);pointer-events:none" ${on?'checked':''}>
       </div>`;}).join('')}
     <div class="tiny mt">New player</div>
@@ -14330,7 +14529,7 @@ function vHole(){
       const lk=rowLock(h,i);
       return `<div class="scorebar ${lk==='mine'?'rowmine':lk==='locked'?'rowlocked':''}">
         <div style="min-width:118px"><b>${esc(p.name)}</b> ${side==='wolf'?'<span class="pill wolf">wolf side</span>':''}
-          <div class="tiny" style="font-size:15.5px">${dots(i)>0?`<span class="dots">${'●'.repeat(dots(i))}</span>`:''} ${g!=null&&S.config.lens!=='gross'?`net ${net} · `:''}hcp ${p.index}${(p.ended)?' · <span style="color:var(--amber-bd,#e0a53a)">ended their round — score them here</span>':''}</div></div>
+          <div class="tiny" style="font-size:15.5px">${dotsHTML(dots(i))} ${g!=null&&S.config.lens!=='gross'?`net ${net} · `:''}hcp ${fmtIdx(p.index)}${(p.ended)?' · <span style="color:var(--amber-bd,#e0a53a)">ended their round — score them here</span>':''}</div></div>
         ${lk==='locked'
           ?`<div style="display:flex;align-items:center;gap:12px"><span class="val num" style="font-size:24px">${g==null?'–':g}</span><button class="ghost" onclick="unlockRow(${h},${i})">✎</button></div>`
           :`<div class="stepper">
@@ -14511,10 +14710,10 @@ function stageScore(h,i,d){const rec=S.round.holes[h];
   stageMap()[h+'-'+i]=Math.min(15,Math.max(1,cur+d));save();}
 function commitStage(h,rows){const rec=S.round.holes[h],m=stageMap();
   (rows||[]).forEach(i=>{const k=h+'-'+i;
-    if(k in m){rec.gross[i]=m[k];if(!rec.gts)rec.gts=[0,0,0,0];rec.gts[i]=Date.now();delete m[k];}});}
+    if(k in m){rec.gross[i]=m[k];if(!rec.gts)rec.gts=[0,0,0,0];rec.gts[i]=stampAfter(rec.gts[i]);delete m[k];}});}
 function clearStage(){S.stage={at:0,v:{}};}
 function chScore(i,d){reviewTouch();
-  if(isReview()){set(()=>{const r=S.round.holes[S.round.cur];const v=(r.gross[i]??S.course.holes[S.round.cur].par)+d;r.gross[i]=Math.min(15,Math.max(1,v));if(!r.gts)r.gts=[0,0,0,0];r.gts[i]=Date.now();});return;}
+  if(isReview()){set(()=>{const r=S.round.holes[S.round.cur];const v=(r.gross[i]??S.course.holes[S.round.cur].par)+d;r.gross[i]=Math.min(15,Math.max(1,v));if(!r.gts)r.gts=[0,0,0,0];r.gts[i]=stampAfter(r.gts[i]);});return;}
   stageScore(S.round.cur,i,d);render();}
 // A par 3 gets a closest-to-pin pick regardless of what game is running.
 // Games that SCORE ctp (wolf, nines, vegas, umbrella) still require it before the
@@ -14878,8 +15077,9 @@ function finishMyRound(){
         // and the room stays open for everyone else. capEnd survives only for
         // Cancel, which is explicit. The receive side still honors a capEnd
         // from an older build.
-        S.shareMetaTs=Date.now();
+        S.shareMetaTs=stampAfter(S.shareMetaTs);
         syncPush();
+        endOutboxStash();   // whatever that push could not deliver goes when signal does
       }catch(e){}
     }
     bfBroadcastEnd();
@@ -14892,7 +15092,7 @@ function finishMyRound(){
     S.round=blankRound();S.screen='home';stView=null;clearStage();
     try{resetRoster();}catch(e){}
     save();
-    if(wasShared)leaveShare();else render();
+    if(wasShared){leaveShare();setTimeout(()=>{try{endOutboxFlush();}catch(e){}},1500);}else render();
     // ...and only once the splash has been dismissed. Firing at +450ms put the
     // "Save this round?" sheet straight over the top of it, so the one moment the
     // round gets summarized was covered by an email prompt.
@@ -15078,7 +15278,7 @@ function catchSave(){
   if(!catchUp)return;const {i,v}=catchUp;catchUp=null;
   reviewTouch();   // fixed from Past Rounds: the reviewed round re-files with the new holes
   set(()=>{Object.keys(v).forEach(k=>{const r=S.round.holes[+k];if(!r||r.gross[i]!=null)return;
-    r.gross[i]=v[k];if(!r.gts)r.gts=[0,0,0,0];r.gts[i]=Date.now();if(!r.cfts)r.cfts=[0,0,0,0];r.cfts[i]=Date.now();});});
+    r.gross[i]=v[k];if(!r.gts)r.gts=[0,0,0,0];r.gts[i]=stampAfter(r.gts[i]);if(!r.cfts)r.cfts=[0,0,0,0];r.cfts[i]=stampAfter(r.cfts[i]);});});
   try{stat('catch_up',{holes:Object.keys(v).length});}catch(e){}
 }
 function catchSkip(i){set(()=>{if(S.players[i])S.players[i].noCatch=true;});}
@@ -15164,7 +15364,7 @@ function confirmMine(){
     const rec=S.round.holes[h];
     commitStage(h,myRows(h).concat(extraMine(h)));
     if(!rec.cfts)rec.cfts=[0,0,0,0];
-    myRows(h).concat(extraMine(h)).forEach(i=>{if(rec.gross[i]!=null)rec.cfts[i]=Date.now();});
+    myRows(h).concat(extraMine(h)).forEach(i=>{if(rec.gross[i]!=null)rec.cfts[i]=stampAfter(rec.cfts[i]);});
     if(!rec.confirmed&&actIdx().every(i=>rec.cfts[i]>0)){rec.confirmed=true;closed=true;}
     if(!isReview())advanceToNext();
   });
@@ -15231,7 +15431,7 @@ function vHoleNines(){
     const lk=rowLock(h,i);
     return `<div class="scorebar ${lk==='mine'?'rowmine':lk==='locked'?'rowlocked':''}">
       <div style="min-width:118px"><b>${esc(p.name)}</b>${isX?' <span class="pill" style="background:var(--line);color:var(--ink)">stroke only</span>':''}
-        <div class="tiny" style="font-size:15.5px">${dn>0?`<span class="dots">${'●'.repeat(dn)}</span>`:''} ${g!=null&&S.config.lens!=='gross'?`net ${net} · `:''}hcp ${p.index}${(p.ended)?' · <span style="color:var(--amber-bd,#e0a53a)">ended their round — score them here</span>':''}</div></div>
+        <div class="tiny" style="font-size:15.5px">${dotsHTML(dn)} ${g!=null&&S.config.lens!=='gross'?`net ${net} · `:''}hcp ${fmtIdx(p.index)}${(p.ended)?' · <span style="color:var(--amber-bd,#e0a53a)">ended their round — score them here</span>':''}</div></div>
       ${lk==='locked'
         ?`<div style="display:flex;align-items:center;gap:12px"><span class="val num" style="font-size:24px">${g==null?'–':g}</span><button class="ghost" onclick="unlockRow(${h},${i})">✎</button></div>`
         :`<div class="stepper">
@@ -15299,7 +15499,7 @@ function vHoleVegas(){
     const lk=rowLock(h,i);
     return `<div class="scorebar ${lk==='mine'?'rowmine':lk==='locked'?'rowlocked':''}">
       <div style="min-width:112px"><b>${esc(p.name)}</b>
-        <div class="tiny" style="font-size:15.5px">${dots(i)>0?`<span class="dots">${'●'.repeat(dots(i))}</span>`:''} ${g!=null&&S.config.lens!=='gross'?`net ${net} · `:''}hcp ${p.index}${(p.ended)?' · <span style="color:var(--amber-bd,#e0a53a)">ended their round — score them here</span>':''}</div></div>
+        <div class="tiny" style="font-size:15.5px">${dotsHTML(dots(i))} ${g!=null&&S.config.lens!=='gross'?`net ${net} · `:''}hcp ${fmtIdx(p.index)}${(p.ended)?' · <span style="color:var(--amber-bd,#e0a53a)">ended their round — score them here</span>':''}</div></div>
       ${lk==='locked'
         ?`<div style="display:flex;align-items:center;gap:12px"><span class="val num" style="font-size:24px">${g==null?'–':g}</span><button class="ghost" onclick="unlockRow(${h},${i})">✎</button></div>`
         :`<div class="stepper">
@@ -15376,7 +15576,7 @@ function vHoleScramble(){
     const g=stagedG(rec,h,capt[k]), d=scrambleDots(k,h);
     return `<div class="scorebar">
       <div style="min-width:140px"><b>${teamLbl(t)}</b>
-        <div class="tiny" style="font-size:15.5px">${d>0?`<span class="dots">${'●'.repeat(d)}</span>`:''} ${g!=null&&S.config.lens!=='gross'?`net ${g-d}`:''}</div></div>
+        <div class="tiny" style="font-size:15.5px">${dotsHTML(d)} ${g!=null&&S.config.lens!=='gross'?`net ${g-d}`:''}</div></div>
       <div class="stepper">
         <button onclick="chScore(${capt[k]},-1)">−</button>
         <span class="val num">${g==null?'–':g}</span>
@@ -15803,7 +16003,7 @@ function chalCheerCheck(final){
         thru:r.thru,total:r.total,done,of:res.length,final:!!final,at:Date.now()});
       added=true;
     });
-    if(added){S.shareMetaTs=Date.now();cheerMerge([]);save();syncPush();}
+    if(added){S.shareMetaTs=stampAfter(S.shareMetaTs);cheerMerge([]);save();syncPush();}
   }catch(e){}
 }
 function cheerMerge(inc){
@@ -16069,14 +16269,16 @@ function teamPickerRow(g){
   // TEAM games count only holes every one of their players played (a late joiner who did not catch up).
   // computeMatch keeps the engine it was called under: Match Play's 1v1 called it as 'bestball' and gave
   // strokes off an empty seat (10/18).
-  const TEAM_G=new Set(['wolf','vegas','scramble','nassau','sixes','umbrella','bestball']);
+  // Scramble is NOT here: it cards only each team's captain row, so "every seat scored" never held and
+  // every hole was masked away -- Scramble paid 0 on every phone from the 10/18 5 PM ship (stress sweep).
+  const TEAM_G=new Set(['wolf','vegas','nassau','sixes','umbrella','bestball']);
   const wrap=(n,g)=>{const o=window[n];if(!o)return;
-    window[n]=function(){const p=engineGame;engineGame=(n==='computeMatch'&&p)?p:g;
+    window[n]=function(){const p=engineGame;engineGame=(n==='computeMatch'&&p)?p:g;engineDepth++;
       try{
         if(n!=='computeMatch'&&TEAM_G.has(engineGame)){const seats=actIdx();
           if(presenceSplit(seats))return withHoleMask(r=>seats.every(i=>r.gross[i]!=null),()=>o.apply(this,arguments));}
         return o.apply(this,arguments);
-      }finally{engineGame=p;}};};
+      }finally{engineGame=p;engineDepth--;}};};
   wrap('computeAll','wolf');wrap('computeNines','nines');wrap('computeVegas','vegas');
   wrap('computeBestBall','bestball');wrap('computeScramble','scramble');
   wrap('computeQuota','quota');wrap('computeBBB','bbb');wrap('computeSkins','skins');
@@ -16358,7 +16560,11 @@ function vStandings(){
   const everyCard=(()=>{try{
     const xs=extraIdx();if(!xs.length)return '';
     const row=i=>{let gr=0,pr=0,st=0,th=0;
+      // a CARDED score only: the hole closed, or this player confirmed their own row (an extra never
+      // closes a hole). The par prefilled on the hole being played is nobody's score yet (stress sweep
+      // 10/18: everyone read "thru 4" after 3 holes, the prefill counted in the total)
       S.round.holes.forEach((r,h)=>{const g=r&&r.gross?r.gross[i]:null;if(g==null)return;
+        if(!(r.confirmed||(r.cfts&&r.cfts[i]>0)))return;
         gr+=g;pr+=(S.course.holes[h]||{par:4}).par;st+=fullDotsOn(i,h);th++;});
       return {i,th,gross:gr,net:gr-st,par:pr};};
     const R=cardIdx().map(row);
