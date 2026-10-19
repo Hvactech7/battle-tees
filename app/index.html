@@ -554,7 +554,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-center in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1792377072';
+const BUILD='1792377732';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -15921,10 +15921,24 @@ function vChal(){
     <button class="big" onclick="chalSave()">Save my challenges</button>
   </main>`;
 }
+// THE SAME DRAW ON EVERY PHONE (Nathan 10/18). Anyone in the group can press Reveal, and a
+// fresh coin flip per phone let two people pressing it together (or one with no signal) see
+// DIFFERENT partners until the room settled on the last write. So the draw is read off the
+// round itself -- its start stamp, the four names in their seats and the game -- which every
+// phone in the group holds identically: whoever presses, whenever, online or not, it is the
+// same pairing. Fixed from the first tee (cancel + re-arm cannot re-roll it), and nobody sees
+// it until Reveal.
+function mysteryDraw(g){
+  const key=[S.round.startedAt||0,g].concat([0,1,2,3].map(i=>((S.players[i]||{}).name||'').trim().toLowerCase())).join('|');
+  let h=2166136261;
+  for(let i=0;i<key.length;i++){h^=key.charCodeAt(i);h=Math.imul(h,16777619)>>>0;}
+  h^=h>>>16;h=Math.imul(h,0x45d9f3b)>>>0;h^=h>>>16;
+  return (h>>>0)%3;
+}
 function revealPartners(g){
   if(!mysteryPending(g))return;
   set(()=>{const c=teamCfg(g);
-    c.pairing=Math.floor(Math.random()*3);   // the draw — synced to every phone
+    c.pairing=mysteryDraw(g);   // the draw — the same on every phone, and synced anyway
     c.revealed=true;
   });
 }
