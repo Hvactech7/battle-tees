@@ -554,7 +554,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-center in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1792364812';
+const BUILD='1792368691';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1744,7 +1744,11 @@ function claimMySlot(steal){
     if(!match&&p.ownerDev===devId()){delete p.ownerDev;changed=true;}
     // my phone is the authority on MY handicap — a stale index someone loaded
     // from their library gets corrected to my current profile the moment I join
-    if(match&&p.ownerDev===devId()&&S.me.index!=null&&+p.index!==+S.me.index){p.index=+S.me.index;changed=true;}
+    // NEVER on a round already over for this phone: a review rejoins the room within
+    // 6 h, and by then my index has moved because of THIS round (Nathan 10/18, Blue
+    // Rock West: Past Rounds re-scored the match at the new 11.5 instead of the 11.7
+    // it was played at -- Nate showed 2 strokes on h14 -- and pushed 11.5 to the room)
+    if(match&&p.ownerDev===devId()&&S.me.index!=null&&+p.index!==+S.me.index&&!isReview()&&!S.round.myEndedAt){p.index=+S.me.index;changed=true;}
     // ...and on MY trackers (putts etc). A phone that never touched the toggle
     // plays the app default (putts on) — not whatever the starter's phone seeded.
     // First run after this shipped: a choice made before S.me.track existed is
@@ -1779,8 +1783,9 @@ function claimMySlot(steal){
         if(S.config[k]&&S.config[k].n!=null)S.config[k].n=Math.max(S.config[k].n,free+1);});
       applyTeePrefs();
       changed=true;
-    }
-  }
+      delete S.share.full;
+    }else S.share.full=true;   // four seats taken: this phone watches (roomFullHTML says so)
+  }else delete S.share.full;
   if(changed){stampChanges();save();syncPush();}
   try{maybeAskWolfOrder();}catch(e){}
   try{maybeAskPairs();}catch(e){}
@@ -3372,6 +3377,10 @@ function playingStrokes(){
   const ch=courseHandicaps();
   if((engineGame||gameOn())==='stroke') // stroke play: net against the course — full handicap
     return ch.map(c=>Math.max(0,Math.round(c*S.config.allowance/100)));
+  if((engineGame||gameOn())==='matchplay'){   // each match gives strokes off ITS low man (10/18: it was the empty seat's)
+    const pr=i=>(mp2On()&&i>=2)?[2,3]:[0,1];
+    return ch.map((c,i)=>{const lo=Math.min(...pr(i).map(k=>ch[k]));return Math.max(0,Math.round((c-lo)*S.config.allowance/100));});
+  }
   const lo=Math.min(...actIdx().map(i=>ch[i]));  // low man among the players actually in the game
   return ch.map(c=>Math.max(0,Math.round((c-lo)*S.config.allowance/100)));
 }
@@ -3458,7 +3467,7 @@ function NP(){
   if(g==='stableford'&&S.config.stbl)return Math.min(4,Math.max(1,S.config.stbl.n||4));
   if(g==='quota'&&S.config.quota)return Math.min(4,Math.max(1,S.config.quota.n||4));
   if(g==='bbb'&&S.config.bbb)return Math.min(4,Math.max(2,S.config.bbb.n||4));
-  if(g==='matchplay')return 2;            // 1v1, no configuration to get wrong
+  if(g==='matchplay')return mp2On()?4:2;  // 1v1 -- or two 1v1 matches when two late joiners play each other (10/18)
   if(g==='nassau'&&S.config.nassau)return S.config.nassau.n===2?2:4;
   if(g==='scramble'&&S.config.scramble)return S.config.scramble.teams==='duo'?2:4;
   if(g==='skins'&&S.config.skins)return Math.min(4,Math.max(2,S.config.skins.n||4));
@@ -3475,6 +3484,27 @@ function extraIdx(){
   return S.players.map((p,i)=>i).filter(i=>i>=n&&i<4&&isRealPl(S.players[i]));
 }
 function cardIdx(){return actIdx().concat(extraIdx());}
+// PRESENCE (Nathan 10/18). Someone who joins late is on the card from the hole they join -- unless they CATCH UP
+// (enter the holes they missed). Between any two players, money only counts holes BOTH played; a team game only
+// counts holes ALL its players played. A normal round (everyone on every hole) never takes any of these paths.
+// a confirmed hole that lacks any of these players' scores (two late joiners were BOTH missing holes 1-8)
+function presenceSplit(seats){return (S.round.holes||[]).some(r=>r&&r.confirmed&&r.gross&&seats.some(i=>r.gross[i]==null));}
+function withHoleMask(keep,fn){const H=S.round.holes;S.round.holes=H.map((r,h)=>(r&&r.confirmed&&!keep(r,h))?Object.assign({},r,{confirmed:false}):r);try{return fn();}finally{S.round.holes=H;}}
+function withEngine(g,fn){const p=engineGame;engineGame=g;try{return fn();}finally{engineGame=p;}}
+function gameSeats(g){return withEngine(g,()=>actIdx());}
+// one pair's difference in game g's ledger, over the holes both of them played
+function pairDelta(g,L,i,j,led){
+  if(!presenceSplit([i,j]))return led[i]-led[j];
+  const m=withHoleMask(r=>r.gross[i]!=null&&r.gross[j]!=null,()=>computeFor(g)).ledgers[L];
+  return m[i]-m[j];
+}
+// Match Play's second match (two late joiners playing each other): seats 2 v 3, beside 1 v 2
+function mp2On(){return !!(S.config&&S.config.mp2&&isRealPl(S.players[2])&&isRealPl(S.players[3]));}
+// who settles against whom in game g: everyone pairwise, except Match Play, which is only ever within a match
+function settlePairs(g,seats){
+  if(g==='matchplay')return mp2On()?[[0,1],[2,3]]:[[0,1]];
+  const out=[];for(let a=0;a<seats.length;a++)for(let b=a+1;b<seats.length;b++)out.push([seats[a],seats[b]]);return out;
+}
 // Round span: which holes are in play (full 18, front/back 9) and the first tee.
 // Hole records stay indexed 0-17 (sync keys unchanged); the span just limits
 // navigation and position-based rules (wolf rotation, match clinches).
@@ -3579,6 +3609,8 @@ function runningTotalsCard(){
     tiles=[tile(nm(0),lbl(up),sub(0),up>0?0:up<0?2:3,sgnCol(up)),
            tile(nm(1),lbl(-up),sub(1),up<0?0:up>0?2:3,sgnCol(-up))].join('');
     foot=matchStatus(m,t=>first(t===0?0:1));
+    const m2=mp2On()?computeMatchPlay().match2[L]:null;   // the late joiners' own match (10/18)
+    if(m2)foot+=' · '+matchStatus(m2,t=>first(t===0?2:3));
   }else{
     const eng=g==='nines'?computeNines():g==='vegas'?computeVegas():g==='stableford'?computeStableford()
       :g==='sixes'?computeSixes():g==='umbrella'?computeUmbrella():g==='bbb'?computeBBB():g==='nassau'?computeNassau():g==='skins'?computeSkins():computeAll();
@@ -8911,7 +8943,7 @@ function vHome(){
       stat('welcome_seen',{});}}catch(e){}
     return vWelcome();
   }
-  return `<main>
+  return `<main>${roomFullHTML()}
   ${markNotesHTML()}
   <div class="center" style="margin:10px 0 18px"><img src="${art('/banner.jpg')}" alt="Battle Tees" style="width:100%;aspect-ratio:1200/509;display:block;border-radius:14px;border:2px solid var(--green);box-shadow:4px 4px 0 var(--green)" onerror="this.outerHTML='<h1 style=&quot;color:var(--green-ink);font-size:20px&quot;>Battle Tees</h1>'"></div>
   ${inRound?'':vfNagHTML()}
@@ -14250,7 +14282,7 @@ function vHole(){
           ?`<button class="ghost" style="margin-top:7px;padding:5px 14px" onclick="redoPick()">Redo pick</button>`
           :`<button class="ghost" style="margin-top:7px;padding:5px 14px" onclick="redoPickArm(${h})">${redoArm===h?'⚠️ Tap again — you\'ll pick for '+esc((names[rec.wolfAt]||'').split(' ')[0]):'Redo pick'}</button>`):''}</div>
       <img class="wolf-art" src="${art('/wolf.png')}" alt="" onerror="this.style.display='none'"></div>
-    ${carryNote}
+    ${roomFullHTML()}${carryNote}
     ${body}
     ${holeNav}
   </main>`+tabs('hole');
@@ -14918,6 +14950,107 @@ function myRows(h){
     // so the group can score them without ceremony.
     return !dev||dev===devId()||!!(p&&p.ended)||!!unlockedRows[hh+'-'+i];});
 }
+// ---- LATE JOINERS (Nathan 10/18) -----------------------------------------------------------------
+// CATCH UP: someone who joined late can enter the holes they missed -- then every game counts them on those
+// holes like everyone else. Skip it and they play from the hole they joined (see PRESENCE above).
+let catchUp=null;   // {i, v:{hole:gross}} while the sheet is open on this phone
+function rowMine(i){
+  const p=S.players[i];if(!p)return false;
+  if(!S.share||!S.share.on)return true;
+  const dev=p.ownerDev||p.scorer;
+  return !dev||dev===devId()||!!p.ended;
+}
+function missedHoles(i,anyway){   // anyway: the end-of-round offer ignores an earlier Skip (Nathan 10/18)
+  const p=S.players[i];if(!p||!isRealPl(p)||(p.noCatch&&!anyway))return [];
+  const o=playOrder(), H=S.round.holes;
+  const firstPos=o.findIndex(h=>H[h]&&H[h].gross&&H[h].gross[i]!=null);
+  if(firstPos<=0)return [];                       // scored from the start, or not scored yet
+  return o.slice(0,firstPos).filter(h=>H[h]&&H[h].confirmed&&H[h].gross[i]==null);
+}
+function holeList(hs){
+  const n=hs.map(h=>h+1);if(!n.length)return '';
+  const run=n.every((x,k)=>k===0||x===n[k-1]+1);
+  return run&&n.length>1?`holes ${n[0]}–${n[n.length-1]}`:n.length===1?`hole ${n[0]}`:`holes ${n.join(', ')}`;
+}
+function catchOpen(i){const v={};missedHoles(i,true).forEach(h=>{v[h]=(S.course.holes[h]||{par:4}).par;});catchUp={i,v};render();}
+function catchStep(h,d){if(!catchUp)return;catchUp.v[h]=Math.min(15,Math.max(1,(catchUp.v[h]||4)+d));render();}
+function catchCancel(){catchUp=null;render();}
+const catchLater={};   // "Not now" on the end-of-round offer: this phone, this session
+function catchSave(){
+  if(!catchUp)return;const {i,v}=catchUp;catchUp=null;
+  reviewTouch();   // fixed from Past Rounds: the reviewed round re-files with the new holes
+  set(()=>{Object.keys(v).forEach(k=>{const r=S.round.holes[+k];if(!r||r.gross[i]!=null)return;
+    r.gross[i]=v[k];if(!r.gts)r.gts=[0,0,0,0];r.gts[i]=Date.now();if(!r.cfts)r.cfts=[0,0,0,0];r.cfts[i]=Date.now();});});
+  try{stat('catch_up',{holes:Object.keys(v).length});}catch(e){}
+}
+function catchSkip(i){set(()=>{if(S.players[i])S.players[i].noCatch=true;});}
+// end: the offer again once the round is done (or when it is reviewed from Past Rounds) -- even after a Skip,
+// so a late joiner can still fill in the holes they missed before the money is settled (Nathan 10/18).
+function catchUpHTML(end){
+  try{
+    if(!S.round.started)return '';
+    if(end){if(!isReview()&&!playOrder().every(h=>(S.round.holes[h]||{}).confirmed))return '';}
+    else if(isReview())return '';
+    const who=cardIdx().filter(i=>rowMine(i)&&missedHoles(i,end).length&&!(end&&catchLater[i]&&!(catchUp&&catchUp.i===i)));
+    if(!who.length)return '';
+    return who.map(i=>{
+      const hs=missedHoles(i,true), nm=esc((S.players[i].name||'').split(' ')[0]);
+      if(catchUp&&catchUp.i===i){
+        return `<div class="card" style="border-color:var(--gold)"><h2>⏪ Catch up · ${nm}</h2>
+          ${hs.map(h=>`<div class="scorebar"><div><b>Hole ${h+1}</b><div class="tiny">Par ${(S.course.holes[h]||{}).par}</div></div>
+            <div class="stepper"><button onclick="catchStep(${h},-1)">−</button><span class="val num">${catchUp.v[h]}</span><button onclick="catchStep(${h},1)">+</button></div></div>`).join('')}
+          <div style="display:flex;gap:8px" class="mt"><button class="big" style="flex:2;margin:0" onclick="catchSave()">Save ${hs.length} hole${hs.length===1?'':'s'}</button>
+            <button class="ghost" style="flex:1" onclick="catchCancel()">Cancel</button></div></div>`;
+      }
+      if(end)return `<div class="card" style="border-color:var(--gold)"><h2>⏪ Missed holes</h2>
+        <div class="tiny">${nm} has no scores for ${holeList(hs)}. Add them before you settle?</div>
+        <div style="display:flex;gap:8px" class="mt"><button class="ghost sel" style="flex:1" onclick="catchOpen(${i})">Enter scores</button>
+          <button class="ghost" style="flex:1" onclick="catchLater[${i}]=true;render()">Not now</button></div></div>`;
+      return `<div class="card" style="border-color:var(--gold)"><h2>⏪ Catch up</h2>
+        <div class="tiny">${nm} missed ${holeList(hs)}. Enter those scores?</div>
+        <div style="display:flex;gap:8px" class="mt"><button class="ghost sel" style="flex:1" onclick="catchOpen(${i})">Enter scores</button>
+          <button class="ghost" style="flex:1" onclick="catchSkip(${i})">Skip</button></div></div>`;
+    }).join('');
+  }catch(e){return '';}
+}
+// JOINING A FULL GAME: once someone is past the game's seats, the group picks what they play.
+// Team up = Best Ball, the original pair v the newcomers; their own match = a second Match Play (seats 3 v 4);
+// keep score = stroke only (the default). Any phone may pick; the choice rides the room's config.
+function joinPlayHTML(){
+  try{
+    if(!S.round.started||isReview()||S.config.joinPlay)return '';
+    const xs=extraIdx();if(!xs.length||cardIdx().length!==4)return '';
+    const nm=xs.map(i=>esc((S.players[i].name||'').split(' ')[0])).join(' & ');
+    const own=gameOn()==='matchplay'&&xs.length===2;
+    const t=matchTeams('bestball');
+    const pair=k=>t[k].map(i=>esc((S.players[i].name||'').split(' ')[0])).join(' & ');
+    return `<div class="card" style="border-color:var(--gold)"><h2>New players</h2>
+      <div class="tiny">${nm} joined. What are they playing?</div>
+      <button class="ghost mt" style="width:100%" onclick="joinPlay('team')">Team up · ${pair(0)} v ${pair(1)}</button>
+      ${own?`<button class="ghost mt" style="width:100%" onclick="joinPlay('match')">Their own match</button>`:''}
+      <button class="ghost mt" style="width:100%" onclick="joinPlay('score')">Just keep score</button></div>`;
+  }catch(e){return '';}
+}
+function joinPlay(k){
+  if(k==='team'){
+    set(()=>{const c=teamCfg('bestball');c.pairing=0;S.config.joinPlay='team';});
+    setRoundGames(gamesOn().concat(['bestball']));
+  }else if(k==='match')set(()=>{S.config.mp2=true;S.config.joinPlay='match';});
+  else set(()=>{S.config.joinPlay='score';});
+  try{stat('join_play',{k,game:gameOn()});}catch(e){}
+}
+// A FIFTH PHONE: the card holds four. Say so, and offer the two ways on (Nathan 10/18).
+function roomFullHTML(){
+  try{
+    if(!S.share||!S.share.on||!S.share.full||S.players.some(p=>p&&p.ownerDev===devId()))return '';
+    return `<div class="card" style="border-color:var(--amber-bd,#e0a53a)"><h2>This round is full</h2>
+      <div class="tiny">It already has four players. Watch it on the Battlefield, or start your own round.</div>
+      <div style="display:flex;gap:8px" class="mt"><button class="ghost sel" style="flex:1" onclick="roomFullWatch()">Watch</button>
+        <button class="ghost" style="flex:1" onclick="roomFullLeave()">Start my own</button></div></div>`;
+  }catch(e){return '';}
+}
+function roomFullWatch(){const c=S.share.code;leaveShare();set(()=>{S.round=blankRound();});openBfWatch(c);}
+function roomFullLeave(){leaveShare();set(()=>{S.round=blankRound();S.screen='home';});}
 // an extra player's row (past the game's seats) is mine on the same terms as myRows
 function extraMine(h){
   const hh=(h==null?S.round.cur:h);
@@ -15029,7 +15162,7 @@ function vHoleNines(){
     }).join('');
   }
   const extrasCard=extrasCardHTML(act, rec);
-  const body=`<div class="card">
+  const body=`${roomFullHTML()}${joinPlayHTML()}${catchUpHTML()}<div class="card">
     ${act.some(i=>rec.gross[i]==null)?`<button class="ghost mb" style="width:100%" onclick="set(()=>prefillNines(${h}))">Everyone to par ${hole.par} — adjust from there</button>`:''}
     ${scoreRows}
     </div>${hamCard}${nasCard}${skCard}${bbbCard}${ctpRow}${extrasCard}${resultNote}
@@ -15763,6 +15896,7 @@ function matchTeams(g){
 // holes up, dormie and the clinch that turns 3 up with 2 to play into "3 & 2".
 function computeMatch(L,sides){
   const T=sides||matchTeams('bestball');
+  { const seats=[].concat(...T); if(presenceSplit(seats))return withHoleMask(r=>seats.every(i=>r.gross[i]!=null),()=>computeMatch(L,T)); }
   const o=playOrder();
   let up=0,thru=0,clinch=null;
   for(let p=0;p<o.length;p++){
@@ -15788,12 +15922,14 @@ function matchPlaySides(){return [[0],[1]];}
 function computeMatchPlay(){
   const out={lenses:['net','gross'],ledgers:{net:[0,0,0,0],gross:[0,0,0,0]},
              match:{},perHole:null,carries:{net:0,gross:0}};
+  out.match2={};
   for(const L of ['net','gross']){
     const m=computeMatch(L,matchPlaySides());
     out.match[L]=m;
     // the ledger is HOLES UP, so every generic standings row and the season
     // ledger keep working without knowing what a match is
     out.ledgers[L][0]=m.up; out.ledgers[L][1]=-m.up;
+    if(mp2On()){const m2=computeMatch(L,[[2],[3]]);out.match2[L]=m2;out.ledgers[L][2]=m2.up;out.ledgers[L][3]=-m2.up;}
   }
   return out;
 }
@@ -15818,15 +15954,23 @@ function teamPickerRow(g){
 }
 // pin each engine to its own game for strokes purposes (see engineGame above)
 (function(){
+  // TEAM games count only holes every one of their players played (a late joiner who did not catch up).
+  // computeMatch keeps the engine it was called under: Match Play's 1v1 called it as 'bestball' and gave
+  // strokes off an empty seat (10/18).
+  const TEAM_G=new Set(['wolf','vegas','scramble','nassau','sixes','umbrella','bestball']);
   const wrap=(n,g)=>{const o=window[n];if(!o)return;
-    window[n]=function(){const p=engineGame;engineGame=g;
-      try{return o.apply(this,arguments);}finally{engineGame=p;}};};
+    window[n]=function(){const p=engineGame;engineGame=(n==='computeMatch'&&p)?p:g;
+      try{
+        if(n!=='computeMatch'&&TEAM_G.has(engineGame)){const seats=actIdx();
+          if(presenceSplit(seats))return withHoleMask(r=>seats.every(i=>r.gross[i]!=null),()=>o.apply(this,arguments));}
+        return o.apply(this,arguments);
+      }finally{engineGame=p;}};};
   wrap('computeAll','wolf');wrap('computeNines','nines');wrap('computeVegas','vegas');
   wrap('computeBestBall','bestball');wrap('computeScramble','scramble');
   wrap('computeQuota','quota');wrap('computeBBB','bbb');wrap('computeSkins','skins');
   wrap('computeNassau','nassau');wrap('computeSixes','sixes');wrap('computeUmbrella','umbrella');
   wrap('computeStroke','stroke');wrap('computeStableford','stableford');
-  wrap('computeMatch','bestball');
+  wrap('computeMatch','bestball');wrap('computeMatchPlay','matchplay');
 })();
 // Hole-by-hole results for the primary game (who was Wolf, lone/blind, who won
 // the hole, 9's shares, Vegas numbers). Shared by Standings/Past Rounds (tap to
@@ -15873,12 +16017,17 @@ function vStandings(){
   // so the picker is the single way in now. Adding a game there shows its card
   // AND settles it; unchecking removes it again.
   const stackOrder=[g].concat(gamesOn().filter(x=>x!==g));
-  const genericCard=(title,led,fmt,asc,note)=>{
-    const order=actIdx().slice().sort((a,b)=>asc?led[prim][a]-led[prim][b]:led[prim][b]-led[prim][a]);
+  // sortBy(i): an optional fair key (stroke play: to-par). When players have played different holes (a late
+  // joiner who did not catch up) each row says how many, so a short card never reads as a lead (10/18).
+  const genericCard=(title,led,fmt,asc,note,sortBy)=>{
+    const key=i=>sortBy?sortBy(i):led[prim][i];
+    const order=actIdx().slice().sort((a,b)=>asc?key(a)-key(b):key(b)-key(a));
+    const split=presenceSplit(actIdx());
+    const held=i=>S.round.holes.filter(r=>r&&r.confirmed&&r.gross&&r.gross[i]!=null).length;
     return `<div class="card"><h2>${title} · thru ${thru}</h2>
-      <table class="st"><tr><th>Player</th>${cols.map(L=>`<th class="r">${lbl(L)}</th>`).join('')}</tr>
-      ${order.map(i=>`<tr><td>${esc(S.players[i].name)}</td>${cols.map(L=>`<td class="r num" style="font-size:34px">${fmt(led[L][i],L,i)}</td>`).join('')}</tr>`).join('')}
-      </table>${note||''}</div>`;
+      <table class="st"><tr><th>Player</th>${split?'<th class="r">Thru</th>':''}${cols.map(L=>`<th class="r">${lbl(L)}</th>`).join('')}</tr>
+      ${order.map(i=>`<tr><td>${esc(S.players[i].name)}</td>${split?`<td class="r num" style="font-size:18px;color:var(--ink2)">${held(i)}</td>`:''}${cols.map(L=>`<td class="r num" style="font-size:34px;white-space:nowrap">${fmt(led[L][i],L,i)}</td>`).join('')}</tr>`).join('')}
+      </table>${split?'<div class="tiny mt">Not everyone has played every hole — two players are only compared on holes both played.</div>':''}${note||''}</div>`;
   };
   const quotaCard=title=>{
     const q=computeQuota();
@@ -15982,7 +16131,7 @@ function vStandings(){
     const st=computeStroke();
     tables=genericCard('Stroke play',st.ledgers,(v,L,i)=>{if(!thru)return '-';const d=v-st.par[L][i];
       return `${v} <span style="font-size:17px">${d===0?'E':(d>0?'+':'')+d}</span>`;},true,
-      `<div class="tiny mt">Total strokes over confirmed holes — lowest wins.</div>`);
+      `<div class="tiny mt">Total strokes over confirmed holes — lowest wins.</div>`,i=>st.par[prim][i]?st.ledgers[prim][i]-st.par[prim][i]:1e9);
   }else if(view==='skins'){
     const sk=computeSkins();
     const potNote=cols.map(L=>sk.pot[L]>0?`<div class="banner carry mt">${lbl(L)}: ${fmtMoney(sk.pot[L])} riding — next outright winner takes it.</div>`:'').join('');
@@ -16022,9 +16171,11 @@ function vStandings(){
         takes the difference. Birdies flip.</div></div>`;
   }else if(view==='matchplay'){
     const nm=t=>esc((S.players[t===0?0:1]||{}).name||'');
+    const nm2=t=>esc((S.players[t===0?2:3]||{}).name||'');
     const blocks=cols.map(L=>{
-      const m=computeMatchPlay().match[L];
-      return `<div class="center mb">${cols.length>1?`<div class="tiny">${lbl(L)}</div>`:''}<span class="bigscore num" style="font-size:24px">${matchStatus(m,nm)}</span></div>`;
+      const mp=computeMatchPlay(), m=mp.match[L], m2=mp.match2&&mp.match2[L];
+      return `<div class="center mb">${cols.length>1?`<div class="tiny">${lbl(L)}</div>`:''}<span class="bigscore num" style="font-size:24px">${matchStatus(m,nm)}</span>
+        ${m2?`<div class="tiny mt">Second match</div><span class="bigscore num" style="font-size:20px">${matchStatus(m2,nm2)}</span>`:''}</div>`;
     }).join('');
     // hole by hole: who won it, so a match can be argued about afterwards
     const o=playOrder();
@@ -16049,7 +16200,7 @@ function vStandings(){
     const st=computeStroke();
     tables=genericCard('Stroke play',st.ledgers,(v,L,i)=>{if(!thru)return '–';const d=v-st.par[L][i];
       return `${v} <span style="font-size:12px">${d===0?'E':(d>0?'+':'')+d}</span>`;},true,
-      `<div class="tiny mt">Total strokes over confirmed holes — lowest wins.</div>`);
+      `<div class="tiny mt">Total strokes over confirmed holes — lowest wins.</div>`,i=>st.par[prim][i]?st.ledgers[prim][i]-st.par[prim][i]:1e9);
   }else if(view==='stableford'){
     tables=(()=>{const P=stblPts();return genericCard('Stableford',computeStableford().ledgers,v=>String(v),false,
       `<div class="tiny mt">Birdie ${P.birdie} · par ${P.par} · bogey ${P.bogey} · double+ ${P.dbl}. Highest wins.</div>`);})();
@@ -16102,11 +16253,13 @@ function vStandings(){
     const key=prim==='net'?'net':'gross';
     R.sort((a,b)=>(a.th?a[key]-a.par:1e9)-(b.th?b[key]-b.par:1e9));
     const tp=d=>d===0?'E':(d>0?'+':'')+d;
+    // one line per score, its to-par beside it in a fixed slot: the first cut wrapped "44" over "+12" on
+    // some rows and not others (Nathan 10/18: "looks crappy")
     return `<div class="card"><h2>Everyone · stroke play</h2>
-      <table class="st"><tr><th>Player</th><th class="r">Thru</th>${cols.map(L=>`<th class="r">${lbl(L)}</th>`).join('')}</tr>
-      ${R.map(x=>`<tr><td>${esc(S.players[x.i].name)}</td><td class="r num" style="font-size:20px;color:var(--ink2)">${x.th}</td>${cols.map(L=>{
+      <table class="st"><tr><th>Player</th><th class="r">Thru</th>${cols.map(L=>`<th class="r">${L==='net'?'Net':'Gross'}</th>`).join('')}</tr>
+      ${R.map(x=>`<tr><td>${esc(S.players[x.i].name)}</td><td class="r num" style="font-size:18px;color:var(--ink2)">${x.th}</td>${cols.map(L=>{
         const v=L==='net'?x.net:x.gross;
-        return `<td class="r num" style="font-size:30px">${x.th?`${v} <span style="font-size:16px">${tp(v-x.par)}</span>`:'–'}</td>`;}).join('')}</tr>`).join('')}
+        return `<td class="r num" style="white-space:nowrap;font-size:24px">${x.th?`${v}<span style="display:inline-block;min-width:30px;text-align:right;font-size:13px;color:var(--ink2)">${tp(v-x.par)}</span>`:'–'}</td>`;}).join('')}</tr>`).join('')}
       </table><div class="tiny mt">${xs.map(i=>esc((S.players[i].name||'').split(' ')[0])).join(' & ')} ${xs.length===1?'is':'are'} on the card but not in the ${gameName(g)} game.</div></div>`;
   }catch(e){return '';}})();
   const hist=holeHistoryRowsHTML(all,prim,true);
@@ -16200,27 +16353,36 @@ function payLensCardHTML(){
 // lens: the settle screens pass this phone's money toggle; the season row passes
 // recLens(), because a permanent row can't be one golfer's view.
 function settleNet(lens){
-  const G=gamesOn(), act=actIdx(), L=(lens==='gross'||lens==='net')?lens:payLens();
+  // EVERY game pays its OWN players (10/18: a Best Ball added beside a 1v1 match paid only the match's
+  // two seats), and two players only ever settle over the holes both of them played (pairDelta).
+  const G=gamesOn(), L=(lens==='gross'||lens==='net')?lens:payLens();
+  const seatSet=new Set(actIdx());G.forEach(g=>{if(!mysteryPending(g))gameSeats(g).forEach(i=>seatSet.add(i));});
+  const act=[...seatSet].sort((a,b)=>a-b);
   const out={act,lens:L,net:act.map(()=>0),per:{},pending:[],priced:false};
   if(act.length<2)return out;
-  const multi=G.length>1;
+  const multi=G.length>1, at=i=>act.indexOf(i);
   G.forEach(g=>{
     if(mysteryPending(g)){out.pending.push(g);return;}
+    const seats=gameSeats(g);if(seats.length<2)return;
     const eng=computeFor(g); const led=eng&&eng.ledgers&&eng.ledgers[L];
     if(!led)return;
     const inv=(g==='stroke'||(!multi&&g==='scramble'))?-1:1;
     const rate=multi?settleRate(g):(g==='skins'?1:(+S.round.dollarPerPt||0));
-    const conv=v=>g==='nines'?v/12:v;
+    // Match Play's ledger is +up / -up, so a pair's difference is twice the match: 18 UP at $1 a hole paid
+    // $36 (10/18). One hole up is worth the rate once.
+    const conv=v=>g==='nines'?v/12:g==='matchplay'?v/2:v;
     if(rate>0)out.priced=true;
-    const gn={}, FT=fixedTeamsFor(g);
+    const gn={}, FT=withEngine(g,()=>fixedTeamsFor(g));
     if(FT){
       const diff=(led[FT[0][0]]-led[FT[1][0]])*inv;
       const half=Math.abs(diff)*rate/2, winT=diff>=0?0:1;
-      act.forEach((i,ai)=>{const amt=FT[winT].includes(i)?half:-half;gn[i]=amt;out.net[ai]+=amt;});
+      seats.forEach(i=>{const amt=FT[winT].includes(i)?half:-half;gn[i]=amt;out.net[at(i)]+=amt;});
     }else{
-      act.forEach((i,ai)=>{
-        let u=0;act.forEach(j=>{if(j!==i)u+=conv((led[i]-led[j])*inv);});
-        const amt=(g==='skins'?u:u*rate);gn[i]=amt;out.net[ai]+=amt;});
+      seats.forEach(i=>{gn[i]=0;});
+      settlePairs(g,seats).forEach(([i,j])=>{
+        const d=conv(pairDelta(g,L,i,j,led)*inv), amt=(g==='skins'?d:d*rate);
+        gn[i]+=amt;gn[j]-=amt;});
+      seats.forEach(i=>{out.net[at(i)]+=gn[i];});
     }
     out.per[g]=gn;
   });
@@ -16229,9 +16391,9 @@ function settleNet(lens){
 }
 function vSettleStack(G){
   const thru=S.round.holes.filter(r=>r.confirmed).length;
-  const act=actIdx();
   const L=payLens();
   const SN=settleNet(L), net=SN.net;
+  const act=SN.act;   // everyone some game pays (10/18), not just the main game's seats
   const UNIT={stroke:'stroke',bestball:'hole',nassau:'bet',skins:'$',nines:'pt',quota:'pt',stableford:'pt',sixes:'pt',umbrella:'pt',bbb:'pt'};
   const cards=G.map(g=>{
     const eng=computeFor(g);
@@ -16244,7 +16406,7 @@ function vSettleStack(G){
       return `<div class="card"><h2>${gameName(g)} · thru ${thru}</h2>
         <div class="tiny">🎲 Partners not drawn yet — reveal them in Standings and this settles itself.</div></div>`;
     }
-    const FT=fixedTeamsFor(g);
+    const FT=withEngine(g,()=>fixedTeamsFor(g));
     if(FT){
       const diff=(led[FT[0][0]]-led[FT[1][0]])*inv;
       const marg=Math.abs(diff), half=marg*rate/2, winT=diff>=0?0:1;
@@ -16264,9 +16426,10 @@ function vSettleStack(G){
     // per-game dollars, kept so each game can show its own pot as well as
     // feeding the combined pile
     const gn=SN.per[g]||{};
-    const pot=act.reduce((a,i)=>a+Math.max(0,gn[i]||0),0);
+    const gs=gameSeats(g);
+    const pot=gs.reduce((a,i)=>a+Math.max(0,gn[i]||0),0);
     const priced=(g==='skins')||rate>0;
-    const order=act.slice().sort((a,b)=>(led[b]-led[a])*inv);
+    const order=gs.slice().sort((a,b)=>(led[b]-led[a])*inv);
     const fmt=v=>g==='skins'?fmtMoney(v):g==='nines'?fmtPts(v):g==='quota'?(v>0?'+':'')+v:String(v);
     return `<div class="card"><h2>${gameName(g)} · thru ${thru}</h2>
       <table class="st"><tr><th>Player</th><th class="r">${unit==='$'?'$ won':unit==='stroke'?'Strokes':unit==='hole'?'Holes':unit==='bet'?'Bets':g==='quota'?'+/−':'Pts'}</th><th class="r">This game</th></tr>
@@ -16300,7 +16463,7 @@ function vSettleStack(G){
     ${anyRate?'':'<div class="tiny mt">Set a $ rate on each game above to fold it into the pile — Skins is already money.</div>'}
   </div>`;
   return topbar('Settlement — game stack',G.map(gameName).join(' · '),'')+`<main>
-    ${chalInviteHTML()}${chalResultsHTML()}
+    ${catchUpHTML(true)}${chalInviteHTML()}${chalResultsHTML()}
     ${payLensCardHTML()}
     ${cards}${totCard}
   </main>`+tabs('settle');
@@ -16337,7 +16500,7 @@ function vSettle(){
   if(mysteryPending(gameOn())){
     const g=gameOn(), thru=S.round.holes.filter(r=>r.confirmed).length;
     return topbar('Settlement','','')+`<main>
-    ${vfNagHTML()}
+    ${vfNagHTML()}${catchUpHTML(true)}
     ${chalInviteHTML()}${chalResultsHTML()}
       <div class="card"><h2>${gameName(g)} · thru ${thru}</h2>
         <div class="center" style="padding:14px 0"><div style="font-size:44px;line-height:1">🎲</div>
@@ -16353,7 +16516,7 @@ function vSettle(){
     const lead=margins[0];
     const verb=thru>=playOrder().length?'wins':'leads';
     return topbar('Settlement','','')+`<main>
-    ${vfNagHTML()}
+    ${vfNagHTML()}${catchUpHTML(true)}
     ${chalInviteHTML()}${chalResultsHTML()}
       <div class="card"><h2>Quota · thru ${thru}</h2>
         <div class="center mb"><span class="bigscore num">${lead.d>0?'+':''}${lead.d}</span>
@@ -16410,12 +16573,13 @@ function vSettle(){
     }
     const inv=(gg==='stroke'||gg==='scramble')?-1:1, unit=(gg==='stroke'||gg==='scramble')?'stroke':gg==='bestball'?'hole':gg==='nassau'?'bet':gg==='skins'?'$':'pt';
     const pairs=[];
-    for(let a=0;a<act.length;a++)for(let b=a+1;b<act.length;b++){
-      const i=act[a],j=act[b],d=(led[i]-led[j])*inv,ad=ptsVal(Math.abs(d));
+    // pairs that actually settle (Match Play: within each match), over the holes both played (10/18)
+    settlePairs(gg,act).forEach(([i,j])=>{
+      const d=pairDelta(gg,LL,i,j,led)*inv,ad=ptsVal(Math.abs(d));
       if(d!==0)pairs.push(gg==='skins'
         ?`${esc(S.players[d>0?j:i].name)} → ${esc(S.players[d>0?i:j].name)}: <b class="num">${fmtMoney(Math.abs(d))}</b>`
         :`${esc(S.players[d>0?j:i].name)} → ${esc(S.players[d>0?i:j].name)}: <b class="num">${ptsTxt(Math.abs(d))} ${unit}${ad===1?'':'s'}</b>${v?` <span class="muted">($${(ad*v).toFixed(2)})</span>`:''}`);
-    }
+    });
     const order=act.slice().sort((a,b)=>(led[b]-led[a])*inv);
     const leaders=act.filter(i=>led[i]===led[order[0]]);
     const verb=thru===18?'wins':'leads';
@@ -16430,7 +16594,7 @@ function vSettle(){
     </div>`;
   }).join('');
   return topbar('Settlement','','')+`<main>
-    ${vfNagHTML()}
+    ${vfNagHTML()}${catchUpHTML(true)}
     ${chalInviteHTML()}${chalResultsHTML()}
     ${payLensCardHTML()}
     ${PAIRS_GAMES.includes(gameOn())&&gameOn()!=='skins'&&actIdx().length>1?`<div class="card"><div class="row"><span class="muted">$ per ${['stroke','scramble'].includes(gameOn())?'stroke':gameOn()==='bestball'?'hole':gameOn()==='nassau'?'bet':'point'} (optional)</span>
