@@ -554,7 +554,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-center in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1792387358';
+const BUILD='1792389283';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1400,7 +1400,7 @@ function stampChanges(){
 // course handicap and the money with it). The owner's phone stamps its row (rts) whenever it changes
 // its own fields; any copy carrying a newer stamp for the same player wins those fields, whichever
 // meta is newer. Only the owner writes rts, so the stamps never compare two clocks.
-const ROW_OWN=['tee','index','track','photo','ended'];
+const ROW_OWN=['tee','index','track','photo','ended','name'];
 function rowMerge(other){
   let changed=false;
   try{
@@ -1898,6 +1898,12 @@ function claimMySlot(steal){
     // phone pushing an older copy of my row put me back on the tees I had not picked -- another phone then
     // carded my course handicap 36 where mine said 38, and the money differed. My phone restores it.
     if(match&&p.ownerDev===devId()&&S.round.myTee&&p.tee!==S.round.myTee&&!isReview()&&!S.round.myEndedAt){p.tee=S.round.myTee;p.rts=stampAfter(p.rts);changed=true;}
+    // ...and on MY NAME (Nathan 10/18: the account holder names himself, a new one every round if he likes):
+    // loaded under an older name, or renamed mid-round, my row carries what my profile says -- unless
+    // another row in this round already goes by it
+    {const nm=((S.me&&S.me.name)||'').trim();
+     if(match&&p.ownerDev===devId()&&nm&&p.name!==nm&&!isReview()&&!S.round.myEndedAt
+        &&!S.players.some(q=>q&&q!==p&&(q.name||'').trim().toLowerCase()===nm.toLowerCase())){p.name=nm;p.rts=stampAfter(p.rts);changed=true;}}
     // ...and on MY trackers (putts etc). A phone that never touched the toggle
     // plays the app default (putts on) — not whatever the starter's phone seeded.
     // First run after this shipped: a choice made before S.me.track existed is
@@ -2491,7 +2497,7 @@ function saveEditMe(){
     const mi=myPlayerIdx();
     S.players.forEach((p,i)=>{
       const mine=(p.ownerDev===devId())||(p.pid===pid)||(i===mi&&(p.name||'').trim().toLowerCase()===old.trim().toLowerCase());
-      if(mine){p.name=name;p.index=S.me.index;p.pid=pid;}
+      if(mine){p.name=name;p.index=S.me.index;p.pid=pid;p.rts=stampAfter(p.rts);}   // stamped: my row's new name wins on every phone
     });
     if(S.share&&S.share.on)S.shareMetaTs=stampAfter(S.shareMetaTs);   // tell the group
   });
@@ -3251,6 +3257,13 @@ function libWhois(){
     lobbySock.send(JSON.stringify({t:'whois',pids,names}));
   }catch(e){}
 }
+// THE ACCOUNT IS THE PERSON, THE NAME IS A LABEL (Nathan 10/18: "id rather the name change to whatever the
+// account holder changes it to ... sometimes a new one every round ... I want it to stay with the same
+// account, and update on any phone that has them"). On every lobby connect the relay answers each saved
+// player's pid with the name that account carries NOW: the entry takes it (capitals and all) -- index,
+// tees, handicap history (hcpLog is keyed by pid) and every past round stay where they were.
+// What stays from the 9/6 repair: a pid filed under a name that is REGISTERED TO A DIFFERENT ACCOUNT is a
+// misfile, not a rename -- that pid comes off. A saved name nobody registered is just an older label.
 function libWhoisApply(m){
   try{
     const byPid=m.pids||{},byName=m.names||{};
@@ -3259,34 +3272,42 @@ function libWhoisApply(m){
     const me=low(S.me&&S.me.name),mep=S.me&&S.me.pid;
     const byNameLow={};Object.keys(byName).forEach(n=>{byNameLow[low(n)]=byName[n];});
     const entry=n=>S.playerLib.find(e=>e&&low(e.name)===low(n));
-    let changed=0;const log=[];
+    let changed=0;const log=[],renamed=[];
     S.playerLib.forEach(e=>{
       if(!e||!e.pid)return;
       const reg=byPid[e.pid];if(!reg)return;                         // unknown to the relay: leave it
-      if(low(reg)===low(e.name))return;                               // filed right
       if(mep&&e.pid===mep&&low(e.name)!==me){delete e.pid;changed++;log.push(e.name+': my pid removed');return;}
-      const home=entry(reg);
-      if(home&&home!==e){
-        // the book's word for THIS pid outranks whatever the home entry holds unless the book confirms that one too
-        if(!home.pid||low(byPid[home.pid]||'')!==low(home.name)){home.pid=e.pid;log.push(reg+': took pid from '+e.name);}
-        delete e.pid;changed++;log.push(e.name+': pid was '+reg+"'s");return;
+      const ownOrig=byNameLow[low(e.name)];
+      if(low(reg)!==low(e.name)&&ownOrig&&ownOrig!==e.pid){
+        // this entry's NAME belongs to another account: the pid was misfiled (9/6), not renamed
+        const home=entry(reg);
+        if(home&&home!==e&&(!home.pid||low(byPid[home.pid]||'')!==low(home.name))){home.pid=e.pid;log.push(reg+': took pid from '+e.name);}
+        delete e.pid;changed++;log.push(e.name+': pid was '+reg+"'s, dropped");return;
       }
+      // a stray second copy of an account already saved here under its current name: it loses the copy
+      if(S.playerLib.some(x=>x&&x!==e&&x.pid===e.pid&&low(x.name)===low(reg))){delete e.pid;changed++;log.push(e.name+': stray copy of '+reg+"'s pid");return;}
+      if(e.name!==reg){renamed.push([e.name,reg,e.pid]);log.push(e.name+' is now '+reg);e.name=reg;changed++;}
+      // an old id the relay merged into another account (Patrick Kanoran 10/18): the name's one registered
+      // pid is the account now -- take it, unless another entry here already holds it
       const own=byNameLow[low(e.name)];
-      if(own&&own!==e.pid){delete e.pid;changed++;log.push(e.name+': pid was '+reg+"'s, dropped");}
+      if(own&&own!==e.pid&&!S.playerLib.some(x=>x&&x!==e&&x.pid===own)){log.push(e.name+': merged id '+e.pid+' -> '+own);e.pid=own;changed++;}
     });
     S.playerLib.forEach(e=>{
       if(!e||e.pid||!e.name)return;
       if(low(e.name)===me)return;
       const pid=byNameLow[low(e.name)];if(!pid)return;
-      const holder=S.playerLib.find(x=>x&&x.pid===pid);
-      if(holder&&low(holder.name)===low(e.name))return;
-      if(holder){if(mep&&pid===mep)return;delete holder.pid;log.push(holder.name+': pid was '+e.name+"'s");}   // the book says this pid is THIS name's
+      if(S.playerLib.some(x=>x&&x.pid===pid))return;   // that account is already saved here (maybe under its new name): this is another, older label
       e.pid=pid;changed++;log.push(e.name+': pid filled from the book');
     });
+    // saved groups follow the rename too (they also carry the pid now)
+    if(renamed.length&&Array.isArray(S.groupLib))S.groupLib.forEach(g=>(g.members||[]).forEach(mm=>{
+      const hit=renamed.find(([from,to,pid])=>(mm.pid&&mm.pid===pid)||(!mm.pid&&low(mm.name)===low(from)));
+      if(hit){mm.name=hit[1];mm.pid=hit[2];}
+    }));
     if(changed){
       save();
       try{stat('lib_repair',{n:changed,log:log.slice(0,8)});}catch(e){}
-      if(S.screen==='players')render();
+      if(S.screen==='players'||S.screen==='home'||S.screen==='setup')render();
     }
   }catch(e){}
 }
@@ -14129,7 +14150,8 @@ function setSpan(count,start){set(()=>{S.config.span={count,start};});}
 function saveGroupFromRoster(){
   const nm=(S.config.groupName||'').trim();
   if(!nm)return;
-  const members=actIdx().map(i=>({name:S.players[i].name,index:S.players[i].index,tee:S.players[i].tee})).filter(m=>m.name&&!/^Player \d$/.test(m.name)&&!/^Bench/.test(m.name));
+  // the pid rides along (10/18): a friend who renames keeps his place in the group under the new name
+  const members=actIdx().map(i=>({name:S.players[i].name,index:S.players[i].index,tee:S.players[i].tee,pid:S.players[i].pid||undefined})).filter(m=>m.name&&!/^Player \d$/.test(m.name)&&!/^Bench/.test(m.name));
   if(members.length<2)return;
   if(!S.groupLib)S.groupLib=[];
   const ex=S.groupLib.find(g2=>g2.name.trim().toLowerCase()===nm.toLowerCase());
@@ -14158,7 +14180,9 @@ function loadGroup(id){
       // row that was Justin's and the handicap book credited Justin with Nate's
       // 112). Clear every identity field, then seed the pid from the library.
       pl.name=m.name;pl.index=m.index;pl.chOverride=null;delete pl.nearby;delete pl.ownerDev;delete pl.pid;delete pl.libId;
-      try{const lib=(S.playerLib||[]).find(x=>x&&x.pid&&(x.name||'').trim().toLowerCase()===m.name.trim().toLowerCase());if(lib)pl.pid=lib.pid;}catch(e){}
+      // the saved player by ACCOUNT first (his current name -- he may have renamed since), then by name
+      try{const lib=(m.pid&&(S.playerLib||[]).find(x=>x&&x.pid===m.pid))||(S.playerLib||[]).find(x=>x&&x.pid&&(x.name||'').trim().toLowerCase()===m.name.trim().toLowerCase());
+        if(lib){pl.pid=lib.pid;pl.name=uniqueRosterName(lib.name,i);}}catch(e){}
       if(m.tee&&S.course.teeSets.some(t=>t.id===m.tee))pl.tee=m.tee;
       pl.scorer=devId();                            // I add them; their phones claim on join
       upsertLib(Object.assign({},pl));
