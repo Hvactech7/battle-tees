@@ -557,7 +557,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-center in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1792400561';
+const BUILD='1792437962';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1673,7 +1673,12 @@ function syncConnect(){
     else if(m.t==='op'){
       if(m.k==='meta'&&m.v&&S.share&&S.share.awaitDoc&&!S.share.creator){onStateDoc({meta:m.v});return;}
       applyOp(m.k,m.v,false);
+      // THE ANNOUNCE RIDES ANY CLOSE (Nathan 10/19). It used to fire only inside this phone's own
+      // confirm, so a captain who confirmed first never saw hole 2 closed at his tap and the round
+      // reached the Battlefield a hole late. A hole another phone closes counts the same.
+      if(/^h\d+$/.test(m.k))try{maybeBroadcastRound();}catch(e){}
     }
+    else if(m.t==='bfnote')bfNoteNudge(m);
     else if(m.t==='courseResult'||m.t==='backupResult'||m.t==='battleResult'||m.t==='accountResult')handleCourseResult(m);
   };
   sock.onclose=()=>{sockOpen=false;sockAwaitState=false;sock=null;render();scheduleReconnect();};
@@ -1987,7 +1992,7 @@ function postRoomInvite(){
     if(!S.share.since)S.share.since=Date.now();
     if(typeof sockOpen!=='undefined'&&sockOpen&&sock)
       sock.send(JSON.stringify({t:'invite',room:S.share.code,
-        info:{course:S.course.name,players:S.players.map(p=>p.name),group:S.config.groupName||'',ts:S.share.since,   // when the room opened: the relay's 6 h / 30 min limits count from here, however often this phone reconnects
+        info:{course:S.course.name,players:S.players.filter(isRealPl).map(p=>p.name),group:S.config.groupName||'',ts:S.share.since,   // when the room opened: the relay's 6 h / 30 min limits count from here, however often this phone reconnects
           near:(S.share.near&&S.share.near.lat!=null)?S.share.near:null,
           at:nearFence(),   // where the room opened: a NAME on the card only matches a phone within 25 km of it
           // TARGETED (9/6): the people ON THIS CARD get the invitation wherever
@@ -3220,6 +3225,7 @@ function lobbyConnect(){
     else if(m.t==='uninvite'){invites=invites.filter(i=>i.code!==m.code);render();}
     else if(m.t==='nearby'){nearby=(m.list||[]).filter(p=>p.id!==devId());if(S.screen==='home'||S.screen==='players'||S.screen==='setup'||S.screen==='gate'||S.screen==='start')render();}
     else if(m.t==='whois')libWhoisApply(m);
+    else if(m.t==='bfnote')bfNoteNudge(m);
     else if(m.t==='courseResult'||m.t==='backupResult'||m.t==='battleResult'||m.t==='accountResult')handleCourseResult(m);
   };
   lobbySock.onclose=()=>{lobbySock=null;nearby=[];if(!(S.share&&S.share.on))setTimeout(lobbyConnect,10000);};
@@ -10119,6 +10125,11 @@ function bfCmUnblock(pid){const c=bfCm;if(!c)return;pid=decodeURIComponent(pid);
 // (one a day at most). One small relay message a minute, only while the app is
 // on screen.
 let bfInbox=[],bfInboxAt=0,bfInboxBusy=false;
+// A NUDGE FROM THE RELAY (Nathan 10/19: "the reaction should popup fairly quickly"). When a friend
+// reacts or comments, the relay tells the round's room and the lobby whose notice it is, and that
+// phone fetches its inbox now instead of at the next minute's poll. The notice never rides the
+// nudge -- the inbox stays the one source, so nothing can show twice.
+function bfNoteNudge(m){try{const me=myPid();if(!me)return;if(Array.isArray(m.pids)&&m.pids.length&&!m.pids.includes(me))return;bfInboxPoll(true);}catch(e){}}
 const bfAckedLocal=new Set();
 function bfInboxPoll(force){
   try{
