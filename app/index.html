@@ -557,7 +557,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-center in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1792437962';
+const BUILD='1792476788';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -8727,7 +8727,7 @@ function verifySheetHTML(){
         <button class="ghost mt" style="width:100%" onclick="verifyUI.stage=0,render()">Use a different email</button>`
       :'')}
       ${verifyUI.msg?`<div class="tiny mt" style="color:${/^✓/.test(verifyUI.msg)?'var(--green-mid)':'var(--amber-bd,#d19a2f)'};font-weight:600">${esc(verifyUI.msg)}</div>`:''}
-      <button class="ghost mt" style="width:100%" onclick="closeVerify()">${done?'Done':(atEnd?'Not now':'Close')}</button>
+      <button class="ghost mt" style="width:100%" onclick="closeVerify()">${done||verifyUI.stage===4?'Done':(atEnd?'Not now':'Close')}</button>
     </div></div>`;
 }
 function topbar(title,sub,backTo,cls,right){
