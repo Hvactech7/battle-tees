@@ -557,7 +557,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-center in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1792476788';
+const BUILD='1792520349';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1375,6 +1375,7 @@ function shareMeta(){return {course:courseForShare(),players:S.players,config:S.
   cheers:(S.round.cheers||[]).slice(-24),
   capEnd:S.round.capEnd||null,
   since:S.round.since||null,
+  optBy:S.round.optBy||null,
   _ts:S.shareMetaTs||0};}
 // HYBRID STAMPS (stress sim 10/18): a sync stamp never goes below the newest one this phone has
 // already seen. A phone whose clock ran 5 minutes slow stamped its seat claim "older" than every
@@ -1394,7 +1395,7 @@ function stampChanges(){
     const c=contentKey(k);
     if(localContent[k]===c)return;
     localContent[k]=c;
-    if(k==='meta'){if(S.share.awaitDoc&&!S.share.creator)return;S.shareMetaTs=stampAfter(S.shareMetaTs);}   // a joiner's own stamp must wait for the room's doc
+    if(k==='meta'){if(S.share.awaitDoc&&!S.share.creator)return;optTrackLocal();localContent[k]=contentKey(k);S.shareMetaTs=stampAfter(S.shareMetaTs);}   // a joiner's own stamp must wait for the room's doc
     else{const hh=S.round.holes[+k.slice(1)];hh._ts=stampAfter(hh._ts);}
   });
 }
@@ -1403,7 +1404,7 @@ function stampChanges(){
 // course handicap and the money with it). The owner's phone stamps its row (rts) whenever it changes
 // its own fields; any copy carrying a newer stamp for the same player wins those fields, whichever
 // meta is newer. Only the owner writes rts, so the stamps never compare two clocks.
-const ROW_OWN=['tee','index','track','photo','ended','name'];
+const ROW_OWN=['tee','index','track','photo','ended','name','rules'];
 function rowMerge(other){
   let changed=false;
   try{
@@ -1446,6 +1447,7 @@ function applyOp(k,v,defer){
       }
       if(Array.isArray(v.cheers))cheerMerge(v.cheers);
       if((v._ts||0)>=(S.shareMetaTs||0)){
+        const optBefore=optSnap();   // to tell the group what an option change did (Nathan 10/20)
         // ...and the mirror: their real map must not end MY amnesia. Keep the
         // blackout, park what they sent so it is there the instant I switch off.
         const wasBlack=S.course&&S.course.geo&&S.course.geo.amn&&amnesiaOn((v.course||{}).id);
@@ -1535,6 +1537,8 @@ function applyOp(k,v,defer){
         }catch(e){}
         applyingRemote=false;render();return;
       }
+        if(v.optBy)S.round.optBy=v.optBy;
+        optNoticeRemote(optBefore,v);
         localContent[k]=sentCache[k]=contentKey(k);
         // the room's copy lacks a row's newer choice: send ours back, freshly stamped
         // ...and so does a game this phone had to widen (the room's copy was narrower -- stress sim 10/18)
@@ -1635,6 +1639,7 @@ function onStateDoc(doc){
   if(S.share&&S.share.awaitDoc&&!S.share.creator&&!(doc&&doc.meta)){S.share.noDoc=Date.now();render();return;}
   Object.entries(doc||{}).forEach(([k,v])=>applyOp(k,v,true));
   if(S.share)delete S.share.awaitDoc;   // seated on the real round now — meta may flow
+  try{if(S.round&&S.round.started&&!S.round._optSnap)S.round._optSnap=optSnap();}catch(e){}
   claimMySlot(true);
   if(joinCarry)applyJoinCarry();                   // seated now: my earlier holes land in my row
   save();syncPush();render();
@@ -1909,6 +1914,7 @@ function claimMySlot(steal){
     // ...and on MY NAME (Nathan 10/18: the account holder names himself, a new one every round if he likes):
     // loaded under an older name, or renamed mid-round, my row carries what my profile says -- unless
     // another row in this round already goes by it
+    if(match&&p.ownerDev===devId()&&(+p.rules||0)!==RULES_VER&&!isReview()&&!S.round.myEndedAt){p.rules=RULES_VER;p.rts=stampAfter(p.rts);changed=true;}
     {const nm=((S.me&&S.me.name)||'').trim();
      if(match&&p.ownerDev===devId()&&nm&&p.name!==nm&&!isReview()&&!S.round.myEndedAt
         &&!S.players.some(q=>q&&q!==p&&(q.name||'').trim().toLowerCase()===nm.toLowerCase())){p.name=nm;p.rts=stampAfter(p.rts);changed=true;}}
@@ -5155,12 +5161,12 @@ function openClubSheet(yds){
 }
 function closeClubSheet(){const d=document.getElementById('clubsheet');if(d)d.remove();}
 // brief centered message — same throwaway-overlay pattern as flashYardage
-function shotToast(msg){
+function shotToast(msg,ms){
   const d=document.createElement('div');
   d.style.cssText='position:fixed;left:0;right:0;margin:0 auto;width:fit-content;bottom:calc(178px + env(safe-area-inset-bottom));z-index:90;max-width:min(420px,92vw);background:var(--card);border:2px solid var(--amber-bd,#c9922e);border-radius:12px;padding:10px 14px;box-shadow:3px 3px 0 rgba(0,0,0,.4);pointer-events:none;text-align:center';
   d.innerHTML=`<span class="tiny" style="font-size:14px">${esc(msg)}</span>`;
   document.body.appendChild(d);
-  setTimeout(()=>{try{d.remove();}catch(e){}},2600);
+  setTimeout(()=>{try{d.remove();}catch(e){}},ms||2600);
 }
 function flashYardage(yds,club){
   const d=document.createElement('div');
@@ -8667,7 +8673,7 @@ function render(){
   const sameScreen=window.__lastScr===scr;
   window.__lastScr=scr;
   try{if(window.__a2hsSync)window.__a2hsSync();}catch(e){}
-  const full=magBanner()+html+holeSplash()+verifySheetHTML()+joinWaitSheetHTML()+teeAskSheetHTML()+joinSpanSheetHTML()+pairsAskSheetHTML()+wolfOrderSheetHTML()+endAskSheetHTML()+idleAskSheetHTML()+exportSheetHTML()+mapInviteHTML()+greenClashHTML()+gamePickSheetHTML()+(S.screen!=='map'?puttAskSheetHTML():'')+(S.screen!=='map'?parAskSheetHTML():'')+photoCropHTML()+cheerSplashHTML();
+  const full=magBanner()+html+holeSplash()+verifySheetHTML()+joinWaitSheetHTML()+teeAskSheetHTML()+joinSpanSheetHTML()+rulesSheetHTML()+pairsAskSheetHTML()+wolfOrderSheetHTML()+endAskSheetHTML()+idleAskSheetHTML()+exportSheetHTML()+mapInviteHTML()+greenClashHTML()+gamePickSheetHTML()+(S.screen!=='map'?puttAskSheetHTML():'')+(S.screen!=='map'?parAskSheetHTML():'')+photoCropHTML()+cheerSplashHTML();
   // Four phones syncing means render() fires constantly. Blowing away innerHTML
   // each time repainted the whole screen — that was the flicker on the course.
   // Identical output is a no-op; otherwise patch only the nodes that differ.
@@ -9254,7 +9260,7 @@ function vHome(){
       stat('welcome_seen',{});}}catch(e){}
     return vWelcome();
   }
-  return `<main>${roomFullHTML()}
+  return `<main>${roomFullHTML()}${rulesNoticeHTML()}
   ${markNotesHTML()}
   <div class="center" style="margin:10px 0 18px"><img src="${art('/banner.jpg')}" alt="Battle Tees" style="width:100%;aspect-ratio:1200/509;display:block;border-radius:14px;border:2px solid var(--green);box-shadow:4px 4px 0 var(--green)" onerror="this.outerHTML='<h1 style=&quot;color:var(--green-ink);font-size:20px&quot;>Battle Tees</h1>'"></div>
   ${inRound?'':vfNagHTML()}
@@ -13318,6 +13324,17 @@ function gameOptionsHTML(){
   const pt=(k,lbl)=>`<div class="row"><span class="muted">${lbl}</span>
     <div class="stepper"><button onclick="chPt('${k}',-1)">−</button><span class="val num">${P[k]}</span><button onclick="chPt('${k}',1)">+</button></div></div>`;
   const V=S.config.vegas;
+  // Scramble's format and Vegas's switches are house rules, not team picks: setup shows
+  // them too (Nathan 10/20 "yes they should"); only the partner pickers wait for the group
+  const scrFmt=()=>{const sf=S.config.scramble.teams;return `<div class="row" style="border-top:none"><span class="muted">Format</span>
+      <span class="seg" style="display:inline-flex;gap:6px">
+        <button class="ghost ${sf==='duo'?'sel':''}" onclick="set(()=>S.config.scramble.teams='duo')">Just us 2</button>
+        <button class="ghost ${sf!=='solo'&&sf!=='duo'?'sel':''}" onclick="set(()=>S.config.scramble.teams='2v2')">2 v 2</button>
+        <button class="ghost ${sf==='solo'?'sel':''}" onclick="set(()=>S.config.scramble.teams='solo')">All 4</button>
+      </span></div>`;};
+  const scrNote=sf=>sf==='duo'?'Two of you, one ball, one card — nobody to play against. Net uses the 35%/15% two-man scramble allowance.'
+        :sf==='solo'?'Tournament mode — the whole group plays one ball and the app keeps the card. Net uses the 25/20/15/10% four-player allowance.'
+        :'One ball per team — pick your partners. Net strokes use the 35%/15% scramble allowance.';
   const pairLbl=T=>`${esc(S.players[T[0][0]].name)} &amp; ${esc(S.players[T[0][1]].name)} <span class="muted">vs</span> ${esc(S.players[T[1][0]].name)} &amp; ${esc(S.players[T[1][1]].name)}`;
   return `
   ${(sixes&&!inWiz)?`<div class="card"><h2>Starting partners</h2>
@@ -13367,7 +13384,8 @@ function gameOptionsHTML(){
       </span></div>
     <div class="tiny mt">Three separate match-play bets: front nine, back nine, and the overall. ${(S.config.nassau.press||'manual')==='off'?'No presses — just the three bets.':(S.config.nassau.press||'manual')==='manual'?'A side that is down can press — a fresh bet on the remaining holes of that nine.':'Every bet automatically presses the first time a side falls exactly 2 down.'}${(S.config.span&&S.config.span.count===9)?' <b>9-hole round: collapses to a single overall match.</b>':''}</div>
   </div>`:''}
-  ${inWiz?'':(()=>{const pairBtns=g2=>[[[0,1],[2,3]],[[0,2],[1,3]],[[0,3],[1,2]]].map((T,pi)=>`
+  ${inWiz?(scramble?`<div class="card"><h2>🤝 Scramble</h2>${scrFmt()}
+      <div class="tiny mt">${scrNote(S.config.scramble.teams).replace(' — pick your partners','')}</div></div>`:''):(()=>{const pairBtns=g2=>[[[0,1],[2,3]],[[0,2],[1,3]],[[0,3],[1,2]]].map((T,pi)=>`
       <button class="ghost ${teamPairing(g2)===pi?'sel':''}" style="width:100%;text-align:left;margin-bottom:8px" onclick="setTeamPairing('${g2}',${pi})">${pairLbl(T)}</button>`).join('');
     // Mystery partners: setup/round-options list every pairing by name and the
     // saved duo names on top of it. Found by the 3000-scenario sweep — the
@@ -13380,24 +13398,16 @@ function gameOptionsHTML(){
     if(bestball)out+=mysteryPending('bestball')?mystBlock('bestball','🏆 Best Ball teams'):`<div class="card"><h2>🏆 Best Ball teams</h2>${pairBtns('bestball')}${teamNamesHTML('bestball')}
       <div class="tiny mt">Better ball of each team wins the hole.</div></div>`;
     if(scramble){const sf=S.config.scramble.teams;
-      out+=`<div class="card"><h2>🤝 Scramble teams</h2>
-      <div class="row" style="border-top:none"><span class="muted">Format</span>
-      <span class="seg" style="display:inline-flex;gap:6px">
-        <button class="ghost ${sf==='duo'?'sel':''}" onclick="set(()=>S.config.scramble.teams='duo')">Just us 2</button>
-        <button class="ghost ${sf!=='solo'&&sf!=='duo'?'sel':''}" onclick="set(()=>S.config.scramble.teams='2v2')">2 v 2</button>
-        <button class="ghost ${sf==='solo'?'sel':''}" onclick="set(()=>S.config.scramble.teams='solo')">All 4</button>
-      </span></div>
+      out+=`<div class="card"><h2>🤝 Scramble teams</h2>${scrFmt()}
       ${(sf==='solo'||sf==='duo')?'':pairBtns('scramble')+teamNamesHTML('scramble')}
-      <div class="tiny mt">${sf==='duo'?'Two of you, one ball, one card — nobody to play against. Net uses the 35%/15% two-man scramble allowance.'
-        :sf==='solo'?'Tournament mode — the whole group plays one ball and the app keeps the card. Net uses the 25/20/15/10% four-player allowance.'
-        :'One ball per team — pick your partners. Net strokes use the 35%/15% scramble allowance.'}</div></div>`;}
+      <div class="tiny mt">${scrNote(sf)}</div></div>`;}
     if(umbrella)out+=mysteryPending('umbrella')?mystBlock('umbrella','☂ Umbrella teams'):`<div class="card"><h2>☂ Umbrella teams</h2>${pairBtns('umbrella')}${teamNamesHTML('umbrella')}
       <div class="tiny mt">Six points a hole — low ball 2, low team total 2, closest to pin 1, gross birdie 1. Sweep all six for 12.</div></div>`;
     if(nassau&&S.config.nassau.n!==2)out+=mysteryPending('nassau')?mystBlock('nassau','🏅 Nassau teams'):`<div class="card"><h2>🏅 Nassau teams</h2>${pairBtns('nassau')}${teamNamesHTML('nassau')}
       <div class="tiny mt">Best ball of each team decides every hole across all three bets.</div></div>`;
     return out;})()}
-  ${(vegas&&!inWiz)?`<div class="card"><h2>🎲 Vegas teams</h2>
-    ${mysteryPending('vegas')?`<div class="tiny">🎲 Mystery partners — hidden until the draw at the end of the round.</div>
+  ${vegas?`<div class="card"><h2>🎲 Vegas${inWiz?'':' teams'}</h2>
+    ${inWiz?'':mysteryPending('vegas')?`<div class="tiny">🎲 Mystery partners — hidden until the draw at the end of the round.</div>
       <button class="ghost mt" style="width:100%" onclick="toggleMystery('vegas')">Cancel mystery — pick partners now</button>`
     :`${[[[0,1],[2,3]],[[0,2],[1,3]],[[0,3],[1,2]]].map((T,pi)=>`
       <button class="ghost ${teamPairing('vegas')===pi?'sel':''}" style="width:100%;text-align:left;margin-bottom:8px" onclick="setTeamPairing('vegas',${pi})">${pairLbl(T)}</button>`).join('')}
@@ -14500,6 +14510,7 @@ function startRound(){
     try{setTimeout(maybeAskPar,900);}catch(e){}
     if(S.config.game!=='wolf')prefillNines(S.round.cur);});
   S.round._sharedAtStart=!!S.share.on;
+  try{S.round._optSnap=optSnap();}catch(e){}
   stat('round_start',{game:S.round.game,course:S.course.name,holes:S.round.span.count,firstTee:S.round.span.start+1,
     lens:S.config.lens,players:NP(),shared:!!S.share.on,stack:(S.round.games||[]).join('+'),
     opts:S.round.game==='nines'?{n:S.config.nines.n,blitz:S.config.nines.blitz,ctp:S.config.nines.ctp}
@@ -14617,7 +14628,7 @@ function vHole(){
           ?`<button class="ghost" style="margin-top:7px;padding:5px 14px" onclick="redoPick()">Redo pick</button>`
           :`<button class="ghost" style="margin-top:7px;padding:5px 14px" onclick="redoPickArm(${h})">${redoArm===h?'⚠️ Tap again — you\'ll pick for '+esc((names[rec.wolfAt]||'').split(' ')[0]):'Redo pick'}</button>`):''}</div>
       <img class="wolf-art" src="${art('/wolf.png')}" alt="" onerror="this.style.display='none'"></div>
-    ${roomFullHTML()}${carryNote}
+    ${roomFullHTML()}${rulesNoticeHTML()}${carryNote}
     ${body}
     ${holeNav}
   </main>`+tabs('hole');
@@ -15376,6 +15387,130 @@ function joinPlay(k){
   try{stat('join_play',{k,game:gameOn()});}catch(e){}
 }
 // A FIFTH PHONE: the card holds four. Say so, and offer the two ways on (Nathan 10/18).
+
+// ---- SAME RULES ON EVERY PHONE (Nathan 10/20: "make sure that when we play multiplayer games that have
+// point options, that everyone in the group is playing with the same ones" -- 2 and 3) -------------------
+// RULES_VER is the version of the SCORING AND MONEY RULES, not of the app. Bump it (yyyymmdd) whenever a
+// change alters how a stroke, a point or a dollar is counted -- never for screens or copy. Each phone
+// stamps its own row with it; a phone behind the group's newest is asked to update before it scores,
+// and the rest of the group sees whose phone is behind (an app older than this check says nothing, so
+// its row carries no stamp and reads as behind).
+const RULES_VER=20261018;   // 10/18: 3rd/4th strokes, plus handicaps, Stableford/team results, Vegas CTP, Scramble
+function rulesRound(){return !!(S.share&&S.share.on&&S.round&&S.round.started&&!isReview()&&!S.round.myEndedAt);}
+function rulesBehind(){
+  if(!rulesRound())return 0;
+  const top=Math.max(0,...S.players.map(p=>+(p&&p.rules)||0));
+  return top>RULES_VER?top:0;
+}
+function rulesLagging(){
+  if(!rulesRound())return [];
+  return S.players.filter(p=>p&&p.ownerDev&&p.ownerDev!==devId()&&!p.ended&&(+p.rules||0)<RULES_VER);
+}
+let rulesAskShown=0,appUpdating=false;
+function appUpdateNow(){
+  appUpdating=true;render();
+  let done=false;const go=()=>{if(done)return;done=true;try{location.reload();}catch(e){}};
+  try{
+    if(!(navigator.serviceWorker&&navigator.serviceWorker.getRegistration)){go();return;}
+    navigator.serviceWorker.addEventListener('controllerchange',go);   // the new version took over: load it
+    navigator.serviceWorker.getRegistration().then(r=>r?r.update():null).catch(()=>{});
+    setTimeout(go,8000);   // already current, or no signal: reload anyway (the round is saved)
+  }catch(e){go();}
+}
+function rulesLater(){rulesAskShown=rulesBehind()||1;render();}
+function rulesSheetHTML(){
+  const top=rulesBehind();
+  if(!top||rulesAskShown>=top)return '';
+  return `<div class="vfWrap" role="dialog" aria-modal="true"><div class="vfCard" style="max-width:430px">
+    <h2 class="vfTitle">Update Battle Tees</h2>
+    <div class="tiny mb">This group is on newer scoring rules. Update so every phone scores the same.</div>
+    <button class="big mt" style="width:100%" onclick="appUpdateNow()">${appUpdating?'Updating…':'Update now'}</button>
+    <button class="ghost mt" style="width:100%" onclick="rulesLater()">Later</button></div></div>`;
+}
+function rulesNoticeHTML(){
+  try{
+    if(rulesBehind())return `<div class="card" style="border-color:var(--amber-bd,#e0a53a)"><h2>Update needed</h2>
+      <div class="tiny">Your app is behind this group's scoring rules.</div>
+      <button class="big mt" style="width:100%" onclick="appUpdateNow()">${appUpdating?'Updating…':'Update now'}</button></div>`;
+    const lag=rulesLagging();
+    if(!lag.length)return '';
+    const nm=lag.map(p=>esc((p.name||'').split(' ')[0])).join(' & ');
+    return `<div class="card" style="border-color:var(--amber-bd,#e0a53a)"><h2>${nm} need${lag.length===1?'s':''} an update</h2>
+      <div class="tiny">Ask ${lag.length===1?'them':'them'} to close and reopen Battle Tees so every phone scores the same.</div></div>`;
+  }catch(e){return '';}
+}
+
+// Option changes, told to the group. A phone that changes a point option mid-round signs it (S.round.optBy);
+// every other phone compares the options before and after the meta lands and says what changed, and who.
+const OPT_GAME={pts:'Wolf',stbl:'Stableford',quota:'Quota',skins:'Skins',nines:"9's",vegas:'Vegas',nassau:'Nassau',hammer:'Hammer',
+  bestball:'Best Ball',umbrella:'Umbrella',bbb:'Bingo Bango Bongo',sixes:'Sixes',scramble:'Scramble',ctpMoney:'Closest to pin',stroke:'Stroke'};
+const OPT_LABEL={'pts.partnerWin':'Wolf · partner win','pts.fieldBeatsPartners':'Wolf · beating the wolf team','pts.loneWin':'Wolf · lone wolf win',
+  'pts.fieldBeatsLone':'Wolf · beating a lone wolf','pts.blindWin':'Wolf · blind wolf win','pts.fieldBeatsBlind':'Wolf · beating a blind wolf',
+  'pts.ctp':'Wolf · closest to pin','allowance':'Handicap %','recLens':'Round scored','lens':'Scores shown','carryTies':'Ties carry',
+  'ctpAll':'Closest to pin','ctpMoney.amt':'Closest to pin $','ctpMoney.carry':'Closest to pin carry','skins.amt':'Skins $',
+  'skins.carry':'Skins carry-overs','skins.per':'Skins hole values','dollarPerPt':'$ per point','games':'Games'};
+function optSnap(){
+  try{
+    const c=clone(S.config||{});
+    // sizes widen on their own as people join, and partner draws have their own screens: not option changes
+    Object.keys(c).forEach(k=>{const v=c[k];if(v&&typeof v==='object'&&!Array.isArray(v)){delete v.n;delete v.revealed;delete v.mystery;}});
+    delete c.game;delete c.span;delete c.track;delete c.bf;delete c._v;delete c.groupName;
+    return {c,dollarPerPt:+(S.round&&S.round.dollarPerPt)||0,rates:clone((S.round&&S.round.rates)||{}),games:clone((S.round&&S.round.games)||[])};
+  }catch(e){return null;}
+}
+function optDiff(a,b){
+  const out=[];
+  const fmt=v=>v===true?'On':v===false?'Off':v==null?'—':Array.isArray(v)?v.map(x=>typeof x==='string'?gameNameSafe(x):x).join(' + '):(typeof v==='object'?'changed':String(v));
+  const walk=(x,y,path)=>{
+    if(JSON.stringify(x)===JSON.stringify(y))return;
+    // a settings block appearing or going (a screen made it lazily, an older app lacks it) is not a change
+    const isObj=v=>v&&typeof v==='object'&&!Array.isArray(v);
+    if((x===undefined&&isObj(y))||(y===undefined&&isObj(x)))return;
+    if(x&&y&&typeof x==='object'&&typeof y==='object'&&!Array.isArray(x)&&!Array.isArray(y)){
+      Object.keys(Object.assign({},x,y)).forEach(k=>walk(x[k],y[k],path?path+'.'+k:k));return;}
+    const key=path.replace(/^c\./,'');
+    let lbl=OPT_LABEL[key];
+    if(!lbl&&key.startsWith('rates.'))lbl=gameNameSafe(key.slice(6))+' $ rate';
+    if(!lbl){const [g,...rest]=key.split('.');lbl=(OPT_GAME[g]||g)+(rest.length?' · '+rest.filter(r=>r!=='pts').join(' '):'');}
+    out.push(lbl+' '+(key==='allowance'?fmt(x)+'% → '+fmt(y)+'%':fmt(x)+' → '+fmt(y)));
+  };
+  walk(a,b,'');
+  return out;
+}
+function gameNameSafe(g){try{return gameName(g);}catch(e){return g;}}
+// local: this phone changed an option in a running shared round -> sign it for the group
+function optTrackLocal(){
+  try{
+    if(!S.round||!S.round.started||!S.share||!S.share.on)return;
+    const now=optSnap();if(!now)return;
+    const was=S.round._optSnap;
+    if(was&&JSON.stringify(was)!==JSON.stringify(now)){
+      const what=optDiff(was,now);
+      if(what.length)S.round.optBy={by:((S.me&&S.me.name)||'').trim(),pid:(S.me&&S.me.pid)||null,at:Date.now(),what:what.slice(0,3)};
+    }
+    S.round._optSnap=now;
+  }catch(e){}
+}
+// remote: the room's meta just changed the options on this phone -> say so
+function optNoticeRemote(before,v){
+  try{
+    const after=optSnap();if(!after)return;
+    const had=S.round._optSnap;
+    S.round._optSnap=after;
+    if(!had||!before||JSON.stringify(before)===JSON.stringify(after))return;
+    const what=optDiff(before,after);if(!what.length)return;
+    const by=v&&v.optBy&&v.optBy.by&&!(S.me&&v.optBy.pid&&v.optBy.pid===S.me.pid)?v.optBy.by.split(' ')[0]:'';
+    if(v&&v.optBy&&S.me&&v.optBy.pid&&v.optBy.pid===S.me.pid)return;   // my own change coming back
+    setTimeout(()=>{try{shotToast((by?by+' changed ':'Options changed: ')+what.slice(0,2).join(', '),6500);}catch(e){}},50);
+  }catch(e){}
+}
+function optLastLineHTML(){
+  try{
+    const o=S.round&&S.round.optBy;if(!o||!o.what||!o.what.length||!S.share||!S.share.on)return '';
+    const t=new Date(o.at);const hh=t.getHours()%12||12,mm=String(t.getMinutes()).padStart(2,'0');
+    return `<div class="tiny" style="margin:2px 4px 10px;color:var(--ink2)">Last option change: ${esc((o.by||'').split(' ')[0]||'someone')} — ${esc(o.what.slice(0,2).join(', '))} · ${hh}:${mm}</div>`;
+  }catch(e){return '';}
+}
 function roomFullHTML(){
   try{
     if(!S.share||!S.share.on||!S.share.full||S.players.some(p=>p&&p.ownerDev===devId()))return '';
@@ -15498,7 +15633,7 @@ function vHoleNines(){
     }).join('');
   }
   const extrasCard=extrasCardHTML(act, rec);
-  const body=`${roomFullHTML()}${joinPlayHTML()}${catchUpHTML()}<div class="card">
+  const body=`${roomFullHTML()}${rulesNoticeHTML()}${joinPlayHTML()}${catchUpHTML()}<div class="card">
     ${act.some(i=>rec.gross[i]==null)?`<button class="ghost mb" style="width:100%" onclick="set(()=>prefillNines(${h}))">Everyone to par ${hole.par} — adjust from there</button>`:''}
     ${scoreRows}
     </div>${hamCard}${nasCard}${skCard}${bbbCard}${ctpRow}${extrasCard}${resultNote}
@@ -16652,7 +16787,7 @@ function vStandings(){
     const done=playOrder().every(h=>(S.round.holes[h]||{}).confirmed);
     const anyOut=actIdx().some(i=>S.players[i]&&S.players[i].ended);
     return (done||anyOut)?othersStillInHTML():'';}catch(e){return '';}})();
-  return topbar('Standings',esc(S.course.name),'','','')+`<main>${paceLine()}${stillIn}${tables}${everyCard}${extra}
+  return topbar('Standings',esc(S.course.name),'','','')+`<main>${rulesNoticeHTML()}${paceLine()}${optLastLineHTML()}${stillIn}${tables}${everyCard}${extra}
     ${(all!=null&&all.perHole)?`<div class="card"><h2>Hole history (tap to edit)</h2>${hist||'<div class="muted">No holes confirmed yet.</div>'}</div>`:''}
     ${settleSectionHTML()}
   </main>`+tabs('standings');
