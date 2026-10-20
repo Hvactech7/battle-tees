@@ -557,7 +557,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-center in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1792537817';
+const BUILD='1792539225';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -17171,6 +17171,11 @@ setInterval(()=>{
   function report(msg,src,line){
     const k=String(msg||'').slice(0,140);
     if(!k||seen[k])return;seen[k]=1;
+    // A bare "Script error." with no file, in Safari, is Safari's own Share sheet: opening it runs Apple's
+    // script inside the page and that script throws (10/20: reproduced on a blank page with none of our
+    // code). The install screen tells people to tap Share, so it came in with nearly every install. Still
+    // reported from the installed app, and whenever Google Maps (the only other outside script) is loaded.
+    if(/^Script error\.?$/.test(k)&&!src&&btMode()==='web'&&!(window.google&&google.maps))return;
     try{stat('js_error',{msg:k,src:String(src||'').split('/').pop().slice(0,40),line:line||0,
       screen:(typeof S!=='undefined'&&S.screen)||'',hole:(typeof S!=='undefined'&&S.round&&S.round.cur!=null)?S.round.cur+1:0});}catch(e){}
   }
