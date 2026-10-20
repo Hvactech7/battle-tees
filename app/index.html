@@ -557,7 +557,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-center in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1792520349';
+const BUILD='1792537817';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1999,7 +1999,11 @@ function postRoomInvite(){
     if(typeof sockOpen!=='undefined'&&sockOpen&&sock)
       sock.send(JSON.stringify({t:'invite',room:S.share.code,
         info:{course:S.course.name,players:S.players.filter(isRealPl).map(p=>p.name),group:S.config.groupName||'',ts:S.share.since,   // when the room opened: the relay's 6 h / 30 min limits count from here, however often this phone reconnects
-          near:(S.share.near&&S.share.near.lat!=null)?S.share.near:null,
+          // A room that never recorded where it opened (a group started from Start Round,
+          // a Battlefield broadcast re-shared) went out UNFENCED, and every phone with the
+          // app open, anywhere, got "Round invitation" (Nathan 10/20). Fence it where this
+          // phone is now (or its course), like the open-to-nearby room does.
+          near:(S.share.near&&S.share.near.lat!=null)?S.share.near:nearFence(),
           at:nearFence(),   // where the room opened: a NAME on the card only matches a phone within 25 km of it
           // TARGETED (9/6): the people ON THIS CARD get the invitation wherever
           // they stand — no GPS fix, a stale fix from home, the parking lot.
@@ -14336,7 +14340,8 @@ function dismissInvite(code){dismissedInvites.add(code);render();}
 // a named hello with a GPS fix. A group member whose phone had not announced
 // itself yet, or had no fix, never saw "Accept round invitation". Now every
 // live invitation arrives and this phone keeps it if: it is on the card (name
-// or id), or the invitation is unfenced, or its own fix is inside the fence.
+// or id), or its own fix is inside the fence (10/20: an unfenced one is fenced at
+// 3 km around where the room opened, or kept for the card only).
 function inviteForMe(i){
   try{
     const to=i.to||{}; const me=(S.me&&S.me.name||'').trim().toLowerCase();
@@ -14351,7 +14356,11 @@ function inviteForMe(i){
       if(!at||at.lat==null||!myCoords||!isFinite(myCoords[0]))return true;
       return kmBetween(+at.lat,+at.lon,+myCoords[0],+myCoords[1])<=25;
     }
-    const near=i.near; if(!near||near.lat==null)return true;
+    // An invitation with no fence comes from a phone that hasn't updated (10/20) or knew
+    // no place at all: it is for the people on its card, plus phones within 3 km of
+    // where the room opened -- never the whole country.
+    const near=(i.near&&i.near.lat!=null)?i.near:(i.at&&i.at.lat!=null)?{lat:i.at.lat,lon:i.at.lon,km:3}:null;
+    if(!near)return false;
     if(!myCoords||!isFinite(myCoords[0]))return false;
     return kmBetween(+near.lat,+near.lon,+myCoords[0],+myCoords[1])<=(+near.km||1.5);
   }catch(e){return false;}
