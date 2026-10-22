@@ -557,7 +557,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-center in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1792631138';
+const BUILD='1792632268';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -17168,7 +17168,12 @@ setInterval(()=>{
 // render loop cannot flood the relay.
 (function(){
   const seen={};
-  function report(msg,src,line){
+  // WHERE, not just what (Brent, Poppy Ridge h6 10/21: "undefined is not an object (evaluating 't.lat')" in
+  // leaflet.js line 5 -- Leaflet is one long line, so the line said nothing). The column and the call trace
+  // name the caller; file URLs shrink to their names. mapHole says which hole the MAP was on (hole = the
+  // round's current hole, which lags when scores go in late).
+  const shortStack=st=>String(st||'').replace(/https?:\/\/[^\s()@]*\/([^\/\s()@:]*)(?=:\d)/g,(m,f)=>f||'app').split('\n').slice(0,12).join('\n').slice(0,900);
+  function report(msg,src,line,col,stack){
     const k=String(msg||'').slice(0,140);
     if(!k||seen[k])return;seen[k]=1;
     // A bare "Script error." with no file, in Safari, is Safari's own Share sheet: opening it runs Apple's
@@ -17176,11 +17181,14 @@ setInterval(()=>{
     // code). The install screen tells people to tap Share, so it came in with nearly every install. Still
     // reported from the installed app, and whenever Google Maps (the only other outside script) is loaded.
     if(/^Script error\.?$/.test(k)&&!src&&btMode()==='web'&&!(window.google&&google.maps))return;
-    try{stat('js_error',{msg:k,src:String(src||'').split('/').pop().slice(0,40),line:line||0,
-      screen:(typeof S!=='undefined'&&S.screen)||'',hole:(typeof S!=='undefined'&&S.round&&S.round.cur!=null)?S.round.cur+1:0});}catch(e){}
+    try{const x={msg:k,src:String(src||'').split('/').pop().slice(0,40),line:line||0,col:col||0,
+      screen:(typeof S!=='undefined'&&S.screen)||'',hole:(typeof S!=='undefined'&&S.round&&S.round.cur!=null)?S.round.cur+1:0};
+      if(stack)x.stack=shortStack(stack);
+      try{if(typeof S!=='undefined'&&S.screen==='map'&&typeof mapHole==='number')x.mapHole=mapHole+1;}catch(e){}
+      stat('js_error',x);}catch(e){}
   }
-  window.addEventListener('error',e=>report(e.message,e.filename,e.lineno));
-  window.addEventListener('unhandledrejection',e=>report('unhandled: '+((e.reason&&e.reason.message)||e.reason),'',0));
+  window.addEventListener('error',e=>report(e.message,e.filename,e.lineno,e.colno,e.error&&e.error.stack));
+  window.addEventListener('unhandledrejection',e=>report('unhandled: '+((e.reason&&e.reason.message)||e.reason),'',0,0,e.reason&&e.reason.stack));
 })();
 applyTheme();
 healUnfinishedRound();   // rescue a round stranded between _finished and archive
