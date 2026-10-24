@@ -557,7 +557,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-center in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1792822112';
+const BUILD='1792822758';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -11154,10 +11154,12 @@ function wizOptsDone(){
 }
 function wizBack(){
   if(!wiz)return;
-  if(wiz.step==='join'&&wiz.from){const to=wiz.from;wiz=null;S.screen=to;render();return;}
+  // Back out of the wizard SAVES where it lands (Nathan 10/23: backed out to Home, closed the app, and it
+  // reopened on "Start a round" -- START ROUND had saved 'start' and these exits never saved over it).
+  if(wiz.step==='join'&&wiz.from){const to=wiz.from;wiz=null;go(to);return;}
   const b={span:'kind',count:'span',who:'count',game:'who',opts:wiz.preGame?'who':'game',
     course:wiz.solo?'span':'opts',join:'kind'};
-  if(wiz.step==='kind'||(wiz.preGame&&(wiz.step==='span'||wiz.step==='count'))){wiz=null;S.screen='home';render();return;}
+  if(wiz.step==='kind'||(wiz.preGame&&(wiz.step==='span'||wiz.step==='count'))){wiz=null;go('home');return;}
   wiz.step=b[wiz.step]||'kind';
   render();
 }
