@@ -557,7 +557,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-center in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1792804751';
+const BUILD='1792822112';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -9639,7 +9639,7 @@ const FAQ=[
  ]],
  ['Playing a round',[
   ['Start a round',
-   'From Home choose <b>Just me</b>, <b>Multi-player</b> (you pick the course and the game) or <b>Join an existing round</b>. Add the group with <b>Nearby</b>, <b>Saved</b> or <b>Type a name</b>, then <b>Move on to pick the game</b> and <b>Start Round</b>. Ending is always yours alone — nobody\u2019s End closes anyone else\u2019s card.'],
+   'Tap <b>Start Round</b> and choose <b>Just me</b>, <b>Multi-player</b> (you pick the course and the game) or <b>Join an existing round</b>, then how many holes. Add the group with <b>Nearby</b>, <b>Saved</b> or <b>Type a name</b>, then <b>Move on to pick the game</b> and <b>Start Round</b>. Ending is always yours alone — nobody\u2019s End closes anyone else\u2019s card.'],
   ['Get everyone into the same round',
    'Phones with Battle Tees open near you appear under <b>Nearby</b>. Anyone you could not add can <b>Join an existing round</b> from their Home screen and type the round code shown at the top of your screen. Joining mid-round is fine: the holes they already scored come with them.'],
   ['Pick and stack games',
@@ -10983,7 +10983,9 @@ function startOwnSetup(){set(()=>{S.screen='pickgame';});}
 // (In-flow navigation — setup ↔ builder ↔ game picker — keeps your picks;
 // active and past rounds are never touched.)
 // ---- the start-round wizard: one card at a time ---------------------------------
-// step: 'kind' | 'count' | 'who' | 'game' | 'course' | 'join'
+// step: 'kind' | 'span' | 'count' | 'who' | 'game' | 'opts' | 'course' | 'join'
+// KIND COMES FIRST (Nathan 10/23): Just me / Multi-player / Join an existing round, THEN how many holes.
+// A rules card (startWithGame) has its game already, so it still opens on the holes card.
 let wiz=null;
 // ── PRE-PICK THE NEAREST COURSE ─────────────────────────────────────────────
 // Start Round kicks off a GPS fix and a nearest-course lookup at once, so by the
@@ -11089,7 +11091,7 @@ function startWizard(){
   // works without touching the grid at all. Coming in from a game's own card
   // sets wiz.preGame instead, and that choice is never overwritten.
   set(()=>{S.config.game='stroke';S.config.games=['stroke'];});
-  wiz={step:'span',n:4};
+  wiz={step:'kind',n:4};
   preCourseStart();                       // AFTER wiz exists: a fresh fix resolves synchronously
   addMode='nearby';                       // the who-card scans nearby automatically
   S.screen='start';save();render();
@@ -11098,10 +11100,16 @@ function wizKind(k){
   if(k==='solo'){
     // a solo round is Stroke, full stop — go straight to the course
     set(()=>{S.config.game='stroke';S.config.games=['stroke'];S.config.stroke.n=1;ensureMeFirst();});
-    wiz.solo=true;wiz.step='course';pickingCourse=true;finder={status:'idle',choices:[],error:''};render();return;
+    wiz.solo=true;wiz.step='span';render();return;
   }
   if(k==='join'){wiz.step='join';sendHello();grabCoords();render();return;}
-  wiz.step='count';render();
+  wiz.solo=false;wiz.step='span';render();
+}
+// Next on the holes card: a solo round goes to the course, a group to how many golfers.
+function wizSpanNext(){
+  if(wiz.solo){wiz.step='course';pickingCourse=true;finder={status:'idle',choices:[],error:''};}
+  else wiz.step='count';
+  render();
 }
 function wizCount(n){
   wiz.n=n;wiz.step='who';
@@ -11147,9 +11155,9 @@ function wizOptsDone(){
 function wizBack(){
   if(!wiz)return;
   if(wiz.step==='join'&&wiz.from){const to=wiz.from;wiz=null;S.screen=to;render();return;}
-  const b={kind:'span',count:'kind',who:'count',game:'who',opts:wiz.preGame?'who':'game',
-    course:wiz.solo?'kind':'opts',join:'kind'};
-  if(wiz.step==='span'||(wiz.step==='count'&&wiz.preGame)){wiz=null;S.screen='home';render();return;}
+  const b={span:'kind',count:'span',who:'count',game:'who',opts:wiz.preGame?'who':'game',
+    course:wiz.solo?'span':'opts',join:'kind'};
+  if(wiz.step==='kind'||(wiz.preGame&&(wiz.step==='span'||wiz.step==='count'))){wiz=null;S.screen='home';render();return;}
   wiz.step=b[wiz.step]||'kind';
   render();
 }
@@ -11171,7 +11179,7 @@ function vStart(){
     const sp=S.config.span||{count:18,start:0};
     const first=sp.count===18?0:(sp.start<9?0:9), n=sp.count===18?18:9;
     return head('Start a round','How many holes?')+`<main>
-    ${inviteCardsHTML()}
+    ${wiz.preGame?inviteCardsHTML():''}
     <div style="display:flex;gap:8px">
       <button class="big ${sp.count===18?'':'ghost'}" style="flex:1;margin:0${sp.count===18?'':';background:var(--card)'}" onclick="setSpan(18,0);render()">All 18</button>
       <button class="big ${sp.count===9&&sp.start<9?'':'ghost'}" style="flex:1;margin:0${sp.count===9&&sp.start<9?'':';background:var(--card)'}" onclick="setSpan(9,0);render()">Front 9</button>
@@ -11180,12 +11188,13 @@ function vStart(){
       <select onchange="setSpan(${sp.count},+this.value)" style="background:var(--field);border:2px solid var(--line);border-radius:10px;color:var(--ink);font:600 16px Rajdhani,Inter,sans-serif;padding:8px 10px">
         ${Array.from({length:n},(_,k)=>first+k).map(h=>`<option value="${h}" ${sp.start===h?'selected':''}>Hole ${h+1}</option>`).join('')}</select></div>
       <div class="tiny">Start from any tee — play wraps around.</div></div>
-    <button class="big" onclick="wiz.step=wiz.preGame?'count':'kind';render()">Next \u2192</button>
-    <button class="big mt" style="background:var(--card);color:var(--green-mid);border-color:var(--green)" onclick="wizKind('join')">👥 Join an existing round</button>
+    <button class="big" onclick="wizSpanNext()">Next \u2192</button>
+    ${wiz.preGame?`<button class="big mt" style="background:var(--card);color:var(--green-mid);border-color:var(--green)" onclick="wizKind('join')">👥 Join an existing round</button>`:''}
     </main>`;
   }
 
   if(step==='kind')return head('Start a round','What kind of round?')+`<main>
+    ${inviteCardsHTML()}
     <button class="big hb" style="padding:16px 12px" onclick="wizKind('solo')">⛳ Just me<div style="font-size:14px;font-weight:500;margin-top:4px;color:inherit;opacity:.92;font-family:Inter,-apple-system,sans-serif">Solo stroke play — score and GPS</div></button>
     <button class="big mt hb" style="padding:16px 12px" onclick="wizKind('multi')">⚔️ Multi-player<div style="font-size:14px;font-weight:500;margin-top:4px;color:inherit;opacity:.92;font-family:Inter,-apple-system,sans-serif">2–4 golfers, any game — you pick the course and the game</div></button>
     <button class="big mt hb" style="padding:16px 12px;background:var(--card);color:var(--green-mid);border-color:var(--green)" onclick="wizKind('join')">👥 Join an existing round<div style="font-size:14px;font-weight:500;margin-top:4px;color:var(--ink);opacity:.9;font-family:Inter,-apple-system,sans-serif">Someone already started it — find it nearby or by code</div></button>
