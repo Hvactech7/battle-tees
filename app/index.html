@@ -557,7 +557,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-center in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1792792359';
+const BUILD='1792803027';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1644,6 +1644,7 @@ function onStateDoc(doc){
   if(joinCarry)applyJoinCarry();                   // seated now: my earlier holes land in my row
   save();syncPush();render();
   try{setTimeout(askPuttsOwed,300);}catch(e){}       // rejoined mid-round: anything owed, oldest first
+  try{setTimeout(nearTick,1500);}catch(e){}          // Players nearby: this room's round, from here on
 }
 // A PREVIEW NEVER WRITES TO A LIVE ROOM. A page served from localhost is a
 // developer's copy; it must not open the sync socket to the production relay
@@ -1870,6 +1871,7 @@ document.addEventListener('visibilitychange',()=>{
   if(document.hidden){wakeLock=null;gpsPauseHidden();return;}   // the OS already released it
   cameBackAt=Date.now();
   wakeOn();gpsResumeVisible();autoEndStaleRound();kickSync();statFlush();try{abKick();}catch(e){}
+  try{nearTick();}catch(e){}
 });
 wakeOn();
 // In a shared round, each phone claims the player slot matching its profile
@@ -2557,16 +2559,23 @@ async function relayBackup(payload){
 // Starting a round announces it (default ON, Settings > Battlefield to stop).
 // The relay resolves library pids to verified emails PRIVATELY — addresses
 // never travel between phones — and mails friends a watch link.
+// A solo round's room: broadcast-only (bf), never a lobby invite. The Battlefield opens it at the
+// second hole; the nearby-players prompt (nearTick) opens it earlier, the first time another
+// round shows up right beside this one -- that code is what the other phone joins.
+function openSoloRoom(early){
+  if(!S.round.started||(S.share&&S.share.on))return false;
+  S.share={on:true,code:makeCode(),creator:true,bf:true};   // bf: broadcast-only, no lobby invite
+  if(early)S.share.early=true;   // opened by Players nearby, holes before the Battlefield's: Home keeps the merge door
+  S.shareMetaTs=stampAfter(S.shareMetaTs);
+  S.round.holes.forEach(r=>{if(!r._ts)r._ts=Date.now();});
+  save();try{sendHello();}catch(e){}syncConnect();
+  return true;
+}
 function bfBroadcastStart(){
   try{
     if(!S.config.bf||!S.config.bf.broadcast)return;
     if(!S.round.started)return;
-    if(!S.share.on){                       // solo round: open a room so spectators have a doc
-      S.share={on:true,code:makeCode(),creator:true,bf:true};   // bf: broadcast-only, no lobby invite
-      S.shareMetaTs=stampAfter(S.shareMetaTs);
-      S.round.holes.forEach(r=>{if(!r._ts)r._ts=Date.now();});
-      save();try{sendHello();}catch(e){}syncConnect();
-    }
+    if(!S.share.on)openSoloRoom();         // solo round: open a room so spectators have a doc
     // THE ROUND'S roster, not the whole library. Sending the library made the
     // relay treat every saved player as "on the tee with you" — so they were
     // skipped by the round-start email (Cypress 8/12: a SOLO round emailed only
@@ -2603,6 +2612,194 @@ function bfReannounce(){
     if(!S.round.started||S.round._bfSent||!S.round._bfLive||isReview())return;
     setTimeout(bfBroadcastStart,400);
   }catch(e){}
+}
+// ---- PLAYERS NEARBY (Nathan 10/23) ---------------------------------------------------------------
+// "ask both players... I want a 15 min/1-hole scored limit. I want anyone that is on battle tees at
+// the time in a very nearby radius (not just friends) should be asked. only ask once per person, but
+// if there are several people, have a list, all at once pop up. if someone new pops up after the
+// first list offer to join with them too. once there are 4 players in a group, stop asking."
+// While MY round is in its first 15 minutes with at most one hole confirmed and fewer than four
+// players, this phone tells the relay where it stands every 10 s ({t:'battle',op:'near'}) and gets
+// back every OTHER such round within 300 m of that fix -- any golfer, friend or not, solo rounds
+// included. The relay keeps the positions; a phone only ever sees names, course and metres. It is
+// NOT a lobby invite: a broadcast-only room stays out of the Join list and is offered only here.
+// A solo round has no room before its second hole, so the first time another round shows up
+// beside it this phone opens its broadcast room early (openSoloRoom) -- both sides get asked.
+// Join is the existing door (joinFromInvite: two taps, my holes ride joinCarry into their room);
+// the relay's 'nearjoin' claim goes first, so two phones tapping Join on each other at once cannot
+// swap rooms and strand each other -- the second one is told the first is on its way.
+const NEAR_WIN_MS=15*60000, NEAR_MAX_HOLES=1, NEAR_POLL_MS=10000, NEAR_FIX_MS=10*60000, NEAR_TAP_GUARD_MS=700;
+let nearTimer=null,nearBusy=false,nearReg=null,nearPop=null,nearSeen=null,nearGrabAt=0;
+// ONCE PER ROUND OFFERED: every code ever shown is remembered (a day), so a list never comes back
+function nearSeenMap(){
+  if(nearSeen)return nearSeen;
+  nearSeen={};
+  try{const v=JSON.parse(localStorage.getItem('btNearSeen')||'{}');Object.keys(v).forEach(c=>{if(Date.now()-(+v[c]||0)<86400e3)nearSeen[c]=+v[c];});}catch(e){}
+  return nearSeen;
+}
+function nearSeenAdd(code){nearSeenMap()[code]=Date.now();try{localStorage.setItem('btNearSeen',JSON.stringify(nearSeen));}catch(e){}}
+function nearScored(){try{return (S.round.holes||[]).filter(r=>r&&r.confirmed).length;}catch(e){return 99;}}
+function nearRoomN(){return (S.players||[]).filter(isRealPl).length;}
+// the rows a Join takes with it: mine plus every row no other phone owns (captureJoinCarry's rule)
+function nearMoveN(){
+  const me=myLocalSlot();
+  return Math.max(1,(S.players||[]).filter((p,i)=>isRealPl(p)&&(i===me||!p.ownerDev||p.ownerDev===devId())).length);
+}
+function nearWindow(){
+  try{
+    if(!S.round||!S.round.started||isReview()||S.round.gpsOnly||S.round.myEndedAt||S.round._finished)return false;
+    if(!S.me||!S.me.name)return false;
+    if(S.share&&S.share.on&&S.share.awaitDoc)return false;
+    const t0=+S.round.startedAt||0,age=Date.now()-t0;
+    if(!t0||age>NEAR_WIN_MS||age<-5*60000)return false;
+    if(nearScored()>NEAR_MAX_HOLES)return false;
+    if(nearRoomN()>=4)return false;
+    return true;
+  }catch(e){return false;}
+}
+function nearFix(){
+  try{
+    if(!myCoords||!isFinite(myCoords[0]))return null;
+    let at=myCoordsAt;
+    if(!at){try{at=+(JSON.parse(localStorage.getItem('wolfLastCoords'))||{}).ts||0;}catch(e){at=0;}}
+    return Date.now()-at<NEAR_FIX_MS?myCoords:null;
+  }catch(e){return null;}
+}
+function nearStop(){
+  if(nearTimer!=null){clearInterval(nearTimer);nearTimer=null;}
+  if(nearReg){const c=nearReg.code;nearReg=null;relayBattle({op:'near',off:true,code:c,dev:devId()}).catch(()=>{});}
+  if(nearPop){nearPop=null;render();}
+}
+async function nearTick(){
+  try{
+    if(previewSandboxed())return;            // a localhost preview never advertises a round on the live relay (8/18)
+    if(!nearWindow()){nearStop();return;}
+    if(nearTimer==null)nearTimer=setInterval(()=>{try{nearTick();}catch(e){}},NEAR_POLL_MS);
+    if(nearBusy||document.hidden)return;
+    const fix=nearFix();
+    if(!fix){if(Date.now()-nearGrabAt>60000){nearGrabAt=Date.now();grabCoords();}return;}   // off the map (no live GPS): one fresh fix a minute, not every pass
+    const code=(S.share&&S.share.on&&S.share.code)||null;
+    nearBusy=true;
+    let r=null;
+    try{r=await relayBattle({op:'near',code,dev:devId(),lat:+fix[0],lon:+fix[1],
+      age:Date.now()-S.round.startedAt,scored:nearScored(),n:nearRoomN(),move:nearMoveN(),
+      names:S.players.filter(isRealPl).map(p=>String(p.name||'').trim()).filter(Boolean).slice(0,4),
+      course:(S.course&&S.course.name)||''});}catch(e){}
+    nearBusy=false;
+    if(!r||!r.ok)return;                      // an older relay answers 'unknown op': no prompt, nothing else changes
+    nearReg={code};
+    if(!nearWindow()){nearStop();return;}     // the round moved on while the relay answered
+    if((+r.seen||0)>0&&openSoloRoom(true))setTimeout(()=>{try{nearTick();}catch(e){}},2500);   // my code, so they are asked about me too
+    nearOffer(r);
+  }catch(e){nearBusy=false;}
+}
+// GATHER ON ONE ROUND (Nathan 10/23, 5:05 PM). Four solo golfers all asked at once used to pair off
+// two and two -- I join Greg while Brent joins Justin -- and with every code offered once, nobody was
+// asked again. The relay now names ONE host for every round that sees the same rounds (most players,
+// then the earliest start, then the lowest code). The host's phone lists the others as "Can join you";
+// every other phone gets the host on top with Join and the rest below as "Joining too", so everyone can
+// see the group gathering. Only the host row has a button.
+// ONCE PER GROUP, NOT PER CODE: an offer is remembered by its code AND who is in it (sorted names) --
+// and a Join offer also by who is in MY round, since it is my group moving into theirs. "Keep my own
+// round" holds until either side changes: someone joining the host, or a pair forming anyway, is a new
+// offer, and the other side is asked again, until someone reaches four.
+function nearNames(a){return (a||[]).map(n=>String(n).trim().toLowerCase()).sort().join(',');}
+function nearKey(c,mine){return c.code+'|'+nearNames(c.names)+(mine!=null?'|'+mine:'');}
+function nearOffer(r){
+  const mine=(S.share&&S.share.on&&S.share.code)||'';
+  const myN=nearRoomN(),move=nearMoveN(),h=(r&&r.host)||{};
+  const ok=(Array.isArray(r&&r.list)?r.list:[]).filter(c=>c&&c.code&&c.code!==mine&&!(+c.age>NEAR_WIN_MS)&&!(+c.scored>NEAR_MAX_HOLES));
+  const myNames=nearNames((S.players||[]).filter(isRealPl).map(p=>p.name));
+  const rowOf=(c,role)=>({code:c.code,key:nearKey(c,role==='join'?myNames:null),names:(Array.isArray(c.names)?c.names:[]).slice(0,4).map(String),course:String(c.course||''),n:+c.n||1,role});
+  // what this pass offers: 'host' -- I am the round they gather on; 'join' -- the host on top, the rest joining too
+  let mode=null,rows=[];
+  if(h.me){mode='host';rows=ok.filter(c=>c.toMe!==false).map(c=>rowOf(c,'can'));}   // each of their phones moves on its own: the relay counts seats per phone
+  else if(h.code){
+    const hc=ok.find(c=>c.code===h.code&&c.fit!==false&&(+c.n||1)+move<=4);
+    if(hc){mode='join';rows=[rowOf(hc,'join')].concat(ok.filter(c=>c.code!==h.code&&c.toHost!==false).map(c=>rowOf(c,'too')));}
+  }
+  // (a host with no room yet -- code null -- has nothing to join: wait for the next pass)
+  if(!mode&&h.code===null&&!h.me&&nearPop&&nearPop.mode==='join')return;
+  if(nearPop&&nearPop.busy)return;            // a Join is on its way to the relay: leave the sheet alone
+  const seen=nearSeenMap(),was=nearPop?JSON.stringify([nearPop.mode,nearPop.rows]):'';
+  if(mode==='host'){
+    const fresh=rows.filter(x=>!seen[x.key]);
+    if(nearPop&&nearPop.mode==='host'){       // still the host: the ones it listed (if still here) plus any new ones
+      nearPop.rows=rows.filter(x=>nearPop.rows.some(y=>y.code===x.code)||!seen[x.key]);
+      fresh.forEach(x=>nearSeenAdd(x.key));
+    }else if(fresh.length&&(nearPop||!nearBlocked())){
+      fresh.forEach(x=>nearSeenAdd(x.key));
+      nearPop={mode,rows:fresh,at:nearPop?nearPop.at:Date.now(),busy:null};
+    }else nearPop=null;
+  }else if(mode==='join'){
+    const hk=rows[0].key;
+    if(nearPop&&nearPop.mode==='join'&&(nearPop.rows[0]||{}).key===hk)nearPop.rows=rows;   // same host, same group: refresh who is joining too
+    else if(!seen[hk]&&(nearPop||!nearBlocked())){
+      nearSeenAdd(hk);
+      nearPop={mode,rows,at:nearPop?nearPop.at:Date.now(),busy:null};
+    }else nearPop=null;
+  }else nearPop=null;                          // nothing to offer: everyone it listed has gone, or the host is full for me
+  if(nearPop&&!nearPop.rows.length)nearPop=null;
+  const now=nearPop?JSON.stringify([nearPop.mode,nearPop.rows]):'';
+  if(now!==was){
+    if(nearPop&&!was)try{stat('round_near',{shown:nearPop.rows.length,mode:nearPop.mode,thru:nearScored(),players:myN});}catch(e){}
+    render();
+  }
+}
+// never on top of another question, a splash, or the install gate
+function nearBlocked(){
+  try{
+    if(installGateOn()||a2hsRoundGate)return true;
+    if(splash||roundSplash||teeAsk||joinSpanAsk||pairsAsk||orderAsk||endAsk||idleAsk||verifyUI||gamePick||puttAsk||parAsk||greenClash||mapInvite||photoCrop||exSheet)return true;
+    if(document.querySelector('#mapsplash,#roundsplash,#mapinvite,.splash'))return true;
+    return [...document.querySelectorAll('.vfWrap')].some(w=>w.id!=='nearAsk');
+  }catch(e){return false;}
+}
+function nearAskSheetHTML(){
+  if(!nearPop||!nearPop.rows.length)return '';
+  const any=nearPop.rows.some(r=>r.role==='join');
+  const rows=nearPop.rows.map(r=>{
+    const who=r.names.length?r.names.map(esc).join(' · '):'A golfer';
+    const right=r.role!=='join'?`<span class="tiny" style="flex:none;color:var(--green-mid);font-weight:600">${r.role==='too'?'Joining too':'Can join you'}</span>`
+      :`<button class="big warn" style="flex:none;width:auto;margin:0;padding:10px 16px" onclick="nearJoin('${esc(r.code)}')">${nearPop.busy===r.code?'Joining…':armJoinSwap===r.code?'⚠️ Tap again':'Join'}</button>`;
+    return `<div class="row"><div style="flex:1;min-width:0"><b>${who}</b><div class="tiny">${esc(r.course)}</div></div>${right}</div>`;
+  }).join('');
+  return `<div class="vfWrap" id="nearAsk" role="dialog" aria-modal="true" aria-labelledby="naTitle"><div class="vfCard">
+    <h2 id="naTitle" class="vfTitle">⚔️ Players nearby</h2>
+    <div class="tiny mb">${any?'Join up — your scores come with you.':'They can join your round.'}</div>
+    ${rows}
+    <button class="ghost mt" style="width:100%" onclick="nearKeep()">Keep my own round</button>
+  </div></div>`;
+}
+function nearKeep(){
+  if(!nearPop||Date.now()-nearPop.at<NEAR_TAP_GUARD_MS)return;   // the sheet just landed under a finger aimed at the map
+  try{stat('round_near',{answer:'keep'});}catch(e){}
+  nearPop=null;armJoinSwap=null;clearTimeout(armJoinTimer);render();
+}
+function nearJoin(code){
+  if(!nearPop||nearPop.busy||Date.now()-nearPop.at<NEAR_TAP_GUARD_MS)return;
+  const row=nearPop.rows.find(r=>r.code===code);if(!row||row.role!=='join')return;
+  // the first tap arms, exactly as every other join door does -- joining ends the round on this phone
+  if(S.round.started&&!isReview()&&armJoinSwap!==code){guardedJoin(code);return;}
+  nearPop.busy=code;render();
+  const claim=relayBattle({op:'nearjoin',code:(S.share&&S.share.on&&S.share.code)||null,dev:devId(),to:code,move:nearMoveN()}).catch(()=>null);
+  Promise.race([claim,new Promise(res=>setTimeout(()=>res(null),5000))]).then(r=>{
+    if(!nearPop||nearPop.busy!==code)return;
+    nearPop.busy=null;
+    const who=row.names.map(n=>n.split(' ')[0]).join(' & ')||'They';
+    if(r&&r.coming){                          // they tapped Join on us first: stay, they are on the way
+      try{stat('round_near',{answer:'join',coming:true});}catch(e){}
+      nearPop=null;armJoinSwap=null;render();shotToast(who+(row.names.length>1?' are':' is')+' joining you');return;}
+    if(r&&r.rehost){                          // the pop-up was a poll behind: the group gathers elsewhere now
+      nearPop=null;armJoinSwap=null;render();setTimeout(()=>{try{nearTick();}catch(e){}},300);return;}
+    if(r&&(r.full||r.gone)){
+      nearPop.rows=nearPop.rows.filter(x=>x.code!==code);if(!nearPop.rows.length)nearPop=null;
+      armJoinSwap=null;render();shotToast(r.full?'That group is full':'That round has moved on');return;}
+    try{stat('round_near',{answer:'join'});}catch(e){}
+    nearPop=null;
+    armJoinSwap=code;                         // still the second tap, however long the relay took to answer
+    joinFromInvite(code);                     // the existing join: ends my round, carries my holes into theirs
+  });
 }
 // MUST send on the socket we already hold, synchronously: endRound() calls
 // leaveShare() on a later line, which closes that socket — an awaited send
@@ -8677,7 +8874,7 @@ function render(){
   const sameScreen=window.__lastScr===scr;
   window.__lastScr=scr;
   try{if(window.__a2hsSync)window.__a2hsSync();}catch(e){}
-  const full=magBanner()+html+holeSplash()+verifySheetHTML()+joinWaitSheetHTML()+teeAskSheetHTML()+joinSpanSheetHTML()+rulesSheetHTML()+pairsAskSheetHTML()+wolfOrderSheetHTML()+endAskSheetHTML()+idleAskSheetHTML()+exportSheetHTML()+mapInviteHTML()+greenClashHTML()+gamePickSheetHTML()+(S.screen!=='map'?puttAskSheetHTML():'')+(S.screen!=='map'?parAskSheetHTML():'')+photoCropHTML()+cheerSplashHTML();
+  const full=magBanner()+html+holeSplash()+nearAskSheetHTML()+verifySheetHTML()+joinWaitSheetHTML()+teeAskSheetHTML()+joinSpanSheetHTML()+rulesSheetHTML()+pairsAskSheetHTML()+wolfOrderSheetHTML()+endAskSheetHTML()+idleAskSheetHTML()+exportSheetHTML()+mapInviteHTML()+greenClashHTML()+gamePickSheetHTML()+(S.screen!=='map'?puttAskSheetHTML():'')+(S.screen!=='map'?parAskSheetHTML():'')+photoCropHTML()+cheerSplashHTML();
   // Four phones syncing means render() fires constantly. Blowing away innerHTML
   // each time repainted the whole screen — that was the flicker on the course.
   // Identical output is a no-op; otherwise patch only the nodes that differ.
@@ -9317,7 +9514,8 @@ function vHome(){
       <div class="tiny">• <b>End Round Now</b> ends and saves <i>your</i> round — everyone else keeps playing, and can still score your row.</div>`:''}`
       :S.round.reopened?''
       :(S.share.on&&S.share.bf&&S.share.creator)?`<button class="ghost mt" style="width:100%" onclick="inviteFromMap();render()">👥 Open Room To Nearby Players — <b class="num" style="letter-spacing:2px">${esc(S.share.code)}</b></button>
-        <div class="tiny mt">Players near you pick it from <b>Join a round</b>; anyone can enter the code — your scores so far come with you. Typing the code works even before you tap.</div>`
+        <div class="tiny mt">Players near you pick it from <b>Join a round</b>; anyone can enter the code — your scores so far come with you. Typing the code works even before you tap.</div>
+        ${S.share.early&&S.round.started?`<button class="ghost mt" style="width:100%" onclick="mergeIntoRound()">⚔️ Merge into another group's round</button>`:''}`
       :`<button class="ghost mt" style="width:100%" onclick="goGroup()">👥 Make This A Group Round</button>
         ${S.round.started?`<button class="ghost mt" style="width:100%" onclick="mergeIntoRound()">⚔️ Merge into another group's round</button>
         <div class="tiny mt">Two groups, one tee: one of you makes a group round, the other merges into it — everyone's holes so far come along.</div>`:''}
@@ -14537,6 +14735,7 @@ function startRound(){
   if((withNearby||grpPicked)&&!S.share.on)shareRound();
   chalApplyTrackers();   // a putts goal is worthless if the tracker is off
   shellRound('started',shellRoundInfo());   // the Android shell raises its round notification + background GPS
+  setTimeout(()=>{try{nearTick();}catch(e){}},1500);   // anyone starting right beside us? (Players nearby)
 }
 function prefillNines(h){
   const par=S.course.holes[h].par,r=S.round.holes[h];
@@ -15265,6 +15464,9 @@ function bfScoredHoles(){
   try{return (S.round.holes||[]).filter(r=>r&&r.confirmed).length;}catch(e){return 0;}
 }
 function maybeBroadcastRound(){
+  // a hole just closed: if this round is being offered nearby, say so now -- the second hole ends
+  // the offer, and the next 10-second poll would leave it listed on other phones until then
+  try{if(nearTimer!=null)setTimeout(()=>{try{nearTick();}catch(e){}},300);}catch(e){}
   try{
     if(!S.round.started||S.round._bfSent||isReview())return;
     // THE CAPTAIN ANNOUNCES THE ROUND. Every phone used to race to open the
@@ -17216,6 +17418,7 @@ try{setTimeout(askPuttsOwed,400);}catch(e){}   // a hole carded while the prompt
 tryMagicLink();
 if(S.share&&S.share.on){primeCaches(false);syncConnect();}
 else lobbyConnect();
+try{if(S.round&&S.round.started)setTimeout(nearTick,4000);}catch(e){}   // relaunched inside the first 15 minutes: keep asking
 
 // ——— Add-to-Home-Screen coach bar ————————————————————————————
 // Browser-tab visitors only — standalone launches never see it. The direct
