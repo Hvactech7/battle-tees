@@ -557,7 +557,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-center in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1792883282';
+const BUILD='1792900209';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -15800,7 +15800,9 @@ function confirmBlockInner(done){
   if(mine.every(i=>cfOn(rec,i)))
     return `<div class="center" style="margin:4px 0 2px">${chips}</div>
       <div class="tiny center mt">✓ You're in — waiting on ${waitingOn.map(first).join(' · ')||'…'}</div>`;
-  const myScored=mine.every(i=>rec.gross[i]!=null);
+  // a score on screen counts: scores stage until Confirm, and a row that joined after the hole's par
+  // prefill has no stored gross until then (Tony 10/24: +/- showed a 6, Confirm my score stayed grey)
+  const myScored=mine.every(i=>stagedG(rec,S.round.cur,i)!=null);
   const final=act.every(i=>mine.includes(i)||cfOn(rec,i));
   const ok=myScored&&(!final||done);
   return `<div class="center" style="margin:4px 0 2px">${chips}</div>
