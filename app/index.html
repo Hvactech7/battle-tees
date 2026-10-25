@@ -557,7 +557,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-center in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1792900209';
+const BUILD='1792962178';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -4715,7 +4715,7 @@ function toggleShots(){
   if(b){b.style.opacity=showShots?'1':'.45';b.style.borderColor=showShots?'var(--green)':'';}
 }
 function loadLeaflet(){
-  if(window.L&&L.Map.prototype.setBearing)return Promise.resolve();
+  if(window.L&&L.Map.prototype.setBearing){fixTouchGestures();return Promise.resolve();}
   if(leafletP)return leafletP;
   const script=src=>new Promise((res,rej)=>{
     const sc=document.createElement('script');sc.src=src;
@@ -4746,8 +4746,37 @@ function loadLeaflet(){
       try{await script('vendor/leaflet-rotate.js');}
       catch(e){try{await script(CDN.rot);}catch(e2){}}
     }
+    fixTouchGestures();
   })().catch(e=>{leafletP=null;throw e;});
   return leafletP;
+}
+// LEAFLET-ROTATE 0.2.8 LEAVES A TWO-FINGER TAP HALF-RESET (Chardonnay 10/25: "t.lat" on three phones, once
+// each). Two fingers down and up without moving: its touchend clears _zooming but not _rotating, and keeps
+// listening. The next pinch is then read as a twist with no zoom centre and moves the map to `undefined` --
+// an uncaught TypeError, and the view lands on latitude -90 until the map is rebuilt. A gesture that never
+// moved now ends cleanly, and a move to no place is ignored rather than wrecking the view.
+function fixTouchGestures(){
+  try{
+    const TG=L.Map.TouchGestures&&L.Map.TouchGestures.prototype;
+    if(TG&&!TG._btFixed){
+      const end=TG._onTouchEnd;
+      TG._onTouchEnd=function(e){
+        const moved=this._moved&&(this._zooming||this._rotating);
+        end.call(this,e);
+        if(!moved){
+          this._zooming=false;this._rotating=false;
+          L.DomEvent.off(document,'touchmove',this._onTouchMove,this).off(document,'touchend touchcancel',this._onTouchEnd,this);
+        }
+      };
+      TG._btFixed=true;
+    }
+    const MP=L.Map.prototype;
+    if(!MP._btMoveSafe){
+      const mv=MP._move;
+      MP._move=function(center){return center?mv.apply(this,arguments):this;};
+      MP._btMoveSafe=true;
+    }
+  }catch(e){}
 }
 // Frame the satellite view at a KNOWN scale. `spanYds` is the ground covered
 // ACROSS the screen's narrower dimension — so 300 means the view is 300 yards
@@ -15856,7 +15885,9 @@ function vHoleNines(){
       return `<div class="banner ok">${L}: ${r.blitz?'⚡ Blitz! ':''}${split}</div>`;
     }).join('');
   }
-  const extrasCard=extrasCardHTML(act, rec);
+  // EVERYONE ON THE CARD, not just the game's seats (Chardonnay 10/25: Andrew and Garrett joined a 1v1 Match Play as
+  // players 3 and 4 -- on the card, "stroke only" -- and their own Putts row never showed on their phones)
+  const extrasCard=extrasCardHTML(cardIdx(), rec);
   const body=`${roomFullHTML()}${rulesNoticeHTML()}${joinPlayHTML()}${catchUpHTML()}<div class="card">
     ${act.some(i=>rec.gross[i]==null)?`<button class="ghost mb" style="width:100%" onclick="set(()=>prefillNines(${h}))">Everyone to par ${hole.par} — adjust from there</button>`:''}
     ${scoreRows}
