@@ -202,7 +202,7 @@
   .cheer-rname{font-family:Rajdhani,sans-serif;font-weight:700;font-size:19px;line-height:1.1}
   .cheer-rn{font-size:13px;color:var(--ink3);font-weight:400}
   .cheer-rline{font-size:14px;margin-top:3px}
-  #windrose{position:fixed;left:max(28px,calc(50vw - 212px));bottom:calc(236px + env(safe-area-inset-bottom));z-index:6;width:84px;height:98px;cursor:pointer;-webkit-tap-highlight-color:transparent;filter:drop-shadow(0 1px 2px rgba(0,0,0,.55))}
+  #windrose{position:fixed;left:max(28px,calc(50vw - 212px));bottom:calc(var(--mapbarH) + 140px);z-index:6;width:84px;height:98px;cursor:pointer;-webkit-tap-highlight-color:transparent;filter:drop-shadow(0 1px 2px rgba(0,0,0,.55))}
   #windrose.on{filter:drop-shadow(0 1px 2px rgba(0,0,0,.55))}
   details.faq{border-top:1px solid var(--line);padding:2px 0}
   details.faq summary{cursor:pointer;list-style:none;padding:10px 26px 10px 0;font-weight:600;font-size:16px;position:relative;line-height:1.3}
@@ -561,6 +561,9 @@
   html.light nav.tabs button.sel{color:var(--elec)}
   #holemap{position:fixed;top:62px;bottom:calc(66px + env(safe-area-inset-bottom));left:0;right:0;margin:0 auto;width:100%;max-width:480px;z-index:1;background:#0a0f18}
   /* extra side/bottom padding keeps the arrow buttons clear of iPhone rounded screen corners */
+  /* the GPS screen's button blocks sit 8 px above the bottom bar (Nathan 10/26: 4 px, then "lets try 8"); --mapbarH is the
+     bar's measured height (syncMapBarH) -- it grows with the safe-area inset and a two-line GPS line */
+  :root{--mapbarH:calc(66px + env(safe-area-inset-bottom))}
   .mapbar{position:fixed;bottom:0;left:0;right:0;margin:0 auto;width:100%;max-width:480px;background:var(--card);border-top:2px solid var(--green);padding:6px 22px calc(14px + env(safe-area-inset-bottom));z-index:5}
   .leaflet-container{font-family:inherit}
 </style>
@@ -572,7 +575,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-center in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1793051503';
+const BUILD='1793054666';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -5310,7 +5313,7 @@ function toggleMapCredits(){
 function mapCreditsChipHTML(){
   // rides INSIDE the map bar, 6 px above its top edge: a fixed 72 px went under the bar
   // whenever it grew (the elevation strip, a two-line GPS message) — click walk 9/17
-  return `<button id="mapattrib" onclick="toggleMapCredits()" style="position:absolute;right:8px;bottom:calc(100% + 6px);z-index:5;height:20px;padding:0 6px;border:none;border-radius:10px;background:rgba(10,16,26,.55);color:rgba(255,255,255,.72);font-size:10.5px;line-height:20px;font-family:inherit;max-width:92vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">ⓘ</button>`;
+  return `<button id="mapattrib" onclick="toggleMapCredits()" style="position:absolute;right:max(142px,calc(50% - 98px));bottom:calc(100% + 6px);z-index:5;height:20px;padding:0 6px;border:none;border-radius:10px;background:rgba(10,16,26,.55);color:rgba(255,255,255,.72);font-size:10.5px;line-height:20px;font-family:inherit;max-width:92vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">ⓘ</button>`;
 }
 function openMap(){
   primeGeo();                       // fires the iOS prompt on this tap
@@ -5352,7 +5355,7 @@ function clearScoreNag(ack){
 function scoreNagToast(){
   if(document.getElementById('scorenag'))return;   // already up, still unanswered
   const d=document.createElement('div');d.id='scorenag';
-  d.style.cssText='position:fixed;right:max(10px,calc(50vw - 230px));bottom:calc(226px + env(safe-area-inset-bottom));z-index:90;width:min(300px,80vw);background:var(--card);border:2px solid var(--amber-bd,#c9922e);border-radius:12px;padding:10px 12px;box-shadow:3px 3px 0 rgba(0,0,0,.4)';
+  d.style.cssText='position:fixed;right:max(10px,calc(50vw - 230px));bottom:calc(var(--mapbarH) + 122px);z-index:90;width:min(300px,80vw);background:var(--card);border:2px solid var(--amber-bd,#c9922e);border-radius:12px;padding:10px 12px;box-shadow:3px 3px 0 rgba(0,0,0,.4)';
   d.innerHTML='<div style="display:flex;align-items:flex-start;gap:8px">'
     +'<div class="tiny" style="flex:1;font-size:14.5px;text-align:center;padding-top:3px"><b>Score this hole first</b><br>close this and ▶ moves on</div>'
     +'<button onclick="clearScoreNag(true)" aria-label="Close" style="flex:none;border:1px solid var(--line);background:var(--card);color:var(--ink2);border-radius:8px;width:40px;height:40px;padding:0;display:flex;align-items:center;justify-content:center">'+XICON+'</button></div>'
@@ -5569,7 +5572,7 @@ function updateTrackBtn(){
   b.textContent=armed?'Mark It':'Track It';
   let x=document.getElementById('trackxbtn');
   if(armed&&!x){
-    b.insertAdjacentHTML('afterend','<button id="trackxbtn" onclick="clearTrackStart()" aria-label="Cancel this shot" style="position:fixed;left:max(138px,calc(50vw - 102px));bottom:calc(112px + env(safe-area-inset-bottom));z-index:6;width:46px;height:46px;padding:0;display:flex;align-items:center;justify-content:center;background:var(--card);border:2px solid var(--red,#c0392b);border-radius:12px;color:var(--red,#c0392b);box-shadow:2px 2px 0 rgba(0,0,0,.35)">'+XICON+'</button>');
+    b.insertAdjacentHTML('afterend','<button id="trackxbtn" onclick="clearTrackStart()" aria-label="Cancel this shot" style="position:fixed;left:max(138px,calc(50vw - 102px));bottom:calc(var(--mapbarH) + 8px);z-index:6;width:46px;height:46px;padding:0;display:flex;align-items:center;justify-content:center;background:var(--card);border:2px solid var(--red,#c0392b);border-radius:12px;color:var(--red,#c0392b);box-shadow:2px 2px 0 rgba(0,0,0,.35)">'+XICON+'</button>');
   }else if(!armed&&x)x.remove();
   b.style.borderColor=armed?'var(--amber-bd)':'var(--green)';
   b.style.color=armed?'var(--amber-bd)':'var(--green-mid)';
@@ -5593,7 +5596,7 @@ function trackShotTap(){
 function openClubSheet(yds){
   closeClubSheet();
   const d=document.createElement('div');d.id='clubsheet';
-  d.style.cssText='position:fixed;left:0;right:0;margin:0 auto;bottom:calc(172px + env(safe-area-inset-bottom));z-index:80;width:min(440px,94vw);background:var(--card);border:2px solid var(--green);border-radius:14px;padding:12px;box-shadow:4px 4px 0 rgba(0,0,0,.4)';
+  d.style.cssText='position:fixed;left:0;right:0;margin:0 auto;bottom:calc(var(--mapbarH) + 68px);z-index:80;width:min(440px,94vw);background:var(--card);border:2px solid var(--green);border-radius:14px;padding:12px;box-shadow:4px 4px 0 rgba(0,0,0,.4)';
   d.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <b class="num" style="font-size:24px">${ydDisp(yds)}${uLbl()}</b><span class="tiny">what club was that?</span>
       <button class="ghost danger xbtn" aria-label="Cancel" onclick="cancelMark()">${XICON}</button></div>
@@ -5605,7 +5608,7 @@ function closeClubSheet(){const d=document.getElementById('clubsheet');if(d)d.re
 // brief centered message — same throwaway-overlay pattern as flashYardage
 function shotToast(msg,ms){
   const d=document.createElement('div');
-  d.style.cssText='position:fixed;left:0;right:0;margin:0 auto;width:fit-content;bottom:calc(178px + env(safe-area-inset-bottom));z-index:90;max-width:min(420px,92vw);background:var(--card);border:2px solid var(--amber-bd,#c9922e);border-radius:12px;padding:10px 14px;box-shadow:3px 3px 0 rgba(0,0,0,.4);pointer-events:none;text-align:center';
+  d.style.cssText='position:fixed;left:0;right:0;margin:0 auto;width:fit-content;bottom:calc(var(--mapbarH) + 74px);z-index:90;max-width:min(420px,92vw);background:var(--card);border:2px solid var(--amber-bd,#c9922e);border-radius:12px;padding:10px 14px;box-shadow:3px 3px 0 rgba(0,0,0,.4);pointer-events:none;text-align:center';
   d.innerHTML=`<span class="tiny" style="font-size:14px">${esc(msg)}</span>`;
   document.body.appendChild(d);
   setTimeout(()=>{try{d.remove();}catch(e){}},ms||2600);
@@ -5628,7 +5631,7 @@ let undoShot=null,undoTimer=null;
 function undoTrackHTML(){
   if(!undoShot)return '';
   return `<button id="trackundobtn" onclick="undoTrackShot()"
-    style="position:fixed;left:max(138px,calc(50vw - 102px));bottom:calc(112px + env(safe-area-inset-bottom));
+    style="position:fixed;left:max(138px,calc(50vw - 102px));bottom:calc(var(--mapbarH) + 8px);
     z-index:7;height:46px;padding:0 15px;background:var(--card);border:2px solid var(--amber-bd,#c9922e);
     border-radius:12px;color:var(--amber-bd,#c9922e);font-family:Rajdhani,Inter,sans-serif;font-weight:700;
     font-size:17px;letter-spacing:.4px;white-space:nowrap;box-shadow:2px 2px 0 rgba(0,0,0,.35)">↩ Undo Track It</button>`;
@@ -5755,7 +5758,7 @@ function mapScoreState(){
 }
 function mapConfirmLabel(){
   const st=mapScoreState();
-  return st==='in'?('✓ Hole '+(mapHole+1)+' in'):st==='armed'?'✓ Confirm':'Score';
+  return st==='in'?('✓ Hole '+(mapHole+1)+' in'):st==='armed'?'✓ Confirm':'Score It';   // "Score It", like Track It (Nathan 10/26)
 }
 function paintMapConfirm(){
   const b=document.getElementById('mapconfirm');if(!b)return;
@@ -5843,7 +5846,7 @@ function mapStatChipsHTML(hole){
   };
   // the pair spans exactly the Track It button beneath it; on a par 3 the single
   // GIR chip flexes to the same 120px so the stack still lines up
-  return `<div style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(166px + env(safe-area-inset-bottom));z-index:6;display:flex;gap:6px;width:120px">
+  return `<div style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(var(--mapbarH) + 62px);z-index:6;display:flex;gap:6px;width:120px">
     ${hole.par>=4?chip('fw','FW'):''}${chip('gir','GIR')}
   </div>`;
 }
@@ -5906,11 +5909,11 @@ function vMap(){
         <div style="font-size:10px;font-weight:600;opacity:.85;letter-spacing:.5px">${S.share.bf?'TAP TO INVITE':'JOIN CODE'}</div>
         <div class="num" style="font-size:22px;letter-spacing:3px">${esc(S.share.code)}</div></div>`:''}${codeShown?'':gameBadgeHTML()}</div>`)+`
   <div id="holemap"></div>
-  <div id="windrose" onclick="toggleWindMode()" onpointerdown="windRosePD(event)" onpointerup="windRosePU()" onpointercancel="windRosePU()" oncontextmenu="return false" style="display:none${manualShown?';bottom:calc(306px + env(safe-area-inset-bottom))':''}"></div>
+  <div id="windrose" onclick="toggleWindMode()" onpointerdown="windRosePD(event)" onpointerup="windRosePU()" onpointercancel="windRosePU()" oncontextmenu="return false" style="display:none${manualShown?';bottom:calc(var(--mapbarH) + 210px)':''}"></div>
   ${mapStatChipsHTML(hole)}
   ${greadBtnHTML()}
-  ${gpsOnly()?'':`<button id="trackbtn" onclick="trackShotTap()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(112px + env(safe-area-inset-bottom));z-index:6;width:120px;height:46px;background:var(--card);border:2px solid ${trackShot&&trackShot.hole===mapHole?'var(--amber-bd)':'var(--green)'};border-radius:12px;color:${trackShot&&trackShot.hole===mapHole?'var(--amber-bd)':'var(--green-mid)'};font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:19px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">${trackShot&&trackShot.hole===mapHole?'Mark It':'Track It'}</button>`}
-  ${gpsOnly()?'':(trackShot&&trackShot.hole===mapHole?`<button id="trackxbtn" onclick="clearTrackStart()" aria-label="Cancel this shot" style="position:fixed;left:max(138px,calc(50vw - 102px));bottom:calc(112px + env(safe-area-inset-bottom));z-index:6;width:46px;height:46px;padding:0;display:flex;align-items:center;justify-content:center;background:var(--card);border:2px solid var(--red,#c0392b);border-radius:12px;color:var(--red,#c0392b);box-shadow:2px 2px 0 rgba(0,0,0,.35)">${XICON}</button>`:'')}
+  ${gpsOnly()?'':`<button id="trackbtn" onclick="trackShotTap()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(var(--mapbarH) + 8px);z-index:6;width:120px;height:46px;background:var(--card);border:2px solid ${trackShot&&trackShot.hole===mapHole?'var(--amber-bd)':'var(--green)'};border-radius:12px;color:${trackShot&&trackShot.hole===mapHole?'var(--amber-bd)':'var(--green-mid)'};font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:19px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">${trackShot&&trackShot.hole===mapHole?'Mark It':'Track It'}</button>`}
+  ${gpsOnly()?'':(trackShot&&trackShot.hole===mapHole?`<button id="trackxbtn" onclick="clearTrackStart()" aria-label="Cancel this shot" style="position:fixed;left:max(138px,calc(50vw - 102px));bottom:calc(var(--mapbarH) + 8px);z-index:6;width:46px;height:46px;padding:0;display:flex;align-items:center;justify-content:center;background:var(--card);border:2px solid var(--red,#c0392b);border-radius:12px;color:var(--red,#c0392b);box-shadow:2px 2px 0 rgba(0,0,0,.35)">${XICON}</button>`:'')}
   ${gpsOnly()?'':undoTrackHTML()}
   ${(()=>{try{
       // Under amnesia the hole is unmapped BY DEFINITION. This runs during
@@ -5927,11 +5930,11 @@ function vMap(){
       const started=!!(S.teeFix&&(S.teeFix[(amnesiaOn(S.course.id)?'amn:':'')+S.course.id]||{})[physHole(mapHole)])
         ||!!((S.round.manualGreens||{})[physHole(mapHole)]);
       const lbl=(manualOn||started)?'🔄 Manual':'📍 Map this hole';
-      return `<button id="manualbtn" onclick="manualModeTap()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(220px + env(safe-area-inset-bottom));z-index:6;height:46px;padding:0 14px;background:var(--card);border:2px solid var(--elec,#2b86ec);border-radius:12px;color:var(--elec,#2b86ec);font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:17px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">${lbl}</button>`;
+      return `<button id="manualbtn" onclick="manualModeTap()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(var(--mapbarH) + 116px);z-index:6;height:46px;padding:0 14px;background:var(--card);border:2px solid var(--elec,#2b86ec);border-radius:12px;color:var(--elec,#2b86ec);font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:17px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">${lbl}</button>`;
     }catch(e){return '';}})()}
   <button onclick="go(gpsOnly()?'setup':'hole')" style="position:fixed;right:max(10px,calc(50vw - 230px));top:calc(100px + env(safe-area-inset-top));z-index:6;background:rgba(15,21,34,.82);border:1.5px solid var(--line);border-radius:12px;color:#fff;padding:10px 17px;font-size:17px;font-weight:600;font-family:inherit">Back</button>
-  ${gpsOnly()?'':`<button id="mapconfirm" onclick="mapConfirm()" style="position:fixed;right:max(10px,calc(50vw - 230px));bottom:calc(166px + env(safe-area-inset-bottom));z-index:6;width:126px;height:46px;background:${mapScoreState()==='in'?'var(--green-lt)':mapScoreState()==='armed'?'#2b86ec':'rgba(15,21,34,.82)'};border:2px solid ${mapScoreState()==='in'?'var(--green)':mapScoreState()==='armed'?'var(--elec-dk,#1c5eb0)':'var(--line)'};border-radius:12px;color:${mapScoreState()==='in'?'var(--green-ink)':mapScoreState()==='armed'?'#eef6ff':'var(--ink3)'};font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:${mapScoreState()==='in'?'15px':'19px'};box-shadow:2px 2px 0 rgba(0,0,0,.35)">${mapConfirmLabel()}</button>
-  <div style="position:fixed;right:max(10px,calc(50vw - 230px));bottom:calc(112px + env(safe-area-inset-bottom));z-index:6;display:flex;align-items:center;background:var(--card);border:2px solid var(--green);border-radius:12px;overflow:hidden;box-shadow:2px 2px 0 rgba(0,0,0,.35)">
+  ${gpsOnly()?'':`<button id="mapconfirm" onclick="mapConfirm()" style="position:fixed;right:max(10px,calc(50vw - 230px));bottom:calc(var(--mapbarH) + 62px);z-index:6;width:126px;height:46px;background:${mapScoreState()==='in'?'var(--green-lt)':mapScoreState()==='armed'?'#2b86ec':'rgba(15,21,34,.82)'};border:2px solid ${mapScoreState()==='in'?'var(--green)':mapScoreState()==='armed'?'var(--elec-dk,#1c5eb0)':'var(--line)'};border-radius:12px;color:${mapScoreState()==='in'?'var(--green-ink)':mapScoreState()==='armed'?'#eef6ff':'var(--ink3)'};font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:${mapScoreState()==='in'?'15px':'19px'};box-shadow:2px 2px 0 rgba(0,0,0,.35)">${mapConfirmLabel()}</button>
+  <div style="position:fixed;right:max(10px,calc(50vw - 230px));bottom:calc(var(--mapbarH) + 8px);z-index:6;display:flex;align-items:center;background:var(--card);border:2px solid var(--green);border-radius:12px;overflow:hidden;box-shadow:2px 2px 0 rgba(0,0,0,.35)">
     <button onclick="mapChScore(-1)" style="width:42px;height:46px;background:none;border:none;color:var(--elec);font-size:24px;font-weight:800">−</button>
     <div id="mapsc" class="num" onclick="showMapConfirm()" style="min-width:36px;text-align:center;font-size:26px;cursor:pointer">${(()=>{const r=S.round.holes[mapHole];if(!r||!r.gross)return hole.par;
       // the STAGED score, not the committed one: a GPS auto-frame repaint mid-entry
@@ -6380,10 +6383,10 @@ function manualModeTap(){
     // green alone gives a distance with no hole to hang it on, and the tee is
     // the half we could never infer — the drag added earlier only exists on
     // holes that already carry a line, which is exactly the case Manual is not.
-    b.insertAdjacentHTML('afterend',`<button id="mtbtn" onclick="teeBtnTap()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(326px + env(safe-area-inset-bottom));z-index:6;height:46px;padding:0 14px;background:var(--card);border:2px solid var(--green);border-radius:12px;color:var(--green-mid);font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:17px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">📍 Set Tee</button>`);
+    b.insertAdjacentHTML('afterend',`<button id="mtbtn" onclick="teeBtnTap()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(var(--mapbarH) + 222px);z-index:6;height:46px;padding:0 14px;background:var(--card);border:2px solid var(--green);border-radius:12px;color:var(--green-mid);font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:17px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">📍 Set Tee</button>`);
   }
   if(!document.getElementById('mgbtn')&&b){
-    b.insertAdjacentHTML('afterend',`<button id="mgbtn" onclick="greenBtnTap()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(274px + env(safe-area-inset-bottom));z-index:6;height:46px;padding:0 14px;background:var(--card);border:2px solid var(--green);border-radius:12px;color:var(--green-mid);font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:17px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">⛳ Set Green</button>`);
+    b.insertAdjacentHTML('afterend',`<button id="mgbtn" onclick="greenBtnTap()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(var(--mapbarH) + 170px);z-index:6;height:46px;padding:0 14px;background:var(--card);border:2px solid var(--green);border-radius:12px;color:var(--green-mid);font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:17px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">⛳ Set Green</button>`);
   }
   // Coming back to a hole you already marked is a different job from marking a
   // fresh one — say which job you are in, and both ways out of a bad mark.
@@ -6391,7 +6394,7 @@ function manualModeTap(){
   markBtns();   // the buttons above are inserted with hardcoded "Set ..." text
 
   if(sb)sb.textContent=(already.tee||already.green)
-    ? 'hole already marked — drag a pin to nudge it, tap a pin or ✕ to clear one, or press 🔄 Manual again to wipe both and start over. Then Score → Confirm.'
+    ? 'hole already marked — drag a pin to nudge it, tap a pin or ✕ to clear one, or press 🔄 Manual again to wipe both and start over. Then Score It → Confirm.'
     : (me
       ? (cardY?`manual mode — twist to rotate, pinch to zoom. Card says ${ydDisp(cardY)}${uLbl()}, so the green sits near the gold ring. Found it? Tap “⛳ Set Green”.`
               :`manual mode — twist to rotate, pinch to zoom. Find the green, then tap “⛳ Set Green”.`)
@@ -7290,9 +7293,28 @@ function refreshHoleMap(){
   // two-line location note), so the map's idea of its own height can be stale
   try{LMAP.invalidateSize(false);}catch(e){}
 }
+// The bar's measured height -> --mapbarH (see .mapbar). The bar grows and shrinks on its own: the
+// line under the yardages reads "loading…" first and a dozen code paths rewrite it in place, without
+// a render. A MutationObserver on the bar re-measures on every one of those edits (a ResizeObserver
+// alone missed the shrink back -- Wolf on 10/26 left the blocks 16 px high); the ResizeObserver
+// stays for safe-area and rotation changes, and render() re-measures after each map paint.
+let mapBarRO=null,mapBarMO=null,mapBarEl=null;
+function syncMapBarH(){
+  try{
+    const b=document.querySelector('.mapbar');if(!b)return;
+    const h=Math.round(b.getBoundingClientRect().height);
+    if(h>0&&document.documentElement.style.getPropertyValue('--mapbarH')!==h+'px')document.documentElement.style.setProperty('--mapbarH',h+'px');
+    if(b!==mapBarEl){
+      if(mapBarRO)mapBarRO.disconnect();if(mapBarMO)mapBarMO.disconnect();mapBarEl=b;
+      if(window.ResizeObserver){mapBarRO=new ResizeObserver(()=>syncMapBarH());mapBarRO.observe(b);}
+      if(window.MutationObserver){mapBarMO=new MutationObserver(()=>syncMapBarH());mapBarMO.observe(b,{childList:true,subtree:true,characterData:true,attributes:true});}
+    }
+  }catch(e){}
+}
 async function initHoleMap(){
   try{if(S.round&&S.round.started&&!coursePreview)windFetch();}catch(e){}   // throttled: a cached day is not refetched
   try{setTimeout(paintWindRose,50);}catch(e){}
+  syncMapBarH();
   const el=document.getElementById('holemap');
   if(!el)return;
   // Same course, same hole, same mode, map still on this very div: nothing to
@@ -8271,7 +8293,7 @@ function greadBtnHTML(){
   if(!playsLikeEntitled()||!greensUrlFor(S.course)||amnesiaOn(S.course.id))return '';
   greensEnsure();
   // on the map above Score, not in the bar: a third bar button squeezed the F/M/B yardages at 375 px
-  return `<button id="greadbtn" onclick="openGreenRead()" aria-label="Green slope" style="position:fixed;right:max(10px,calc(50vw - 230px));bottom:calc(220px + env(safe-area-inset-bottom));z-index:6;width:54px;height:54px;padding:0;display:flex;align-items:center;justify-content:center;background:var(--card);border:2px solid #2f9d5f;border-radius:12px;color:var(--gread-ink,#7fe3a1);box-shadow:2px 2px 0 rgba(0,0,0,.35)">${GREAD_ICON}</button>`;
+  return `<button id="greadbtn" onclick="openGreenRead()" aria-label="Green slope" style="position:fixed;right:max(10px,calc(50vw - 230px));bottom:calc(var(--mapbarH) + 116px);z-index:6;width:54px;height:54px;padding:0;display:flex;align-items:center;justify-content:center;background:var(--card);border:2px solid #2f9d5f;border-radius:12px;color:var(--gread-ink,#7fe3a1);box-shadow:2px 2px 0 rgba(0,0,0,.35)">${GREAD_ICON}</button>`;
 }
 function greadHole(){const g=greensEnsure();return g&&g.holes[physHole(mapHole)+1]||null;}
 function openGreenRead(){
@@ -9268,6 +9290,9 @@ function render(){
       morphKids(el,tmp);
     }else el.innerHTML=full;
   }
+  // the GPS buttons sit off the bar's height -- re-measure after every map paint: a bar that grew
+  // for a moment (Wolf's order-of-play note) left them 16 px high when it shrank back (10/26 walk)
+  if(scr==='map')try{syncMapBarH();}catch(e){}
   try{
     keepOpen.forEach(id=>{const d=document.getElementById(id);if(d&&!d.open)d.open=true;});
     keepInput.forEach(([id,v,dv,rec])=>{const i=document.getElementById(id);if(!i)return;
