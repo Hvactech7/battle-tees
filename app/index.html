@@ -439,6 +439,17 @@
   .bbb-ph{font-size:34px;flex:none;margin:0 14px 0 0}
   .gamebtn.nasg{background:rgba(70,99,217,.10);border-color:#4663d9;box-shadow:3px 3px 0 #2a3b85}
   .nas-ph{font-size:34px;flex:none;margin:0 14px 0 0}
+  .gamebtn.junkg{background:rgba(224,128,60,.10);border-color:#e0803c;box-shadow:3px 3px 0 #8a4a1f}
+  .gamebtn.junkg:active{box-shadow:1px 1px 0 #8a4a1f}
+  .gamebtn.snakeg{background:rgba(87,179,106,.10);border-color:#57b36a;box-shadow:3px 3px 0 #2e6b3b}
+  .gamebtn.snakeg:active{box-shadow:1px 1px 0 #2e6b3b}
+  .junk-ph,.snake-ph{font-size:38px;flex:none;margin:0 14px 0 0}
+  .junkrow{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 6px}
+  .junkchip{padding:7px 12px;border-radius:999px;border:2px solid var(--line);background:var(--card);color:var(--ink);
+    font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:16px;line-height:1.1}
+  .junkchip.on{border-color:#e0803c;background:rgba(224,128,60,.20)}
+  .junkgot{display:inline-block;padding:2px 8px;border-radius:999px;font-size:13px;font-weight:700;
+    background:rgba(224,128,60,.16);color:var(--ink);margin:2px 4px 2px 0}
   .gamebtn.sking{background:rgba(61,220,151,.10);border-color:#3ddc97;box-shadow:3px 3px 0 #1f7d57}
   /* the game you already have — a ring and a chip, so "picked for you" is
      visible without reading a word of it */
@@ -557,7 +568,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-center in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1792962178';
+const BUILD='1793045378';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -698,6 +709,8 @@ function defaultConfig(){
     bestball:{pairing:0},
     umbrella:{pairing:0},
     bbb:{n:4},
+    junk:{n:4,pts:{birdie:1,eagle:2,greenie:1,sandy:1,barkie:1,splashy:0,polie:1,chip:1,three:0}},
+    snake:{n:4,grow:true},
     nassau:{n:4,press:'manual',pairing:0},
     skins:{n:4,amt:1,carry:true,per:null},
     games:['wolf'],
@@ -953,6 +966,8 @@ function migrateState(s){
       if(!s.config.sixes)s.config.sixes={pairing:0};
       if(!s.config.hammer)s.config.hammer={on:false};
       if(!s.config.bbb)s.config.bbb={n:4};
+      if(!s.config.junk)s.config.junk={n:4,pts:{birdie:1,eagle:2,greenie:1,sandy:1,barkie:1,splashy:0,polie:1,chip:1,three:0}};
+      if(!s.config.snake)s.config.snake={n:4,grow:true};
       if(!s.config.nassau)s.config.nassau={n:4,press:'manual'};
       if(!s.config.skins)s.config.skins={n:4,amt:1,carry:true,per:null};
       if(!s.config.games)s.config.games=[s.config.game||'wolf'];
@@ -1494,7 +1509,7 @@ function applyOp(k,v,defer){
         var widened=false;
         if(v.started){
           const realN=Math.min(4,Math.max(1,(v.players||[]).filter(isRealPl).length));
-          [['stroke',1],['stbl',1],['quota',1],['bbb',2],['skins',2]].forEach(([g,mn])=>{
+          [['stroke',1],['stbl',1],['quota',1],['bbb',2],['skins',2],['junk',2],['snake',2]].forEach(([g,mn])=>{
             if(S.config[g]&&(S.config[g].n||0)<Math.max(mn,Math.min(4,realN))){S.config[g].n=Math.max(mn,Math.min(4,realN));widened=true;}
           });
           if(S.config.nassau&&realN>=4&&S.config.nassau.n!==4){S.config.nassau.n=4;widened=true;}
@@ -1563,7 +1578,7 @@ function applyOp(k,v,defer){
         // ...and the games widen for them exactly as THE DOUG FIX does above (grow-only)
         if(seated){
           const realN=Math.min(4,Math.max(1,S.players.filter(isRealPl).length));
-          [['stroke',1],['stbl',1],['quota',1],['bbb',2],['skins',2]].forEach(([g,mn])=>{
+          [['stroke',1],['stbl',1],['quota',1],['bbb',2],['skins',2],['junk',2],['snake',2]].forEach(([g,mn])=>{
             if(S.config[g]&&(S.config[g].n||0)<Math.max(mn,Math.min(4,realN)))S.config[g].n=Math.max(mn,Math.min(4,realN));
           });
           if(S.config.nassau&&realN>=4)S.config.nassau.n=4;
@@ -1959,7 +1974,7 @@ function claimMySlot(steal){
       // left a joiner in seat 3 behind a friend already in seat 4 at n=3 -- his phone paid Quota without
       // that friend for 50 minutes while every other phone counted four
       {const realN=Math.min(4,Math.max(free+1,S.players.filter(isRealPl).length));
-      ['stroke','stbl','quota','skins','bbb'].forEach(k=>{
+      ['stroke','stbl','quota','skins','bbb','junk','snake'].forEach(k=>{
         if(S.config[k]&&S.config[k].n!=null)S.config[k].n=Math.max(S.config[k].n,realN);});}
       applyTeePrefs();
       // ...and the prefill pars carded on that seat were nobody's golf: clear them -- Catch up then offers
@@ -3834,7 +3849,7 @@ function setPayLens(v){
 // meant the round's own, not one phone's view. Money call sites take payLens().
 function primaryLens(){return recLens();}
 // Round screens score by the game the round was started as; setup/home follow the picked game.
-const STACKABLE=['nines','stroke','bestball','stableford','quota','sixes','umbrella','bbb','nassau','skins'];
+const STACKABLE=['nines','stroke','bestball','stableford','quota','sixes','umbrella','bbb','nassau','skins','junk','snake'];
 // Games that can join a stack as a guest but can't host one (their primary
 // hole screens don't carry the shared tap cards): vegas needs only gross
 // scores, so it guests cleanly on any host.
@@ -3852,6 +3867,8 @@ function computeFor(g){
     case 'matchplay':return computeMatchPlay();
     case 'nassau':return computeNassau();
     case 'bbb':return computeBBB();
+    case 'junk':return computeJunk();
+    case 'snake':return computeSnake();
     case 'sixes':return computeSixes();
     case 'umbrella':return computeUmbrella();
     case 'quota':return computeQuota();
@@ -3868,7 +3885,7 @@ function gameOn(){
   const roundScr=['hole','standings','settle','map'].includes(S.screen);
   return (roundScr&&S.round.started&&S.round.game)||S.config.game||'wolf';
 }
-function gameName(g){const x=g||gameOn();return x==='nines'?'9’s':x==='vegas'?'Vegas':x==='stroke'?'Stroke':x==='bestball'?'Best Ball':x==='scramble'?'Scramble':x==='stableford'?'Stableford':x==='quota'?'Quota':x==='sixes'?'Sixes':x==='umbrella'?'Umbrella':x==='bbb'?'Bingo Bango Bongo':x==='nassau'?'Nassau':x==='skins'?'Skins':x==='matchplay'?'Match Play':'Wolf';}
+function gameName(g){const x=g||gameOn();return x==='nines'?'9’s':x==='vegas'?'Vegas':x==='stroke'?'Stroke':x==='bestball'?'Best Ball':x==='scramble'?'Scramble':x==='stableford'?'Stableford':x==='quota'?'Quota':x==='sixes'?'Sixes':x==='umbrella'?'Umbrella':x==='bbb'?'Bingo Bango Bongo':x==='junk'?'Junk':x==='snake'?'Snake':x==='nassau'?'Nassau':x==='skins'?'Skins':x==='matchplay'?'Match Play':'Wolf';}
 function NP(){
   const g=engineGame||gameOn();   // engines size their roster by THEIR game, not the viewer's main
   // 9's IS A THREEBALL. Five, three and one is a three-way split; the old
@@ -3880,6 +3897,7 @@ function NP(){
   if(g==='stableford'&&S.config.stbl)return Math.min(4,Math.max(1,S.config.stbl.n||4));
   if(g==='quota'&&S.config.quota)return Math.min(4,Math.max(1,S.config.quota.n||4));
   if(g==='bbb'&&S.config.bbb)return Math.min(4,Math.max(2,S.config.bbb.n||4));
+  if((g==='junk'||g==='snake')&&S.config[g])return Math.min(4,Math.max(2,S.config[g].n||4));
   if(g==='matchplay')return mp2On()?4:2;  // 1v1 -- or two 1v1 matches when two late joiners play each other (10/18)
   if(g==='nassau'&&S.config.nassau)return S.config.nassau.n===2?2:4;
   if(g==='scramble'&&S.config.scramble)return S.config.scramble.teams==='duo'?2:4;
@@ -4331,6 +4349,89 @@ function computeBBB(){
     ['bingo','bango','bongo'].forEach(k=>{const i=b[k];if(i!=null&&i>=0&&i<4)led[i]+=1;});
   }
   return {ledgers:{net:led.slice(),gross:led.slice()},perHole:null,carries:{net:0,gross:0},lenses:['net','gross']};
+}
+// JUNK -- dots, trash, garbage: points for the good things on a hole, paid on
+// the difference between every two players exactly like Bingo Bango Bongo.
+// Each item is worth what the group sets it to (0 = not in the game).
+// Three come straight off the card: a gross birdie or eagle, the greenie (the
+// par 3's closest-to-pin pick -- or the only claim when nobody picked -- with
+// par or better) and a 3-putt (off the putts answer). The rest are claims the
+// golfer taps for himself on the putts sheet after the hole. They live in the
+// per-player stats block (stats.j<item>) beside putts, so two phones claiming
+// on one hole merge slot by slot instead of overwriting each other. Sandy,
+// barkie and splashy pay only with par or better, the way the game is played.
+const JUNK_ITEMS=[['birdie','Birdie'],['eagle','Eagle'],['greenie','Greenie'],['sandy','Sandy'],['barkie','Barkie'],
+  ['splashy','Splashy'],['polie','Polie'],['chip','Chip-in'],['three','3-putt']];
+const JUNK_TAPS=['greenie','sandy','barkie','splashy','polie','chip'];
+const JUNK_PAR=['greenie','sandy','barkie','splashy'];
+const JUNK_SAY={birdie:'gross birdie',eagle:'eagle or better',greenie:'closest on a par 3, then par',sandy:'par after a bunker',
+  barkie:'par after hitting a tree',splashy:'par after the water',polie:'holed a putt longer than the flagstick',
+  chip:'holed out from off the green',three:'3 putts or more'};
+function junkDefaults(){return {birdie:1,eagle:2,greenie:1,sandy:1,barkie:1,splashy:0,polie:1,chip:1,three:0};}
+function junkPts(){const c=S.config.junk||{};return Object.assign(junkDefaults(),c.pts||{});}
+function junkPar(h){return (S.course.holes[physHole(h)]||{par:4}).par;}
+function junkClaim(rec,k,i){const a=rec&&rec.stats&&rec.stats['j'+k];return !!(a&&a[i]);}
+function junkTapKeys(h){const P=junkPts(),p3=junkPar(h)===3;return JUNK_TAPS.filter(k=>P[k]&&(k!=='greenie'||p3));}
+// The greenie on hole h: the closest-to-pin pick when one was made, else the
+// lone claim. 'tie' = two claims and no pick yet (the Score screen asks).
+function junkGreenie(rec,h,seats){
+  if(!rec||junkPar(h)!==3)return -1;
+  if(rec.ctp!=null)return (rec.ctp>=0&&seats.includes(rec.ctp))?rec.ctp:-1;
+  const cl=seats.filter(i=>junkClaim(rec,'greenie',i));
+  return cl.length===1?cl[0]:cl.length>1?'tie':-1;
+}
+// what player i earned on hole h: [[item,points],...]
+function junkHoleItems(rec,h,i,seats){
+  const P=junkPts(),out=[];
+  const g=rec&&rec.gross?rec.gross[i]:null;if(g==null)return out;
+  const d=g-junkPar(h);
+  if(d<=-2&&P.eagle)out.push(['eagle',P.eagle]);
+  else if(d<=-1&&P.birdie)out.push(['birdie',P.birdie]);
+  if(P.greenie&&d<=0&&junkGreenie(rec,h,seats)===i)out.push(['greenie',P.greenie]);
+  ['sandy','barkie','splashy','polie','chip'].forEach(k=>{
+    if(P[k]&&junkClaim(rec,k,i)&&(d<=0||!JUNK_PAR.includes(k)))out.push([k,P[k]]);});
+  const st=rec.stats||{};
+  if(P.three&&puttsEntered(rec,i)&&st.putts&&st.putts[i]>=3)out.push(['three',P.three]);
+  return out;
+}
+function computeJunk(){
+  const seats=actIdx(),led=[0,0,0,0],items=[{},{},{},{}];
+  for(const h of playOrder()){
+    const rec=S.round.holes[h];if(!rec||!rec.confirmed||sinceSkip('junk',h))continue;
+    seats.forEach(i=>junkHoleItems(rec,h,i,seats).forEach(([k,p])=>{led[i]+=p;items[i][k]=(items[i][k]||0)+1;}));
+  }
+  return {ledgers:{net:led.slice(),gross:led.slice()},items,perHole:null,carries:{net:0,gross:0},lenses:['net','gross']};
+}
+// SNAKE: every 3-putt (three or more) takes the snake. Whoever has it when the
+// round ends pays every other player what it is worth -- a point for every
+// 3-putt in the round, or one flat point with "grows" off. It runs off the
+// putts each golfer answers after the hole: nothing extra to tap. Two 3-putts
+// on one hole: whoever holed out LAST has it (rec.snakeLast, picked on the
+// Score screen or in Standings). Until somebody picks, the one with more
+// putts, then the higher score, keeps it. An unanswered putts prompt can't take
+// the snake, so the sheet drops "Not this hole" while the snake is on.
+// Ledger: the holder -value, everyone else 0 -- the pairwise difference is then
+// exactly "the holder pays each player the snake", and nobody else settles.
+function snakeGrow(){return !(S.config.snake&&S.config.snake.grow===false);}
+function snakeHole(rec,seats){
+  const st=(rec&&rec.stats)||{};
+  const three=seats.filter(i=>puttsEntered(rec,i)&&st.putts&&st.putts[i]>=3);
+  if(three.length<2)return {three,holder:three.length?three[0]:null,tie:false};
+  if(rec.snakeLast!=null&&three.includes(rec.snakeLast))return {three,holder:rec.snakeLast,tie:false};
+  const by=three.slice().sort((a,b)=>(st.putts[b]-st.putts[a])||((rec.gross[b]||0)-(rec.gross[a]||0))||(a-b));
+  return {three,holder:by[0],tie:true};
+}
+function computeSnake(){
+  const seats=actIdx(),led=[0,0,0,0],hist=[];
+  let holder=null,count=0;
+  for(const h of playOrder()){
+    const rec=S.round.holes[h];if(!rec||!rec.confirmed||sinceSkip('snake',h))continue;
+    const r=snakeHole(rec,seats);if(r.holder==null)continue;
+    count+=r.three.length;holder=r.holder;hist.push({h,i:r.holder,three:r.three,tie:r.tie});
+  }
+  const value=holder==null?0:(snakeGrow()?count:1);
+  if(holder!=null)led[holder]=-value;
+  return {ledgers:{net:led.slice(),gross:led.slice()},holder,count,value,hist,perHole:null,carries:{net:0,gross:0},lenses:['net','gross']};
 }
 // Skins: every hole carries a dollar amount (uniform by default, adjustable
 // per hole). Lowest score wins the hole OUTRIGHT to take the skin; a tie
@@ -8372,8 +8473,12 @@ function puttsDue(h){
   // group's putts landed on whoever confirmed first (Teal Bend, 8/15). A
   // single-phone round still collects everyone's: there is no other phone.
   const rows=groupShare()?[myPlayerIdx()]:myRows(h);
-  return rows.filter(i=>puttsOn(i)&&rec.gross[i]!=null&&!(done[i]>0)&&!skip[i]);
+  return rows.filter(i=>(puttsOn(i)||sideSeat('junk',i,h)||sideSeat('snake',i,h))&&rec.gross[i]!=null&&!(done[i]>0)&&!skip[i]);
 }
+// Junk and Snake play off this sheet: a golfer in either is asked after every
+// hole even with putts tracking off -- the snake can't be told without his
+// putts, and his junk claims ride on the same sheet.
+function sideSeat(g,i,h){try{return stackHas(g)&&!sinceSkip(g,h)&&gameSeats(g).includes(i);}catch(e){return false;}}
 // PUTTS OWED. The prompt fires from MY confirm — so a hole that got carded
 // without this phone ever being asked slips through: the app killed with the
 // prompt up (a cold relaunch, Paradise Valley 8/18), or in a shared round
@@ -8475,6 +8580,70 @@ function skipPutts(src){
   });
   puttSettle(src);
 }
+// Junk claims on the putts sheet. A chip toggles and stays put; the putts
+// button still answers and closes, so "no junk" costs nothing extra. Same
+// pointer-up handling as the putt buttons (a tap that slides is a scroll to
+// iOS and never clicks), and the click iOS synthesizes afterwards is dropped.
+function junkChipsHTML(h,i){
+  if(!sideSeat('junk',i,h))return '';
+  const rec=S.round.holes[h]||{},ks=junkTapKeys(h);
+  if(!ks.length)return '';
+  const N=Object.fromEntries(JUNK_ITEMS);
+  return `<div class="junkrow">${ks.map(k=>{const on=junkClaim(rec,k,i);
+    return `<button class="junkchip${on?' on':''}" onpointerdown="puttPD(event)" onpointerup="junkPU(event,${h},${i},'${k}')" onclick="junkTap(${h},${i},'${k}','click')">${on?'✓ ':''}${N[k]}</button>`;}).join('')}</div>`;
+}
+let junkPUAt=0;
+function junkPU(e,h,i,k){
+  const t=puttTouch;puttTouch=null;
+  if(!t||Math.hypot(e.clientX-t.x,e.clientY-t.y)>14)return;
+  junkPUAt=Date.now();junkToggle(h,i,k);
+}
+function junkTap(h,i,k,src){if(src==='click'&&Date.now()-junkPUAt<700)return;junkToggle(h,i,k);}
+function junkToggle(h,i,k){
+  const rec=S.round.holes[h];if(!rec)return;
+  puttPersist(()=>{const a=statArr(rec,'j'+k);a[i]=a[i]?0:1;stampStat(rec,i);});
+  if(S.screen==='map')paintPuttAsk();
+}
+// Score screen: everyone's junk on this hole. Your own rows (and anyone your
+// phone scores) can still be tapped -- a claim forgotten on the sheet, or taken back.
+function junkSet(h,i,k){reviewTouch();set(()=>{const rec=S.round.holes[h];if(!rec)return;const a=statArr(rec,'j'+k);a[i]=a[i]?0:1;stampStat(rec,i);});}
+function junkCardHTML(rec,h){
+  if(!stackHas('junk')||sinceSkip('junk',h)||!rec)return '';
+  const seats=gameSeats('junk'),mine=myRows(h),ks=junkTapKeys(h);
+  const N=Object.fromEntries(JUNK_ITEMS);
+  const rows=seats.map(i=>{
+    const p=S.players[i];if(!p)return '';
+    const got=junkHoleItems(rec,h,i,seats);
+    const sum=got.reduce((a,[,v])=>a+v,0);
+    const auto=got.filter(([k])=>!JUNK_TAPS.includes(k)||(k==='greenie'&&rec.ctp!=null))
+      .map(([k,v])=>`<span class="junkgot">${N[k]} ${v>0?'+':''}${v}</span>`).join('');
+    const taps=mine.includes(i)
+      ?ks.map(k=>{const on=junkClaim(rec,k,i);return `<button class="junkchip${on?' on':''}" onclick="junkSet(${h},${i},'${k}')">${on?'✓ ':''}${N[k]}</button>`;}).join('')
+      :ks.filter(k=>junkClaim(rec,k,i)).map(k=>`<span class="junkgot">${N[k]}</span>`).join('');
+    return `<div class="mt"><b>${esc(p.name)}</b>${sum?` <span class="num" style="color:var(--good);font-weight:700">${sum>0?'+':''}${sum}</span>`:''}
+      ${auto||taps?`<div class="junkrow">${auto}${taps}</div>`:''}</div>`;
+  }).join('');
+  const tie=junkGreenie(rec,h,seats)==='tie'?'<div class="tiny mt">Two greenie claims — pick Closest to pin below.</div>':'';
+  return `<div class="card"><h2>🪙 Junk</h2>${rows}${tie}</div>`;
+}
+function setSnakeLast(h,i){set(()=>{const r=S.round.holes[h];if(r)r.snakeLast=i;});}
+function snakeTiePickHTML(h,three){
+  const r=S.round.holes[h]||{};
+  return `<div class="flexwrap" style="margin-top:5px">${three.map(i=>`<button class="ghost ${r.snakeLast===i?'sel':''}" onclick="setSnakeLast(${h},${i})">${esc((S.players[i]||{}).name||'')}</button>`).join('')}</div>`;
+}
+function snakeCardHTML(rec,h){
+  if(!stackHas('snake')||sinceSkip('snake',h)||!rec)return '';
+  const s=computeSnake(),r=snakeHole(rec,gameSeats('snake'));
+  const who=s.holder==null?'Nobody has 3-putted yet.'
+    :`<b>${esc((S.players[s.holder]||{}).name||'')}</b> has it — worth ${s.value} pt${s.value===1?'':'s'}`;
+  const tie=r.three.length>1?`<div class="mt"><b>${r.three.length} 3-putts here</b> <span class="tiny">— who holed out last?</span>${snakeTiePickHTML(h,r.three)}</div>`:'';
+  return `<div class="card"><h2>🐍 Snake</h2><div>${who}</div>${tie}</div>`;
+}
+function snakeSettleNoteHTML(){
+  const s=computeSnake();
+  if(s.holder==null)return '<div class="tiny mt">Nobody 3-putted — the snake pays nothing.</div>';
+  return `<div class="tiny mt">🐍 ${esc((S.players[s.holder]||{}).name||'')} has the snake — ${s.value} pt${s.value===1?'':'s'} to each player.</div>`;
+}
 // The map screen gets the sheet appended directly — a render() there rebuilds
 // Leaflet mid-prompt (the trap the Undo Track It button hit).
 function paintPuttAsk(){
@@ -8488,6 +8657,8 @@ function puttAskSheetHTML(inner){
   if(!puttAsk)return '';
   const h=puttAsk.h;
   const opts=[0,1,2,3,4];
+  const anyJunk=puttAsk.rows.some(i=>junkChipsHTML(h,i));
+  const snakeUp=puttAsk.rows.some(i=>sideSeat('snake',i,h));   // a skipped answer could dodge the snake
   // every row answered (a pointer answer, closing on its own): a "got it" card
   // holds the screen for a beat so a trailing click lands on nothing that acts
   const body=!puttAsk.rows.length?`<div class="vfCard" style="width:min(420px,100%)">
@@ -8495,13 +8666,14 @@ function puttAskSheetHTML(inner){
       <div class="tiny" style="font-size:16px;color:var(--green-mid);font-weight:700">✓ Hole ${h+1} — got it</div>
     </div>`
   :`<div class="vfCard" style="width:min(420px,100%)">
-      <h2 class="vfTitle">Putts</h2>
-      <div class="tiny mb">Hole ${h+1} — tap how many you had.</div>
+      <h2 class="vfTitle">${anyJunk?'Junk &amp; putts':'Putts'}</h2>
+      <div class="tiny mb">Hole ${h+1} — ${anyJunk?'tap any junk, then your putts.':'tap how many you had.'}</div>
       ${puttAsk.rows.map(i=>`
         ${puttAsk.rows.length>1?`<div class="tiny" style="color:var(--gold);font-weight:700;margin-top:8px">${esc((S.players[i]||{}).name||'')}</div>`:''}
+        ${junkChipsHTML(h,i)}
         <div class="puttrow">${opts.map(v=>
           `<button class="puttbtn" onpointerdown="puttPD(event)" onpointerup="puttPU(event,${i},${v})" onclick="setPutts(${i},${v},'click')">${v===4?'4+':v}</button>`).join('')}</div>`).join('')}
-      <button class="ghost mt" style="width:100%" onpointerdown="puttPD(event)" onpointerup="puttPUskip(event)" onclick="skipPutts('click')">Not this hole</button>
+      ${snakeUp?'':`<button class="ghost mt" style="width:100%" onpointerdown="puttPD(event)" onpointerup="puttPUskip(event)" onclick="skipPutts('click')">Not this hole</button>`}
     </div>`;
   return inner?`<div class="vfWrap" role="dialog" aria-modal="true">${body}</div>`
               :`<div class="vfWrap" role="dialog" aria-modal="true">${body}</div>`;
@@ -8667,7 +8839,7 @@ function holeSplash(force){
   const par=S.course.holes[h].par;
   const first=i=>esc((S.players[i].name||'').split(' ')[0]);
   const sc=i=>{const gr=rec.gross[i];return gr==null?null:(L==='net'?gr-dotsOn(i,h):gr);};
-  const A={wolf:'/wolf.png',nines:'/nine.png',vegas:'/vegas.png',quota:'/quota.png',sixes:'/sixes.png',umbrella:'/umbrella.png',bbb:'/bbb.png',stroke:'/stroke.png',stableford:'/stableford.png',bestball:'/bestball.png',scramble:'/scramble.png',nassau:'/nassau.png',skins:'/skins.png',matchplay:'/matchplay.png'}[g];
+  const A={wolf:'/wolf.png',nines:'/nine.png',vegas:'/vegas.png',quota:'/quota.png',sixes:'/sixes.png',umbrella:'/umbrella.png',bbb:'/bbb.png',stroke:'/stroke.png',stableford:'/stableford.png',bestball:'/bestball.png',scramble:'/scramble.png',nassau:'/nassau.png',skins:'/skins.png',matchplay:'/matchplay.png',junk:'/junk.png',snake:'/snake.png'}[g];
   const C=gameColor(g);
   const tag=v=>{if(v==null)return '';const d=v-par;return d<=-2?' 🦅':d===-1?' 🐦':'';};
   function verdict(g){
@@ -8982,9 +9154,9 @@ function gdTag(k){return gridDeco?(' '+gridDeco.tag(k)):'';}
 function gameColor(g){
   return {wolf:'#c76a1d',nines:'#4aa8ff',vegas:'#2ea043',stroke:'#e0bb45',bestball:'#2aa7a0',
     scramble:'#8e5cd9',stableford:'#c94f7c',quota:'#5ad0e0',sixes:'#9ec425',umbrella:'#8fa3c0',
-    bbb:'#d24bb8',nassau:'#4663d9',skins:'#3ddc97',matchplay:'#e05a5a'}[g]||'#c9a227';
+    bbb:'#d24bb8',nassau:'#4663d9',skins:'#3ddc97',matchplay:'#e05a5a',junk:'#e0803c',snake:'#57b36a'}[g]||'#c9a227';
 }
-function gameArtFile(g){return {wolf:'/wolf.png',nines:'/nine.png',vegas:'/vegas.png',quota:'/quota.png',sixes:'/sixes.png',umbrella:'/umbrella.png',bbb:'/bbb.png',stroke:'/stroke.png',stableford:'/stableford.png',bestball:'/bestball.png',scramble:'/scramble.png',nassau:'/nassau.png',skins:'/skins.png',matchplay:'/matchplay.png'}[g];}
+function gameArtFile(g){return {wolf:'/wolf.png',nines:'/nine.png',vegas:'/vegas.png',quota:'/quota.png',sixes:'/sixes.png',umbrella:'/umbrella.png',bbb:'/bbb.png',stroke:'/stroke.png',stableford:'/stableford.png',bestball:'/bestball.png',scramble:'/scramble.png',nassau:'/nassau.png',skins:'/skins.png',matchplay:'/matchplay.png',junk:'/junk.png',snake:'/snake.png'}[g];}
 
 function gameBadgeHTML(){
   if(!S.round.started||gpsOnly())return '';   // rangefinder mode has no game
@@ -9001,6 +9173,10 @@ function gameBadgeHTML(){
 // the partner, who was on the green first -- so a scorecard cannot reconstruct
 // them after the fact. They can only be picked before the round starts.
 const START_ONLY=['wolf','scramble','bbb'];
+// Junk and Snake ride on top of a main game -- they have no scoring screen of
+// their own, so they are never offered as the main game. Picked up mid-round,
+// they count from that hole on, like a tee-tap game.
+const SIDE_ONLY=['junk','snake'];
 // ONE TABLE OF HOW MANY GOLFERS EACH GAME TAKES. These are not preferences --
 // the engines are built around the number. Wolf rotates with pos%4 and reads a
 // field of [0,1,2,3]; 9's splits nine points three ways; Match Play is a duel;
@@ -9012,7 +9188,7 @@ const START_ONLY=['wolf','scramble','bbb'];
 // game".)
 const GAME_SEATS={
   stroke:[1,2,3,4],stableford:[1,2,3,4],quota:[1,2,3,4],
-  skins:[2,3,4],bbb:[2,3,4],
+  skins:[2,3,4],bbb:[2,3,4],junk:[2,3,4],snake:[2,3,4],
   matchplay:[2],nines:[3],
   nassau:[2,4],scramble:[2,4],
   wolf:[4],vegas:[4],bestball:[4],sixes:[4],umbrella:[4]};
@@ -9121,9 +9297,9 @@ function setRoundGames(list){set(()=>{
     S.round.since=S.round.since||{};
     const o=playOrder();let pos=Math.max(0,o.indexOf(S.round.cur));
     while(pos<o.length&&(S.round.holes[o[pos]]||{}).confirmed)pos++;
-    a.filter(g=>START_ONLY.includes(g)&&!prev.includes(g)).forEach(g=>{
+    a.filter(g=>(START_ONLY.includes(g)||SIDE_ONLY.includes(g))&&!prev.includes(g)).forEach(g=>{
       S.round.since[g]=pos;
-      if(g!=='bbb'&&!START_ONLY.includes(host)){S.round.game=g;host=g;}
+      if(g!=='bbb'&&!SIDE_ONLY.includes(g)&&!START_ONLY.includes(host)){S.round.game=g;host=g;}
       // Wolf needs an order of play. Pre-round that is the starter's sheet on
       // the first tee; picked up on the 3rd tee it is the same sheet, on the
       // phone that picked it, with "first listed is the Wolf on hole 3".
@@ -9153,7 +9329,7 @@ function gamePickSheetHTML(){
     tag:k=>`data-gp="${k}"`};
   let grid='';
   try{grid=gameGridHTML('pickToggleGame');}finally{gridDeco=null;}
-  const off=['wolf','vegas','skins','matchplay','stroke','nines','bestball','scramble','sixes','umbrella','quota','stableford','bbb','nassau']
+  const off=['wolf','vegas','skins','matchplay','stroke','nines','bestball','scramble','sixes','umbrella','quota','stableford','bbb','nassau','junk','snake']
     .map(k=>[k,gamePick.sel[k]?'':gamePickWhy(k)]).filter(([,r])=>r);
   const why=off.length?`<div class="tiny mt">Grayed out — ${off.map(([k,r])=>`${gameName(k)} <span style="color:var(--ink3)">(${r})</span>`).join(' · ')}</div>`:'';
   return `<div class="vfWrap" role="dialog" aria-modal="true" aria-labelledby="gpTitle">
@@ -9383,6 +9559,16 @@ function gameGridHTML(fn,showPick){
         <div class="tiny">The classic — front nine, back nine, overall. Press when you're down</div>${note('nassau')}</div>
       <img src="${art('/nassau.png')}" alt="" style="height:92px;margin:4px 8px 4px 0;filter:drop-shadow(0 0 6px rgba(70,99,217,.55))" onerror="this.outerHTML='<span class=&quot;nas-ph&quot;>🏅</span>'">
     </button>
+    ${live?'':`<button class="gamebtn junkg${pick('junk')}${gdCls('junk')}"${gdTag('junk')} onclick="${go_('junk')}">
+      <div style="flex:1;min-width:0"><span class="gname">Junk</span>
+        <div class="tiny">Greenies, sandies, barkies — points for the good stuff</div>${note('junk')}</div>
+      <img src="${art('/junk.png')}" alt="" style="height:92px;margin:4px 8px 4px 0;filter:drop-shadow(0 0 6px rgba(224,128,60,.5))" onerror="this.outerHTML='<span class=&quot;junk-ph&quot;>🪙</span>'">
+    </button>
+    <button class="gamebtn snakeg${pick('snake')}${gdCls('snake')}"${gdTag('snake')} onclick="${go_('snake')}">
+      <div style="flex:1;min-width:0"><span class="gname">Snake</span>
+        <div class="tiny">Last one to 3-putt pays everyone</div>${note('snake')}</div>
+      <img src="${art('/snake.png')}" alt="" style="height:92px;margin:4px 8px 4px 0;filter:drop-shadow(0 0 6px rgba(87,179,106,.55))" onerror="this.outerHTML='<span class=&quot;snake-ph&quot;>🐍</span>'">
+    </button>`}
     ${chosen?'</div>':''}`;
 }
 function ruleOpened(d){
@@ -12249,6 +12435,17 @@ function vRules(){
     '<b>Dormie:</b> leading by exactly the holes remaining. The leader cannot lose from there.',
     '<b>Clinching:</b> the moment the lead is bigger than the holes left, the match is over — 3 up with 2 to play is a <b>3 &amp; 2</b> win. The app calls it the instant it happens.',
     '<b>Strokes</b> come off the low man, dropped on the hardest holes by stroke index — so a mixed pair plays dead even.']),'matchplay')}
+  ${ruleCard(img('/junk.png',48),'Junk','Points for the good stuff — a side game',li([
+    '<b>Every item pays:</b> birdie, eagle, <b>greenie</b> (closest on a par 3, then par), <b>sandy</b> (par after a bunker), <b>barkie</b> (par after hitting a tree), <b>polie</b> (holing a putt longer than the flagstick), <b>chip-in</b>. Splashy (par after the water) and 3-putt are there to switch on.',
+    '<b>Set what each is worth</b> in setup — 0 takes it out. A 3-putt can cost points.',
+    '<b>Claim your own</b> right after the hole, on the putts sheet. Birdies, eagles, greenies and 3-putts count themselves.',
+    'Paid on the difference between every two players. Rides on top of your main game — add it with Choose Game(s).']),null)}
+  ${ruleCard(img('/snake.png',48),'Snake','Last one to 3-putt pays everyone',li([
+    '<b>Every 3-putt takes the snake</b> — four putts too. It moves to whoever 3-putted last.',
+    '<b>It grows:</b> each 3-putt in the round makes it worth one more point (or keep it flat in setup).',
+    '<b>Whoever has it at the end</b> pays every other player what it is worth.',
+    'Runs off the putts you already answer after each hole. Two 3-putts on one hole: the last to hole out takes it.',
+    'Rides on top of your main game — add it with Choose Game(s).']),null)}
   ${ruleCard(img('/hammer.png',48),'Hammer','Battle modifier — double or fold',li([
     '<b>Not a game — a weapon:</b> switch it on in <b>Best Ball</b> or <b>Sixes</b> setup and every hole becomes a standoff.',
     '<b>The throw:</b> any time during a hole, either team can throw the hammer — but only until a player takes their grip and addresses the ball. Once someone is at address, the hammer stays down until that shot is struck. When it flies, the hole instantly goes double-or-fold.',
@@ -13531,6 +13728,7 @@ function vRoundOpts(){
       <span style="display:flex;gap:6px;flex:none"><button class="ghost ${recLens()==='net'?'sel':''}" onclick="setRecLens('net')">Net</button><button class="ghost ${recLens()==='gross'?'sel':''}" onclick="setRecLens('gross')">Gross</button></span></div>
       <div class="tiny mt">Sets the win–loss record. The settle screen has its own toggle.</div>
     </div>
+    ${stackHas('junk')?junkOptsHTML():''}${stackHas('snake')?snakeOptsHTML():''}
     ${wolf?`<div class="card"><h2>Rules</h2>
       <div class="row"><span class="muted">Ties carry over</span>
         <button class="ghost ${S.config.carryTies?'sel':''}" onclick="set(()=>S.config.carryTies=!S.config.carryTies)">${S.config.carryTies?'On':'Off'}</button></div>
@@ -13557,6 +13755,8 @@ function gameOptionsHTML(){
   const bbb=stackHas('bbb');
   const nassau=stackHas('nassau');
   const skins=stackHas('skins');
+  const junk=stackHas('junk');
+  const snake=stackHas('snake');
   // In the wizard the group has not JOINED yet, so team pickers would be
   // picking teams for empty seats — the captain's partner/order sheet fires
   // when the fourth arrives instead. Holes/first tee were the wizard's first
@@ -13673,6 +13873,7 @@ function gameOptionsHTML(){
     <div class="tiny mt">Your quota = ${playOrder().length===9?'18':'36'} minus your course handicap — beat it by the most and you win. Points come from gross scores; the handicap lives in the target.
     <b>Quotas today: ${actIdx().map(i=>`${esc((S.players[i].name||'').split(' ')[0])} ${quotaTargets()[i]}`).join(' · ')}</b></div>
   </div>`:''}
+  ${junk?junkOptsHTML():''}${snake?snakeOptsHTML():''}
   ${bbb?`<div class="card"><h2>Bingo Bango Bongo</h2>
     <div class="row" style="border-top:none"><span class="muted">Players in the round</span>
       <span class="seg" style="display:inline-flex;gap:6px">
@@ -14630,6 +14831,7 @@ function syncGroupCounts(){
   const n=Math.max(1,S.players.filter(isRealPl).length);
   S.config.stroke.n=Math.min(4,n);S.config.stbl.n=Math.min(4,n);S.config.quota.n=Math.min(4,n);
   S.config.bbb.n=Math.min(4,Math.max(2,n));S.config.skins.n=Math.min(4,Math.max(2,n));
+  if(S.config.junk)S.config.junk.n=Math.min(4,Math.max(2,n));if(S.config.snake)S.config.snake.n=Math.min(4,Math.max(2,n));
   S.config.nassau.n=n>=4?4:2;
   if(S.config.nines)S.config.nines.n=3;                 // 9's is 3-handed, always
 }
@@ -14743,6 +14945,7 @@ function startRound(){
       if(g==='stableford')S.config.stbl.n=nn;
       if(g==='quota')S.config.quota.n=nn;
       if(g==='bbb')S.config.bbb.n=Math.max(2,nn);
+      if((g==='junk'||g==='snake')&&S.config[g])S.config[g].n=Math.max(2,nn);
       if(g==='skins')S.config.skins.n=Math.max(2,nn);
       if(g==='nassau')S.config.nassau.n=nn>=4?S.config.nassau.n:2;
     });
@@ -14860,7 +15063,7 @@ function vHole(){
     body=`<div class="card">
       ${modeLbl?`<div class="row" style="border:none;padding-top:0"><span class="pill wolf">${modeLbl}</span></div>`:''}
       ${scoreRows}
-      </div>${hamCard}${nasCard}${skCard}${bbbCard}${ctpRow}${extrasCard}${resultNote}
+      </div>${hamCard}${nasCard}${skCard}${bbbCard}${junkCardHTML(rec,h)}${snakeCardHTML(rec,h)}${ctpRow}${extrasCard}${resultNote}
       ${rec.confirmed
         ?`${isReview()?'':`<button class="big" onclick="nextHole()">${posOf(h)<playOrder().length-1?'Next hole →':'Finish round'}</button>`}
           <button class="ghost mt" style="width:100%" onclick="unconfirm()">Edit this hole</button>`
@@ -15023,7 +15226,7 @@ function ctpScored(){
 }
 function ctpShown(){
   const hole=S.course.holes[physHole(S.round.cur)]||{};
-  return ctpScored()||(S.config.ctpAll&&hole.par===3);
+  return ctpScored()||(hole.par===3&&(S.config.ctpAll||(stackHas('junk')&&junkPts().greenie>0)));
 }
 function ctpCardHTML(rec,idxs,title){
   if(!ctpShown())return '';
@@ -15056,9 +15259,12 @@ function computeCtpPot(){
     if(!hole||hole.par!==3)continue;
     out.par3s++;
     pot=+(pot+amt).toFixed(2);
-    if(rec.ctp!=null&&rec.ctp>=0&&act.includes(rec.ctp)){
-      out.counts[rec.ctp]++;
-      out.money[rec.ctp]=+(out.money[rec.ctp]+pot).toFixed(2);
+    // no pick made, but one golfer claimed the greenie on his putts sheet: he was closest
+    let w=rec.ctp;
+    if(w==null&&stackHas('junk')){const gj=junkGreenie(rec,h,gameSeats('junk'));if(typeof gj==='number'&&gj>=0)w=gj;}
+    if(w!=null&&w>=0&&act.includes(w)){
+      out.counts[w]++;
+      out.money[w]=+(out.money[w]+pot).toFixed(2);
       pot=0;
     }else{
       out.unclaimed++;
@@ -15115,6 +15321,29 @@ function toggleCtpCarry(){set(()=>{
 });}
 function toggleCtpAll(){set(()=>{S.config.ctpAll=!S.config.ctpAll;});}
 function setCtp(i){set(()=>{S.round.holes[S.round.cur].ctp=i;});}
+// Junk and Snake options: Setup before the tee, and Round Settings once the round is on --
+// they are usually picked up mid-round from Standings, after Setup has gone.
+function junkOptsHTML(){const JP=junkPts(),jn=Math.min(4,Math.max(2,S.config.junk.n||4));return `<div class="card"><h2>🪙 Junk</h2>
+    ${S.round.started?'':`<div class="row" style="border-top:none"><span class="muted">Players in the game</span>
+      <span class="seg" style="display:inline-flex;gap:6px">
+        ${[2,3,4].map(n=>`<button class="ghost ${jn===n?'sel':''}" onclick="set(()=>S.config.junk.n=${n})">${n}</button>`).join('')}
+      </span></div>`}
+    ${JUNK_ITEMS.map(([k,l])=>`<div class="row"><span class="muted">${l} <span class="tiny">· ${JUNK_SAY[k]}</span></span>
+      <div class="stepper"><button onclick="chJunkPt('${k}',-1)">−</button><span class="val num">${JP[k]?(JP[k]>0?JP[k]:'−'+(-JP[k])):'Off'}</span><button onclick="chJunkPt('${k}',1)">+</button></div></div>`).join('')}
+    <div class="tiny mt">Points for each, paid on the difference. Claim yours after the hole, with your putts.</div>
+  </div>`;}
+function snakeOptsHTML(){return `<div class="card"><h2>🐍 Snake</h2>
+    ${S.round.started?'':`<div class="row" style="border-top:none"><span class="muted">Players in the game</span>
+      <span class="seg" style="display:inline-flex;gap:6px">
+        ${[2,3,4].map(n=>`<button class="ghost ${Math.min(4,Math.max(2,S.config.snake.n||4))===n?'sel':''}" onclick="set(()=>S.config.snake.n=${n})">${n}</button>`).join('')}
+      </span></div>`}
+    <div class="row"${S.round.started?' style="border-top:none"':''}><span class="muted">Grows with every 3-putt</span>
+      <button class="ghost ${snakeGrow()?'sel':''}" onclick="set(()=>{S.config.snake.grow=!snakeGrow();})">${snakeGrow()?'On':'Off'}</button></div>
+    <div class="tiny mt">Every 3-putt takes the snake. Whoever has it at the end pays everyone.</div>
+  </div>`;}
+// Junk item values: 0 takes an item out of the game; a 3-putt can only cost.
+function chJunkPt(k,d){set(()=>{const c=S.config.junk=S.config.junk||{n:4};c.pts=Object.assign(junkDefaults(),c.pts||{});
+  const lo=k==='three'?-5:0,hi=k==='three'?0:10;c.pts[k]=Math.min(hi,Math.max(lo,(+c.pts[k]||0)+d));});}
 function setBBB(k,i){set(()=>{const rec=S.round.holes[S.round.cur];rec.bbb=Object.assign({},rec.bbb);rec.bbb[k]=i;});}
 // BBB tap card — shared by the stacked hole screen and the wolf (host) hole screen.
 const BBB_DEFS=[['bingo','\u{1F7E2} Bingo','first ball on the green'],['bango','\u{1F4CD} Bango','closest to the pin once all balls are on'],['bongo','⛳ Bongo','first ball in the cup']];
@@ -15646,7 +15875,7 @@ function joinPlay(k){
 // stamps its own row with it; a phone behind the group's newest is asked to update before it scores,
 // and the rest of the group sees whose phone is behind (an app older than this check says nothing, so
 // its row carries no stamp and reads as behind).
-const RULES_VER=20261018;   // 10/18: 3rd/4th strokes, plus handicaps, Stableford/team results, Vegas CTP, Scramble
+const RULES_VER=20261026;   // 10/26: Junk + Snake side games. 10/18: 3rd/4th strokes, plus handicaps, Stableford/team results, Vegas CTP, Scramble
 function rulesRound(){return !!(S.share&&S.share.on&&S.round&&S.round.started&&!isReview()&&!S.round.myEndedAt);}
 function rulesBehind(){
   if(!rulesRound())return 0;
@@ -15694,12 +15923,14 @@ function rulesNoticeHTML(){
 // Option changes, told to the group. A phone that changes a point option mid-round signs it (S.round.optBy);
 // every other phone compares the options before and after the meta lands and says what changed, and who.
 const OPT_GAME={pts:'Wolf',stbl:'Stableford',quota:'Quota',skins:'Skins',nines:"9's",vegas:'Vegas',nassau:'Nassau',hammer:'Hammer',
-  bestball:'Best Ball',umbrella:'Umbrella',bbb:'Bingo Bango Bongo',sixes:'Sixes',scramble:'Scramble',ctpMoney:'Closest to pin',stroke:'Stroke'};
+  bestball:'Best Ball',umbrella:'Umbrella',bbb:'Bingo Bango Bongo',sixes:'Sixes',scramble:'Scramble',ctpMoney:'Closest to pin',stroke:'Stroke',
+  junk:'Junk',snake:'Snake'};
 const OPT_LABEL={'pts.partnerWin':'Wolf · partner win','pts.fieldBeatsPartners':'Wolf · beating the wolf team','pts.loneWin':'Wolf · lone wolf win',
   'pts.fieldBeatsLone':'Wolf · beating a lone wolf','pts.blindWin':'Wolf · blind wolf win','pts.fieldBeatsBlind':'Wolf · beating a blind wolf',
   'pts.ctp':'Wolf · closest to pin','allowance':'Handicap %','recLens':'Round scored','lens':'Scores shown','carryTies':'Ties carry',
   'ctpAll':'Closest to pin','ctpMoney.amt':'Closest to pin $','ctpMoney.carry':'Closest to pin carry','skins.amt':'Skins $',
-  'skins.carry':'Skins carry-overs','skins.per':'Skins hole values','dollarPerPt':'$ per point','games':'Games'};
+  'skins.carry':'Skins carry-overs','skins.per':'Skins hole values','dollarPerPt':'$ per point','games':'Games',
+  'snake.grow':'Snake · grows with every 3-putt'};
 function optSnap(){
   try{
     const c=clone(S.config||{});
@@ -15891,7 +16122,7 @@ function vHoleNines(){
   const body=`${roomFullHTML()}${rulesNoticeHTML()}${joinPlayHTML()}${catchUpHTML()}<div class="card">
     ${act.some(i=>rec.gross[i]==null)?`<button class="ghost mb" style="width:100%" onclick="set(()=>prefillNines(${h}))">Everyone to par ${hole.par} — adjust from there</button>`:''}
     ${scoreRows}
-    </div>${hamCard}${nasCard}${skCard}${bbbCard}${ctpRow}${extrasCard}${resultNote}
+    </div>${hamCard}${nasCard}${skCard}${bbbCard}${junkCardHTML(rec,h)}${snakeCardHTML(rec,h)}${ctpRow}${extrasCard}${resultNote}
     ${rec.confirmed
       ?`${isReview()?'':`<button class="big" onclick="nextHole()">${posOf(h)<playOrder().length-1?'Next hole →':'Finish round'}</button>`}
         <button class="ghost mt" style="width:100%" onclick="unconfirm()">Edit this hole</button>`
@@ -15987,7 +16218,7 @@ function vHoleVegas(){
       <img class="vegas-art" src="${art('/vegas.png')}" alt="" onerror="this.outerHTML='<span style=&quot;font-size:34px&quot;>🎲</span>'">
     </div>
     ${[0,1,2,3].some(i=>rec.gross[i]==null)?`<button class="ghost mb" style="width:100%" onclick="set(()=>prefillNines(${h}))">Everyone to par ${hole.par} — adjust from there</button>`:''}
-    ${teamBoxes}${hamCard}${nasCard}${skCard}${bbbCard}${ctpRow}${extrasCard}${resultNote}
+    ${teamBoxes}${hamCard}${nasCard}${skCard}${bbbCard}${junkCardHTML(rec,h)}${snakeCardHTML(rec,h)}${ctpRow}${extrasCard}${resultNote}
     ${rec.confirmed
       ?`${isReview()?'':`<button class="big" onclick="nextHole()">${posOf(h)<playOrder().length-1?'Next hole →':'Finish round'}</button>`}
         <button class="ghost mt" style="width:100%" onclick="unconfirm()">Edit this hole</button>`
@@ -16151,6 +16382,7 @@ function setStView(v){
 }
 function makeMainGame(g){
   if(g==='match')return;                       // lens only — no hole-screen engine
+  if(SIDE_ONLY.includes(g))return;             // a side game has no score screen to drive
   // Wolf, Scramble and Bingo Bango Bongo drive the hole screen with taps no
   // other game carries — the partner pick, the one team ball, who was on first.
   // Hand the screen to something else mid-round and the rest of their holes
@@ -16709,7 +16941,7 @@ function teamPickerRow(g){
       }finally{engineGame=p;engineDepth--;}};};
   wrap('computeAll','wolf');wrap('computeNines','nines');wrap('computeVegas','vegas');
   wrap('computeBestBall','bestball');wrap('computeScramble','scramble');
-  wrap('computeQuota','quota');wrap('computeBBB','bbb');wrap('computeSkins','skins');
+  wrap('computeQuota','quota');wrap('computeBBB','bbb');wrap('computeJunk','junk');wrap('computeSnake','snake');wrap('computeSkins','skins');
   wrap('computeNassau','nassau');wrap('computeSixes','sixes');wrap('computeUmbrella','umbrella');
   wrap('computeStroke','stroke');wrap('computeStableford','stableford');
   wrap('computeMatch','bestball');wrap('computeMatchPlay','matchplay');
@@ -16791,7 +17023,7 @@ function vStandings(){
   // mainBtn is outer because cardFor writes it per card.
   let mainBtn='';
   const cardFor=(view)=>{
-   mainBtn=sinceNoteHTML(view)+((view===g||view==='match')?''
+   mainBtn=sinceNoteHTML(view)+((view===g||view==='match'||SIDE_ONLY.includes(view))?''
      :(START_ONLY.includes(g)
        ?`<div class="tiny mt" style="opacity:.75">${gameName(g)} runs your score screen for the rest of the round — this card is a view only.</div>`
        :`<button class="ghost mt" style="width:100%" onclick="makeMainGame('${view}')">★ Make ${gameName(view)} my main game</button>`));
@@ -16866,6 +17098,26 @@ function vStandings(){
       </table>${teamPickerRow('umbrella')+mysteryRowHTML('umbrella')}
       <div class="tiny mt">Six points a hole: 2 low ball · 2 low team total · 1 closest to pin · 1 gross birdie.
       Sweep all six and it doubles to <b>12</b>${u.sweeps[prim]?` — ☂ ${u.sweeps[prim]} umbrella${u.sweeps[prim]>1?'s':''} opened!`:''}.</div></div>`;
+  }else if(view==='junk'&&stackHas('junk')){
+    const J=computeJunk(),JP=junkPts(),N=Object.fromEntries(JUNK_ITEMS);
+    const on=JUNK_ITEMS.filter(([k])=>JP[k]);
+    const brk=gameSeats('junk').map(i=>{const it=J.items[i]||{};const ks=Object.keys(it);
+      return ks.length?`<div class="tiny"><b>${esc((S.players[i].name||'').split(' ')[0])}</b> — ${ks.map(k=>`${N[k]}${it[k]>1?' ×'+it[k]:''}`).join(' · ')}</div>`:'';}).join('');
+    // one Points column: junk is the same with or without strokes, so Gross/Net would just repeat it
+    const jo=gameSeats('junk').slice().sort((a,b)=>J.ledgers.gross[b]-J.ledgers.gross[a]);
+    tables=`<div class="card"><h2>🪙 Junk · thru ${thru}</h2>
+      <table class="st"><tr><th>Player</th><th class="r">Points</th></tr>
+      ${jo.map(i=>`<tr><td>${esc(S.players[i].name)}</td><td class="r num" style="font-size:34px">${J.ledgers.gross[i]}</td></tr>`).join('')}</table>
+      <div class="tiny mt">${on.map(([k,l])=>`${l} ${JP[k]>0?'+':''}${JP[k]}`).join(' · ')} — paid on the difference.</div>${brk?`<div class="mt">${brk}</div>`:''}
+      ${isReview()?'':'<button class="ghost mt" style="width:100%" onclick="openRoundOpts()">Change junk points</button>'}</div>`;
+  }else if(view==='snake'&&stackHas('snake')){
+    const sn=computeSnake(),nm=i=>esc((S.players[i]||{}).name||'');
+    tables=`<div class="card"><h2>🐍 Snake · thru ${thru}</h2>
+      <div class="center mb"><span class="bigscore num" style="font-size:26px">${sn.holder==null?'No 3-putts yet':nm(sn.holder)+' has the snake'}</span>
+      ${sn.holder!=null?`<div class="muted">${sn.count} three-putt${sn.count===1?'':'s'} · pays ${sn.value} pt${sn.value===1?'':'s'} to each player</div>`:''}</div>
+      ${sn.hist.length?`<div class="tiny">${sn.hist.map(x=>`Hole ${x.h+1}: ${nm(x.i)}`).join(' · ')}</div>`:''}
+      ${sn.hist.filter(x=>x.tie).map(x=>`<div class="mt"><b>Hole ${x.h+1}</b> <span class="tiny">— ${x.three.length} 3-putts. Who holed out last?</span>${snakeTiePickHTML(x.h,x.three)}</div>`).join('')}
+      <div class="tiny mt">Every 3-putt takes the snake${snakeGrow()?' and makes it worth a point more':''}. Whoever has it at the end pays everyone.</div></div>`;
   }else if(view==='bbb'&&stackHas('bbb')){
     tables=genericCard('Bingo Bango Bongo',computeBBB().ledgers,v=>String(v),false,
       `<div class="tiny mt">Three points a hole: \u{1F7E2} first on the green · \u{1F4CD} closest once all on · \u26F3 first in the cup. Most taps wins.</div>`);
@@ -17140,7 +17392,7 @@ function vSettleStack(G){
   const L=payLens();
   const SN=settleNet(L), net=SN.net;
   const act=SN.act;   // everyone some game pays (10/18), not just the main game's seats
-  const UNIT={stroke:'stroke',bestball:'hole',nassau:'bet',skins:'$',nines:'pt',quota:'pt',stableford:'pt',sixes:'pt',umbrella:'pt',bbb:'pt'};
+  const UNIT={stroke:'stroke',bestball:'hole',nassau:'bet',skins:'$',nines:'pt',quota:'pt',stableford:'pt',sixes:'pt',umbrella:'pt',bbb:'pt',junk:'pt',snake:'pt'};
   const cards=G.map(g=>{
     const eng=computeFor(g);
     const led=eng.ledgers[L];
@@ -17182,6 +17434,7 @@ function vSettleStack(G){
       ${order.map(i=>`<tr><td>${esc(S.players[i].name)}</td><td class="r num" style="font-size:18px">${fmt(led[i])}</td>
         <td class="r num" style="font-size:18px;color:${!priced?'var(--ink2)':gn[i]>0.004?'var(--good)':gn[i]<-0.004?'var(--red)':'var(--ink2)'}">${!priced?'—':(gn[i]>0.004?'+':'')+fmtMoney(gn[i]).replace('$-','-$')}</td></tr>`).join('')}</table>
       ${priced?`<div class="row mt" style="border-top:1px solid var(--line)"><span class="muted">Pot this game</span><b class="num" style="font-size:18px">${fmtMoney(pot)}</b></div>`:''}
+      ${g==='snake'?snakeSettleNoteHTML():''}
       ${g==='skins'?'<div class="tiny mt">Already dollars — each skin collects from every other player.</div>'
         :`<div class="row mt"><span class="muted">$ per ${unit}</span>
           <input id="rate_${g}" type="number" step="0.25" min="0" value="${(S.round.rates||{})[g]||''}" placeholder="0" style="width:90px" onchange="setRate('${g}',this.value)"></div>`}
@@ -17362,7 +17615,7 @@ function newRound(){
 // paint from memory — no service-worker round trips, no background network
 // revalidation per render, no pop-in on flaky signal.
 const ART={};
-['/banner.jpg','/wolf.png','/nine.png','/vegas.png','/quota.png','/sixes.png','/umbrella.png','/hammer.png','/bbb.png','/stroke.png','/stableford.png','/bestball.png','/scramble.png','/nassau.png','/skins.png','/matchplay.png'].forEach(f=>{
+['/banner.jpg','/wolf.png','/nine.png','/vegas.png','/quota.png','/sixes.png','/umbrella.png','/hammer.png','/bbb.png','/stroke.png','/stableford.png','/bestball.png','/scramble.png','/nassau.png','/skins.png','/matchplay.png','/junk.png','/snake.png'].forEach(f=>{
   fetch(f).then(r=>r.ok?r.blob():null).then(b=>{
     if(!b)return;
     ART[f]=URL.createObjectURL(b);
