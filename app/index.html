@@ -443,7 +443,11 @@
   .gamebtn.junkg:active{box-shadow:1px 1px 0 #8a4a1f}
   .gamebtn.snakeg{background:rgba(87,179,106,.10);border-color:#57b36a;box-shadow:3px 3px 0 #2e6b3b}
   .gamebtn.snakeg:active{box-shadow:1px 1px 0 #2e6b3b}
-  .junk-ph,.snake-ph{font-size:38px;flex:none;margin:0 14px 0 0}
+  .junk-ph,.snake-ph,.rabbit-ph,.banker-ph{font-size:38px;flex:none;margin:0 14px 0 0}
+  .gamebtn.rabbitg{background:rgba(143,124,240,.10);border-color:#8f7cf0;box-shadow:3px 3px 0 #4b3f8f}
+  .gamebtn.rabbitg:active{box-shadow:1px 1px 0 #4b3f8f}
+  .gamebtn.bankerg{background:rgba(201,154,46,.10);border-color:#c99a2e;box-shadow:3px 3px 0 #7a5c17}
+  .gamebtn.bankerg:active{box-shadow:1px 1px 0 #7a5c17}
   .junkrow{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 6px}
   .junkchip{padding:7px 12px;border-radius:999px;border:2px solid var(--line);background:var(--card);color:var(--ink);
     font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:16px;line-height:1.1}
@@ -568,7 +572,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-center in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1793045378';
+const BUILD='1793051503';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -711,6 +715,8 @@ function defaultConfig(){
     bbb:{n:4},
     junk:{n:4,pts:{birdie:1,eagle:2,greenie:1,sandy:1,barkie:1,splashy:0,polie:1,chip:1,three:0}},
     snake:{n:4,grow:true},
+    rabbit:{n:4,steal:false,split:'nines'},
+    banker:{n:4,min:1,max:5,rotate:false},
     nassau:{n:4,press:'manual',pairing:0},
     skins:{n:4,amt:1,carry:true,per:null},
     games:['wolf'],
@@ -968,6 +974,8 @@ function migrateState(s){
       if(!s.config.bbb)s.config.bbb={n:4};
       if(!s.config.junk)s.config.junk={n:4,pts:{birdie:1,eagle:2,greenie:1,sandy:1,barkie:1,splashy:0,polie:1,chip:1,three:0}};
       if(!s.config.snake)s.config.snake={n:4,grow:true};
+      if(!s.config.rabbit)s.config.rabbit={n:4,steal:false,split:'nines'};
+      if(!s.config.banker)s.config.banker={n:4,min:1,max:5,rotate:false};
       if(!s.config.nassau)s.config.nassau={n:4,press:'manual'};
       if(!s.config.skins)s.config.skins={n:4,amt:1,carry:true,per:null};
       if(!s.config.games)s.config.games=[s.config.game||'wolf'];
@@ -1494,7 +1502,7 @@ function applyOp(k,v,defer){
           // wolf's phone, so Wolf or Scramble picked up mid-round takes the
           // hole screen everywhere, exactly as it did on the phone that picked it.
           Object.keys(v.since).forEach(g=>{
-            if(had[g]!=null||g==='bbb'||!START_ONLY.includes(g))return;
+            if(had[g]!=null||g==='bbb'||g==='banker'||!START_ONLY.includes(g))return;
             if(!START_ONLY.includes(S.round.game))S.round.game=g;
           });
         }
@@ -1509,7 +1517,7 @@ function applyOp(k,v,defer){
         var widened=false;
         if(v.started){
           const realN=Math.min(4,Math.max(1,(v.players||[]).filter(isRealPl).length));
-          [['stroke',1],['stbl',1],['quota',1],['bbb',2],['skins',2],['junk',2],['snake',2]].forEach(([g,mn])=>{
+          [['stroke',1],['stbl',1],['quota',1],['bbb',2],['skins',2],['junk',2],['snake',2],['rabbit',2],['banker',3]].forEach(([g,mn])=>{
             if(S.config[g]&&(S.config[g].n||0)<Math.max(mn,Math.min(4,realN))){S.config[g].n=Math.max(mn,Math.min(4,realN));widened=true;}
           });
           if(S.config.nassau&&realN>=4&&S.config.nassau.n!==4){S.config.nassau.n=4;widened=true;}
@@ -1578,7 +1586,7 @@ function applyOp(k,v,defer){
         // ...and the games widen for them exactly as THE DOUG FIX does above (grow-only)
         if(seated){
           const realN=Math.min(4,Math.max(1,S.players.filter(isRealPl).length));
-          [['stroke',1],['stbl',1],['quota',1],['bbb',2],['skins',2],['junk',2],['snake',2]].forEach(([g,mn])=>{
+          [['stroke',1],['stbl',1],['quota',1],['bbb',2],['skins',2],['junk',2],['snake',2],['rabbit',2],['banker',3]].forEach(([g,mn])=>{
             if(S.config[g]&&(S.config[g].n||0)<Math.max(mn,Math.min(4,realN)))S.config[g].n=Math.max(mn,Math.min(4,realN));
           });
           if(S.config.nassau&&realN>=4)S.config.nassau.n=4;
@@ -1974,7 +1982,7 @@ function claimMySlot(steal){
       // left a joiner in seat 3 behind a friend already in seat 4 at n=3 -- his phone paid Quota without
       // that friend for 50 minutes while every other phone counted four
       {const realN=Math.min(4,Math.max(free+1,S.players.filter(isRealPl).length));
-      ['stroke','stbl','quota','skins','bbb','junk','snake'].forEach(k=>{
+      ['stroke','stbl','quota','skins','bbb','junk','snake','rabbit','banker'].forEach(k=>{
         if(S.config[k]&&S.config[k].n!=null)S.config[k].n=Math.max(S.config[k].n,realN);});}
       applyTeePrefs();
       // ...and the prefill pars carded on that seat were nobody's golf: clear them -- Catch up then offers
@@ -3849,7 +3857,7 @@ function setPayLens(v){
 // meant the round's own, not one phone's view. Money call sites take payLens().
 function primaryLens(){return recLens();}
 // Round screens score by the game the round was started as; setup/home follow the picked game.
-const STACKABLE=['nines','stroke','bestball','stableford','quota','sixes','umbrella','bbb','nassau','skins','junk','snake'];
+const STACKABLE=['nines','stroke','bestball','stableford','quota','sixes','umbrella','bbb','nassau','skins','junk','snake','rabbit','banker'];
 // Games that can join a stack as a guest but can't host one (their primary
 // hole screens don't carry the shared tap cards): vegas needs only gross
 // scores, so it guests cleanly on any host.
@@ -3868,6 +3876,8 @@ function computeFor(g){
     case 'nassau':return computeNassau();
     case 'bbb':return computeBBB();
     case 'junk':return computeJunk();
+    case 'rabbit':return computeRabbit();
+    case 'banker':return computeBanker();
     case 'snake':return computeSnake();
     case 'sixes':return computeSixes();
     case 'umbrella':return computeUmbrella();
@@ -3885,7 +3895,7 @@ function gameOn(){
   const roundScr=['hole','standings','settle','map'].includes(S.screen);
   return (roundScr&&S.round.started&&S.round.game)||S.config.game||'wolf';
 }
-function gameName(g){const x=g||gameOn();return x==='nines'?'9’s':x==='vegas'?'Vegas':x==='stroke'?'Stroke':x==='bestball'?'Best Ball':x==='scramble'?'Scramble':x==='stableford'?'Stableford':x==='quota'?'Quota':x==='sixes'?'Sixes':x==='umbrella'?'Umbrella':x==='bbb'?'Bingo Bango Bongo':x==='junk'?'Junk':x==='snake'?'Snake':x==='nassau'?'Nassau':x==='skins'?'Skins':x==='matchplay'?'Match Play':'Wolf';}
+function gameName(g){const x=g||gameOn();return x==='nines'?'9’s':x==='vegas'?'Vegas':x==='stroke'?'Stroke':x==='bestball'?'Best Ball':x==='scramble'?'Scramble':x==='stableford'?'Stableford':x==='quota'?'Quota':x==='sixes'?'Sixes':x==='umbrella'?'Umbrella':x==='bbb'?'Bingo Bango Bongo':x==='junk'?'Junk':x==='snake'?'Snake':x==='rabbit'?'Rabbit':x==='banker'?'Banker':x==='nassau'?'Nassau':x==='skins'?'Skins':x==='matchplay'?'Match Play':'Wolf';}
 function NP(){
   const g=engineGame||gameOn();   // engines size their roster by THEIR game, not the viewer's main
   // 9's IS A THREEBALL. Five, three and one is a three-way split; the old
@@ -3897,7 +3907,8 @@ function NP(){
   if(g==='stableford'&&S.config.stbl)return Math.min(4,Math.max(1,S.config.stbl.n||4));
   if(g==='quota'&&S.config.quota)return Math.min(4,Math.max(1,S.config.quota.n||4));
   if(g==='bbb'&&S.config.bbb)return Math.min(4,Math.max(2,S.config.bbb.n||4));
-  if((g==='junk'||g==='snake')&&S.config[g])return Math.min(4,Math.max(2,S.config[g].n||4));
+  if((g==='junk'||g==='snake'||g==='rabbit')&&S.config[g])return Math.min(4,Math.max(2,S.config[g].n||4));
+  if(g==='banker'&&S.config.banker)return Math.min(4,Math.max(3,S.config.banker.n||4));
   if(g==='matchplay')return mp2On()?4:2;  // 1v1 -- or two 1v1 matches when two late joiners play each other (10/18)
   if(g==='nassau'&&S.config.nassau)return S.config.nassau.n===2?2:4;
   if(g==='scramble'&&S.config.scramble)return S.config.scramble.teams==='duo'?2:4;
@@ -4051,7 +4062,7 @@ function runningTotalsCard(){
     if(m2)foot+=' · '+matchStatus(m2,t=>first(t===0?2:3));
   }else{
     const eng=g==='nines'?computeNines():g==='vegas'?computeVegas():g==='stableford'?computeStableford()
-      :g==='sixes'?computeSixes():g==='umbrella'?computeUmbrella():g==='bbb'?computeBBB():g==='nassau'?computeNassau():g==='skins'?computeSkins():computeAll();
+      :g==='sixes'?computeSixes():g==='umbrella'?computeUmbrella():g==='bbb'?computeBBB():g==='nassau'?computeNassau():g==='skins'?computeSkins():g==='rabbit'?computeRabbit():g==='banker'?computeBanker():computeAll();
     const f=g==='nines'?fmtPts:g==='skins'?fmtMoney:(v=>(v>0?'+':'')+v);
     const rows=actIdx().map(i=>({label:first(i),v:eng.ledgers[L][i]}));
     rows.sort((a,b)=>b.v-a.v);
@@ -4068,6 +4079,8 @@ function runningTotalsCard(){
     else if(g==='nassau'){const sgn=x=>x===0?'AS':(x>0?'+':'')+x;
       foot=eng.bets[L].filter(b=>!b.press).map(b=>`${b.seg[0].toUpperCase()} ${sgn(b.up)}`).join(' · ');}
     else if(g==='skins'){foot=eng.pot[L]>0?fmtMoney(eng.pot[L])+' riding':'dollars won';}
+    else if(g==='rabbit'){foot=rabbitNowTxt(eng,L);}
+    else if(g==='banker'){foot='🏦 '+esc(first(bankerOf(S.round.cur)))+' banks this hole';}
     else foot='points';
   }
   return `<div class="card" style="padding:12px 10px 8px"><div style="display:flex;gap:6px">${tiles}</div>
@@ -4433,6 +4446,102 @@ function computeSnake(){
   if(holder!=null)led[holder]=-value;
   return {ledgers:{net:led.slice(),gross:led.slice()},holder,count,value,hist,perHole:null,carries:{net:0,gross:0},lenses:['net','gross']};
 }
+// RABBIT: win a hole outright (lowest score, alone) and you catch the rabbit. It stays
+// yours until somebody else wins a hole outright -- that sets it loose again, and the next
+// outright winner catches it (with "steal" on, he takes it straight from you instead).
+// Whoever has it when the front nine ends wins the front rabbit, and a fresh one starts
+// on the back. A rabbit still loose at the turn carries on: the back nine's rabbit is then
+// worth both. Each rabbit is a point collected from every other player (ledger: holder
+// +rabbits, everyone else 0 -- Snake's shape reversed). A nine still in play pays whoever
+// holds its rabbit now, so Standings reads "if it ended here".
+function rabbitCfg(){return Object.assign({steal:false,split:'nines'},S.config.rabbit||{});}
+function rabbitSegs(){const o=playOrder();return (rabbitCfg().split==='all'||o.length<=9)?[o]:[o.slice(0,9),o.slice(9)];}
+function computeRabbit(){
+  const seats=actIdx(),c=rabbitCfg(),segs=rabbitSegs();
+  const out={lenses:['net','gross'],ledgers:{net:[0,0,0,0],gross:[0,0,0,0]},segs:{net:[],gross:[]},perHole:null,carries:{net:0,gross:0}};
+  for(const L of ['net','gross']){
+    let carry=0;
+    segs.forEach((seg,si)=>{
+      let holder=null,caught=null,played=0;const hist=[];
+      for(const h of seg){
+        const rec=S.round.holes[h];if(!rec||!rec.confirmed)continue;
+        const sc=seats.map(i=>{const g=rec.gross[i];return g==null?null:(L==='net'?g-dotsOn(i,h):g);});
+        if(sc.some(v=>v==null))continue;
+        played++;
+        const best=Math.min(...sc),win=seats.filter((i,k)=>sc[k]===best);
+        if(win.length!==1)continue;
+        const w=win[0];
+        if(holder==null){holder=w;caught=h;hist.push({h,i:w,ev:'caught'});}
+        else if(w!==holder){
+          if(c.steal){hist.push({h,i:w,ev:'stole',from:holder});holder=w;caught=h;}
+          else{hist.push({h,i:w,ev:'freed',from:holder});holder=null;caught=null;}
+        }
+      }
+      const done=seg.every(h=>(S.round.holes[h]||{}).confirmed), worth=1+carry;
+      if(holder!=null){out.ledgers[L][holder]+=worth;carry=0;}
+      else carry=(done&&si<segs.length-1&&played)?worth:0;
+      out.segs[L].push({holes:seg,holder,caught,played,worth,hist,done});
+    });
+  }
+  return out;
+}
+function rabbitSegName(k,n){return n===1?'Rabbit':k===0?'Front 9':'Back 9';}
+function rabbitNowTxt(eng,L){
+  const segs=eng.segs[L];if(!segs.length)return '';
+  const cur=segs.find(x=>!x.done)||segs[segs.length-1];
+  const nm=i=>esc((S.players[i].name||'').split(' ')[0]);
+  return '🐇 '+(cur.holder!=null?nm(cur.holder)+' has it':'loose')+(cur.worth>1?' · worth '+cur.worth:'');
+}
+// BANKER: on every hole one golfer is the banker and everybody else plays him one-on-one.
+// Each player bets between the group's minimum and maximum (the minimum until he sets it),
+// can double his own bet, and the banker can double back -- the banker's double covers
+// every bet on the hole. Low score wins each match (net with strokes off the low man, or
+// gross); a tie pushes. The banker is whoever had the low gross score on the hole before
+// (a tie keeps the banker if he was one of them, otherwise the first of them in the order
+// listed); hole 1's is the first golfer listed. Anyone can name a different banker for a
+// hole (rec.bkWho). With "rotates" on it goes round the group in order instead.
+// Bets and doubles are per-player stats slots (stats.bkBet / stats.bkDbl -- the banker's
+// slot is his double), so two phones setting their own bets merge. Bets are bilateral, so
+// the ledger is each golfer's own net and settlement pays it directly (see settleNet);
+// pair[] keeps who won what from whom for the single-game settle screen.
+function bankerCfg(){return Object.assign({min:1,max:5,rotate:false},S.config.banker||{});}
+function bankerOf(h){
+  const seats=engineGame==='banker'?actIdx():gameSeats('banker'),o=playOrder();
+  const pos=Math.max(0,o.indexOf(h)),rec=S.round.holes[h]||{};
+  if(rec.bkWho!=null&&seats.includes(rec.bkWho))return rec.bkWho;
+  const since=(S.round.since&&S.round.since.banker)||0,k=pos-since;
+  if(bankerCfg().rotate)return seats[((k%seats.length)+seats.length)%seats.length];
+  if(k<=0)return seats[0];
+  const ph=o[pos-1],prev=S.round.holes[ph],pb=bankerOf(ph);
+  if(!prev||!prev.confirmed)return pb;
+  const sc=seats.map(i=>prev.gross[i]);if(sc.some(v=>v==null))return pb;
+  const best=Math.min(...sc),low=seats.filter((i,x)=>sc[x]===best);
+  return low.includes(pb)?pb:low[0];
+}
+function bankerBet(rec,i){const c=bankerCfg(),a=rec&&rec.stats&&rec.stats.bkBet,v=a?(+a[i]||0):0;return Math.min(c.max,Math.max(c.min,v||c.min));}
+function bankerDbl(rec,i){const a=rec&&rec.stats&&rec.stats.bkDbl;return !!(a&&a[i]);}
+function computeBanker(){
+  const seats=actIdx(),z=()=>[[0,0,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0]];
+  const out={lenses:['net','gross'],ledgers:{net:[0,0,0,0],gross:[0,0,0,0]},pair:{net:z(),gross:z()},holes:{net:{},gross:{}},perHole:null,carries:{net:0,gross:0}};
+  for(const h of playOrder()){
+    const rec=S.round.holes[h];if(!rec||!rec.confirmed||sinceSkip('banker',h))continue;
+    const b=bankerOf(h);
+    for(const L of ['net','gross']){
+      const sc=i=>{const g=rec.gross[i];return g==null?null:(L==='net'?g-dotsOn(i,h):g);};
+      if(sc(b)==null)continue;
+      const res=[];
+      seats.forEach(p=>{
+        if(p===b||sc(p)==null)return;
+        const amt=bankerBet(rec,p)*(bankerDbl(rec,b)?2:1)*(bankerDbl(rec,p)?2:1);
+        const d=sc(p)<sc(b)?amt:sc(p)>sc(b)?-amt:0;
+        out.ledgers[L][p]+=d;out.ledgers[L][b]-=d;out.pair[L][p][b]+=d;out.pair[L][b][p]-=d;
+        res.push({p,amt,d});
+      });
+      out.holes[L][h]={b,res};
+    }
+  }
+  return out;
+}
 // Skins: every hole carries a dollar amount (uniform by default, adjustable
 // per hole). Lowest score wins the hole OUTRIGHT to take the skin; a tie
 // rolls the pot into the next hole (optional). Ledgers hold dollars won —
@@ -4626,6 +4735,8 @@ function computeGame(){const g=gameOn();
   if(g==='skins')return computeSkins();
   if(g==='nassau')return computeNassau();
   if(g==='bbb')return computeBBB();
+  if(g==='rabbit')return computeRabbit();
+  if(g==='banker')return computeBanker();
   if(g==='sixes')return computeSixes();
   if(g==='umbrella')return computeUmbrella();
   if(g==='quota')return computeQuota();
@@ -8626,6 +8737,53 @@ function junkCardHTML(rec,h){
   const tie=junkGreenie(rec,h,seats)==='tie'?'<div class="tiny mt">Two greenie claims — pick Closest to pin below.</div>':'';
   return `<div class="card"><h2>🪙 Junk</h2>${rows}${tie}</div>`;
 }
+// Rabbit on the Score screen: whose it is on this nine, and what it is worth.
+function rabbitSegsTxt(eng,L){
+  const segs=eng.segs[L],nm=i=>esc((S.players[i].name||'').split(' ')[0]);
+  return segs.map((x,k)=>`${rabbitSegName(k,segs.length)}: ${x.holder!=null?nm(x.holder)+(x.done?' wins it':' has it'):(x.done&&x.played&&k<segs.length-1?'loose — rides to the back':'loose')}${x.worth>1?' (worth '+x.worth+')':''}`).join(' · ');
+}
+function rabbitCardHTML(rec,h){
+  if(!stackHas('rabbit')||!rec)return '';
+  const L=recLens(),eng=computeRabbit(),segs=eng.segs[L];
+  const k=segs.findIndex(x=>x.holes.includes(h)),x=segs[k];if(!x)return '';
+  const nm=i=>esc((S.players[i]||{}).name||'');
+  const ev=x.hist.find(e=>e.h===h);
+  const now=x.holder!=null?`<b>${nm(x.holder)}</b> has the rabbit${x.caught!=null?` — caught on ${x.caught+1}`:''}`:'The rabbit is loose — win a hole outright to catch it';
+  const evTxt=ev?(ev.ev==='caught'?`${nm(ev.i)} caught it here`:ev.ev==='stole'?`${nm(ev.i)} stole it from ${nm(ev.from)}`:`${nm(ev.i)} set it loose`):'';
+  return `<div class="card"><h2>🐇 Rabbit · ${rabbitSegName(k,segs.length)}</h2><div>${now}</div>
+    ${evTxt?`<div class="tiny mt">${evTxt}</div>`:''}${x.worth>1?`<div class="tiny mt">Worth ${x.worth} — the front nine's rode along.</div>`:''}</div>`;
+}
+// Banker on the Score screen. Each golfer sets his own bet and double on his own phone (and
+// for anyone his phone scores); the banker's double sits on his row. Anyone can change who
+// banks this hole.
+function bkBet(h,i,d){reviewTouch();set(()=>{const rec=S.round.holes[h];if(!rec)return;const c=bankerCfg(),a=statArr(rec,'bkBet');
+  a[i]=Math.min(c.max,Math.max(c.min,bankerBet(rec,i)+d));stampStat(rec,i);});}
+function bkDbl(h,i){reviewTouch();set(()=>{const rec=S.round.holes[h];if(!rec)return;const a=statArr(rec,'bkDbl');a[i]=a[i]?0:1;stampStat(rec,i);});}
+function bkWho(h,i){reviewTouch();set(()=>{const rec=S.round.holes[h];if(rec)rec.bkWho=i;});}
+function bankerCardHTML(rec,h){
+  if(!stackHas('banker')||sinceSkip('banker',h)||!rec)return '';
+  const seats=gameSeats('banker'),b=bankerOf(h),mine=myRows(h),c=bankerCfg();
+  const nm=i=>esc((S.players[i]||{}).name||'');
+  const L=recLens(),res=(withEngine('banker',()=>computeBanker()).holes[L]||{})[h];
+  const dOf=i=>res?((res.res.find(r=>r.p===i)||{}).d):null;
+  const rows=seats.filter(i=>i!==b).map(i=>{
+    const bet=bankerBet(rec,i),dbl=bankerDbl(rec,i),can=mine.includes(i)&&!rec.confirmed,d=dOf(i);
+    return `<div class="row"><b style="min-width:70px">${nm(i)}</b>
+      <span style="display:flex;align-items:center;gap:8px;flex:none">
+      ${can?`<div class="stepper"><button onclick="bkBet(${h},${i},-1)">−</button><span class="val num">${bet}</span><button onclick="bkBet(${h},${i},1)">+</button></div>
+        <button class="ghost ${dbl?'sel':''}" onclick="bkDbl(${h},${i})">×2</button>`
+       :`<span class="num" style="font-size:18px">${bet}${dbl?' ×2':''}</span>`}
+      ${d!=null&&rec.confirmed?`<b class="num" style="min-width:42px;text-align:right;color:${d>0?'var(--good)':d<0?'var(--red)':'var(--ink2)'}">${d>0?'+':''}${d||'push'}</b>`:''}</span></div>`;
+  }).join('');
+  const bd=bankerDbl(rec,b),bcan=mine.includes(b)&&!rec.confirmed;
+  return `<div class="card"><h2>🏦 Banker · ${nm(b)}</h2>
+    <div class="tiny">Bets ${c.min}–${c.max} · ${nm(b)} tees off last</div>
+    ${rows}
+    <div class="row"><span class="muted">${nm(b)} doubles every bet</span>
+      ${bcan?`<button class="ghost ${bd?'sel':''}" onclick="bkDbl(${h},${b})">${bd?'On':'Off'}</button>`:`<b>${bd?'On':'Off'}</b>`}</div>
+    ${rec.confirmed?'':`<div class="tiny mt">Banker this hole: ${seats.map(i=>`<button class="ghost ${i===b?'sel':''}" style="padding:4px 10px;margin:2px" onclick="bkWho(${h},${i})">${nm(i)}</button>`).join('')}</div>`}
+  </div>`;
+}
 function setSnakeLast(h,i){set(()=>{const r=S.round.holes[h];if(r)r.snakeLast=i;});}
 function snakeTiePickHTML(h,three){
   const r=S.round.holes[h]||{};
@@ -8839,7 +8997,7 @@ function holeSplash(force){
   const par=S.course.holes[h].par;
   const first=i=>esc((S.players[i].name||'').split(' ')[0]);
   const sc=i=>{const gr=rec.gross[i];return gr==null?null:(L==='net'?gr-dotsOn(i,h):gr);};
-  const A={wolf:'/wolf.png',nines:'/nine.png',vegas:'/vegas.png',quota:'/quota.png',sixes:'/sixes.png',umbrella:'/umbrella.png',bbb:'/bbb.png',stroke:'/stroke.png',stableford:'/stableford.png',bestball:'/bestball.png',scramble:'/scramble.png',nassau:'/nassau.png',skins:'/skins.png',matchplay:'/matchplay.png',junk:'/junk.png',snake:'/snake.png'}[g];
+  const A={wolf:'/wolf.png',nines:'/nine.png',vegas:'/vegas.png',quota:'/quota.png',sixes:'/sixes.png',umbrella:'/umbrella.png',bbb:'/bbb.png',stroke:'/stroke.png',stableford:'/stableford.png',bestball:'/bestball.png',scramble:'/scramble.png',nassau:'/nassau.png',skins:'/skins.png',matchplay:'/matchplay.png',junk:'/junk.png',snake:'/snake.png',rabbit:'/rabbit.png',banker:'/banker.png'}[g];
   const C=gameColor(g);
   const tag=v=>{if(v==null)return '';const d=v-par;return d<=-2?' 🦅':d===-1?' 🐦':'';};
   function verdict(g){
@@ -8851,14 +9009,14 @@ function holeSplash(force){
   }else if(g==='vegas'){
     const r=computeVegas().perHole[h],res=r&&r.results[L];
     if(res){const T=r.teams;
-      headline=res.winner==null?'PUSH — numbers match':`${teamLbl(T[res.winner])} +${res.diff}`;
+      headline=res.winner==null?'TIE — numbers match, no points':`${teamLbl(T[res.winner])} +${res.diff}`;
       rows.push([teamLbl(T[0]),String(res.nums[0])+(res.flips[0]?' 🔄':'')]);
       rows.push([teamLbl(T[1]),String(res.nums[1])+(res.flips[1]?' 🔄':'')]);}
   }else if(g==='wolf'){
     const r=computeAll().perHole[h],res=r&&r.results[L];
     if(res){
       const mode=rec.mode==='blind'?'BLIND LONE WOLF':rec.mode==='lone'?'LONE WOLF':'WOLF';
-      if(res.tie){headline='TIE — carried';}
+      if(res.tie){headline=S.config.carryTies?'TIE — carries to the next hole':'TIE — no points';}
       else if(res.wolfWon){headline=`🐺 AWOOOO! — ${mode} WINS`;fx='wolfwin';
         rows.push([res.winners.map(first).join(' & '),`+${res.per*res.mult} each${res.mult>1?` ×${res.mult}`:''}`]);}
       else{headline=`🔒 ${mode} CAGED!`;fx='wolfcage';
@@ -8872,7 +9030,7 @@ function holeSplash(force){
     else{const best=t=>Math.min(...t.map(i=>sc(i)??99));const a=best(T[0]),b=best(T[1]);
       if(a<b)win=0;else if(b<a)win=1;
       else if(g==='sixes'){const s2=t=>t.reduce((x,i)=>x+(sc(i)??99),0);const sA=s2(T[0]),sB=s2(T[1]);win=sA<sB?0:sB<sA?1:null;}}
-    headline=win==null?'HALVED':`${teamLbl(T[win])} take the hole${mult>1?` ×${mult} 🔨`:''}${st&&st.fold>=0?' — FOLD':''}`;
+    headline=win==null?'TIE — hole halved':`${teamLbl(T[win])} take the hole${mult>1?` ×${mult} 🔨`:''}${st&&st.fold>=0?' — FOLD':''}`;
     T.forEach(t=>{const b=Math.min(...t.map(i=>sc(i)??99));rows.push([teamLbl(t),b===99?'–':String(b)+tag(b)]);});
   }else if(g==='umbrella'){
     const T=matchTeams('umbrella');const pts=[0,0];
@@ -8884,7 +9042,7 @@ function holeSplash(force){
     const bird=T.map(t=>t.some(i=>rec.gross[i]!=null&&rec.gross[i]<=par-1));
     if(bird[0]&&!bird[1])pts[0]+=1;else if(bird[1]&&!bird[0])pts[1]+=1;
     const sweep=pts[0]===6||pts[1]===6;
-    headline=sweep?'☂ UMBRELLA — 6 DOUBLES TO 12!':`${pts[0]} — ${pts[1]}`;
+    headline=sweep?'☂ UMBRELLA — 6 DOUBLES TO 12!':pts[0]===pts[1]?`TIE — ${pts[0]} points each`:`${pts[0]} — ${pts[1]}`;
     T.forEach((t,k)=>rows.push([teamLbl(t),String(pts[k]===6?12:pts[k])+' pts']));
   }else if(g==='skins'){
     const eng=computeSkins();const d=eng.detail[L].find(x=>x.h===h);
@@ -8893,7 +9051,7 @@ function holeSplash(force){
   }else if(g==='nassau'){
     const T=nassauSides();
     const best=t=>Math.min(...t.map(i=>sc(i)??99));const a=best(T[0]),b=best(T[1]);
-    headline=a===b?'HALVED':`${teamLbl(T[a<b?0:1])} win the hole`;
+    headline=a===b?'TIE — hole halved':`${teamLbl(T[a<b?0:1])} win the hole`;
     const na=computeNassau();const sgn=x=>x===0?'AS':(x>0?'+':'')+x;
     na.bets[L].filter(bb=>!bb.press).forEach(bb=>rows.push([bb.seg[0].toUpperCase()+bb.seg.slice(1),sgn(bb.up)]));
   }else if(g==='bbb'){
@@ -8910,15 +9068,38 @@ function holeSplash(force){
     actIdx().forEach(i=>{const gr=rec.gross[i];if(gr==null){rows.push([first(i),'–']);return;}
       const d=gr-par;const pts=d<=-3?P.alba:d===-2?P.eagle:d===-1?P.birdie:d===0?P.par:d===1?P.bogey:0;
       rows.push([first(i),'+'+pts+' pts'+tag(gr)]);});
+  }else if(g==='junk'){
+    const seats=gameSeats('junk'),N=Object.fromEntries(JUNK_ITEMS);
+    const got=seats.map(i=>[i,junkHoleItems(rec,h,i,seats)]).filter(([,x])=>x.length);
+    headline=got.length?got.map(([i,x])=>`${first(i)} ${x.map(([k,p])=>N[k]+' '+(p>0?'+':'')+p).join(', ')}`).join(' · '):'';
+    got.forEach(([i,x])=>rows.push([first(i),x.map(([k])=>N[k]).join(' · ')]));
+  }else if(g==='snake'){
+    const r=snakeHole(rec,gameSeats('snake'));
+    headline=r.holder!=null?`🐍 ${first(r.holder)} has the snake`:'';
+  }else if(g==='rabbit'){
+    const segs=computeRabbit().segs[L],x=segs.find(s=>s.holes.includes(h));
+    const ev=x&&x.hist.find(e=>e.h===h);
+    headline=ev?(ev.ev==='caught'?`🐇 ${first(ev.i)} catches the rabbit`:ev.ev==='stole'?`🐇 ${first(ev.i)} steals the rabbit`:`🐇 ${first(ev.i)} sets the rabbit loose`)
+      :x?((()=>{const v=actIdx().map(sc);const b=Math.min(...v.map(y=>y??99));return v.filter(y=>y===b).length>1?'TIE — ':'';})()
+        +(x.holder!=null?`🐇 ${first(x.holder)} still has it`:'🐇 still loose')):'';
+    actIdx().forEach(i=>rows.push([first(i),String(sc(i)??'–')+tag(sc(i))]));
+  }else if(g==='banker'){
+    const r=(computeBanker().holes[L]||{})[h];
+    headline=r?`🏦 ${first(r.b)} banked`:'';
+    if(r)r.res.forEach(x=>rows.push([first(x.p),x.d>0?'+'+x.d:x.d<0?String(x.d):'push']));
   }else if(g==='scramble'){
     const T=scrambleTeams(),capt=T.map(t=>t[0]);
-    headline=T.length>1?'Team scores':'Team score';
+    const ts=capt.map(c=>rec.gross[c]);
+    headline=T.length>1?(ts.every(v=>v!=null&&v===ts[0])?'TIE — same team score':'Team scores'):'Team score';
     T.forEach((t,k)=>{const gr=rec.gross[capt[k]];rows.push([teamLbl(t),String(gr??'–')+tag(gr)]);});
   }else{
     const vals=actIdx().map(i=>({i,v:sc(i)}));
     const best=Math.min(...vals.map(x=>x.v??99));
     const lows=vals.filter(x=>x.v===best).map(x=>first(x.i));
-    headline=best<99?`${lows.join(' & ')} low ball`:'';
+    // a shared low is a TIE -- "Nathan & Greg low ball" read as if both of them won the hole
+    headline=best>=99?'':lows.length===1?`${lows[0]} low ball`
+      :lows.length===vals.length?(vals.length===2?'TIE — hole halved':'TIE — everyone tied')
+      :`TIE for low — ${lows.join(' & ')}`;
     vals.sort((a,b)=>(a.v??99)-(b.v??99)).forEach(x=>rows.push([first(x.i),String(x.v??'–')+tag(x.v)]));
   }
   return {headline,rows,fx};
@@ -9154,9 +9335,9 @@ function gdTag(k){return gridDeco?(' '+gridDeco.tag(k)):'';}
 function gameColor(g){
   return {wolf:'#c76a1d',nines:'#4aa8ff',vegas:'#2ea043',stroke:'#e0bb45',bestball:'#2aa7a0',
     scramble:'#8e5cd9',stableford:'#c94f7c',quota:'#5ad0e0',sixes:'#9ec425',umbrella:'#8fa3c0',
-    bbb:'#d24bb8',nassau:'#4663d9',skins:'#3ddc97',matchplay:'#e05a5a',junk:'#e0803c',snake:'#57b36a'}[g]||'#c9a227';
+    bbb:'#d24bb8',nassau:'#4663d9',skins:'#3ddc97',matchplay:'#e05a5a',junk:'#e0803c',snake:'#57b36a',rabbit:'#8f7cf0',banker:'#c99a2e'}[g]||'#c9a227';
 }
-function gameArtFile(g){return {wolf:'/wolf.png',nines:'/nine.png',vegas:'/vegas.png',quota:'/quota.png',sixes:'/sixes.png',umbrella:'/umbrella.png',bbb:'/bbb.png',stroke:'/stroke.png',stableford:'/stableford.png',bestball:'/bestball.png',scramble:'/scramble.png',nassau:'/nassau.png',skins:'/skins.png',matchplay:'/matchplay.png',junk:'/junk.png',snake:'/snake.png'}[g];}
+function gameArtFile(g){return {wolf:'/wolf.png',nines:'/nine.png',vegas:'/vegas.png',quota:'/quota.png',sixes:'/sixes.png',umbrella:'/umbrella.png',bbb:'/bbb.png',stroke:'/stroke.png',stableford:'/stableford.png',bestball:'/bestball.png',scramble:'/scramble.png',nassau:'/nassau.png',skins:'/skins.png',matchplay:'/matchplay.png',junk:'/junk.png',snake:'/snake.png',rabbit:'/rabbit.png',banker:'/banker.png'}[g];}
 
 function gameBadgeHTML(){
   if(!S.round.started||gpsOnly())return '';   // rangefinder mode has no game
@@ -9172,7 +9353,7 @@ function gameBadgeHTML(){
 // Wolf, scramble and Bingo Bango Bongo need calls made at the tee -- the order,
 // the partner, who was on the green first -- so a scorecard cannot reconstruct
 // them after the fact. They can only be picked before the round starts.
-const START_ONLY=['wolf','scramble','bbb'];
+const START_ONLY=['wolf','scramble','bbb','banker'];
 // Junk and Snake ride on top of a main game -- they have no scoring screen of
 // their own, so they are never offered as the main game. Picked up mid-round,
 // they count from that hole on, like a tee-tap game.
@@ -9188,7 +9369,7 @@ const SIDE_ONLY=['junk','snake'];
 // game".)
 const GAME_SEATS={
   stroke:[1,2,3,4],stableford:[1,2,3,4],quota:[1,2,3,4],
-  skins:[2,3,4],bbb:[2,3,4],junk:[2,3,4],snake:[2,3,4],
+  skins:[2,3,4],bbb:[2,3,4],junk:[2,3,4],snake:[2,3,4],rabbit:[2,3,4],banker:[3,4],
   matchplay:[2],nines:[3],
   nassau:[2,4],scramble:[2,4],
   wolf:[4],vegas:[4],bestball:[4],sixes:[4],umbrella:[4]};
@@ -9299,7 +9480,7 @@ function setRoundGames(list){set(()=>{
     while(pos<o.length&&(S.round.holes[o[pos]]||{}).confirmed)pos++;
     a.filter(g=>(START_ONLY.includes(g)||SIDE_ONLY.includes(g))&&!prev.includes(g)).forEach(g=>{
       S.round.since[g]=pos;
-      if(g!=='bbb'&&!SIDE_ONLY.includes(g)&&!START_ONLY.includes(host)){S.round.game=g;host=g;}
+      if(g!=='bbb'&&g!=='banker'&&!SIDE_ONLY.includes(g)&&!START_ONLY.includes(host)){S.round.game=g;host=g;}
       // Wolf needs an order of play. Pre-round that is the starter's sheet on
       // the first tee; picked up on the 3rd tee it is the same sheet, on the
       // phone that picked it, with "first listed is the Wolf on hole 3".
@@ -9329,7 +9510,7 @@ function gamePickSheetHTML(){
     tag:k=>`data-gp="${k}"`};
   let grid='';
   try{grid=gameGridHTML('pickToggleGame');}finally{gridDeco=null;}
-  const off=['wolf','vegas','skins','matchplay','stroke','nines','bestball','scramble','sixes','umbrella','quota','stableford','bbb','nassau','junk','snake']
+  const off=['wolf','vegas','skins','matchplay','stroke','nines','bestball','scramble','sixes','umbrella','quota','stableford','bbb','nassau','junk','snake','rabbit','banker']
     .map(k=>[k,gamePick.sel[k]?'':gamePickWhy(k)]).filter(([,r])=>r);
   const why=off.length?`<div class="tiny mt">Grayed out — ${off.map(([k,r])=>`${gameName(k)} <span style="color:var(--ink3)">(${r})</span>`).join(' · ')}</div>`:'';
   return `<div class="vfWrap" role="dialog" aria-modal="true" aria-labelledby="gpTitle">
@@ -9558,6 +9739,16 @@ function gameGridHTML(fn,showPick){
       <div style="flex:1;min-width:0"><span class="gname">Nassau</span>
         <div class="tiny">The classic — front nine, back nine, overall. Press when you're down</div>${note('nassau')}</div>
       <img src="${art('/nassau.png')}" alt="" style="height:92px;margin:4px 8px 4px 0;filter:drop-shadow(0 0 6px rgba(70,99,217,.55))" onerror="this.outerHTML='<span class=&quot;nas-ph&quot;>🏅</span>'">
+    </button>
+    <button class="gamebtn rabbitg${pick('rabbit')}${gdCls('rabbit')}"${gdTag('rabbit')} onclick="${go_('rabbit')}">
+      <div style="flex:1;min-width:0"><span class="gname">Rabbit</span>
+        <div class="tiny">Win a hole outright to catch it — hold it at the turn to win</div>${note('rabbit')}</div>
+      <img src="${art('/rabbit.png')}" alt="" style="height:92px;margin:4px 8px 4px 0;filter:drop-shadow(0 0 6px rgba(143,124,240,.55))" onerror="this.outerHTML='<span class=&quot;rabbit-ph&quot;>🐇</span>'">
+    </button>
+    <button class="gamebtn bankerg${pick('banker')}${gdCls('banker')}"${gdTag('banker')} onclick="${go_('banker')}">
+      <div style="flex:1;min-width:0"><span class="gname">Banker</span>
+        <div class="tiny">Everyone plays the banker one-on-one — pick your own bet</div>${note('banker')}</div>
+      <img src="${art('/banker.png')}" alt="" style="height:92px;margin:4px 8px 4px 0;filter:drop-shadow(0 0 6px rgba(201,154,46,.55))" onerror="this.outerHTML='<span class=&quot;banker-ph&quot;>🏦</span>'">
     </button>
     ${live?'':`<button class="gamebtn junkg${pick('junk')}${gdCls('junk')}"${gdTag('junk')} onclick="${go_('junk')}">
       <div style="flex:1;min-width:0"><span class="gname">Junk</span>
@@ -11710,7 +11901,7 @@ function gameIdFor(title){
   const t=String(title||'').trim().toLowerCase();
   const m={'wolf':'wolf','9\u2019s':'nines',"9's":'nines','vegas':'vegas','stroke':'stroke','best ball':'bestball',
     'scramble':'scramble','sixes':'sixes','umbrella':'umbrella','quota':'quota','stableford':'stableford',
-    'bingo bango bongo':'bbb','nassau':'nassau','skins':'skins','match play':'matchplay'};
+    'bingo bango bongo':'bbb','nassau':'nassau','skins':'skins','match play':'matchplay','rabbit':'rabbit','banker':'banker'};
   return m[t]||null;
 }
 // The wizard, entered with the game already picked: solo games go straight to
@@ -12435,6 +12626,16 @@ function vRules(){
     '<b>Dormie:</b> leading by exactly the holes remaining. The leader cannot lose from there.',
     '<b>Clinching:</b> the moment the lead is bigger than the holes left, the match is over — 3 up with 2 to play is a <b>3 &amp; 2</b> win. The app calls it the instant it happens.',
     '<b>Strokes</b> come off the low man, dropped on the hardest holes by stroke index — so a mixed pair plays dead even.']),'matchplay')}
+  ${ruleCard(img('/rabbit.png',48),'Rabbit','Catch it, hold it at the turn',li([
+    '<b>Catch it:</b> win a hole outright — lowest score, nobody tied — and the rabbit is yours.',
+    '<b>Lose it:</b> the next time someone else wins a hole outright, the rabbit is set loose, and the next outright winner catches it. (House option: that win steals it straight away.)',
+    '<b>Hold it at the turn:</b> whoever has it after the 9th wins the front rabbit; a fresh one starts on the back. Still loose at the turn? It rides along — the back-nine rabbit is worth both.',
+    'Each rabbit is a point from every other player. 2 to 4 players, net or gross. Play it as your game or add it to another.']),'rabbit')}
+  ${ruleCard(img('/banker.png',48),'Banker','Everyone plays the banker',li([
+    '<b>One banker a hole:</b> whoever had the low score on the last hole banks the next one and tees off last. (House option: the banker rotates in order.)',
+    '<b>Pick your bet:</b> everyone else plays the banker one-on-one, for any amount between the smallest and biggest bet the group sets.',
+    '<b>Doubles:</b> a player can double his own bet; the banker can double back — and his double covers every bet on the hole.',
+    'Low score wins each match, a tie pushes. 3 or 4 players, net or gross. The banker\'s card on the Score screen holds the bets.']),'banker')}
   ${ruleCard(img('/junk.png',48),'Junk','Points for the good stuff — a side game',li([
     '<b>Every item pays:</b> birdie, eagle, <b>greenie</b> (closest on a par 3, then par), <b>sandy</b> (par after a bunker), <b>barkie</b> (par after hitting a tree), <b>polie</b> (holing a putt longer than the flagstick), <b>chip-in</b>. Splashy (par after the water) and 3-putt are there to switch on.',
     '<b>Set what each is worth</b> in setup — 0 takes it out. A 3-putt can cost points.',
@@ -13728,7 +13929,7 @@ function vRoundOpts(){
       <span style="display:flex;gap:6px;flex:none"><button class="ghost ${recLens()==='net'?'sel':''}" onclick="setRecLens('net')">Net</button><button class="ghost ${recLens()==='gross'?'sel':''}" onclick="setRecLens('gross')">Gross</button></span></div>
       <div class="tiny mt">Sets the win–loss record. The settle screen has its own toggle.</div>
     </div>
-    ${stackHas('junk')?junkOptsHTML():''}${stackHas('snake')?snakeOptsHTML():''}
+    ${stackHas('junk')?junkOptsHTML():''}${stackHas('snake')?snakeOptsHTML():''}${stackHas('rabbit')?rabbitOptsHTML():''}${stackHas('banker')?bankerOptsHTML():''}
     ${wolf?`<div class="card"><h2>Rules</h2>
       <div class="row"><span class="muted">Ties carry over</span>
         <button class="ghost ${S.config.carryTies?'sel':''}" onclick="set(()=>S.config.carryTies=!S.config.carryTies)">${S.config.carryTies?'On':'Off'}</button></div>
@@ -13757,6 +13958,8 @@ function gameOptionsHTML(){
   const skins=stackHas('skins');
   const junk=stackHas('junk');
   const snake=stackHas('snake');
+  const rabbit=stackHas('rabbit');
+  const banker=stackHas('banker');
   // In the wizard the group has not JOINED yet, so team pickers would be
   // picking teams for empty seats — the captain's partner/order sheet fires
   // when the fourth arrives instead. Holes/first tee were the wizard's first
@@ -13873,7 +14076,7 @@ function gameOptionsHTML(){
     <div class="tiny mt">Your quota = ${playOrder().length===9?'18':'36'} minus your course handicap — beat it by the most and you win. Points come from gross scores; the handicap lives in the target.
     <b>Quotas today: ${actIdx().map(i=>`${esc((S.players[i].name||'').split(' ')[0])} ${quotaTargets()[i]}`).join(' · ')}</b></div>
   </div>`:''}
-  ${junk?junkOptsHTML():''}${snake?snakeOptsHTML():''}
+  ${junk?junkOptsHTML():''}${snake?snakeOptsHTML():''}${rabbit?rabbitOptsHTML():''}${banker?bankerOptsHTML():''}
   ${bbb?`<div class="card"><h2>Bingo Bango Bongo</h2>
     <div class="row" style="border-top:none"><span class="muted">Players in the round</span>
       <span class="seg" style="display:inline-flex;gap:6px">
@@ -13988,7 +14191,7 @@ function vSetup(){
     <div class="stepper"><button onclick="chPt('${k}',-1)">−</button><span class="val num">${P[k]}</span><button onclick="chPt('${k}',1)">+</button></div></div>`;
   const V=S.config.vegas;
   const pairLbl=T=>`${esc(S.players[T[0][0]].name)} &amp; ${esc(S.players[T[0][1]].name)} <span class="muted">vs</span> ${esc(S.players[T[1][0]].name)} &amp; ${esc(S.players[T[1][1]].name)}`;
-  const SUBS={nines:'Every hole is worth 9 points: 5 · 3 · 1',vegas:'Low team number takes the difference',stroke:'Straight scoring — net, gross or both',stableford:'Points vs par — highest total wins',quota:'Beat your own number',sixes:'Partners rotate — best ball wins the hole',umbrella:'Six points a hole — sweep for twelve',bbb:'Three taps a hole — bingo, bango, bongo',nassau:'Front nine · back nine · overall — three bets',skins:'Win the hole outright — ties roll the pot',bestball:'2 v 2 — better ball wins the hole',matchplay:'1 v 1 — win the hole, go one up',
+  const SUBS={rabbit:'Catch it, hold it at the turn',banker:'Everyone plays the banker one-on-one',nines:'Every hole is worth 9 points: 5 · 3 · 1',vegas:'Low team number takes the difference',stroke:'Straight scoring — net, gross or both',stableford:'Points vs par — highest total wins',quota:'Beat your own number',sixes:'Partners rotate — best ball wins the hole',umbrella:'Six points a hole — sweep for twelve',bbb:'Three taps a hole — bingo, bango, bongo',nassau:'Front nine · back nine · overall — three bets',skins:'Win the hole outright — ties roll the pot',bestball:'2 v 2 — better ball wins the hole',matchplay:'1 v 1 — win the hole, go one up',
     scramble:S.config.scramble.teams==='duo'?'Two of you, one ball':S.config.scramble.teams==='solo'?'All four, one ball':'2 v 2 — one ball per team'};
   const stackN=(S.config.games||[]).length;
   return topbar(`Round setup — ${gameName(S.config.game)}${stackN>1?` +${stackN-1}`:''}`,SUBS[S.config.game]||'Order = tee order on hole 1 (wolf rotation)','gate')+`<main>
@@ -14832,6 +15035,7 @@ function syncGroupCounts(){
   S.config.stroke.n=Math.min(4,n);S.config.stbl.n=Math.min(4,n);S.config.quota.n=Math.min(4,n);
   S.config.bbb.n=Math.min(4,Math.max(2,n));S.config.skins.n=Math.min(4,Math.max(2,n));
   if(S.config.junk)S.config.junk.n=Math.min(4,Math.max(2,n));if(S.config.snake)S.config.snake.n=Math.min(4,Math.max(2,n));
+  if(S.config.rabbit)S.config.rabbit.n=Math.min(4,Math.max(2,n));if(S.config.banker)S.config.banker.n=Math.min(4,Math.max(3,n));
   S.config.nassau.n=n>=4?4:2;
   if(S.config.nines)S.config.nines.n=3;                 // 9's is 3-handed, always
 }
@@ -14945,7 +15149,8 @@ function startRound(){
       if(g==='stableford')S.config.stbl.n=nn;
       if(g==='quota')S.config.quota.n=nn;
       if(g==='bbb')S.config.bbb.n=Math.max(2,nn);
-      if((g==='junk'||g==='snake')&&S.config[g])S.config[g].n=Math.max(2,nn);
+      if((g==='junk'||g==='snake'||g==='rabbit')&&S.config[g])S.config[g].n=Math.max(2,nn);
+      if(g==='banker'&&S.config.banker)S.config.banker.n=Math.max(3,nn);
       if(g==='skins')S.config.skins.n=Math.max(2,nn);
       if(g==='nassau')S.config.nassau.n=nn>=4?S.config.nassau.n:2;
     });
@@ -14974,6 +15179,8 @@ function startRound(){
       :S.round.game==='nassau'?{n:S.config.nassau.n,press:S.config.nassau.press,pairing:S.config.vegas.pairing}
       :S.round.game==='skins'?{n:S.config.skins.n,amt:S.config.skins.amt,carry:S.config.skins.carry!==false,custom:!!S.config.skins.per}
       :S.round.game==='umbrella'?{pairing:S.config.vegas.pairing}
+      :S.round.game==='rabbit'?{n:S.config.rabbit.n,steal:!!S.config.rabbit.steal,split:S.config.rabbit.split}
+      :S.round.game==='banker'?{n:S.config.banker.n,min:S.config.banker.min,max:S.config.banker.max,rotate:!!S.config.banker.rotate}
       :S.round.game==='wolf'?{carry:S.config.carryTies,last2:S.config.last2LastPlace}:{}});
   if((withNearby||grpPicked)&&!S.share.on)shareRound();
   chalApplyTrackers();   // a putts goal is worthless if the tracker is off
@@ -14998,7 +15205,7 @@ function vHole(){
   if(!S.round.started) return topbar(gameName(),'','home')+`<main><div class="card center">No round in progress.<button class="big mt" onclick="go('home')">Pick a game</button></div></main>`;
   // Every game but Wolf, Vegas and Scramble scores on the plain card. A game missing
   // from this list falls through to the WOLF screen (DarkHorse 9/13: Match Play did).
-  if(['nines','stroke','bestball','stableford','quota','sixes','umbrella','bbb','nassau','skins','matchplay'].includes(gameOn())) return vHoleNines();
+  if(['nines','stroke','bestball','stableford','quota','sixes','umbrella','bbb','nassau','skins','matchplay','rabbit','banker'].includes(gameOn())) return vHoleNines();
   if(gameOn()==='vegas') return vHoleVegas();
   if(gameOn()==='scramble') return vHoleScramble();
   const h=S.round.cur, hole=S.course.holes[h], rec=S.round.holes[h];
@@ -15063,7 +15270,7 @@ function vHole(){
     body=`<div class="card">
       ${modeLbl?`<div class="row" style="border:none;padding-top:0"><span class="pill wolf">${modeLbl}</span></div>`:''}
       ${scoreRows}
-      </div>${hamCard}${nasCard}${skCard}${bbbCard}${junkCardHTML(rec,h)}${snakeCardHTML(rec,h)}${ctpRow}${extrasCard}${resultNote}
+      </div>${hamCard}${nasCard}${skCard}${bbbCard}${junkCardHTML(rec,h)}${snakeCardHTML(rec,h)}${rabbitCardHTML(rec,h)}${bankerCardHTML(rec,h)}${ctpRow}${extrasCard}${resultNote}
       ${rec.confirmed
         ?`${isReview()?'':`<button class="big" onclick="nextHole()">${posOf(h)<playOrder().length-1?'Next hole →':'Finish round'}</button>`}
           <button class="ghost mt" style="width:100%" onclick="unconfirm()">Edit this hole</button>`
@@ -15341,6 +15548,25 @@ function snakeOptsHTML(){return `<div class="card"><h2>🐍 Snake</h2>
       <button class="ghost ${snakeGrow()?'sel':''}" onclick="set(()=>{S.config.snake.grow=!snakeGrow();})">${snakeGrow()?'On':'Off'}</button></div>
     <div class="tiny mt">Every 3-putt takes the snake. Whoever has it at the end pays everyone.</div>
   </div>`;}
+function crewRowHTML(g,lo){const n=Math.min(4,Math.max(lo,S.config[g].n||4));
+  return S.round.started?'':`<div class="row" style="border-top:none"><span class="muted">Players in the game</span>
+    <span class="seg" style="display:inline-flex;gap:6px">${[2,3,4].filter(x=>x>=lo).map(x=>`<button class="ghost ${n===x?'sel':''}" onclick="set(()=>S.config.${g}.n=${x})">${x}</button>`).join('')}</span></div>`;}
+function rabbitOptsHTML(){const c=rabbitCfg();return `<div class="card"><h2>🐇 Rabbit</h2>${crewRowHTML('rabbit',2)}
+    <div class="row"><span class="muted">Rabbits</span><span class="seg" style="display:inline-flex;gap:6px">
+      <button class="ghost ${c.split!=='all'?'sel':''}" onclick="set(()=>S.config.rabbit.split='nines')">Front &amp; back</button>
+      <button class="ghost ${c.split==='all'?'sel':''}" onclick="set(()=>S.config.rabbit.split='all')">One for 18</button></span></div>
+    <div class="row"><span class="muted">Next outright win steals it</span>
+      <button class="ghost ${c.steal?'sel':''}" onclick="set(()=>{S.config.rabbit.steal=!rabbitCfg().steal;})">${c.steal?'On':'Off'}</button></div>
+    <div class="tiny mt">${c.steal?'Win a hole outright to take the rabbit.':'Win a hole outright to catch it; the next outright win sets it loose.'} Whoever has it at the end of the nine wins.</div></div>`;}
+function bankerOptsHTML(){const c=bankerCfg();return `<div class="card"><h2>🏦 Banker</h2>${crewRowHTML('banker',3)}
+    <div class="row"><span class="muted">Smallest bet</span><div class="stepper"><button onclick="chBanker('min',-1)">−</button><span class="val num">${c.min}</span><button onclick="chBanker('min',1)">+</button></div></div>
+    <div class="row"><span class="muted">Biggest bet</span><div class="stepper"><button onclick="chBanker('max',-1)">−</button><span class="val num">${c.max}</span><button onclick="chBanker('max',1)">+</button></div></div>
+    <div class="row"><span class="muted">Banker</span><span class="seg" style="display:inline-flex;gap:6px">
+      <button class="ghost ${!c.rotate?'sel':''}" onclick="set(()=>S.config.banker.rotate=false)">Low score</button>
+      <button class="ghost ${c.rotate?'sel':''}" onclick="set(()=>S.config.banker.rotate=true)">Rotates</button></span></div>
+    <div class="tiny mt">Everyone plays the banker one-on-one for their own bet. ${c.rotate?'The banker goes round the group in order.':'Low score on a hole banks the next one.'}</div></div>`;}
+function chBanker(k,d){set(()=>{const c=S.config.banker=Object.assign({n:4,min:1,max:5,rotate:false},S.config.banker||{});
+  if(k==='min'){c.min=Math.max(1,Math.min(c.max,(+c.min||1)+d));}else{c.max=Math.max(c.min,Math.min(100,(+c.max||5)+d));}});}
 // Junk item values: 0 takes an item out of the game; a 3-putt can only cost.
 function chJunkPt(k,d){set(()=>{const c=S.config.junk=S.config.junk||{n:4};c.pts=Object.assign(junkDefaults(),c.pts||{});
   const lo=k==='three'?-5:0,hi=k==='three'?0:10;c.pts[k]=Math.min(hi,Math.max(lo,(+c.pts[k]||0)+d));});}
@@ -15875,7 +16101,7 @@ function joinPlay(k){
 // stamps its own row with it; a phone behind the group's newest is asked to update before it scores,
 // and the rest of the group sees whose phone is behind (an app older than this check says nothing, so
 // its row carries no stamp and reads as behind).
-const RULES_VER=20261026;   // 10/26: Junk + Snake side games. 10/18: 3rd/4th strokes, plus handicaps, Stableford/team results, Vegas CTP, Scramble
+const RULES_VER=20261027;   // 10/26 pm: Rabbit + Banker (a 2nd change on 10/26, so it takes the next day's number). 10/26: Junk + Snake side games. 10/18: 3rd/4th strokes, plus handicaps, Stableford/team results, Vegas CTP, Scramble
 function rulesRound(){return !!(S.share&&S.share.on&&S.round&&S.round.started&&!isReview()&&!S.round.myEndedAt);}
 function rulesBehind(){
   if(!rulesRound())return 0;
@@ -15924,13 +16150,14 @@ function rulesNoticeHTML(){
 // every other phone compares the options before and after the meta lands and says what changed, and who.
 const OPT_GAME={pts:'Wolf',stbl:'Stableford',quota:'Quota',skins:'Skins',nines:"9's",vegas:'Vegas',nassau:'Nassau',hammer:'Hammer',
   bestball:'Best Ball',umbrella:'Umbrella',bbb:'Bingo Bango Bongo',sixes:'Sixes',scramble:'Scramble',ctpMoney:'Closest to pin',stroke:'Stroke',
-  junk:'Junk',snake:'Snake'};
+  junk:'Junk',snake:'Snake',rabbit:'Rabbit',banker:'Banker'};
 const OPT_LABEL={'pts.partnerWin':'Wolf · partner win','pts.fieldBeatsPartners':'Wolf · beating the wolf team','pts.loneWin':'Wolf · lone wolf win',
   'pts.fieldBeatsLone':'Wolf · beating a lone wolf','pts.blindWin':'Wolf · blind wolf win','pts.fieldBeatsBlind':'Wolf · beating a blind wolf',
   'pts.ctp':'Wolf · closest to pin','allowance':'Handicap %','recLens':'Round scored','lens':'Scores shown','carryTies':'Ties carry',
   'ctpAll':'Closest to pin','ctpMoney.amt':'Closest to pin $','ctpMoney.carry':'Closest to pin carry','skins.amt':'Skins $',
   'skins.carry':'Skins carry-overs','skins.per':'Skins hole values','dollarPerPt':'$ per point','games':'Games',
-  'snake.grow':'Snake · grows with every 3-putt'};
+  'snake.grow':'Snake · grows with every 3-putt','rabbit.steal':'Rabbit · steal','rabbit.split':'Rabbit · front & back / one for 18',
+  'banker.min':'Banker · smallest bet','banker.max':'Banker · biggest bet','banker.rotate':'Banker · rotates'};
 function optSnap(){
   try{
     const c=clone(S.config||{});
@@ -16122,7 +16349,7 @@ function vHoleNines(){
   const body=`${roomFullHTML()}${rulesNoticeHTML()}${joinPlayHTML()}${catchUpHTML()}<div class="card">
     ${act.some(i=>rec.gross[i]==null)?`<button class="ghost mb" style="width:100%" onclick="set(()=>prefillNines(${h}))">Everyone to par ${hole.par} — adjust from there</button>`:''}
     ${scoreRows}
-    </div>${hamCard}${nasCard}${skCard}${bbbCard}${junkCardHTML(rec,h)}${snakeCardHTML(rec,h)}${ctpRow}${extrasCard}${resultNote}
+    </div>${hamCard}${nasCard}${skCard}${bbbCard}${junkCardHTML(rec,h)}${snakeCardHTML(rec,h)}${rabbitCardHTML(rec,h)}${bankerCardHTML(rec,h)}${ctpRow}${extrasCard}${resultNote}
     ${rec.confirmed
       ?`${isReview()?'':`<button class="big" onclick="nextHole()">${posOf(h)<playOrder().length-1?'Next hole →':'Finish round'}</button>`}
         <button class="ghost mt" style="width:100%" onclick="unconfirm()">Edit this hole</button>`
@@ -16218,7 +16445,7 @@ function vHoleVegas(){
       <img class="vegas-art" src="${art('/vegas.png')}" alt="" onerror="this.outerHTML='<span style=&quot;font-size:34px&quot;>🎲</span>'">
     </div>
     ${[0,1,2,3].some(i=>rec.gross[i]==null)?`<button class="ghost mb" style="width:100%" onclick="set(()=>prefillNines(${h}))">Everyone to par ${hole.par} — adjust from there</button>`:''}
-    ${teamBoxes}${hamCard}${nasCard}${skCard}${bbbCard}${junkCardHTML(rec,h)}${snakeCardHTML(rec,h)}${ctpRow}${extrasCard}${resultNote}
+    ${teamBoxes}${hamCard}${nasCard}${skCard}${bbbCard}${junkCardHTML(rec,h)}${snakeCardHTML(rec,h)}${rabbitCardHTML(rec,h)}${bankerCardHTML(rec,h)}${ctpRow}${extrasCard}${resultNote}
     ${rec.confirmed
       ?`${isReview()?'':`<button class="big" onclick="nextHole()">${posOf(h)<playOrder().length-1?'Next hole →':'Finish round'}</button>`}
         <button class="ghost mt" style="width:100%" onclick="unconfirm()">Edit this hole</button>`
@@ -16941,7 +17168,7 @@ function teamPickerRow(g){
       }finally{engineGame=p;engineDepth--;}};};
   wrap('computeAll','wolf');wrap('computeNines','nines');wrap('computeVegas','vegas');
   wrap('computeBestBall','bestball');wrap('computeScramble','scramble');
-  wrap('computeQuota','quota');wrap('computeBBB','bbb');wrap('computeJunk','junk');wrap('computeSnake','snake');wrap('computeSkins','skins');
+  wrap('computeQuota','quota');wrap('computeBBB','bbb');wrap('computeJunk','junk');wrap('computeSnake','snake');wrap('computeRabbit','rabbit');wrap('computeBanker','banker');wrap('computeSkins','skins');
   wrap('computeNassau','nassau');wrap('computeSixes','sixes');wrap('computeUmbrella','umbrella');
   wrap('computeStroke','stroke');wrap('computeStableford','stableford');
   wrap('computeMatch','bestball');wrap('computeMatchPlay','matchplay');
@@ -17098,6 +17325,14 @@ function vStandings(){
       </table>${teamPickerRow('umbrella')+mysteryRowHTML('umbrella')}
       <div class="tiny mt">Six points a hole: 2 low ball · 2 low team total · 1 closest to pin · 1 gross birdie.
       Sweep all six and it doubles to <b>12</b>${u.sweeps[prim]?` — ☂ ${u.sweeps[prim]} umbrella${u.sweeps[prim]>1?'s':''} opened!`:''}.</div></div>`;
+  }else if(view==='rabbit'&&stackHas('rabbit')){
+    const R=computeRabbit();
+    tables=withEngine('rabbit',()=>genericCard('🐇 Rabbit',R.ledgers,v=>String(v),false,
+      `<div class="tiny mt">${rabbitSegsTxt(R,prim)}</div><div class="tiny mt">Win a hole outright to catch it; the next outright win ${rabbitCfg().steal?'steals it':'sets it loose'}. Each rabbit is a point from everyone.</div>`));
+  }else if(view==='banker'&&stackHas('banker')){
+    const B=computeBanker();
+    tables=withEngine('banker',()=>genericCard('🏦 Banker',B.ledgers,v=>(v>0?'+':'')+v,false,
+      `<div class="tiny mt">Each golfer's net from his bets with the banker. 🏦 ${esc((S.players[bankerOf(S.round.cur)]||{}).name||'')} banks hole ${S.round.cur+1}.</div>`));
   }else if(view==='junk'&&stackHas('junk')){
     const J=computeJunk(),JP=junkPts(),N=Object.fromEntries(JUNK_ITEMS);
     const on=JUNK_ITEMS.filter(([k])=>JP[k]);
@@ -17302,7 +17537,7 @@ function vStandings(){
 function jumpAndGo(h){set(()=>{S.round.cur=h;S.screen='hole';});try{setTimeout(maybeAskPar,400);}catch(e){}}
 
 // ----- settlement -----
-const PAIRS_GAMES=['wolf','vegas','bestball','scramble','sixes','umbrella','nassau','skins'];
+const PAIRS_GAMES=['wolf','vegas','bestball','scramble','sixes','umbrella','nassau','skins','rabbit','banker'];
 // A FIXED 2v2 settles as one side: the margin is between the two teams, and each
 // losing player pays half of it. Settling player-against-player instead bills the
 // same round four times, because it charges you against your own partner too.
@@ -17371,6 +17606,10 @@ function settleNet(lens){
     const conv=v=>g==='nines'?v/12:g==='matchplay'?v/2:v;
     if(rate>0)out.priced=true;
     const gn={}, FT=withEngine(g,()=>fixedTeamsFor(g));
+    if(g==='banker'){   // one-on-one bets with the banker: each golfer's ledger IS his money
+      seats.forEach(i=>{gn[i]=(led[i]||0)*rate;out.net[at(i)]+=gn[i];});
+      out.per[g]=gn;return;
+    }
     if(FT){
       const diff=(led[FT[0][0]]-led[FT[1][0]])*inv;
       const half=Math.abs(diff)*rate/2, winT=diff>=0?0:1;
@@ -17392,7 +17631,7 @@ function vSettleStack(G){
   const L=payLens();
   const SN=settleNet(L), net=SN.net;
   const act=SN.act;   // everyone some game pays (10/18), not just the main game's seats
-  const UNIT={stroke:'stroke',bestball:'hole',nassau:'bet',skins:'$',nines:'pt',quota:'pt',stableford:'pt',sixes:'pt',umbrella:'pt',bbb:'pt',junk:'pt',snake:'pt'};
+  const UNIT={stroke:'stroke',bestball:'hole',nassau:'bet',skins:'$',nines:'pt',quota:'pt',stableford:'pt',sixes:'pt',umbrella:'pt',bbb:'pt',junk:'pt',snake:'pt',rabbit:'pt',banker:'pt'};
   const cards=G.map(g=>{
     const eng=computeFor(g);
     const led=eng.ledgers[L];
@@ -17434,7 +17673,7 @@ function vSettleStack(G){
       ${order.map(i=>`<tr><td>${esc(S.players[i].name)}</td><td class="r num" style="font-size:18px">${fmt(led[i])}</td>
         <td class="r num" style="font-size:18px;color:${!priced?'var(--ink2)':gn[i]>0.004?'var(--good)':gn[i]<-0.004?'var(--red)':'var(--ink2)'}">${!priced?'—':(gn[i]>0.004?'+':'')+fmtMoney(gn[i]).replace('$-','-$')}</td></tr>`).join('')}</table>
       ${priced?`<div class="row mt" style="border-top:1px solid var(--line)"><span class="muted">Pot this game</span><b class="num" style="font-size:18px">${fmtMoney(pot)}</b></div>`:''}
-      ${g==='snake'?snakeSettleNoteHTML():''}
+      ${g==='snake'?snakeSettleNoteHTML():''}${g==='rabbit'?`<div class="tiny mt">${rabbitSegsTxt(computeRabbit(),L)}</div>`:''}${g==='banker'?'<div class="tiny mt">Every bet is one-on-one with that hole\'s banker — this is each golfer\'s net.</div>':''}
       ${g==='skins'?'<div class="tiny mt">Already dollars — each skin collects from every other player.</div>'
         :`<div class="row mt"><span class="muted">$ per ${unit}</span>
           <input id="rate_${g}" type="number" step="0.25" min="0" value="${(S.round.rates||{})[g]||''}" placeholder="0" style="width:90px" onchange="setRate('${g}',this.value)"></div>`}
@@ -17574,7 +17813,7 @@ function vSettle(){
     const pairs=[];
     // pairs that actually settle (Match Play: within each match), over the holes both played (10/18)
     settlePairs(gg,act).forEach(([i,j])=>{
-      const d=pairDelta(gg,LL,i,j,led)*inv,ad=ptsVal(Math.abs(d));
+      const d=(gg==='banker'?all.pair[LL][i][j]:pairDelta(gg,LL,i,j,led))*inv,ad=ptsVal(Math.abs(d));
       if(d!==0)pairs.push(gg==='skins'
         ?`${esc(S.players[d>0?j:i].name)} → ${esc(S.players[d>0?i:j].name)}: <b class="num">${fmtMoney(Math.abs(d))}</b>`
         :`${esc(S.players[d>0?j:i].name)} → ${esc(S.players[d>0?i:j].name)}: <b class="num">${ptsTxt(Math.abs(d))} ${unit}${ad===1?'':'s'}</b>${v?` <span class="muted">($${(ad*v).toFixed(2)})</span>`:''}`);
@@ -17615,7 +17854,7 @@ function newRound(){
 // paint from memory — no service-worker round trips, no background network
 // revalidation per render, no pop-in on flaky signal.
 const ART={};
-['/banner.jpg','/wolf.png','/nine.png','/vegas.png','/quota.png','/sixes.png','/umbrella.png','/hammer.png','/bbb.png','/stroke.png','/stableford.png','/bestball.png','/scramble.png','/nassau.png','/skins.png','/matchplay.png','/junk.png','/snake.png'].forEach(f=>{
+['/banner.jpg','/wolf.png','/nine.png','/vegas.png','/quota.png','/sixes.png','/umbrella.png','/hammer.png','/bbb.png','/stroke.png','/stableford.png','/bestball.png','/scramble.png','/nassau.png','/skins.png','/matchplay.png','/junk.png','/snake.png','/rabbit.png','/banker.png'].forEach(f=>{
   fetch(f).then(r=>r.ok?r.blob():null).then(b=>{
     if(!b)return;
     ART[f]=URL.createObjectURL(b);
