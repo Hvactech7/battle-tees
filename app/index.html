@@ -583,7 +583,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-center in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1793087564';
+const BUILD='1793117218';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1427,7 +1427,7 @@ function primeCaches(toServer){
   SYNC_KEYS.forEach(k=>{const c=contentKey(k);localContent[k]=c;if(toServer)sentCache[k]=c;else delete sentCache[k];});
 }
 function stampChanges(){
-  if(!applyingRemote)try{bankFreeze();}catch(e){}
+  if(!applyingRemote)try{bankFreeze();stampPlayedTerms();}catch(e){}
   if(!S.share||!S.share.on||applyingRemote)return;
   SYNC_KEYS.forEach(k=>{
     const c=contentKey(k);
@@ -1783,7 +1783,26 @@ function kickSync(){if(S.share&&S.share.on&&!sock){retryMs=1000;syncConnect();}t
 // for the tie toss, the Snake last-out pick, closest to the pin and the values a mid-round change keeps on
 // played holes. None of these is ever cleared, only set or re-set, so a copy that lacks one never wins it.
 const HOLE_ONCE=['bkWho','bkAt','bkToss','bkRange','jPts','snakeLast','ctp'];
-function keepHoleOnce(m,other){HOLE_ONCE.forEach(k=>{if(m[k]==null&&other&&other[k]!=null)m[k]=clone(other[k]);});}
+function keepHoleOnce(m,other){HOLE_ONCE.forEach(k=>{if(k!=='bkAt'&&k!=='bkWho'&&m[k]==null&&other&&other[k]!=null)m[k]=clone(other[k]);});
+  if(other&&bkAtBeats(other,m)){m.bkAt=other.bkAt;if(other.bkAtK)m.bkAtK=other.bkAtK.slice();else delete m.bkAtK;}
+  if(other&&bkWhoBeats(other,m)){m.bkWho=other.bkWho;if(other.bkWhoK)m.bkWhoK=other.bkWhoK.slice();else delete m.bkWhoK;}}
+// TWO PHONES, TWO BANKERS (stress run 10/27, seed 849: one phone carded the hole before with a typo, another fixed it,
+// and each locked the next hole's banker from its own copy). The newer record used to win, so a banker's "double every
+// bet" could turn into a player's double. Now each lock carries what made it: the banker's own double outranks a bet,
+// a bet outranks a confirm, and the same kind goes to the earlier one -- every phone picks the same winner, in any order.
+const BK_CF=1,BK_BET=2,BK_DBL=3;
+function bkLock(r,b,k){r.bkAt=b;r.bkAtK=[k,Date.now()];}
+// a pick (a name tapped) and the app's toss settle the same way between phones: the toss outranks a tap, then the earlier
+function bkWhoBeats(x,y){
+  if(!x||x.bkWho==null)return false;if(!y||y.bkWho==null)return true;
+  const a=x.bkWhoK||[0,Infinity],b=y.bkWhoK||[0,Infinity];
+  return a[0]!==b[0]?a[0]>b[0]:a[1]!==b[1]?a[1]<b[1]:x.bkWho<y.bkWho;
+}
+function bkAtBeats(x,y){
+  if(!x||x.bkAt==null)return false;if(!y||y.bkAt==null)return true;
+  const a=x.bkAtK||[0,Infinity],b=y.bkAtK||[0,Infinity];   // a lock from an older app ranks last
+  return a[0]!==b[0]?a[0]>b[0]:a[1]!==b[1]?a[1]<b[1]:x.bkAt<y.bkAt;
+}
 function outboxMerge(cur,mine){
   const newer=(mine._ts||0)>(cur._ts||0), base=newer?mine:cur, other=newer?cur:mine;
   const m=Object.assign({},base);keepHoleOnce(m,other);
@@ -4464,6 +4483,17 @@ function freezePlayed(g,fn){
   for(const h of playOrder()){const rec=S.round.holes[h];if(rec&&rec.confirmed&&!sinceSkip(g,h))fn(rec,h);}
 }
 function holeJunkPts(rec){return rec&&rec.jPts?Object.assign(junkDefaults(),rec.jPts):junkPts();}
+// EVERY PLAYED HOLE CARRIES ITS OWN TERMS (stress run 10/27, seed 40): a phone with no signal never heard the
+// holes close, so its lock never shut and it raised Banker's biggest bet; the closed holes reached it with nothing
+// on them to say they were played at the old range. Now the phone that cards a hole writes its Junk points and Banker
+// range on it right then, and a phone that's behind reads them off the hole.
+function stampPlayedTerms(){
+  if(!S.round||!S.round.started||isReview())return;
+  const J=stackHas('junk'),B=stackHas('banker');if(!J&&!B)return;
+  for(const h of playOrder()){const r=S.round.holes[h];if(!r||!r.confirmed)continue;
+    if(J&&!r.jPts&&!sinceSkip('junk',h))r.jPts=clone(junkPts());
+    if(B&&!r.bkRange&&!sinceSkip('banker',h)){const c=bankerCfg();r.bkRange=[c.min,c.max];}}
+}
 // The lock stops a change once a hole is in -- on the phone making it. A phone that hadn't heard the hole
 // close could still send one, so the RECEIVING phone keeps its own played holes at the values they were
 // played for before the new options land; the stamps ride the next sync back to everyone.
@@ -4605,7 +4635,10 @@ function bankerCfg(){return Object.assign({min:1,max:5,rotate:false},S.config.ba
 function bankerOf(h){
   const seats=engineGame==='banker'?actIdx():gameSeats('banker'),o=playOrder();
   const pos=Math.max(0,o.indexOf(h)),rec=S.round.holes[h]||{};
-  if(rec.bkWho!=null&&seats.includes(rec.bkWho))return rec.bkWho;   // a pick or the toss
+  // a pick or the toss -- except a name tapped on a phone that hadn't seen the banker double every bet: the double is
+  // final (the rules), so it holds against a tap whenever it reaches the other phones. The app's toss still rules.
+  const dblFirst=rec.bkAt!=null&&rec.bkAtK&&rec.bkAtK[0]>=BK_DBL&&rec.bkWhoK&&rec.bkWhoK[0]<2;
+  if(rec.bkWho!=null&&seats.includes(rec.bkWho)&&!(dblFirst&&seats.includes(rec.bkAt)))return rec.bkWho;
   if(rec.bkAt!=null&&seats.includes(rec.bkAt))return rec.bkAt;      // frozen at confirm / at the first bet
   const since=(S.round.since&&S.round.since.banker)||0,k=pos-since;
   const c=bankerCfg();
@@ -4616,8 +4649,10 @@ function bankerOf(h){
   if(k<=0)return seats[0];
   const ph=o[pos-1],prev=S.round.holes[ph],pb=bankerOf(ph);
   if(!prev||!prev.confirmed)return pb;
-  const sc=seats.map(i=>prev.gross[i]);if(sc.some(v=>v==null))return pb;
-  const best=Math.min(...sc),low=seats.filter((i,x)=>sc[x]===best);
+  // the hole before is confirmed, so a blank on it is a golfer who wasn't playing yet (a late joiner): the low score
+  // comes from those who played it -- a phone that had seated him and one that hadn't used to bank different golfers
+  const pl=seats.filter(i=>prev.gross[i]!=null);if(!pl.length)return pb;
+  const best=Math.min(...pl.map(i=>prev.gross[i])),low=pl.filter(i=>prev.gross[i]===best);
   if(low.includes(pb))return pb;
   return low.length>1&&c.toss?bankTossPick(h,low):low[0];
 }
@@ -4633,7 +4668,7 @@ function bankFreeze(){
   // not while the hole still waits and nobody has bet on it: its banker is a placeholder, and the real toss/pick may
   // still be on its way from a phone with no signal (stress run 10/27, seed 1933) -- it freezes once it's known.
   // Bets already in (an older app, or a hole re-opened behind it) were made with the banker shown then: freeze that.
-  for(const h of playOrder()){const r=S.round.holes[h];if(r&&r.confirmed&&r.bkWho==null&&r.bkAt==null&&!sinceSkip('banker',h)&&(!bankerWaits(h)||bankActed(r)))r.bkAt=bankerOf(h);}
+  for(const h of playOrder()){const r=S.round.holes[h];if(r&&r.confirmed&&r.bkWho==null&&r.bkAt==null&&!sinceSkip('banker',h)&&(!bankerWaits(h)||bankActed(r)))bkLock(r,bankerOf(h),BK_CF);}
 }
 function bankActed(r){const s=(r&&r.stats)||{};return ['bkBet','bkDbl'].some(k=>Array.isArray(s[k])&&s[k].some(v=>+v));
 }
@@ -9011,20 +9046,23 @@ function bankerWaits(h){
     // the first banker hole: with the toss rules, bets open once the toss (or a pick) says who banks --
     // a double made before it changed meaning when the toss landed on its maker (stress run 10/26)
     if(pos===sc)return !!bankerCfg().toss;
-    if(bankerCfg().rotate||pos<sc)return false;
+    if(pos<sc)return false;
+    // a rotating bank starts from the tossed banker: until the toss reaches this phone every later hole waits too
+    // (stress run 10/27, seeds 6726/6960: the toss landed on a phone with no signal, the others rotated from seat 1)
+    if(bankerCfg().rotate){if(!bankerCfg().toss)return false;const f=S.round.holes[o[sc]];return !(f&&f.bkWho!=null);}
     const prev=S.round.holes[o[pos-1]];return !(prev&&prev.confirmed);
   }catch(e){return false;}
 }
 // the hole the Banker game starts on (the first tee, or where it was picked up): its banker is a toss or a pick
 function bankerFirstHole(h){try{const o=playOrder(),sc=(S.round.since&&S.round.since.banker)||0;return o.indexOf(h)===sc;}catch(e){return false;}}
 // while a hole waits nobody banks it yet: every screen says where the banker comes from, never names one
-function bankerFrom(h){const o=playOrder(),pos=o.indexOf(h),sc=(S.round.since&&S.round.since.banker)||0;return pos===sc?'the tee toss':`hole ${o[pos-1]+1}`;}
+function bankerFrom(h){const o=playOrder(),pos=o.indexOf(h),sc=(S.round.since&&S.round.since.banker)||0;return (pos===sc||bankerCfg().rotate)?'the tee toss':`hole ${o[pos-1]+1}`;}
 function bankerWaitLine(h){const o=playOrder(),pos=o.indexOf(h),sc=(S.round.since&&S.round.since.banker)||0;
-  return `<div class="tiny" style="color:var(--gold,#e8c552)">⏳ ${pos===sc?'Toss a tee for the first banker — bets open after.':`Hole ${o[pos-1]+1} isn't in yet — its low score banks this hole.`}</div>`;}
+  return `<div class="tiny" style="color:var(--gold,#e8c552)">⏳ ${pos===sc?'Toss a tee for the first banker — bets open after.':bankerCfg().rotate?`The bank rotates from the tee toss on hole ${o[sc]+1} — bets open once it's in.`:`Hole ${o[pos-1]+1} isn't in yet — its low score banks this hole.`}</div>`;}
 let bkArm=null;   // the banker's first tap on "double every bet": {h,at}
 // Nathan 10/26 11:34 PM: a golfer's bet and double lock when THEY confirm their own score (cfOn) -- a score typed
 // by mistake locks nothing until it's confirmed; a bet made with no signal still counts when it syncs
-function bkBet(h,i,d){reviewTouch();set(()=>{const rec=S.round.holes[h];if(!rec||bankerLock(rec,h)||cfOn(rec,i)||i===bankerOf(h))return;if(rec.bkWho==null&&rec.bkAt==null)rec.bkAt=bankerOf(h);const c=bankerCfg(),a=statArr(rec,'bkBet');
+function bkBet(h,i,d){reviewTouch();set(()=>{const rec=S.round.holes[h];if(!rec||bankerLock(rec,h)||cfOn(rec,i)||i===bankerOf(h))return;if(rec.bkWho==null&&rec.bkAt==null)bkLock(rec,bankerOf(h),BK_BET);const c=bankerCfg(),a=statArr(rec,'bkBet');
   a[i]=Math.min(c.max,Math.max(c.min,bankerBet(rec,i)+d));stampStat(rec,i);});}
 function bkDbl(h,i){reviewTouch();
   const rec=S.round.holes[h];if(!rec||bankerLock(rec,h)||cfOn(rec,i))return;
@@ -9032,9 +9070,10 @@ function bkDbl(h,i){reviewTouch();
     if(!bkArm||bkArm.h!==h){bkArm={h};render();setTimeout(()=>{if(bkArm&&bkArm.h===h){bkArm=null;render();}},4000);return;}
     bkArm=null;
   }
-  set(()=>{if(rec.bkWho==null&&rec.bkAt==null)rec.bkAt=bankerOf(h);const a=statArr(rec,'bkDbl');a[i]=a[i]?0:1;stampStat(rec,i);});}
+  set(()=>{const b=bankerOf(h);if(rec.bkWho==null&&(rec.bkAt==null||i===b))bkLock(rec,b,i===b?BK_DBL:BK_BET);   // the banker's double: the strongest lock
+    const a=statArr(rec,'bkDbl');a[i]=a[i]?0:1;stampStat(rec,i);});}
 function bkWho(h,i){const l=bankerLock(S.round.holes[h],h);if(l==='closed'||l==='banker')return;   // the rules: not after the banker's double
-  reviewTouch();set(()=>{const rec=S.round.holes[h];if(rec&&!rec.bkToss)rec.bkWho=i;});}   // a tossed banker is final
+  reviewTouch();set(()=>{const rec=S.round.holes[h];if(rec&&!rec.bkToss){rec.bkWho=i;rec.bkWhoK=[1,Date.now()];}});}   // a tossed banker is final
 function bankerCardHTML(rec,h){
   if(!stackHas('banker')||sinceSkip('banker',h)||!rec)return '';
   const seats=gameSeats('banker'),b=bankerOf(h),mine=myRows(h),c=bankerCfg(),lock=bankerLock(rec,h);
@@ -15253,8 +15292,8 @@ function bankAskDue(){
     const rec=S.round.holes[h],ph=o[pos-1],prev=S.round.holes[ph];
     // a bet already froze this hole's banker (bkAt): an edit to the hole before can't re-open the toss (stress run 10/26)
     if(!rec||rec.confirmed||rec.bkWho!=null||rec.bkAt!=null||!prev||!prev.confirmed)return null;
-    const g=seats.map(i=>prev.gross[i]);if(g.some(v=>v==null))return null;
-    const best=Math.min(...g),low=seats.filter((i,x)=>g[x]===best);
+    const pl=seats.filter(i=>prev.gross[i]!=null);if(!pl.length)return null;   // the golfers who played it (see bankerOf)
+    const best=Math.min(...pl.map(i=>prev.gross[i])),low=pl.filter(i=>prev.gross[i]===best);
     if(low.length<2||low.includes(bankerOf(ph)))return null;
     return {h,kind:'tie',pool:low};
   }catch(e){return null;}
@@ -15291,7 +15330,7 @@ function bankAskToss(){
   const a=bankAsk;if(!a||a.spin||a.tossed||(S.round.holes[a.h]||{}).bkToss||bankerLock(S.round.holes[a.h],a.h)==='banker')return;
   const to=a.kind==='first'?a.pool[Math.floor(Math.random()*a.pool.length)]:bankerOf(a.h);
   const land=()=>{if(bankAsk!==a)return;a.spin=false;a.tossed=true;a.sel=to;
-    reviewTouch();set(()=>{const r=S.round.holes[a.h];if(!r)return;r.bkToss=1;if(a.kind==='first')r.bkWho=to;});};   // a tie's pick is bankTossPick: nothing to write but the lock
+    reviewTouch();set(()=>{const r=S.round.holes[a.h];if(!r)return;r.bkToss=1;if(a.kind==='first'){r.bkWho=to;r.bkWhoK=[2,Date.now()];}});};   // a tie's pick is bankTossPick: nothing to write but the lock
   let still=false;try{still=matchMedia('(prefers-reduced-motion: reduce)').matches;}catch(e){}
   const n=a.pool.length;if(still||n<2)return land();
   const st=Math.floor(Math.random()*n),T=n*Math.ceil(12/n)+(((a.pool.indexOf(to)-st)%n)+n)%n;
@@ -16201,7 +16240,7 @@ function bankerOptsHTML(){const c=bankerCfg();return `<div class="card"><h2>🏦
       <button class="ghost ${!c.rotate?'sel':''}" onclick="chBankerRotate(false)">Low score</button>
       <button class="ghost ${c.rotate?'sel':''}" onclick="chBankerRotate(true)">Rotates</button></span></div>
     <div class="tiny mt">Everyone plays the banker one-on-one for their own bet. A tee toss picks the first banker. ${c.rotate?'Then it goes round the group in order.':'Then low score on a hole banks the next one.'}</div></div>`;}
-function freezeBanker(){freezePlayed('banker',(rec,h)=>{if(rec.bkWho==null&&rec.bkAt==null&&(!bankerWaits(h)||bankActed(rec)))rec.bkAt=bankerOf(h);if(!rec.bkRange){const c=bankerCfg();rec.bkRange=[c.min,c.max];}});}
+function freezeBanker(){freezePlayed('banker',(rec,h)=>{if(rec.bkWho==null&&rec.bkAt==null&&(!bankerWaits(h)||bankActed(rec)))bkLock(rec,bankerOf(h),BK_CF);if(!rec.bkRange){const c=bankerCfg();rec.bkRange=[c.min,c.max];}});}
 function chBankerRotate(v){if(optsLocked('banker'))return;set(()=>{freezeBanker();S.config.banker.rotate=v;});}
 function chBanker(k,d){if(optsLocked('banker'))return;set(()=>{freezeBanker();const c=S.config.banker=Object.assign({n:4,min:1,max:5,rotate:false},S.config.banker||{});
   if(k==='min'){c.min=Math.max(1,Math.min(c.max,(+c.min||1)+d));}else{c.max=Math.max(c.min,Math.min(100,(+c.max||5)+d));}});}
@@ -16740,7 +16779,7 @@ function joinPlay(k){
 // stamps its own row with it; a phone behind the group's newest is asked to update before it scores,
 // and the rest of the group sees whose phone is behind (an app older than this check says nothing, so
 // its row carries no stamp and reads as behind).
-const RULES_VER=20261030;   // 10/26 late: game options set before the first hole and locked for the round, Stableford dots = full strokes / Quota + BBB none, Score It scores only you (typed golfers on their own sheet), Banker: hole 1 waits for the toss, a confirmed or bet-on hole keeps its banker (bkAt). 10/26 night: Best Ball + Match Play pay the match as won (stop at the clinch), Quota bogey = 1, mid-round Junk/Banker changes count from the next hole, a confirmed hole keeps its banker, no Banker bets until the hole before is in (the 4th change on 10/26). 10/26 eve: Banker tee toss (first banker + ties). 10/26 pm: Rabbit + Banker (a 2nd change on 10/26, so it takes the next day's number). 10/26: Junk + Snake side games. 10/18: 3rd/4th strokes, plus handicaps, Stableford/team results, Vegas CTP, Scramble
+const RULES_VER=20261031;   // 10/27: Banker clashes settle the same on every phone (banker's double > bet > confirm, then earlier; a tapped pick loses to the banker's double), a rotating bank waits for the hole-1 toss, the low score comes from the golfers who played the hole, a carded hole keeps its bet range + junk points. 10/26 late: game options set before the first hole and locked for the round, Stableford dots = full strokes / Quota + BBB none, Score It scores only you (typed golfers on their own sheet), Banker: hole 1 waits for the toss, a confirmed or bet-on hole keeps its banker (bkAt). 10/26 night: Best Ball + Match Play pay the match as won (stop at the clinch), Quota bogey = 1, mid-round Junk/Banker changes count from the next hole, a confirmed hole keeps its banker, no Banker bets until the hole before is in (the 4th change on 10/26). 10/26 eve: Banker tee toss (first banker + ties). 10/26 pm: Rabbit + Banker (a 2nd change on 10/26, so it takes the next day's number). 10/26: Junk + Snake side games. 10/18: 3rd/4th strokes, plus handicaps, Stableford/team results, Vegas CTP, Scramble
 function rulesRound(){return !!(S.share&&S.share.on&&S.round&&S.round.started&&!isReview()&&!S.round.myEndedAt);}
 function rulesBehind(){
   if(!rulesRound())return 0;
