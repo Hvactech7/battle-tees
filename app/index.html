@@ -575,7 +575,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-center in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1793061779';
+const BUILD='1793063705';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -14900,12 +14900,14 @@ function bankAskDone(){
   bankAsk=null;if(a.kind==='first')bankPickup=false;
   set(()=>{S.round._bankSeen=Object.assign({},S.round._bankSeen,{[a.h]:1});});
 }
-// BANKER BETS ON THE GPS MAP (Nathan 10/26: "go with C"). Walking onto a hole someone else banks, the
-// phone asks what you are playing him for; after your drive, the chip above FW/GIR (Track It's width)
-// opens your bet to double it -- or, for the banker, double every bet. The same handlers and locks as
-// the Banker card (bkBet / bkDbl / bankerLock), so the map can never do what the card can't. On a hole
-// with no green mapped the Manual button owns that spot: the chip moves over the Score It box.
-let mapBet=null;   // the open pop-up {h,ask}
+// BANKER BETS ON THE GPS MAP (Nathan 10/26: "go with C"). The chip above FW/GIR (Track It's width)
+// opens your bet and Double my bet -- or, for the banker, everyone's bets and Double every bet. NOTHING
+// pops up on its own: the phone rides in a cart holder, the GPS has to be clear when the cart pulls up
+// to the tee, and bets and doubles go in together back at the cart after the tee shots (Nathan 10/26).
+// The same handlers and locks as the Banker card (bkBet / bkDbl / bankerLock), so the map can never do
+// what the card can't. On a hole with no green mapped the Manual button owns that spot: the chip moves
+// over the Score It box.
+let mapBet=null;   // the open pop-up {h}
 function mapBetCtx(h){
   try{
     if(!S.round.started||isReview()||gpsOnly()||!stackHas('banker')||sinceSkip('banker',h))return null;
@@ -14921,21 +14923,11 @@ function mapBetChipHTML(manualShown){
   const at=manualShown?'right:max(10px,calc(50vw - 230px));bottom:calc(var(--mapbarH) + 116px)':'left:max(10px,calc(50vw - 230px));bottom:calc(var(--mapbarH) + 102px)';
   return `<button id="mapbetchip" onclick="mapBetOpen()" style="position:fixed;${at};z-index:6;width:120px;height:36px;padding:0 6px;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:rgba(15,21,34,.86);border:1.5px solid #c99a2e;color:#f3d48a;border-radius:10px;font-family:Rajdhani,Inter,sans-serif;font-weight:700">${lbl}</button>`;
 }
-function mapBetAskDue(){
-  try{
-    if(S.screen!=='map'||mapBet||bankAsk||bankBlocked('mapBet')||bankAskDue())return null;   // the tee toss first
-    const x=mapBetCtx(mapHole);if(!x||x.mine||x.lock)return null;
-    if((S.round._betAsked||{})[x.h])return null;
-    const a=x.rec.stats&&x.rec.stats.bkBet;if(a&&a[x.me])return null;   // already bet, on the Score card or another phone
-    return x;
-  }catch(e){return null;}
-}
 function mapBetSheetHTML(){
   try{
-    if(S.screen!=='map'){mapBet=null;return '';}
-    if(!mapBet){const d=mapBetAskDue();if(!d)return '';mapBet={h:d.h,ask:true};}
+    if(S.screen!=='map'||!mapBet){mapBet=null;return '';}
     const x=mapBetCtx(mapBet.h);
-    if(!x||x.h!==mapHole||(mapBet.ask&&(x.mine||x.lock))){mapBet=null;return '';}
+    if(!x||x.h!==mapHole){mapBet=null;return '';}
     if(bankBlocked('mapBet'))return '';
     const nm=i=>esc(((S.players[i]||{}).name||'').trim().split(' ')[0]);
     const lockLine=x.lock==='banker'?`<div class="tiny mb" style="color:var(--gold,#e8c552)">🔒 ${x.mine?'You':nm(x.b)} doubled every bet. Bets are locked.</div>`:'';
@@ -14950,26 +14942,20 @@ function mapBetSheetHTML(){
     }else{
       body=`<h2 class="vfTitle" style="margin-bottom:2px">🏦 Hole ${x.h+1}: ${nm(x.b)} banks</h2>
         ${x.lock?lockLine+`<div class="row"><span>Your bet</span><b class="num">${x.bet}${x.dbl?' ×2':''}</b></div>`
-        :`<div class="tiny mb">${mapBet.ask?`What are you playing ${nm(x.b)} for?`:'Your bet'}</div>
+        :`<div class="tiny mb">Your bet</div>
           ${few?`<div class="flexwrap">${vals.map(v=>`<button class="ghost ${v===x.bet?'sel':''}" style="min-width:48px;font-size:18px" onclick="mapBetPick(${v})">${v}</button>`).join('')}</div>`
             :`<div class="row"><span class="muted">Your bet</span><div class="stepper"><button onclick="bkBet(${x.h},${x.me},-1)">−</button><span class="val num">${x.bet}</span><button onclick="bkBet(${x.h},${x.me},1)">+</button></div></div>`}
-          ${mapBet.ask?'':`<div class="row mt"><span class="muted">Double my bet</span><button class="ghost ${x.dbl?'sel':''}" onclick="bkDbl(${x.h},${x.me})">×2</button></div>`}`}`;
+          <div class="row mt"><span class="muted">Double my bet</span><button class="ghost ${x.dbl?'sel':''}" onclick="bkDbl(${x.h},${x.me})">×2</button></div>`}`;
     }
-    const keep=mapBet.ask&&few&&!x.lock;
     return `<div class="vfWrap" role="dialog" aria-modal="true"><div class="vfCard" style="max-width:430px">${body}
-      <button class="${keep?'ghost':'big'} mt" style="width:100%" onclick="mapBetClose()">${keep?'Keep the minimum':'Done'}</button></div></div>`;
+      <button class="big mt" style="width:100%" onclick="mapBetClose()">Done</button></div></div>`;
   }catch(e){return '';}
 }
-function mapBetOpen(){if(justResumed())return;mapBet={h:mapHole,ask:false};render();}
-function mapBetClose(){
-  const a=mapBet;mapBet=null;bkArm=null;
-  if(a)S.round._betAsked=Object.assign({},S.round._betAsked,{[a.h]:1});
-  save();render();
-}
+function mapBetOpen(){if(justResumed())return;mapBet={h:mapHole};render();}
+function mapBetClose(){mapBet=null;bkArm=null;render();}
 function mapBetPick(v){
   const x=mapBet&&mapBetCtx(mapBet.h);if(!x||x.mine||x.lock)return;
-  if(mapBet.ask){S.round._betAsked=Object.assign({},S.round._betAsked,{[x.h]:1});mapBet=null;}
-  bkBet(x.h,x.me,v-x.bet);
+  bkBet(x.h,x.me,v-x.bet);   // the pop-up stays open for Double my bet; Done closes it
 }
 let reorderOpen=false;
 function canReorderRoster(){
