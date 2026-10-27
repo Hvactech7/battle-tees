@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Junk — golf game rules &amp; how to play | Battle Tees</title>
+<meta name="description" content="Junk golf side game rules: birdies, greenies, sandies, barkies, polies, chip-ins and the 3-putt, with points and settling up. Add Junk to any round at Battle Tees.">
+<meta property="og:title" content="Junk — golf game rules | Battle Tees">
+<meta property="og:description" content="Greenies, sandies, barkies — points for the good stuff">
+<meta property="og:image" content="https://battletees.app/junk.png">
+<link rel="canonical" href="https://battletees.app/rules/junk/">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Junk — golf game rules | Battle Tees">
+<meta name="twitter:description" content="Greenies, sandies, barkies — points for the good stuff">
+<meta name="twitter:image" content="https://battletees.app/junk.png">
+<link rel="icon" href="/icon-180.png">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0f1522;--card:#1b2433;--gold:#c9a227;--gold-dk:#8a6f1c;--elec:#4aa8ff;--elec-dk:#1d5c9e;
+--ink:#e8e4d8;--ink2:#a9b0c0;--ink3:#7d8494;--line:#2a3550;--gc:#d0743c}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:Inter,-apple-system,sans-serif;line-height:1.65;
+background-image:radial-gradient(ellipse 90% 40% at 50% -5%,rgba(74,168,255,.10),transparent)}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 40px}
+h1,h2,.rj{font-family:Rajdhani,Inter,sans-serif}
+.top{padding:22px 0 6px;font-size:14px}
+.top a{color:var(--elec);text-decoration:none}
+.hero{text-align:center;padding:8px 0 4px}
+.hero img{height:clamp(230px,52vw,340px);filter:drop-shadow(0 0 22px rgba(0,0,0,.62)) drop-shadow(0 0 40px rgba(199,106,29,.20))}
+h1{font-size:clamp(30px,6vw,44px);letter-spacing:.5px;color:var(--gc);margin-top:6px}
+.tag{color:var(--ink2);font-size:16px;margin-bottom:18px}
+.card{background:linear-gradient(180deg,rgba(27,36,51,.93),rgba(20,28,42,.93));backdrop-filter:blur(3px);
+  border:2px solid var(--gc);border-radius:14px;box-shadow:5px 5px 0 rgba(0,0,0,.45);padding:20px 22px;margin:16px 0;
+  position:relative;overflow:hidden}
+.card::before{content:'';position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(ellipse 90% 62% at 8% 0%,var(--tint,transparent),transparent 70%)}
+.card>*{position:relative}
+.card h2{color:var(--gold);font-size:21px;letter-spacing:.5px;margin-bottom:8px;display:flex;align-items:center;gap:9px}
+.card h2 .ki{font-size:20px;filter:drop-shadow(0 0 8px currentColor)}
+.card p{font-size:15.5px;color:var(--ink);margin-bottom:10px}
+.card p:last-child{margin-bottom:0}
+/* section flavors */
+.k-strat{border-color:var(--elec);--tint:rgba(74,168,255,.14)}
+.k-strat h2{color:#7cc0ff}
+.k-fun{border-color:#c76a1d;--tint:rgba(232,96,79,.14)}
+.k-fun h2{color:#ff9b3d}
+.k-wager{border-color:var(--gold);--tint:rgba(201,162,39,.15)}
+.k-wager h2{color:#e8c552}
+.card.k-wager p b{color:#f0d271}
+.stake{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 2px}
+.stake span{font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:13.5px;letter-spacing:.6px;
+  background:rgba(201,162,39,.13);border:1px solid rgba(201,162,39,.45);color:#e8c552;
+  border-radius:999px;padding:5px 13px}
+.house{margin-top:14px;padding:11px 14px;border-left:3px solid var(--gold);
+  background:rgba(201,162,39,.07);border-radius:0 8px 8px 0;font-size:14px;color:var(--ink2)}
+.house b{color:var(--ink)}
+.netnote{margin-top:14px;padding:12px 15px;border-left:3px solid var(--elec);
+  background:rgba(74,168,255,.09);border-radius:0 8px 8px 0;font-size:14.5px;color:var(--ink2)}
+.netnote b{color:#9ccfff}
+.netnote .lede{display:block;font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:16px;
+  letter-spacing:.5px;color:#9ccfff;margin-bottom:3px}
+.tune{margin-top:14px;padding:12px 15px;border-left:3px solid var(--gc);
+  background:color-mix(in srgb,var(--gc) 9%,transparent);border-radius:0 8px 8px 0;
+  font-size:14.5px;color:var(--ink2)}
+.tune b{color:var(--ink)}
+.card ul{margin:4px 0 10px;padding-left:20px}
+.card li{font-size:15.5px;color:var(--ink);margin:0 0 7px;line-height:1.5}
+.ex{margin:10px 0 12px;padding:10px 14px;border:1px solid var(--line);border-left:3px solid var(--gold);
+  border-radius:0 8px 8px 0;background:rgba(201,162,39,.06);font-size:14.5px;line-height:1.5;color:var(--ink2)}
+.ex b{color:var(--ink)}
+.ex .lede{display:block;font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:15px;letter-spacing:.5px;color:var(--gold);margin-bottom:2px}
+.tune .lede{display:block;font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:16px;
+  letter-spacing:.5px;color:var(--gc);margin-bottom:3px}
+.cta{display:block;text-align:center;font-family:Rajdhani;font-weight:700;font-size:21px;color:#f4f9ff;
+background:linear-gradient(180deg,#5cb2ff,#2f7fd4);border:2px solid var(--elec-dk);border-radius:12px;
+padding:14px;text-decoration:none;box-shadow:4px 4px 0 var(--elec-dk);margin:22px 0 8px}
+.all{display:block;text-align:center;color:var(--elec);font-size:14px;margin-top:14px}
+.rel{margin:26px 0 6px}
+.rel h2{font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:19px;letter-spacing:.6px;
+  text-transform:uppercase;color:var(--gold);margin-bottom:10px;text-align:center}
+.rel ul{list-style:none;display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px}
+.rel a{display:block;background:rgba(27,36,51,.9);border:2px solid var(--line);border-radius:11px;
+  padding:11px 14px;text-decoration:none;transition:border-color .12s}
+.rel a:hover{border-color:var(--gc)}
+.rel b{display:block;font-family:Rajdhani,Inter,sans-serif;font-size:18px;color:var(--gc)}
+.rel span{font-size:13px;color:var(--ink2)}
+</style>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"Article","headline":"Junk — golf game rules and how to play","description":"Junk golf side game rules: birdies, greenies, sandies, barkies, polies, chip-ins and the 3-putt, with points and settling up. Add Junk to any round at Battle Tees.","image":"https://battletees.app/junk.png","mainEntityOfPage":{"@type":"WebPage","@id":"https://battletees.app/rules/junk/"},"author":{"@type":"Organization","name":"Battle Tees","url":"https://battletees.app/"},"publisher":{"@type":"Organization","name":"Battle Tees","logo":{"@type":"ImageObject","url":"https://battletees.app/icon-512.png"}},"about":{"@type":"Thing","name":"Junk (golf game)"},"isPartOf":{"@type":"WebSite","name":"Battle Tees","url":"https://battletees.app/"}}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Battle Tees","item":"https://battletees.app/"},{"@type":"ListItem","position":2,"name":"Golf games","item":"https://battletees.app/rules/"},{"@type":"ListItem","position":3,"name":"Junk","item":"https://battletees.app/rules/junk/"}]}</script>
+<style>
+
+/* ---- generated storm plate: fixed backdrop, fades into the slate ---- */
+.plate{position:absolute;top:0;left:0;right:0;height:min(86vh,880px);
+  background:url('/storm-sm.webp') no-repeat center top/cover;
+  -webkit-mask-image:linear-gradient(180deg,#000 0,#000 46%,rgba(0,0,0,.55) 72%,transparent 100%);
+  mask-image:linear-gradient(180deg,#000 0,#000 46%,rgba(0,0,0,.55) 72%,transparent 100%);
+  opacity:.92}
+@media (min-width:820px){.plate{background-image:url('/storm.webp')}}
+/* guarantee text contrast no matter how bright the plate gets */
+.plate::after{content:'';position:absolute;inset:0;
+  background:radial-gradient(ellipse 78% 62% at 50% 44%,rgba(15,21,34,.72),rgba(15,21,34,.18) 70%,transparent)}
+
+/* ---- atmosphere: fixed behind all content, never interactive ---- */
+.atmos{position:fixed;inset:0;z-index:-1;pointer-events:none;overflow:hidden}
+.atmos canvas{position:absolute;inset:0;width:100%;height:100%}
+
+/* fire pooling in the lower corners — red/ember left, electric blue right */
+.flame{position:absolute;bottom:-16vh;width:66vw;height:52vh;filter:blur(46px);opacity:.34}
+.flame-l{left:-14vw;background:radial-gradient(ellipse 50% 62% at 50% 100%,
+  rgba(232,96,79,.44),rgba(199,106,29,.26) 42%,transparent 72%);
+  animation:flick 5.5s ease-in-out infinite}
+.flame-r{right:-14vw;background:radial-gradient(ellipse 50% 62% at 50% 100%,
+  rgba(74,168,255,.40),rgba(29,92,158,.22) 44%,transparent 72%);
+  animation:flick 6.9s ease-in-out infinite reverse}
+@keyframes flick{0%,100%{transform:scaleY(1) scaleX(1);opacity:.42}
+  35%{transform:scaleY(1.13) scaleX(.96);opacity:.60}
+  70%{transform:scaleY(.94) scaleX(1.05);opacity:.36}}
+
+/* one sheet-flash element the bolt code strobes */
+.sheet{position:absolute;inset:0;background:linear-gradient(180deg,rgba(120,190,255,.16),transparent 46%);
+  opacity:0;transition:opacity .09s ease-out}
+
+@media (prefers-reduced-motion:reduce){
+  .flame{animation:none}
+  .atmos canvas{display:none}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top"><a href="/">← Battle Tees</a> · <a href="/#games">all the games</a></div>
+  <div class="hero">
+    <img src="/junk.png" alt="Junk game art">
+    <h1>Junk</h1>
+    <div class="tag">Greenies, sandies, barkies — points for the good stuff</div>
+  </div>
+  <div class="card "><h2>The game in 20 seconds</h2><p>Junk is <b>points for the good stuff</b> — a birdie, a greenie, a sandy, a chip-in. Every item is worth points, and at the end the points are paid on the <b>difference</b> between every two players.</p><p>It's a <b>side game</b>: it rides on top of your main game and can't be played on its own. Two, three or four players.</p></div>
+  <div class="card "><h2>Getting it on the card</h2><ul><li><b>Add it with Choose Game(s)</b>, next to your main game — anything but Scramble.</li><li><b>Picked up mid-round?</b> It counts from that hole on.</li><li><b>Everyone in the main game plays.</b> No teams, no order.</li></ul></div>
+  <div class="card "><h2>The items</h2><ul><li><b>Birdie</b> — 1 point. A gross birdie.</li><li><b>Eagle</b> — 2. Eagle or better. It pays instead of the birdie, not on top of it.</li><li><b>Greenie</b> — 1. Par 3s only: closest to the pin, then par or better.</li><li><b>Sandy</b> — 1. Par or better after being in a bunker.</li><li><b>Barkie</b> — 1. Par or better after hitting a tree.</li><li><b>Splashy</b> — Off. Par or better after the water.</li><li><b>Polie</b> — 1. Holed a putt longer than the flagstick, any score.</li><li><b>Chip-in</b> — 1. Holed out from off the green, any score.</li><li><b>3-putt</b> — Off. Turned on, three putts or more <b>costs</b> you points.</li></ul><p>Items stack: one hole can pay a birdie, a polie and a sandy.</p></div>
+  <div class="card "><h2>Claiming it</h2><ul><li><b>Birdies, eagles and 3-putts count themselves</b> — they come off the score and the putts.</li><li><b>The rest you claim</b> back at the cart, on the <b>Junk &amp; putts</b> sheet after the hole: tap your items, then your putts. No junk? Just tap your putts.</li><li>It comes up after every hole, even with putts tracking off. In a shared round each phone asks about its own golfer.</li><li><b>Forgot one?</b> Tap it on the Junk card on the Score screen — tap again to take it back.</li></ul><div class="ex"><span class="lede">Hole 1 · par 4</span>Nate birdies → <b>Birdie +1</b>.<br>Greg is in the bunker, gets up and down for par, taps Sandy → <b>Sandy +1</b>.<br>Tyler is in the sand too and taps Sandy, but makes 5 → nothing.</div><div class="ex"><span class="lede">Hole 3 · par 5</span>Tyler makes 3 → <b>Eagle +2</b>, no birdie on top.<br>Nate holes one longer than the flagstick for birdie → <b>Birdie +1</b>, <b>Polie +1</b>.<br>Greg hits a tree and makes 6 → no barkie.</div></div>
+  <div class="card "><h2>The greenie</h2><p>On a par 3 the greenie goes to whoever is <b>closest to the pin</b> — the Closest to pin pick on the Score screen — and they still have to make <b>par or better</b>.</p><p>No pick made? If only one player claimed the greenie, it's theirs. If two claimed it, the Score screen asks you to pick Closest to pin.</p><div class="ex"><span class="lede">Hole 2 · par 3</span>Tyler is closest and two-putts for par → <b>Greenie +1</b>.<br>Mike misses the green and chips in for 2 → <b>Birdie +1</b>, <b>Chip-in +1</b>.</div><div class="ex"><span class="lede">The odd one · par 3</span>Greg is closest but three-putts for a 4.<br>No greenie — and it doesn't drop to the next closest. Nobody gets it.</div></div>
+  <div class="card "><h2>The 3-putt</h2><p>Off unless you turn it on. Set it from −1 to −5, and every hole with <b>three putts or more</b> costs you that. It reads your putts — nothing to claim.</p><div class="ex"><span class="lede">Hole 1 · 3-putt at −1</span>Greg and Mike 3-putt, Tyler 4-putts — each loses a point.<br>Nate two-putts: Nate is 1 up on all three, <b>+$3</b> at $1 a point.</div></div>
+  <div class="card "><h2>Handicaps</h2><p>None. Junk runs on <b>gross</b> scores — a birdie is a real birdie and par is real par. Strokes don't change a single point; net or gross, the totals are the same.</p></div>
+  <div class="card k-wager"><h2><span class="ki">💰</span>The money</h2><p>Every two players settle the <b>difference</b> in their junk points, at the <b>$ per pt</b> you put on the Junk card under <b>Settle up</b> on the Standings screen.</p><div class="ex"><span class="lede">After holes 1–3, at $1 a point</span>Nate 3, Tyler 3, Mike 2, Greg 1.<br>Nate: 2 up on Greg, 1 up on Mike, even with Tyler → <b>+$3</b>. Tyler the same → <b>+$3</b>.<br>Mike: 1 up on Greg, 1 down to Nate and Tyler → <b>−$1</b>.<br>Greg: 2, 1 and 2 down → <b>−$5</b>.</div><p>It folds into the one payout with your other games. Battle Tees never touches the money.</p></div>
+  <div class="card "><h2>Options in Battle Tees</h2><ul><li><b>Birdie</b> 1 · <b>Eagle</b> 2 · <b>Greenie</b> 1 · <b>Sandy</b> 1 · <b>Barkie</b> 1 · <b>Splashy</b> Off · <b>Polie</b> 1 · <b>Chip-in</b> 1 — each from Off (0) to 10. Off takes an item out of the game.</li><li><b>3-putt</b> — Off. On, it's −1 to −5.</li><li><b>Players</b> — everyone in the main game plays.</li></ul><p>Turn Eagle off and an eagle pays as a birdie.</p><p>Set them in setup, or mid-round in Round options — Standings has a <b>Change junk points</b> button. A change counts from the <b>next hole on</b> — every hole already played keeps the points it was worth — and every phone in the group gets it.</p></div>
+  <div class="card k-strat"><h2><span class="ki">⚡</span>How to win it</h2><ul><li><b>Bunkers aren't dead.</b> At the default points a sandy pays the same as a birdie — get it up and down.</li><li><b>Par 3s carry an extra point.</b> Get closest, then don't three-putt it away.</li><li><b>Long putts pay twice.</b> Hole one longer than the flagstick for birdie and it's a polie and a birdie.</li><li><b>With the 3-putt on, lag it.</b></li></ul></div>
+  <div class="card "><h2>Variations you&#x27;ll hear about</h2><p><b>Arnies.</b> Some groups pay a point for a par made without hitting the fairway. Battle Tees doesn't have an Arnie.</p></div>
+  <div class="rel"><h2>If you like Junk, try these</h2><ul><li><a href="/rules/snake/"><b>Snake</b><span>the other side game</span></a></li><li><a href="/rules/bingo-bango-bongo/"><b>Bingo Bango Bongo</b><span>points for more than your score</span></a></li><li><a href="/rules/skins/"><b>Skins</b><span>hole-by-hole money</span></a></li><li><a href="/rules/stroke/"><b>Stroke</b><span>the round it rides on</span></a></li></ul></div>
+  
+  <a class="cta" href="/#beta">⚔️ &nbsp;Play Junk in Battle Tees — request beta access</a>
+  <a class="all" href="/">Battle Tees — fourteen golf games, one scorecard, settled before the parking lot</a>
+</div>
+<div class="atmos" aria-hidden="true">
+  <div class="plate"></div>
+  <canvas id="btfx"></canvas>
+  <div class="flame flame-l"></div>
+  <div class="flame flame-r"></div>
+  <div class="sheet" id="btsheet"></div>
+</div>
+<script>
+(function(){
+  var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var cv = document.getElementById('btfx'); if(!cv || reduce) return;
+  var ctx = cv.getContext('2d'), W=0, H=0, DPR=Math.min(devicePixelRatio||1, 2);
+
+  function size(){
+    var w = cv.clientWidth, h = cv.clientHeight;
+    if(!w || !h || (w===W && h===H)) return !!w;      /* nothing to do / not visible yet */
+    W=w; H=h; cv.width=W*DPR; cv.height=H*DPR;
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    return true;
+  }
+  size();
+  var rt; addEventListener('resize', function(){ clearTimeout(rt); rt=setTimeout(size,150); });
+  /* the beta gate hides every body child, so the canvas measures 0 until it is
+     dismissed — and no resize event fires when that happens. Watch the element. */
+  if(window.ResizeObserver) new ResizeObserver(size).observe(cv);
+
+  /* ---------- lightning: midpoint-displacement bolts ---------- */
+  var bolts = [];
+  function makeBolt(){
+    var x0 = W*(.08 + Math.random()*.84), y0 = -20;
+    var x1 = x0 + (Math.random()-.5)*W*.34, y1 = H*(.34 + Math.random()*.4);
+    var pts = [{x:x0,y:y0},{x:x1,y:y1}];
+    for(var pass=0; pass<6; pass++){
+      var out=[];
+      for(var i=0;i<pts.length-1;i++){
+        var a=pts[i], b=pts[i+1];
+        var mx=(a.x+b.x)/2, my=(a.y+b.y)/2;
+        var off=(Math.random()-.5)*Math.abs(b.y-a.y)*.52;
+        out.push(a,{x:mx+off,y:my});
+      }
+      out.push(pts[pts.length-1]); pts=out;
+    }
+    var branches=[];
+    for(var k=0;k<2+((Math.random()*3)|0);k++){
+      var s = pts[(Math.random()*(pts.length-6)+3)|0];
+      var seg=[s]; var bx=s.x, by=s.y;
+      var dir = Math.random()<.5 ? -1 : 1;
+      for(var j=0;j<5;j++){ bx += dir*(8+Math.random()*30); by += 14+Math.random()*34;
+        seg.push({x:bx,y:by}); }
+      branches.push(seg);
+    }
+    return { pts:pts, branches:branches, life:1, born:performance.now() };
+  }
+  function drawPath(p, w, alpha, col){
+    ctx.beginPath(); ctx.moveTo(p[0].x,p[0].y);
+    for(var i=1;i<p.length;i++) ctx.lineTo(p[i].x,p[i].y);
+    ctx.strokeStyle=col; ctx.globalAlpha=alpha; ctx.lineWidth=w;
+    ctx.lineCap='round'; ctx.lineJoin='round'; ctx.stroke();
+  }
+
+  var sheet = document.getElementById('btsheet');
+  var nextStrike = performance.now() + 1600 + Math.random()*3400;
+
+  function frame(now){
+    if(!size() && !W){ raf = requestAnimationFrame(frame); return; }  /* still hidden */
+    ctx.clearRect(0,0,W,H);
+
+    ctx.globalCompositeOperation='lighter';
+
+    /* strikes */
+    if(now > nextStrike){
+      bolts.push(makeBolt());
+      if(Math.random()<.45) setTimeout(function(){ bolts.push(makeBolt()); }, 90+Math.random()*140);
+      sheet.style.opacity = (.55 + Math.random()*.45);
+      setTimeout(function(){ sheet.style.opacity = 0; }, 70 + Math.random()*90);
+      nextStrike = now + 2600 + Math.random()*6500;
+    }
+    for(var b=bolts.length-1; b>=0; b--){
+      var bo=bolts[b], age=(now-bo.born)/470;
+      if(age>=1){ bolts.splice(b,1); continue; }
+      var al=Math.pow(1-age, 1.7);
+      ctx.shadowBlur=26; ctx.shadowColor='rgba(74,168,255,.95)';
+      drawPath(bo.pts, 5.5, al*.34, 'rgba(74,168,255,.95)');
+      for(var k=0;k<bo.branches.length;k++) drawPath(bo.branches[k], 2.4, al*.30, 'rgba(110,190,255,.9)');
+      ctx.shadowBlur=10; ctx.shadowColor='rgba(210,235,255,.9)';
+      drawPath(bo.pts, 1.5, al*.92, 'rgba(238,247,255,.98)');
+      ctx.shadowBlur=0;
+    }
+    ctx.globalAlpha=1; ctx.globalCompositeOperation='source-over';
+    raf = requestAnimationFrame(frame);
+  }
+  var raf = requestAnimationFrame(frame);
+
+  /* stop burning battery in a background tab */
+  document.addEventListener('visibilitychange', function(){
+    if(document.hidden){ cancelAnimationFrame(raf); }
+    else { nextStrike = performance.now() + 1200; raf = requestAnimationFrame(frame); }
+  });
+})();
+</script>
+<!-- Cloudflare Web Analytics --><script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "55fe6253d0e54b02bc8e2d96e101c600"}'></script><!-- End Cloudflare Web Analytics -->
+</body>
+</html>
