@@ -575,7 +575,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-center in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1793054666';
+const BUILD='1793059915';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -4503,6 +4503,11 @@ function rabbitNowTxt(eng,L){
 // (a tie keeps the banker if he was one of them, otherwise the first of them in the order
 // listed); hole 1's is the first golfer listed. Anyone can name a different banker for a
 // hole (rec.bkWho). With "rotates" on it goes round the group in order instead.
+// TEE TOSS (Nathan 10/26), rounds started with config.banker.toss: a tee toss on the first tee
+// picks hole 1's banker (rec.bkWho; with "rotates" the order starts from him), and a tie for
+// low the banker isn't in goes to a toss between the tied golfers -- seeded by the round and
+// the hole (bankTossPick), so every phone lands on the same golfer without sending anything.
+// Rounds started before it keep the first-listed rules, so an update never re-banks old holes.
 // Bets and doubles are per-player stats slots (stats.bkBet / stats.bkDbl -- the banker's
 // slot is his double), so two phones setting their own bets merge. Bets are bilateral, so
 // the ledger is each golfer's own net and settlement pays it directly (see settleNet);
@@ -4513,13 +4518,24 @@ function bankerOf(h){
   const pos=Math.max(0,o.indexOf(h)),rec=S.round.holes[h]||{};
   if(rec.bkWho!=null&&seats.includes(rec.bkWho))return rec.bkWho;
   const since=(S.round.since&&S.round.since.banker)||0,k=pos-since;
-  if(bankerCfg().rotate)return seats[((k%seats.length)+seats.length)%seats.length];
+  const c=bankerCfg();
+  if(c.rotate){
+    const f=c.toss&&k>0?(S.round.holes[o[Math.min(since,o.length-1)]]||{}).bkWho:null,st=Math.max(0,seats.indexOf(f));
+    return seats[(((k+st)%seats.length)+seats.length)%seats.length];
+  }
   if(k<=0)return seats[0];
   const ph=o[pos-1],prev=S.round.holes[ph],pb=bankerOf(ph);
   if(!prev||!prev.confirmed)return pb;
   const sc=seats.map(i=>prev.gross[i]);if(sc.some(v=>v==null))return pb;
   const best=Math.min(...sc),low=seats.filter((i,x)=>sc[x]===best);
-  return low.includes(pb)?pb:low[0];
+  if(low.includes(pb))return pb;
+  return low.length>1&&c.toss?bankTossPick(h,low):low[0];
+}
+function bankTossPick(h,pool){
+  const s=`${S.round.startedAt||0}|${h}|${pool.join(',')}`;let x=2166136261;
+  for(let i=0;i<s.length;i++){x^=s.charCodeAt(i);x=Math.imul(x,16777619);}
+  x^=x>>>15;x=Math.imul(x,0x2c1b3c6d);x^=x>>>12;
+  return pool[(x>>>0)%pool.length];
 }
 function bankerBet(rec,i){const c=bankerCfg(),a=rec&&rec.stats&&rec.stats.bkBet,v=a?(+a[i]||0):0;return Math.min(c.max,Math.max(c.min,v||c.min));}
 function bankerDbl(rec,i){const a=rec&&rec.stats&&rec.stats.bkDbl;return !!(a&&a[i]);}
@@ -8778,18 +8794,34 @@ function rabbitCardHTML(rec,h){
 // Banker on the Score screen. Each golfer sets his own bet and double on his own phone (and
 // for anyone his phone scores); the banker's double sits on his row. Anyone can change who
 // banks this hole.
-function bkBet(h,i,d){reviewTouch();set(()=>{const rec=S.round.holes[h];if(!rec)return;const c=bankerCfg(),a=statArr(rec,'bkBet');
+// DOUBLES, the Golf Digest way (Nathan 10/26): a player may double his own bet after his tee shot,
+// before the banker hits; the banker tees off last and may then double every bet. The banker's
+// double is final (two taps) and freezes the players' bets and doubles; a confirmed hole is closed.
+// One double each, so 4x the bet is the most a hole can be. NOT locked by the first score: a golfer
+// who slips a score onto the next hole would freeze its bets before anyone tees off (Nathan 10/26).
+function bankerLock(rec,h){
+  if(!rec||rec.confirmed)return 'closed';
+  return bankerDbl(rec,bankerOf(h))?'banker':'';
+}
+let bkArm=null;   // the banker's first tap on "double every bet": {h,at}
+function bkBet(h,i,d){reviewTouch();set(()=>{const rec=S.round.holes[h];if(!rec||bankerLock(rec,h)||i===bankerOf(h))return;const c=bankerCfg(),a=statArr(rec,'bkBet');
   a[i]=Math.min(c.max,Math.max(c.min,bankerBet(rec,i)+d));stampStat(rec,i);});}
-function bkDbl(h,i){reviewTouch();set(()=>{const rec=S.round.holes[h];if(!rec)return;const a=statArr(rec,'bkDbl');a[i]=a[i]?0:1;stampStat(rec,i);});}
-function bkWho(h,i){reviewTouch();set(()=>{const rec=S.round.holes[h];if(rec)rec.bkWho=i;});}
+function bkDbl(h,i){reviewTouch();
+  const rec=S.round.holes[h];if(!rec||bankerLock(rec,h))return;
+  if(i===bankerOf(h)){
+    if(!bkArm||bkArm.h!==h){bkArm={h};render();setTimeout(()=>{if(bkArm&&bkArm.h===h){bkArm=null;render();}},4000);return;}
+    bkArm=null;
+  }
+  set(()=>{const a=statArr(rec,'bkDbl');a[i]=a[i]?0:1;stampStat(rec,i);});}
+function bkWho(h,i){reviewTouch();set(()=>{const rec=S.round.holes[h];if(rec&&!rec.bkToss)rec.bkWho=i;});}   // a tossed banker is final
 function bankerCardHTML(rec,h){
   if(!stackHas('banker')||sinceSkip('banker',h)||!rec)return '';
-  const seats=gameSeats('banker'),b=bankerOf(h),mine=myRows(h),c=bankerCfg();
+  const seats=gameSeats('banker'),b=bankerOf(h),mine=myRows(h),c=bankerCfg(),lock=bankerLock(rec,h);
   const nm=i=>esc((S.players[i]||{}).name||'');
   const L=recLens(),res=(withEngine('banker',()=>computeBanker()).holes[L]||{})[h];
   const dOf=i=>res?((res.res.find(r=>r.p===i)||{}).d):null;
   const rows=seats.filter(i=>i!==b).map(i=>{
-    const bet=bankerBet(rec,i),dbl=bankerDbl(rec,i),can=mine.includes(i)&&!rec.confirmed,d=dOf(i);
+    const bet=bankerBet(rec,i),dbl=bankerDbl(rec,i),can=mine.includes(i)&&!lock,d=dOf(i);
     return `<div class="row"><b style="min-width:70px">${nm(i)}</b>
       <span style="display:flex;align-items:center;gap:8px;flex:none">
       ${can?`<div class="stepper"><button onclick="bkBet(${h},${i},-1)">−</button><span class="val num">${bet}</span><button onclick="bkBet(${h},${i},1)">+</button></div>
@@ -8797,13 +8829,14 @@ function bankerCardHTML(rec,h){
        :`<span class="num" style="font-size:18px">${bet}${dbl?' ×2':''}</span>`}
       ${d!=null&&rec.confirmed?`<b class="num" style="min-width:42px;text-align:right;color:${d>0?'var(--good)':d<0?'var(--red)':'var(--ink2)'}">${d>0?'+':''}${d||'push'}</b>`:''}</span></div>`;
   }).join('');
-  const bd=bankerDbl(rec,b),bcan=mine.includes(b)&&!rec.confirmed;
+  const bd=bankerDbl(rec,b),bcan=mine.includes(b)&&!lock,armed=!!(bkArm&&bkArm.h===h);
   return `<div class="card"><h2>🏦 Banker · ${nm(b)}</h2>
     <div class="tiny">Bets ${c.min}–${c.max} · ${nm(b)} tees off last</div>
+    ${lock==='banker'?`<div class="tiny" style="color:var(--gold,#e8c552)">🔒 ${nm(b)} doubled every bet. Bets are locked.</div>`:''}
     ${rows}
     <div class="row"><span class="muted">${nm(b)} doubles every bet</span>
-      ${bcan?`<button class="ghost ${bd?'sel':''}" onclick="bkDbl(${h},${b})">${bd?'On':'Off'}</button>`:`<b>${bd?'On':'Off'}</b>`}</div>
-    ${rec.confirmed?'':`<div class="tiny mt">Banker this hole: ${seats.map(i=>`<button class="ghost ${i===b?'sel':''}" style="padding:4px 10px;margin:2px" onclick="bkWho(${h},${i})">${nm(i)}</button>`).join('')}</div>`}
+      ${bcan?`<button class="ghost ${armed?'sel':''}" onclick="bkDbl(${h},${b})">${armed?'Final? Tap again':'×2'}</button>`:`<b>${bd?'On':'Off'}</b>`}</div>
+    ${rec.confirmed||lock?'':rec.bkToss?`<div class="tiny mt">Picked by the tee toss.</div>`:`<div class="tiny mt">Banker this hole: ${seats.map(i=>`<button class="ghost ${i===b?'sel':''}" style="padding:4px 10px;margin:2px" onclick="bkWho(${h},${i})">${nm(i)}</button>`).join('')}</div>`}
   </div>`;
 }
 function setSnakeLast(h,i){set(()=>{const r=S.round.holes[h];if(r)r.snakeLast=i;});}
@@ -9278,7 +9311,7 @@ function render(){
   const sameScreen=window.__lastScr===scr;
   window.__lastScr=scr;
   try{if(window.__a2hsSync)window.__a2hsSync();}catch(e){}
-  const full=magBanner()+html+holeSplash()+nearAskSheetHTML()+verifySheetHTML()+joinWaitSheetHTML()+teeAskSheetHTML()+joinSpanSheetHTML()+rulesSheetHTML()+pairsAskSheetHTML()+wolfOrderSheetHTML()+endAskSheetHTML()+idleAskSheetHTML()+exportSheetHTML()+mapInviteHTML()+greenClashHTML()+gamePickSheetHTML()+(S.screen!=='map'?puttAskSheetHTML():'')+(S.screen!=='map'?parAskSheetHTML():'')+photoCropHTML()+cheerSplashHTML();
+  const full=magBanner()+html+holeSplash()+nearAskSheetHTML()+verifySheetHTML()+joinWaitSheetHTML()+teeAskSheetHTML()+joinSpanSheetHTML()+rulesSheetHTML()+pairsAskSheetHTML()+wolfOrderSheetHTML()+bankAskSheetHTML()+endAskSheetHTML()+idleAskSheetHTML()+exportSheetHTML()+mapInviteHTML()+greenClashHTML()+gamePickSheetHTML()+(S.screen!=='map'?puttAskSheetHTML():'')+(S.screen!=='map'?parAskSheetHTML():'')+photoCropHTML()+cheerSplashHTML();
   // Four phones syncing means render() fires constantly. Blowing away innerHTML
   // each time repainted the whole screen — that was the flicker on the course.
   // Identical output is a no-op; otherwise patch only the nodes that differ.
@@ -9510,6 +9543,7 @@ function setRoundGames(list){set(()=>{
       // the first tee; picked up on the 3rd tee it is the same sheet, on the
       // phone that picked it, with "first listed is the Wolf on hole 3".
       if(g==='wolf'){S.round._orderOk=false;wolfOrderPickup=true;}
+      if(g==='banker')bankPickup=true;   // ...and Banker: who banks this hole? the same toss
     });
   }
   // the main game leads the stack -- gamesOn()[0] is the fallback main in
@@ -12657,9 +12691,9 @@ function vRules(){
     '<b>Hold it at the turn:</b> whoever has it after the 9th wins the front rabbit; a fresh one starts on the back. Still loose at the turn? It rides along — the back-nine rabbit is worth both.',
     'Each rabbit is a point from every other player. 2 to 4 players, net or gross. Play it as your game or add it to another.']),'rabbit')}
   ${ruleCard(img('/banker.png',48),'Banker','Everyone plays the banker',li([
-    '<b>One banker a hole:</b> whoever had the low score on the last hole banks the next one and tees off last. (House option: the banker rotates in order.)',
+    '<b>One banker a hole:</b> toss a tee for the first one. After that, the low score on the last hole banks the next one and tees off last. Tie for low? If the banker is in it, the bank stays; if not, toss a tee between the tied players. (House option: the banker rotates in order.)',
     '<b>Pick your bet:</b> everyone else plays the banker one-on-one, for any amount between the smallest and biggest bet the group sets.',
-    '<b>Doubles:</b> a player can double his own bet; the banker can double back — and his double covers every bet on the hole.',
+    '<b>Doubles:</b> after your tee shot, before the banker hits, you can double your bet. The banker tees off last, then can double every bet on the hole. That\'s final: nobody doubles after the banker, so 4× your bet is the most a hole can be.',
     'Low score wins each match, a tie pushes. 3 or 4 players, net or gross. The banker\'s card on the Score screen holds the bets.']),'banker')}
   ${ruleCard(img('/junk.png',48),'Junk','Points for the good stuff — a side game',li([
     '<b>Every item pays:</b> birdie, eagle, <b>greenie</b> (closest on a par 3, then par), <b>sandy</b> (par after a bunker), <b>barkie</b> (par after hitting a tree), <b>polie</b> (holing a putt longer than the flagstick), <b>chip-in</b>. Splashy (par after the water) and 3-putt are there to switch on.',
@@ -14748,6 +14782,7 @@ function movePl(i){set(()=>{const a=S.players;[a[i-1],a[i]]=[a[i],a[i-1]];});}
 // pointing at the wrong golfer — carry all of it across together.
 // ---- Wolf: confirm the order once four are seated ---------------------------
 let orderAsk=false;
+let bankAsk=null,bankPickup=false;  // the Banker tee toss sheet; this phone picked Banker up mid-round
 let wolfOrderPickup=false;          // this phone picked Wolf up mid-round and owes the order
 function wolfPickupHole(){try{const sc=S.round.since&&S.round.since.wolf;if(!sc)return 0;const o=playOrder();return o[Math.min(sc,o.length-1)];}catch(e){return 0;}}
 function wolfOrderDue(){
@@ -14784,6 +14819,84 @@ function wolfOrderSheetHTML(){
       <div style="flex:1;min-width:0"><b>${['1st','2nd','3rd','4th'][i]} · ${esc(p.name)}</b>${i===0?` <span class="pill wolf">wolf h${wolfPickupHole()+1}</span>`:''}</div></div>`).join('')}</div>
     <button class="big mt" style="width:100%" onclick="wolfOrderDone()">✓ &nbsp;This is the order</button>
   </div></div>`;
+}
+// WHO BANKS (Nathan 10/26: "add the toss a tee button"). The first tee: the starter's phone (or the one
+// that picked Banker up) asks once every seat has a name -- toss a tee, or tap who a real one pointed
+// at. A tie for low the banker wasn't in: every phone asks, and every toss lands on bankTossPick.
+// one sheet at a time: an open toss steps aside (and keeps its state) while a hole splash or a
+// putts question is up -- the closing phone's splash landed on top of it in the 10/26 walk
+function bankBlocked(){
+  try{return !!(splash||puttAsk||parAsk||teeAsk||orderAsk||pairsAsk||joinSpanAsk||gamePick||endAsk||idleAsk||(nearPop&&nearPop.rows.length));}catch(e){return true;}
+}
+function bankAskDue(){
+  try{
+    if(!S.round.started||isReview()||!stackHas('banker'))return null;
+    const c=bankerCfg();if(!c.toss||bankBlocked())return null;
+    const seen=S.round._bankSeen||{},o=playOrder(),seats=gameSeats('banker');
+    const sc=(S.round.since&&S.round.since.banker)||0,f=o[Math.min(sc,o.length-1)],fr=S.round.holes[f];
+    const named=i=>{const p=S.players[i];return !!(p&&p.name&&!/^Player \d$/.test(p.name.trim()));};
+    if(fr&&!fr.confirmed&&!seen[f]&&fr.bkWho==null&&seats.every(named)
+      &&(sc?bankPickup:!(S.share&&S.share.on&&!S.share.creator)))return {h:f,kind:'first',pool:seats.slice()};
+    if(c.rotate)return null;
+    const h=S.screen==='map'?mapHole:S.round.cur,pos=o.indexOf(h);
+    if(pos<=sc||seen[h])return null;
+    const rec=S.round.holes[h],ph=o[pos-1],prev=S.round.holes[ph];
+    if(!rec||rec.confirmed||rec.bkWho!=null||!prev||!prev.confirmed)return null;
+    const g=seats.map(i=>prev.gross[i]);if(g.some(v=>v==null))return null;
+    const best=Math.min(...g),low=seats.filter((i,x)=>g[x]===best);
+    if(low.length<2||low.includes(bankerOf(ph)))return null;
+    return {h,kind:'tie',pool:low};
+  }catch(e){return null;}
+}
+function bankAskSheetHTML(){
+  try{
+    if(!bankAsk){const d=bankAskDue();if(!d)return '';bankAsk=Object.assign(d,{sel:null});}
+    const a=bankAsk,rec=S.round.holes[a.h];
+    if(!rec||rec.confirmed||!S.round.started||!stackHas('banker')){bankAsk=null;return '';}
+    if(!a.spin&&bankBlocked())return '';
+    const nm=i=>esc(((S.players[i]||{}).name||'').trim());
+    // a name picked on another phone, or on the Score card, shows here as the pick. Once the app's
+    // toss lands -- here or on another phone (rec.bkToss) -- it is final: the names lock (Nathan 10/26)
+    const locked=!!(a.tossed||rec.bkToss);
+    const sel=a.spin?a.hi:rec.bkToss?bankerOf(a.h):(rec.bkWho!=null&&a.pool.includes(rec.bkWho)?rec.bkWho:a.sel);
+    const ns=a.pool.map(nm),tied=ns.slice(0,-1).join(', ')+' and '+ns[ns.length-1];
+    return `<div class="vfWrap" role="dialog" aria-modal="true"><div class="vfCard" style="max-width:430px">
+      <h2 class="vfTitle" style="margin-bottom:2px">🏦 Who banks hole ${a.h+1}?</h2>
+      <div class="tiny mb">${a.kind==='tie'?`${tied} tied for low. Toss a tee.`:'Toss a tee, or tap who it points at.'}</div>
+      <div class="flexwrap">${a.pool.map(i=>`<button id="bkt${i}" class="ghost ${sel===i?'sel':''}" style="min-width:84px${locked&&sel!==i?';opacity:.35':''}" ${locked&&sel!==i?'disabled':''} onclick="bankAskPick(${i})">${nm(i)}</button>`).join('')}</div>
+      ${locked||(a.kind==='tie'&&rec.bkWho!=null)?'':`<button class="ghost mt" style="width:100%" ${a.spin?'disabled':''} onclick="bankAskToss()">Toss a tee</button>`}
+      <button class="big mt" style="width:100%" ${sel==null||a.spin?'disabled':''} onclick="bankAskDone()">${sel==null||a.spin?'✓ Pick the banker':`✓ ${nm(sel)} banks hole ${a.h+1}`}</button>
+    </div></div>`;
+  }catch(e){return '';}
+}
+function bankAskPick(i){
+  const a=bankAsk;if(!a||a.spin||a.tossed||!a.pool.includes(i))return;
+  const rec=S.round.holes[a.h];if(!rec||rec.bkToss)return;
+  a.sel=i;bkWho(a.h,i);
+}
+// the tee spins round the names, slowing, and lands -- about a second and a half
+function bankAskToss(){
+  const a=bankAsk;if(!a||a.spin||a.tossed||(S.round.holes[a.h]||{}).bkToss)return;
+  const to=a.kind==='first'?a.pool[Math.floor(Math.random()*a.pool.length)]:bankerOf(a.h);
+  const land=()=>{if(bankAsk!==a)return;a.spin=false;a.tossed=true;a.sel=to;
+    reviewTouch();set(()=>{const r=S.round.holes[a.h];if(!r)return;r.bkToss=1;if(a.kind==='first')r.bkWho=to;});};   // a tie's pick is bankTossPick: nothing to write but the lock
+  let still=false;try{still=matchMedia('(prefers-reduced-motion: reduce)').matches;}catch(e){}
+  const n=a.pool.length;if(still||n<2)return land();
+  const st=Math.floor(Math.random()*n),T=n*Math.ceil(12/n)+(((a.pool.indexOf(to)-st)%n)+n)%n;
+  let t=0;a.spin=true;a.hi=a.pool[st];render();
+  const tick=()=>{
+    if(bankAsk!==a)return;
+    a.hi=a.pool[(st+t)%n];
+    a.pool.forEach(i=>{const b=document.getElementById('bkt'+i);if(b)b.classList.toggle('sel',i===a.hi);});
+    if(t>=T)return setTimeout(land,350);
+    t++;setTimeout(tick,55+Math.round(190*Math.pow(t/T,2)));
+  };
+  tick();
+}
+function bankAskDone(){
+  const a=bankAsk;if(!a||a.spin)return;
+  bankAsk=null;if(a.kind==='first')bankPickup=false;
+  set(()=>{S.round._bankSeen=Object.assign({},S.round._bankSeen,{[a.h]:1});});
 }
 let reorderOpen=false;
 function canReorderRoster(){
@@ -15180,6 +15293,7 @@ function startRound(){
       if(g==='nassau')S.config.nassau.n=nn>=4?S.config.nassau.n:2;
     });
     S.round.span=clone(S.config.span||{count:18,start:0});S.round.startedAt=Date.now();S.round.myStartedAt=Date.now();
+    if(S.config.banker)S.config.banker.toss=1;   // the tee-toss rules (bankerOf); a round started before them keeps the old ones
     // A round opens on the GPS map of the first tee, not the scorecard — you are
     // standing on the tee box, and the first thing you want is the hole in front
     // of you. Same entry mapPrev/mapNext use; the map_open stat stays
@@ -15589,7 +15703,7 @@ function bankerOptsHTML(){const c=bankerCfg();return `<div class="card"><h2>🏦
     <div class="row"><span class="muted">Banker</span><span class="seg" style="display:inline-flex;gap:6px">
       <button class="ghost ${!c.rotate?'sel':''}" onclick="set(()=>S.config.banker.rotate=false)">Low score</button>
       <button class="ghost ${c.rotate?'sel':''}" onclick="set(()=>S.config.banker.rotate=true)">Rotates</button></span></div>
-    <div class="tiny mt">Everyone plays the banker one-on-one for their own bet. ${c.rotate?'The banker goes round the group in order.':'Low score on a hole banks the next one.'}</div></div>`;}
+    <div class="tiny mt">Everyone plays the banker one-on-one for their own bet. A tee toss picks the first banker. ${c.rotate?'Then it goes round the group in order.':'Then low score on a hole banks the next one.'}</div></div>`;}
 function chBanker(k,d){set(()=>{const c=S.config.banker=Object.assign({n:4,min:1,max:5,rotate:false},S.config.banker||{});
   if(k==='min'){c.min=Math.max(1,Math.min(c.max,(+c.min||1)+d));}else{c.max=Math.max(c.min,Math.min(100,(+c.max||5)+d));}});}
 // Junk item values: 0 takes an item out of the game; a 3-putt can only cost.
@@ -16126,7 +16240,7 @@ function joinPlay(k){
 // stamps its own row with it; a phone behind the group's newest is asked to update before it scores,
 // and the rest of the group sees whose phone is behind (an app older than this check says nothing, so
 // its row carries no stamp and reads as behind).
-const RULES_VER=20261027;   // 10/26 pm: Rabbit + Banker (a 2nd change on 10/26, so it takes the next day's number). 10/26: Junk + Snake side games. 10/18: 3rd/4th strokes, plus handicaps, Stableford/team results, Vegas CTP, Scramble
+const RULES_VER=20261028;   // 10/26 eve: Banker tee toss (first banker + ties; the 3rd change on 10/26). 10/26 pm: Rabbit + Banker (a 2nd change on 10/26, so it takes the next day's number). 10/26: Junk + Snake side games. 10/18: 3rd/4th strokes, plus handicaps, Stableford/team results, Vegas CTP, Scramble
 function rulesRound(){return !!(S.share&&S.share.on&&S.round&&S.round.started&&!isReview()&&!S.round.myEndedAt);}
 function rulesBehind(){
   if(!rulesRound())return 0;
@@ -16187,7 +16301,7 @@ function optSnap(){
   try{
     const c=clone(S.config||{});
     // sizes widen on their own as people join, and partner draws have their own screens: not option changes
-    Object.keys(c).forEach(k=>{const v=c[k];if(v&&typeof v==='object'&&!Array.isArray(v)){delete v.n;delete v.revealed;delete v.mystery;}});
+    Object.keys(c).forEach(k=>{const v=c[k];if(v&&typeof v==='object'&&!Array.isArray(v)){delete v.n;delete v.revealed;delete v.mystery;delete v.toss;}});
     delete c.game;delete c.span;delete c.track;delete c.bf;delete c._v;delete c.groupName;
     return {c,dollarPerPt:+(S.round&&S.round.dollarPerPt)||0,rates:clone((S.round&&S.round.rates)||{}),games:clone((S.round&&S.round.games)||[])};
   }catch(e){return null;}
