@@ -583,7 +583,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-center in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1793122775';
+const BUILD='1793143753';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1413,6 +1413,7 @@ function shareMeta(){return {course:courseForShare(),players:S.players,config:S.
   gameOps:S.round.gameOps||null,
   optAt:S.round.optAt||{},   // always an object: a meta without it comes from an older app (plain last-write-wins)
   optBy:S.round.optBy||null,
+  hcpLock:S.round.hcpLock||null,   // handicaps set for the round (hcpLockStamp)
   _ts:S.shareMetaTs||0};}
 // HYBRID STAMPS (stress sim 10/18): a sync stamp never goes below the newest one this phone has
 // already seen. A phone whose clock ran 5 minutes slow stamped its seat claim "older" than every
@@ -1428,6 +1429,7 @@ function primeCaches(toServer){
 }
 function stampChanges(){
   if(!applyingRemote)try{bankFreeze();stampPlayedTerms();}catch(e){}
+  if(!applyingRemote)try{hcpLockStamp();}catch(e){}
   if(!S.share||!S.share.on||applyingRemote)return;
   SYNC_KEYS.forEach(k=>{
     const c=contentKey(k);
@@ -1547,6 +1549,7 @@ function applyOp(k,v,defer){
         let gfix=false;try{gfix=gameOpsMerge(v);}catch(e){}   // a pickup this meta's writer hadn't seen stays on
         if(v.rates){try{S.round.rates=optMergeRates(v.rates,optKeep);}catch(e){S.round.rates=v.rates;}}
         try{optAtMerge(v);}catch(e){}
+        let hfix=false;try{hfix=hcpLockMerge(v.hcpLock);}catch(e){}   // handicaps set for the round: the earlier lock stays, and goes back to a copy without it
         if(v.span)S.round.span=v.span;
         if(v.startedAt)S.round.startedAt=v.startedAt;
         S.shareMetaTs=v._ts;
@@ -1605,7 +1608,7 @@ function applyOp(k,v,defer){
         localContent[k]=sentCache[k]=contentKey(k);
         // the room's copy lacks a row's newer choice: send ours back, freshly stamped
         // ...and so does a game this phone had to widen (the room's copy was narrower -- stress sim 10/18)
-        if(rowFix||widened||gfix||optFix){sentCache[k]='(merge-pending)';S.shareMetaTs=Math.max(Date.now(),(v._ts||0)+1);}
+        if(rowFix||widened||gfix||optFix||hfix){sentCache[k]='(merge-pending)';S.shareMetaTs=Math.max(Date.now(),(v._ts||0)+1);}
       }else if(S.round.started&&Array.isArray(v.players)){
         // AN OLDER META STILL SEATS PEOPLE (stress sim 10/18). A phone that stamped its own meta while
         // offline (a putt, a tracker) ignored the room's meta when it came back -- "older" -- and so never
@@ -1622,6 +1625,7 @@ function applyOp(k,v,defer){
         keepClaims(v.players); // ...and a seat claimed since then is claimed here too
         try{gameOpsMerge(v);}catch(e){}   // ...and a game it picked up (or put down) after my last look
         optTakeNewer(v);       // ...and an option or $ rate it set after mine
+        try{hcpLockMerge(v.hcpLock);}catch(e){}   // ...and handicaps set for the round: the earlier lock, either copy's
         // ...and if the room's copy still differs from my newer one, the room is behind: send mine again
         // (my phone had pushed it, the room took another phone's later write while I was out of signal,
         // and nothing would ever re-send -- an owner's tees sat wrong on the relay; stress sim 10/18)
@@ -1990,7 +1994,7 @@ function claimMySlot(steal){
     }
   }catch(e){}
   const pidSeated=!!(S.me.pid&&S.players.some(p=>p&&p.pid===S.me.pid));
-  S.players.forEach(p=>{
+  S.players.forEach((p,pi)=>{
     const pidMatch=!!(S.me.pid&&p.pid===S.me.pid);
     const match=pidMatch||(!pidSeated&&(p.name||'').trim().toLowerCase()===me);
     if(match&&!p.pid&&S.me.pid){p.pid=S.me.pid;changed=true;}
@@ -2005,7 +2009,8 @@ function claimMySlot(steal){
     // 6 h, and by then my index has moved because of THIS round (Nathan 10/18, Blue
     // Rock West: Past Rounds re-scored the match at the new 11.5 instead of the 11.7
     // it was played at -- Nate showed 2 strokes on h14 -- and pushed 11.5 to the room)
-    if(match&&p.ownerDev===devId()&&S.me.index!=null&&+p.index!==+S.me.index&&!isReview()&&!S.round.myEndedAt){p.index=+S.me.index;p.rts=stampAfter(p.rts);changed=true;}
+    // ...until my handicap is set for the round (Nathan 10/27: two holes in, it stays -- hcpLockStamp)
+    if(match&&p.ownerDev===devId()&&S.me.index!=null&&+p.index!==+S.me.index&&!isReview()&&!S.round.myEndedAt&&!hcpSeatSet(pi)){p.index=+S.me.index;p.rts=stampAfter(p.rts);changed=true;}
     // ...and on MY TEES for this round (stress sim 10/18): the meta is one last-write-wins record, so a
     // phone pushing an older copy of my row put me back on the tees I had not picked -- another phone then
     // carded my course handicap 36 where mine said 38, and the money differed. My phone restores it.
@@ -2052,6 +2057,7 @@ function claimMySlot(steal){
       p.name=S.me.name.trim();p.index=S.me.index!=null?+S.me.index:p.index;
       if(S.me.pid)p.pid=S.me.pid;
       p.ownerDev=devId();p.tee=null;
+      p.rules=RULES_VER;   // ...on today's rules: the match pass above ran before this seat was mine, and nothing re-ran it -- every other phone showed "NEEDS AN UPDATE" for him all round (10/27 tap walk)
       // widen to the REAL roster, as THE DOUG FIX does (stress sim 10/18): widening to my own seat number
       // left a joiner in seat 3 behind a friend already in seat 4 at n=3 -- his phone paid Quota without
       // that friend for 50 minutes while every other phone counted four
@@ -2593,6 +2599,7 @@ function saveEditMe(){
   if(em)try{localStorage.setItem('wolfBackupEmail',em);}catch(x2){}
   const old=S.me.name;
   editingMe=false;
+  let hcpNext=false;
   set(()=>{
     // THE PID IS WHO YOU ARE. It used to be dropped here — S.me={name,index} —
     // so a rename mid-round hunted for your slot by the OLD name and every
@@ -2614,12 +2621,14 @@ function saveEditMe(){
     const mi=myPlayerIdx();
     S.players.forEach((p,i)=>{
       const mine=(p.ownerDev===devId())||(p.pid===pid)||(i===mi&&(p.name||'').trim().toLowerCase()===old.trim().toLowerCase());
-      if(mine){p.name=name;p.index=S.me.index;p.pid=pid;p.rts=stampAfter(p.rts);}   // stamped: my row's new name wins on every phone
+      // ...but a handicap set for the round stays: the new index plays the next one (Nathan 10/27)
+      if(mine){const set2=hcpSeatSet(i);p.name=name;if(!set2)p.index=S.me.index;else if(+S.me.index!==+was)hcpNext=true;p.pid=pid;p.rts=stampAfter(p.rts);}   // stamped: my row's new name wins on every phone
     });
     if(S.share&&S.share.on)S.shareMetaTs=stampAfter(S.shareMetaTs);   // tell the group
   });
   setTimeout(registerProfile,0);   // the Pi keeps the pid -> current name
   sendHello();
+  if(hcpNext)try{shotToast('Your new index plays your next round');}catch(e){}
 }
 function onlineList(){
   // never show yourself — another copy of the app (Safari tab vs home-screen
@@ -3506,7 +3515,7 @@ function saveEditPlayer(){
     if(!e)return;
     e.name=name;
     e.index=parseIdx(x&&x.value,e.index);
-    S.players.forEach(p=>{if(p.libId===id&&!ownedElsewhere(p)){p.name=e.name;p.index=e.index;}});
+    S.players.forEach((p,i)=>{if(p.libId===id&&!ownedElsewhere(p)){p.name=e.name;if(!hcpSeatSet(i))p.index=e.index;}});   // a handicap set for the round stays (Nathan 10/27)
   });
 }
 function addManualPlayer(){
@@ -3672,6 +3681,73 @@ function fixLoop9(c){
   }catch(e){}
 }
 function courseHandicaps(){
+  return hcpLiveCH().map((c,i)=>{const e=hcpSeatSet(i);return e?e.ch:c;});   // a golfer whose handicap is set for the round plays it (hcpLockStamp)
+}
+// ============ HANDICAPS ARE SET FOR THE ROUND (Nathan 10/27) ==============
+// "I dont think handicaps should be able to be changed once the 2nd hole is scored/confirmed." A golfer's course
+// handicap is written into the round (S.round.hcpLock.s[seat]) once two holes with his score are confirmed -- hole 2
+// for the group that tees off together, his own second hole for anyone who arrives later -- and his strokes come
+// from there: an index typed after that, a profile synced from the book, new tees or a re-rated course all play the
+// NEXT round. The low man of every game is set when the round's second hole closes (lo[game]; a game picked up later,
+// at its own first hole), so a late joiner never moves anyone else's strokes: he plays off that low man, and one
+// lower than him gives strokes back on the easiest holes, the way a plus handicap does. Each entry carries its
+// hole's close time, so phones that saw the same holes write the same lock; where two differ, the earlier wins.
+function hcpCloseAt(r){let t=0;((r&&r.cfts)||[]).forEach(x=>{if(+x>t)t=+x;});return t||(+(r&&r._ts)||0);}
+// the close time of the second confirmed hole: the round's (no seat) or one golfer's (holes carrying his score)
+function hcpSecondAt(seat){
+  const ts=playOrder().map(h=>S.round.holes[h]).filter(r=>r&&r.confirmed&&(seat==null||(r.gross&&r.gross[seat]!=null))).map(hcpCloseAt).sort((a,b)=>a-b);
+  return ts.length>=2?Math.max(1,ts[1]):0;   // a hole carried without stamps still counts
+}
+// the entry still belongs to the golfer in that seat: same account, or the typed row he claimed (no pid then)
+function hcpSameSeat(e,p){
+  if(!e||!isRealPl(p))return false;
+  if(e.pid)return p.pid===e.pid;
+  return !!p.pid||(p.name||'').trim().toLowerCase()===(e.nm||'').trim().toLowerCase();
+}
+function hcpSeatSet(i){const L=S.round&&S.round.hcpLock,e=L&&L.s&&L.s[i];return hcpSameSeat(e,S.players[i])?e:null;}
+function hcpLockStamp(){
+  if(!S.round||!S.round.started||isReview()||S.round.myEndedAt)return;
+  const at=hcpSecondAt();if(!at)return;
+  const L=S.round.hcpLock||(S.round.hcpLock={s:[],lo:{}});
+  if(!L.s)L.s=[];if(!L.lo)L.lo={};
+  const live=hcpLiveCH();
+  S.players.forEach((p,i)=>{
+    if(!isRealPl(p)||hcpSeatSet(i))return;
+    const t=hcpSecondAt(i);if(!t)return;
+    L.s[i]={ch:live[i],ix:+p.index,tee:p.tee||null,pid:p.pid||null,nm:p.name,at:t};
+  });
+  for(let i=0;i<L.s.length;i++)if(L.s[i]===undefined)L.s[i]=null;
+  const ch=courseHandicaps(),o=playOrder();
+  gamesOn().forEach(g=>{
+    if(L.lo[g])return;
+    const t1=o.filter(h=>{const r=S.round.holes[h];return r&&r.confirmed&&!sinceSkip(g,h);}).map(h=>hcpCloseAt(S.round.holes[h])).sort((a,b)=>a-b)[0];
+    if(t1==null)return;   // nothing of this game's is in yet
+    const v=withEngine(g,()=>{
+      const lo=seats=>Math.min(...seats.map(i=>ch[i]));
+      return g==='matchplay'?[lo([0,1]),mp2On()?lo([2,3]):null]:lo(actIdx());});
+    L.lo[g]={v,at:Math.max(at,t1)};
+  });
+}
+// Two phones' locks: per seat and per game, the earlier stamp wins -- but a seat's entry for the golfer now
+// sitting there beats one for whoever sat there before. True when the incoming copy lacks what this one holds.
+function hcpLockMerge(inc){
+  const mine=S.round&&S.round.hcpLock;
+  if(!inc||typeof inc!=='object')return !!mine;
+  if(!mine){S.round.hcpLock=clone(inc);return false;}
+  const early=(a,b)=>(+a.at<+b.at||(+a.at===+b.at&&JSON.stringify(a)<=JSON.stringify(b)))?a:b;
+  const out={s:[],lo:{}},ms=mine.s||[],is=inc.s||[];
+  for(let i=0;i<Math.max(ms.length,is.length);i++){
+    const a=ms[i]||null,b=is[i]||null;
+    if(!a||!b){out.s[i]=clone(a||b);continue;}
+    const va=hcpSameSeat(a,S.players[i]),vb=hcpSameSeat(b,S.players[i]);
+    out.s[i]=clone(va!==vb?(va?a:b):early(a,b));
+  }
+  const ml=mine.lo||{},il=inc.lo||{};
+  new Set([...Object.keys(ml),...Object.keys(il)]).forEach(g=>{out.lo[g]=clone(ml[g]&&il[g]?early(ml[g],il[g]):(ml[g]||il[g]));});
+  S.round.hcpLock=out;
+  return JSON.stringify(out)!==JSON.stringify(inc);
+}
+function hcpLiveCH(){
   const pt=parTotal();
   return S.players.map(p=>{
     const t=teeOf(p)||{};   // a course with no tee sets plays as par/113
@@ -3723,7 +3799,8 @@ function hcpDiffFor(entry,mi){
     const span=sp.count===9?Array.from({length:9},(_,k)=>(sp.start||0)+k):[...Array(18).keys()];
     const holes=(entry.round&&entry.round.holes)||[];
     const idx=+snap.index;
-    const ch=isFinite(idx)?Math.round(idx*(slope/113)+(rating-tp)):null;
+    const lk=entry.round&&entry.round.hcpLock&&(entry.round.hcpLock.s||[])[mi];   // the handicap the round was set at (hcpLockStamp)
+    const ch=hcpSameSeat(lk,snap)?lk.ch:isFinite(idx)?Math.round(idx*(slope/113)+(rating-tp)):null;
     const strokes=h=>{const si=(hs[h%hs.length]||{}).si||((h%18)+1);
       if(ch==null)return 0;
       return holeDots(ch,si);};
@@ -3872,15 +3949,20 @@ function hcpBackfill(){
 // two phones watching different mains have to settle every stacked game identically.
 let engineGame=null;
 function playingStrokes(){
-  const ch=courseHandicaps();
-  if((engineGame||gameOn())==='stroke') // stroke play: net against the course — full handicap (a plus player gives strokes back)
-    return ch.map(c=>Math.round(c*S.config.allowance/100));
-  if((engineGame||gameOn())==='matchplay'){   // each match gives strokes off ITS low man (10/18: it was the empty seat's)
+  const ch=courseHandicaps(),g=engineGame||gameOn(),al=S.config.allowance;
+  const fz=((S.round&&S.round.hcpLock&&S.round.hcpLock.lo)||{})[g];   // the low man set at the second hole: a late joiner never moves it (hcpLockStamp)
+  if(g==='stroke') // stroke play: net against the course — full handicap (a plus player gives strokes back)
+    return ch.map(c=>Math.round(c*al/100));
+  if(g==='matchplay'){   // each match gives strokes off ITS low man (10/18: it was the empty seat's)
     const pr=i=>(mp2On()&&i>=2)?[2,3]:[0,1];
-    return ch.map((c,i)=>{const lo=Math.min(...pr(i).map(k=>ch[k]));return Math.max(0,Math.round((c-lo)*S.config.allowance/100));});
+    return ch.map((c,i)=>{const z=fz&&fz.v&&fz.v[(mp2On()&&i>=2)?1:0];
+      if(z!=null){const s=Math.round((c-z)*al/100);return (i<2||mp2On())?s:Math.max(0,s);}   // a golfer past the match's seats plays stroke only
+      const lo=Math.min(...pr(i).map(k=>ch[k]));return Math.max(0,Math.round((c-lo)*al/100));});
   }
+  if(fz){const seats=actIdx();   // a joiner below the set low man gives strokes back; a seat outside the game stays at 0 or more
+    return ch.map((c,i)=>{const s=Math.round((c-fz.v)*al/100);return seats.includes(i)?s:Math.max(0,s);});}
   const lo=Math.min(...actIdx().map(i=>ch[i]));  // low man among the players actually in the game
-  return ch.map(c=>Math.max(0,Math.round((c-lo)*S.config.allowance/100)));
+  return ch.map(c=>Math.max(0,Math.round((c-lo)*al/100)));
 }
 // Full-handicap strokes: what a player's "net score" means as a number.
 // Game engines keep using playingStrokes (off the low man) for points.
@@ -10516,7 +10598,7 @@ const FAQ=[
   ['Putts, bunkers, chips and penalties',
    'Settings › <b>📊 Track extras</b> turns each one on for you: <b>Putts</b> (on to start), <b>Bunker shots</b>, <b>Chips</b> and <b>Penalties</b>. With Putts on, a 0–4+ sheet asks for your putts the moment you confirm a hole (<b>Not this hole</b> skips one). The others add an <b>Extras</b> card with − and + on the Score screen. Each golfer switches their own on from their own phone. Your putting stats only count rounds where you answered every hole.'],
   ['Someone joins late',
-   'They join with your code and play from the hole they join. Their phone offers <b>⏪ Catch up</b> for the holes they missed — <b>Enter scores</b> or <b>Skip</b>. Money between two golfers only counts holes both of them played. If the game’s seats are full — a third golfer in a 1 v 1 Match Play, say — the newcomer plays stroke only against the course and shows under <b>Everyone · stroke play</b> on Standings. Once the card has four, the group is asked about the <b>New players</b>: <b>Team up</b> (a 2 v 2 Best Ball), <b>Their own match</b> (a second match, in Match Play) or <b>Just keep score</b>. The card holds four golfers; a fifth phone sees <b>This round is full</b> and can <b>Watch</b> it on the Battlefield or <b>Start my own</b>.'],
+   'They join with your code and play from the hole they join. Their phone offers <b>⏪ Catch up</b> for the holes they missed — <b>Enter scores</b> or <b>Skip</b>. Money between two golfers only counts holes both of them played,, and a newcomer never changes anyone else’s strokes. If the game’s seats are full — a third golfer in a 1 v 1 Match Play, say — the newcomer plays stroke only against the course and shows under <b>Everyone · stroke play</b> on Standings. Once the card has four, the group is asked about the <b>New players</b>: <b>Team up</b> (a 2 v 2 Best Ball), <b>Their own match</b> (a second match, in Match Play) or <b>Just keep score</b>. The card holds four golfers; a fifth phone sees <b>This round is full</b> and can <b>Watch</b> it on the Battlefield or <b>Start my own</b>.'],
   ['Two groups, one round',
    'Two twosomes on the same tee? One group needs a code: a Multi-player round already has one (<b>JOIN CODE</b> on the GPS screen), and a Just me round gets one with <b>Make This A Group Round</b> on the Round in progress card (the <b>Setup</b> tab). The other group taps <b>Merge into another group\'s round</b> on that same card and joins with the code. Everyone’s holes so far come along; then pick the game for the foursome with <b>Choose Game(s)</b>. The card holds four golfers.'],
   ['No signal on the course',
@@ -10570,13 +10652,15 @@ const FAQ=[
   ['Net or gross',
    'Every round starts as Net. To play it gross, switch <b>Scored as</b> to <b>Gross</b> under <b>Scoring options</b> in the game’s options, before the first hole. That’s the group’s call — it sets the win–loss record and where the money starts. The money has its own <b>Settling on</b> Net / Gross toggle so you can see it both ways; if your pick differs from the round’s, it says <b>Your phone only</b>. Gross and net are kept side by side all round.'],
   ['Course handicap and strokes',
-   'Each golfer’s course handicap comes from their index and the tees they play: index × slope ÷ 113, plus rating minus par, rounded. A 10.0 from tees rated 71.5 / 125 on a par 72 is an 11. Most games give strokes <b>off the low man</b>: the best player plays off zero and everyone else gets the difference, one a hole on the hardest holes by the card’s stroke index. Nate is a 4 and Greg a 12, so Greg gets 8 strokes, on stroke index 1 to 8. Past 18 strokes, a golfer gets one on every hole and two on the hardest. Stroke play and Stableford use each golfer’s full course handicap instead, Quota builds it into each golfer’s target, Scramble uses team allowances, and Bingo Bango Bongo needs none.'],
+   'Each golfer’s course handicap comes from their index and the tees they play: index × slope ÷ 113, plus rating minus par, rounded. A 10.0 from tees rated 71.5 / 125 on a par 72 is an 11. Most games give strokes <b>off the low man</b>: the best player plays off zero and everyone else gets the difference, one a hole on the hardest holes by the card’s stroke index. Nate is a 4 and Greg a 12, so Greg gets 8 strokes, on stroke index 1 to 8. Past 18 strokes, a golfer gets one on every hole and two on the hardest. Stroke play and Stableford use each golfer’s full course handicap instead, Quota builds it into each golfer’s target, Scramble uses team allowances, and Bingo Bango Bongo needs none. Handicaps are set for the round once the second hole is confirmed.'],
   ['Handicap allowance',
    '<b>Handicap allowance</b>, under <b>Scoring options</b>, scales every golfer’s strokes from 100% down to 50%, in 5% steps. At 90%, Greg’s 8 strokes become 7 (7.2, rounded). Set it before the first hole, in the game’s options; it stays for the round. The allowance you set carries over to the next round you start; Scored as goes back to Net every round.'],
   ['Plus handicaps',
    'Type a plus index with the plus sign: +2.4. In games played off the low man, the plus golfer is usually the low man and plays off zero, so everyone else gets their course handicap plus the low man’s 2 — a 12 playing a +2 gets 14 strokes. In Stroke play and Stableford, a plus golfer gives strokes back on the easiest holes: a course handicap of +2 adds a stroke on stroke index 17 and 18. The Score screen shows those as +1 instead of a dot.'],
   ['Whose handicap counts',
-   'The one on each golfer’s own phone. A golfer who joins on their own phone brings the index from their profile and picks their own tees, and nobody else can change their index — other phones show <b>🔒 set on their phone</b>. Golfers you add yourself (<b>Type a name</b> or <b>Saved</b>) play off the index you give them; <b>Players</b> › <b>Edit</b> on their row changes it, in the round too. Your own index: <b>Players</b> › <b>Edit</b> on your row. A newly typed index plays your next round.'],
+   'The one on each golfer’s own phone. A golfer who joins on their own phone brings the index from their profile and picks their own tees, and nobody else can change their index — other phones show <b>🔒 set on their phone</b>. Golfers you add yourself (<b>Type a name</b> or <b>Saved</b>) play off the index you give them; <b>Players</b> › <b>Edit</b> on their row changes it, in the round too, until the second hole is confirmed. Your own index: <b>Players</b> › <b>Edit</b> on your row. A newly typed index plays your next round.'],
+  ['Handicaps are set after hole 2',
+   'Once the second hole is confirmed, every golfer’s handicap is set for the round. Fix a wrong index on the first two holes; after that a new index, new tees or a golfer joining late can’t move anyone’s strokes, and a changed index plays the next round. Setup shows <b>🔒 set for this round</b>. A golfer who arrives later is set once two of their holes are in. They play off the low man as he stood at hole 2: a 4 joining a group whose low man is a 10 gives 6 strokes back, on the 6 easiest holes, the way a plus handicap does.'],
   ['Your Battle Tees handicap index',
    'Battle Tees keeps its own index from the rounds you play here: the average of your best 8 of the last 20 score differentials, with every hole capped at net double bogey and the score measured against the tees’ rating and slope. Until you have 8 full 18-hole rounds, the index you typed stands. A nine-hole round still makes a differential (the other nine go in at net par) but doesn’t count toward the 8. It’s for settling your group’s games, not an official handicap. On the Battlefield, the index each player carried into the round shows as <i>hcp</i> next to their name.'],
  ]],
@@ -11520,7 +11604,7 @@ function withDoc(doc,fn){
   S.config=Object.assign({},S.config,meta.config||{});
   S.round=Object.assign(blankRound(),{started:true,game:(meta.games&&meta.games[0])||(meta.config&&meta.config.game)||'stroke',
     games:meta.games||null,span:meta.span||{count:18,start:0},startedAt:meta.startedAt||0,holes,
-    dollarPerPt:meta.dollarPerPt||0,rates:meta.rates||{},since:meta.since||null});   // since: Junk/Snake/Banker/Wolf picked up mid-round (stress run 10/26)
+    dollarPerPt:meta.dollarPerPt||0,rates:meta.rates||{},since:meta.since||null,hcpLock:meta.hcpLock||null});   // since: Junk/Snake/Banker/Wolf picked up mid-round (stress run 10/26)
   try{return fn();}finally{
     S.course=keep.course;S.players=keep.players;S.config=keep.config;S.round=keep.round;
   }
@@ -12683,6 +12767,9 @@ function exRounds(only){
 function exFullStrokes(e,cs,me){
   try{
     const holes=(cs&&cs.holes)||[];
+    const allow0=(e.config&&e.config.allowance!=null)?+e.config.allowance:100;
+    const lk=e.round&&e.round.hcpLock&&(e.round.hcpLock.s||[])[(e.playersSnap||[]).indexOf(me)];   // set for the round (hcpLockStamp)
+    if(holes.length&&hcpSameSeat(lk,me))return Math.round(lk.ch*allow0/100);
     if(!holes.length||me.index==null)return null;
     const parTot=holes.reduce((a,h)=>a+((h&&h.par)||0),0);
     const ts=cs.teeSets||[];
@@ -14690,7 +14777,9 @@ function vSetup(){
       <div class="grid2 mt">
         <div><div class="tiny">Name</div><div style="padding:6px 2px;font-weight:700;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:8px">${avatarHTML(p,30)}<span style="min-width:0;overflow:hidden;text-overflow:ellipsis">${esc(p.name)}</span></div></div>
         <div><div class="tiny">Tees</div><select style="width:100%;padding:9px;border:2px solid var(--line);border-radius:8px;font-size:15px;background:var(--card)" onchange="setPl(${i},'tee',this.value)">${teeOpts}</select></div>
-        <div><div class="tiny">Handicap index</div>${ownedElsewhere(p)
+        <div><div class="tiny">Handicap index</div>${hcpSeatSet(i)
+          ?`<div style="padding:9px 2px;font-weight:700;font-size:17px">${esc(fmtIdx(hcpSeatSet(i).ix))} <span class="tiny muted">🔒 set for this round</span></div>`
+          :ownedElsewhere(p)
           ?`<div style="padding:9px 2px;font-weight:700;font-size:17px">${esc(String(p.index))} <span class="tiny muted">🔒 set on their phone</span></div>`
           :`<input id="plIdx${i}" data-rec="${esc(p.name)}" type="text" inputmode="decimal" value="${fmtIdx(p.index)}" onfocus="tapClear(this)" onblur="commitPl(this,${i},'index')">`}</div>
         <div></div>
@@ -15210,6 +15299,10 @@ function ownedElsewhere(p){return !!(p&&p.ownerDev&&p.ownerDev!==devId());}
 function setPl(i,k,v){set(()=>{
   if((k==='index'||k==='chOverride')&&ownedElsewhere(S.players[i])){
     try{shotToast(`${S.players[i].name} sets their own handicap on their phone`);}catch(e){}
+    return;
+  }
+  if((k==='index'||k==='chOverride')&&hcpSeatSet(i)){   // two holes in, it stays for the round (Nathan 10/27)
+    try{shotToast(`${S.players[i].name}'s handicap is set for this round`);}catch(e){}
     return;
   }
   if(k==='name')v=uniqueRosterName(v,i);
@@ -15749,9 +15842,12 @@ function addTypedGolfer(){
   const n=document.getElementById('newName'),x=document.getElementById('newIdx');
   const nm=(n&&n.value||'').trim();if(!nm)return;
   const i=firstEmptySlot();if(i<0)return;
-  setPl(i,'name',nm);
-  if(x&&String(x.value).trim())setPl(i,'index',x.value);
-  set(()=>syncGroupCounts());
+  // name and index in ONE change: a seat with two carded holes is set for the round the moment it is real (hcpLockStamp)
+  const ix=x&&String(x.value).trim();
+  set(()=>{const p=S.players[i];p.name=uniqueRosterName(nm,i);delete p.nearby;
+    if(!S.me.name||nm.toLowerCase()!==S.me.name.trim().toLowerCase())p.scorer=devId();else delete p.scorer;
+    if(ix)p.index=parseIdx(ix,+p.index||0);
+    upsertLib(p);syncGroupCounts();});
   addMode=null;render();
 }
 // 2 v 2 from two saved duos: my duo takes slots 1-2, theirs 3-4, and the team
@@ -16787,7 +16883,7 @@ function joinPlay(k){
 // stamps its own row with it; a phone behind the group's newest is asked to update before it scores,
 // and the rest of the group sees whose phone is behind (an app older than this check says nothing, so
 // its row carries no stamp and reads as behind).
-const RULES_VER=20261102;   // 10/27 9:51 AM: in a net round the low NET score on the hole before banks the next (rounds started before keep gross). Before that, 9:22 AM: a Junk eagle never pays less than a birdie (Eagle Off or set below Birdie pays the Birdie points). Before that, 10/27: Banker clashes settle the same on every phone (banker's double > bet > confirm, then earlier; a tapped pick loses to the banker's double), a rotating bank waits for the hole-1 toss, the low score comes from the golfers who played the hole, a carded hole keeps its bet range + junk points. 10/26 late: game options set before the first hole and locked for the round, Stableford dots = full strokes / Quota + BBB none, Score It scores only you (typed golfers on their own sheet), Banker: hole 1 waits for the toss, a confirmed or bet-on hole keeps its banker (bkAt). 10/26 night: Best Ball + Match Play pay the match as won (stop at the clinch), Quota bogey = 1, mid-round Junk/Banker changes count from the next hole, a confirmed hole keeps its banker, no Banker bets until the hole before is in (the 4th change on 10/26). 10/26 eve: Banker tee toss (first banker + ties). 10/26 pm: Rabbit + Banker (a 2nd change on 10/26, so it takes the next day's number). 10/26: Junk + Snake side games. 10/18: 3rd/4th strokes, plus handicaps, Stableford/team results, Vegas CTP, Scramble
+const RULES_VER=20261103;   // 10/27 3:12 PM: handicaps are set for the round once the second hole is confirmed (a late arrival's at his own second hole), and each game's low man with them -- a late joiner never moves anyone else's strokes. Before that, 9:51 AM: in a net round the low NET score on the hole before banks the next (rounds started before keep gross). Before that, 9:22 AM: a Junk eagle never pays less than a birdie (Eagle Off or set below Birdie pays the Birdie points). Before that, 10/27: Banker clashes settle the same on every phone (banker's double > bet > confirm, then earlier; a tapped pick loses to the banker's double), a rotating bank waits for the hole-1 toss, the low score comes from the golfers who played the hole, a carded hole keeps its bet range + junk points. 10/26 late: game options set before the first hole and locked for the round, Stableford dots = full strokes / Quota + BBB none, Score It scores only you (typed golfers on their own sheet), Banker: hole 1 waits for the toss, a confirmed or bet-on hole keeps its banker (bkAt). 10/26 night: Best Ball + Match Play pay the match as won (stop at the clinch), Quota bogey = 1, mid-round Junk/Banker changes count from the next hole, a confirmed hole keeps its banker, no Banker bets until the hole before is in (the 4th change on 10/26). 10/26 eve: Banker tee toss (first banker + ties). 10/26 pm: Rabbit + Banker (a 2nd change on 10/26, so it takes the next day's number). 10/26: Junk + Snake side games. 10/18: 3rd/4th strokes, plus handicaps, Stableford/team results, Vegas CTP, Scramble
 function rulesRound(){return !!(S.share&&S.share.on&&S.round&&S.round.started&&!isReview()&&!S.round.myEndedAt);}
 function rulesBehind(){
   if(!rulesRound())return 0;
