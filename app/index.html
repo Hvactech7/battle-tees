@@ -575,7 +575,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-center in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1793059915';
+const BUILD='1793061779';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -5926,7 +5926,7 @@ function vMap(){
         <div class="num" style="font-size:22px;letter-spacing:3px">${esc(S.share.code)}</div></div>`:''}${codeShown?'':gameBadgeHTML()}</div>`)+`
   <div id="holemap"></div>
   <div id="windrose" onclick="toggleWindMode()" onpointerdown="windRosePD(event)" onpointerup="windRosePU()" onpointercancel="windRosePU()" oncontextmenu="return false" style="display:none${manualShown?';bottom:calc(var(--mapbarH) + 210px)':''}"></div>
-  ${mapStatChipsHTML(hole)}
+  ${mapStatChipsHTML(hole)}${mapBetChipHTML(manualShown)}
   ${greadBtnHTML()}
   ${gpsOnly()?'':`<button id="trackbtn" onclick="trackShotTap()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(var(--mapbarH) + 8px);z-index:6;width:120px;height:46px;background:var(--card);border:2px solid ${trackShot&&trackShot.hole===mapHole?'var(--amber-bd)':'var(--green)'};border-radius:12px;color:${trackShot&&trackShot.hole===mapHole?'var(--amber-bd)':'var(--green-mid)'};font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:19px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">${trackShot&&trackShot.hole===mapHole?'Mark It':'Track It'}</button>`}
   ${gpsOnly()?'':(trackShot&&trackShot.hole===mapHole?`<button id="trackxbtn" onclick="clearTrackStart()" aria-label="Cancel this shot" style="position:fixed;left:max(138px,calc(50vw - 102px));bottom:calc(var(--mapbarH) + 8px);z-index:6;width:46px;height:46px;padding:0;display:flex;align-items:center;justify-content:center;background:var(--card);border:2px solid var(--red,#c0392b);border-radius:12px;color:var(--red,#c0392b);box-shadow:2px 2px 0 rgba(0,0,0,.35)">${XICON}</button>`:'')}
@@ -9311,7 +9311,7 @@ function render(){
   const sameScreen=window.__lastScr===scr;
   window.__lastScr=scr;
   try{if(window.__a2hsSync)window.__a2hsSync();}catch(e){}
-  const full=magBanner()+html+holeSplash()+nearAskSheetHTML()+verifySheetHTML()+joinWaitSheetHTML()+teeAskSheetHTML()+joinSpanSheetHTML()+rulesSheetHTML()+pairsAskSheetHTML()+wolfOrderSheetHTML()+bankAskSheetHTML()+endAskSheetHTML()+idleAskSheetHTML()+exportSheetHTML()+mapInviteHTML()+greenClashHTML()+gamePickSheetHTML()+(S.screen!=='map'?puttAskSheetHTML():'')+(S.screen!=='map'?parAskSheetHTML():'')+photoCropHTML()+cheerSplashHTML();
+  const full=magBanner()+html+holeSplash()+nearAskSheetHTML()+verifySheetHTML()+joinWaitSheetHTML()+teeAskSheetHTML()+joinSpanSheetHTML()+rulesSheetHTML()+pairsAskSheetHTML()+wolfOrderSheetHTML()+bankAskSheetHTML()+mapBetSheetHTML()+endAskSheetHTML()+idleAskSheetHTML()+exportSheetHTML()+mapInviteHTML()+greenClashHTML()+gamePickSheetHTML()+(S.screen!=='map'?puttAskSheetHTML():'')+(S.screen!=='map'?parAskSheetHTML():'')+photoCropHTML()+cheerSplashHTML();
   // Four phones syncing means render() fires constantly. Blowing away innerHTML
   // each time repainted the whole screen — that was the flicker on the course.
   // Identical output is a no-op; otherwise patch only the nodes that differ.
@@ -14823,10 +14823,12 @@ function wolfOrderSheetHTML(){
 // WHO BANKS (Nathan 10/26: "add the toss a tee button"). The first tee: the starter's phone (or the one
 // that picked Banker up) asks once every seat has a name -- toss a tee, or tap who a real one pointed
 // at. A tie for low the banker wasn't in: every phone asks, and every toss lands on bankTossPick.
-// one sheet at a time: an open toss steps aside (and keeps its state) while a hole splash or a
-// putts question is up -- the closing phone's splash landed on top of it in the 10/26 walk
-function bankBlocked(){
-  try{return !!(splash||puttAsk||parAsk||teeAsk||orderAsk||pairsAsk||joinSpanAsk||gamePick||endAsk||idleAsk||(nearPop&&nearPop.rows.length));}catch(e){return true;}
+// one sheet at a time: an open toss or map bet steps aside (and keeps its state) while a hole splash,
+// a putts question, a joiner's tee sheet... is up -- the 10/26 walks caught the toss on top of the
+// closing phone's splash, and the map bet on top of a joiner's "Which tees are you playing?"
+function bankBlocked(self){
+  try{return !!(splash||puttAsk||parAsk||teeAsk||orderAsk||pairsAsk||joinSpanAsk||gamePick||endAsk||idleAsk||verifyUI
+    ||mapInvite||greenClash||exSheet||cheerShown||photoCrop||(self!=='mapBet'&&mapBet)||(nearPop&&nearPop.rows.length)||(S.share&&S.share.on&&!S.share.creator&&S.share.awaitDoc));}catch(e){return true;}
 }
 function bankAskDue(){
   try{
@@ -14897,6 +14899,77 @@ function bankAskDone(){
   const a=bankAsk;if(!a||a.spin)return;
   bankAsk=null;if(a.kind==='first')bankPickup=false;
   set(()=>{S.round._bankSeen=Object.assign({},S.round._bankSeen,{[a.h]:1});});
+}
+// BANKER BETS ON THE GPS MAP (Nathan 10/26: "go with C"). Walking onto a hole someone else banks, the
+// phone asks what you are playing him for; after your drive, the chip above FW/GIR (Track It's width)
+// opens your bet to double it -- or, for the banker, double every bet. The same handlers and locks as
+// the Banker card (bkBet / bkDbl / bankerLock), so the map can never do what the card can't. On a hole
+// with no green mapped the Manual button owns that spot: the chip moves over the Score It box.
+let mapBet=null;   // the open pop-up {h,ask}
+function mapBetCtx(h){
+  try{
+    if(!S.round.started||isReview()||gpsOnly()||!stackHas('banker')||sinceSkip('banker',h))return null;
+    const rec=S.round.holes[h],me=myPlayerIdx();
+    if(!rec||rec.confirmed||!gameSeats('banker').includes(me))return null;
+    const b=bankerOf(h);
+    return {h,rec,me,b,mine:me===b,bet:bankerBet(rec,me),dbl:bankerDbl(rec,me),bd:bankerDbl(rec,b),lock:bankerLock(rec,h),c:bankerCfg()};
+  }catch(e){return null;}
+}
+function mapBetChipHTML(manualShown){
+  const x=mapBetCtx(mapHole);if(!x)return '';
+  const ic=x.lock?'🔒':'🏦',lbl=x.mine?`${ic} You bank${x.bd?' ×2':''}`:`${ic} Bet ${x.bet}${x.dbl?' ×2':''}`;
+  const at=manualShown?'right:max(10px,calc(50vw - 230px));bottom:calc(var(--mapbarH) + 116px)':'left:max(10px,calc(50vw - 230px));bottom:calc(var(--mapbarH) + 102px)';
+  return `<button id="mapbetchip" onclick="mapBetOpen()" style="position:fixed;${at};z-index:6;width:120px;height:36px;padding:0 6px;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:rgba(15,21,34,.86);border:1.5px solid #c99a2e;color:#f3d48a;border-radius:10px;font-family:Rajdhani,Inter,sans-serif;font-weight:700">${lbl}</button>`;
+}
+function mapBetAskDue(){
+  try{
+    if(S.screen!=='map'||mapBet||bankAsk||bankBlocked('mapBet')||bankAskDue())return null;   // the tee toss first
+    const x=mapBetCtx(mapHole);if(!x||x.mine||x.lock)return null;
+    if((S.round._betAsked||{})[x.h])return null;
+    const a=x.rec.stats&&x.rec.stats.bkBet;if(a&&a[x.me])return null;   // already bet, on the Score card or another phone
+    return x;
+  }catch(e){return null;}
+}
+function mapBetSheetHTML(){
+  try{
+    if(S.screen!=='map'){mapBet=null;return '';}
+    if(!mapBet){const d=mapBetAskDue();if(!d)return '';mapBet={h:d.h,ask:true};}
+    const x=mapBetCtx(mapBet.h);
+    if(!x||x.h!==mapHole||(mapBet.ask&&(x.mine||x.lock))){mapBet=null;return '';}
+    if(bankBlocked('mapBet'))return '';
+    const nm=i=>esc(((S.players[i]||{}).name||'').trim().split(' ')[0]);
+    const lockLine=x.lock==='banker'?`<div class="tiny mb" style="color:var(--gold,#e8c552)">🔒 ${x.mine?'You':nm(x.b)} doubled every bet. Bets are locked.</div>`:'';
+    const vals=Array.from({length:x.c.max-x.c.min+1},(_,k)=>x.c.min+k),few=vals.length<=10;
+    let body;
+    if(x.mine){
+      const armed=!!(bkArm&&bkArm.h===x.h);
+      body=`<h2 class="vfTitle" style="margin-bottom:2px">🏦 You bank hole ${x.h+1}</h2>
+        <div class="tiny mb">Everyone plays you for their own bet.</div>${lockLine}
+        ${gameSeats('banker').filter(i=>i!==x.b).map(i=>`<div class="row"><span>${nm(i)}</span><b class="num">${bankerBet(x.rec,i)}${bankerDbl(x.rec,i)?' ×2':''}</b></div>`).join('')}
+        <div class="row"><span class="muted">Double every bet</span>${x.lock?`<b>${x.bd?'On':'Off'}</b>`:`<button class="ghost ${armed?'sel':''}" onclick="bkDbl(${x.h},${x.b})">${armed?'Final? Tap again':'×2'}</button>`}</div>`;
+    }else{
+      body=`<h2 class="vfTitle" style="margin-bottom:2px">🏦 Hole ${x.h+1}: ${nm(x.b)} banks</h2>
+        ${x.lock?lockLine+`<div class="row"><span>Your bet</span><b class="num">${x.bet}${x.dbl?' ×2':''}</b></div>`
+        :`<div class="tiny mb">${mapBet.ask?`What are you playing ${nm(x.b)} for?`:'Your bet'}</div>
+          ${few?`<div class="flexwrap">${vals.map(v=>`<button class="ghost ${v===x.bet?'sel':''}" style="min-width:48px;font-size:18px" onclick="mapBetPick(${v})">${v}</button>`).join('')}</div>`
+            :`<div class="row"><span class="muted">Your bet</span><div class="stepper"><button onclick="bkBet(${x.h},${x.me},-1)">−</button><span class="val num">${x.bet}</span><button onclick="bkBet(${x.h},${x.me},1)">+</button></div></div>`}
+          ${mapBet.ask?'':`<div class="row mt"><span class="muted">Double my bet</span><button class="ghost ${x.dbl?'sel':''}" onclick="bkDbl(${x.h},${x.me})">×2</button></div>`}`}`;
+    }
+    const keep=mapBet.ask&&few&&!x.lock;
+    return `<div class="vfWrap" role="dialog" aria-modal="true"><div class="vfCard" style="max-width:430px">${body}
+      <button class="${keep?'ghost':'big'} mt" style="width:100%" onclick="mapBetClose()">${keep?'Keep the minimum':'Done'}</button></div></div>`;
+  }catch(e){return '';}
+}
+function mapBetOpen(){if(justResumed())return;mapBet={h:mapHole,ask:false};render();}
+function mapBetClose(){
+  const a=mapBet;mapBet=null;bkArm=null;
+  if(a)S.round._betAsked=Object.assign({},S.round._betAsked,{[a.h]:1});
+  save();render();
+}
+function mapBetPick(v){
+  const x=mapBet&&mapBetCtx(mapBet.h);if(!x||x.mine||x.lock)return;
+  if(mapBet.ask){S.round._betAsked=Object.assign({},S.round._betAsked,{[x.h]:1});mapBet=null;}
+  bkBet(x.h,x.me,v-x.bet);
 }
 let reorderOpen=false;
 function canReorderRoster(){
