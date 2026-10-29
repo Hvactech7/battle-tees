@@ -583,7 +583,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-center in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1793145169';
+const BUILD='1793252917';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1720,6 +1720,8 @@ function onStateDoc(doc){
   if(joinCarry)applyJoinCarry();                   // seated now: my earlier holes land in my row
   save();syncPush();render();
   try{setTimeout(askPuttsOwed,300);}catch(e){}       // rejoined mid-round: anything owed, oldest first
+  roomDocAt=Date.now();
+  if(idleSyncT){try{clearTimeout(idleSyncT);}catch(e){}idleSyncT=0;try{autoEndStaleRound();}catch(e){}}   // a "Still playing?" waiting on the room may ask now (a close that landed already ended it)
   try{setTimeout(nearTick,1500);}catch(e){}          // Players nearby: this room's round, from here on
 }
 // A PREVIEW NEVER WRITES TO A LIVE ROOM. A page served from localhost is a
@@ -1971,7 +1973,7 @@ function justResumed(){return Date.now()-cameBackAt<800;}
 document.addEventListener('visibilitychange',()=>{
   if(document.hidden){wakeLock=null;gpsPauseHidden();return;}   // the OS already released it
   cameBackAt=Date.now();
-  wakeOn();gpsResumeVisible();autoEndStaleRound();kickSync();statFlush();try{abKick();}catch(e){}
+  wakeOn();gpsResumeVisible();frontAt=cameBackAt;autoEndStaleRound();kickSync();statFlush();try{abKick();}catch(e){}
   try{nearTick();}catch(e){}
 });
 wakeOn();
@@ -14059,6 +14061,12 @@ const MAX_ROUND_MS=8*60*60*1000;
 // stops 20 minutes after the last score (Nathan's rule for every end "due to time"),
 // never at the moment the app happened to reopen, never start + 8 h.
 const IDLE_ASK_MS=2*60*60*1000, IDLE_END_MS=MAX_ROUND_MS, IDLE_TAIL_MS=20*60*1000;
+// A SHARED ROUND CATCHES UP FIRST (Nathan 10/28). Greg ended HRX58 at Paradise Valley at 2:54 PM; Brent's phone, opened
+// again at 5:22, asked "Still playing?" before the room's copy -- carrying Greg's close -- had landed. In a shared round
+// the ask (and the quiet 8-hour end) waits until the room's doc has arrived since the app came to the front, or 10 s
+// without it: a phone with no signal can't learn of a close, so it asks as before.
+const IDLE_SYNC_WAIT_MS=10000;
+let frontAt=Date.now(), roomDocAt=0, idleSyncT=0;
 // the last thing entered on the card: every score, confirm and stat carries its moment
 function lastScoreAt(){
   let t=0;
@@ -14145,6 +14153,11 @@ function autoEndStaleRound(){
     return true;
   }
   if(!(S.round.myStartedAt||S.round.startedAt))return false;
+  const others=(S.players||[]).some(p=>p&&p.ownerDev&&p.ownerDev!==devId());   // only another phone can have closed it
+  if(S.share&&S.share.on&&others&&roomDocAt<frontAt&&Date.now()-frontAt<IDLE_SYNC_WAIT_MS){   // the room's copy first (see IDLE_SYNC_WAIT_MS)
+    if(!idleSyncT)idleSyncT=setTimeout(()=>{idleSyncT=0;autoEndStaleRound();},Math.max(500,IDLE_SYNC_WAIT_MS-(Date.now()-frontAt)));
+    return false;
+  }
   const idle=Date.now()-idleSince();
   if(idle>=IDLE_END_MS)return endRoundForTime('8h');
   if(idle>=IDLE_ASK_MS&&!idleAsk){
