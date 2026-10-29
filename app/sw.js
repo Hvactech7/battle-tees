@@ -1,7 +1,7 @@
 // Wolf service worker — offline cache + auto-update (stale-while-revalidate).
 // The app loads instantly from cache and refreshes in the background; a new
 // version appears the next time it's opened while online.
-const CACHE = 'battletees-1793252917';
+const CACHE = 'battletees-1793288745';
 // Offline course-map pack: satellite tiles cached cache-first, SURVIVES app
 // updates (excluded from the activate cleanup below).
 const TILES = 'bt-tiles';
