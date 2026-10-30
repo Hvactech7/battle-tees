@@ -583,7 +583,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-center in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1793288745';
+const BUILD='1793320437';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1743,6 +1743,7 @@ function syncConnect(){
     // (reading 'send')"). Only the current socket gets to act.
     if(sock!==ws){try{ws.close();}catch(e){}return;}
     sockOpen=true;retryMs=1000;
+    try{setTimeout(()=>bfInboxPoll(true),0);}catch(e){}   // a nudge sent while it was down is lost: ask now
     sockAwaitState=true;
     ws.send(JSON.stringify({t:'join',room:S.share.code}));
     postRoomInvite();
@@ -1968,8 +1969,20 @@ function wakeLabel(){
 // measured and carded without a press, after a trip out to Pandora. Only taps
 // that COMMIT are held off — arming, navigating and opening a sheet still work,
 // so the guard costs nothing when it is wrong.
-let cameBackAt=0;
+let cameBackAt=0,wentAwayAt=0;
 function justResumed(){return Date.now()-cameBackAt<800;}
+// A FRESH LOBBY SOCKET ON RESUME (Nathan 10/29). iOS kills a backgrounded page's socket but can
+// leave it reading "open"; the inbox ask on resume went into it and the popup waited a minute.
+// After 15 s away the lobby socket is replaced at once (its own retry waits 10 s after it closes).
+function lobbyRevive(){
+  if((S.share&&S.share.on)||previewSandboxed())return;
+  if(lobbySock){const s0=lobbySock;lobbySock=null;try{s0.onopen=null;s0.onclose=null;s0.onmessage=null;s0.close();}catch(e){}}
+  lobbyConnect();
+}
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden){wentAwayAt=Date.now();return;}
+  if(wentAwayAt&&Date.now()-wentAwayAt>15000)try{lobbyRevive();}catch(e){}   // before the inbox ask on return
+});
 document.addEventListener('visibilitychange',()=>{
   if(document.hidden){wakeLock=null;gpsPauseHidden();return;}   // the OS already released it
   cameBackAt=Date.now();
@@ -3532,7 +3545,7 @@ function lobbyConnect(){
   try{lobbySock=new WebSocket(RELAY);}catch(e){lobbySock=null;setTimeout(lobbyConnect,10000);return;}
   if(!lobbyDownSince)lobbyDownSince=Date.now();
   setTimeout(()=>{if(!relayUp()&&lobbyDownSince)render();},8500);   // flip "Connecting…" into the plain warning
-  lobbySock.onopen=()=>{const wasDown=!!lobbyDownSince;lobbyDownSince=0;try{lobbySock.send('{"t":"lobby"}');}catch(e){}sendHello();statFlush();try{abKick();}catch(e){}registerProfile();loadMarkNotes();bfReannounce();libWhois();try{endOutboxFlush();}catch(e){}if(wasDown)render();};
+  lobbySock.onopen=()=>{const wasDown=!!lobbyDownSince;lobbyDownSince=0;try{lobbySock.send('{"t":"lobby"}');}catch(e){}sendHello();statFlush();try{abKick();}catch(e){}registerProfile();loadMarkNotes();bfReannounce();libWhois();try{endOutboxFlush();}catch(e){}try{bfInboxPoll(true);}catch(e){}if(wasDown)render();};
   lobbySock.onmessage=ev=>{
     let m;try{m=JSON.parse(ev.data);}catch(e){return;}
     if(m.t==='invites'){invites=m.list||[];inviteFixCheck();render();}
@@ -11264,6 +11277,7 @@ function openBfComments(code,t,rp){
   code=decodeURIComponent(code);t=decodeURIComponent(t);
   bfPick=null;closeBfComments(true);
   bfCm={code,t,list:null,menu:null,blocked:[],note:'',noteK:(rp&&rp.note)||'',replyTo:(rp&&rp.replyTo)||'',sending:false};
+  bfAckThread(code,t);
   bfNotePaint();
   const who=rp?esc(rp.replyName||'them'):t==='round'?'the whole group':bfWhoFor(code,t);
   const d=document.createElement('div');
@@ -11346,20 +11360,44 @@ let bfInbox=[],bfInboxAt=0,bfInboxBusy=false;
 // nudge -- the inbox stays the one source, so nothing can show twice.
 function bfNoteNudge(m){try{const me=myPid();if(!me)return;if(Array.isArray(m.pids)&&m.pids.length&&!m.pids.includes(me))return;bfInboxPoll(true);}catch(e){}}
 const bfAckedLocal=new Set();
+// A MISSED ASK IS ASKED AGAIN (Nathan 10/29: "pretty much instantly, the popup comes on the
+// recipient's app"). Brian's reply sat unseen: Nathan's phone came back from the background with
+// a dead relay socket, the ask on resume failed, and the next try was the one-minute poll. Now a
+// failed ask retries in 3 s (five times), an ask that lands while one is in flight runs right
+// after it, and every relay (re)connect asks too -- a nudge sent while the socket was down is lost.
+let bfInboxAgain=false,bfInboxRetry=0;
+function bfInboxFail(){
+  if(bfInboxAgain){bfInboxAgain=false;bfInboxPoll(true);return;}
+  if(bfInboxRetry<5){bfInboxRetry++;setTimeout(()=>bfInboxPoll(true),3000);}
+}
 function bfInboxPoll(force){
   try{
-    if(!myPid()||previewSandboxed()||bfInboxBusy)return;
+    if(!myPid()||previewSandboxed())return;
     if(S.config.bf&&S.config.bf.popups===false)return;   // Settings › Reaction pop-ups: Off
     if(document.visibilityState==='hidden')return;
+    if(bfInboxBusy){if(force)bfInboxAgain=true;return;}
     if(!force&&Date.now()-bfInboxAt<55000)return;
     bfInboxBusy=true;bfInboxAt=Date.now();
     relayBattle({op:'inbox',pid:myPid()}).then(r=>{
-      bfInboxBusy=false;if(!r||!r.ok)return;
+      bfInboxBusy=false;if(!r||!r.ok){bfInboxFail();return;}
+      bfInboxRetry=0;
       bfInbox=(r.items||[]).filter(x=>x&&x.k&&!bfAckedLocal.has(x.k));
       const t=Date.now();bfInbox.forEach(x=>{if(!bfSeen[x.k])bfSeen[x.k]=t;});
+      if(bfCm)bfAckThread(bfCm.code,bfCm.t);   // the thread on screen is being read
       bfNotePaint();
-    }).catch(()=>{bfInboxBusy=false;});
+      if(bfInboxAgain){bfInboxAgain=false;bfInboxPoll(true);}
+    }).catch(()=>{bfInboxBusy=false;bfInboxFail();});
   }catch(e){bfInboxBusy=false;}
+}
+// READ IS DONE (Nathan 10/29). He opened Brian's thread from the card and read the reply there,
+// and its notice still popped up 40 minutes later. Opening a comments thread now acknowledges
+// every comment notice for that thread; reactions are not in the thread, so they still show.
+function bfAckThread(code,t){
+  const keys=bfInbox.filter(x=>x.kind==='c'&&x.code===code&&x.target===t).map(x=>x.k);
+  if(!keys.length)return;
+  keys.forEach(k=>bfAckedLocal.add(k));
+  bfInbox=bfInbox.filter(x=>!keys.includes(x.k));
+  relayBattle({op:'ack',pid:myPid(),keys}).catch(()=>{});
 }
 // NOT MID-SHOT (Nathan 9/16). Two notices at the top of the hole map covered the hole
 // number, Back and the green with its yardage — a golfer standing over a shot had to
