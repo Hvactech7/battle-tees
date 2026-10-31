@@ -583,7 +583,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-center in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1793481243';
+const BUILD='1793484568';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -6418,7 +6418,7 @@ function splinePath(path){
 // kept forever, so at load (online only, never mid-round) any hosted map fetched
 // before this stamp is re-fetched in the background and swapped in on success —
 // the old one stays if the fetch fails, so a no-signal round never loses its map.
-const GEO_STAMP=1793412997985;   // ring 8 part 10 (10/29-30 run): 54 courses added, 230 listings mapped/fixed hole by hole, card/name fixes on 94 more, 168 off search, 6 live holes put back on their own course; N-hole cards ['nat5232']; held maps stay off.
+const GEO_STAMP=1793484233328;   // 2026-10-31: 1,521 estimated ring greens on 321 courses replaced by the green the imgreens U-Net traced from Esri imagery at the hole line's end (line end inside, prob >= 0.9, compact >= 0.65, 200-2500 m2; every trace looked at, 216 kept as rings); earlier: ring 8 part 10 (10/29-30 run): 54 courses added, 230 listings mapped/fixed hole by hole, card/name fixes on 94 more, 168 off search, 6 live holes put back on their own course; N-hole cards ['nat5232']; held maps stay off.
 // A COURSE RECORD ON A PHONE WAS NEVER REFRESHED. natUse() is the only thing that reads
 // /courses/<id>.json and it only runs when ADDING a course that is not already saved —
 // preCourseApply deliberately keeps the saved record when the id matches. So a par we
