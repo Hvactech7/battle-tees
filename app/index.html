@@ -583,7 +583,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-center in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1793328214';
+const BUILD='1793405503';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -2033,7 +2033,7 @@ function claimMySlot(steal){
     // ...and on MY NAME (Nathan 10/18: the account holder names himself, a new one every round if he likes):
     // loaded under an older name, or renamed mid-round, my row carries what my profile says -- unless
     // another row in this round already goes by it
-    if(match&&p.ownerDev===devId()&&(+p.rules||0)!==RULES_VER&&!isReview()&&!S.round.myEndedAt){p.rules=RULES_VER;p.rts=stampAfter(p.rts);changed=true;}
+    if(match&&p.ownerDev===devId()&&(+p.rules||0)!==rulesVer()&&!isReview()&&!S.round.myEndedAt){p.rules=rulesVer();p.rts=stampAfter(p.rts);changed=true;}
     {const nm=((S.me&&S.me.name)||'').trim();
      if(match&&p.ownerDev===devId()&&nm&&p.name!==nm&&!isReview()&&!S.round.myEndedAt
         &&!S.players.some(q=>q&&q!==p&&(q.name||'').trim().toLowerCase()===nm.toLowerCase())){p.name=nm;p.rts=stampAfter(p.rts);changed=true;}}
@@ -2072,7 +2072,7 @@ function claimMySlot(steal){
       p.name=S.me.name.trim();p.index=S.me.index!=null?+S.me.index:p.index;
       if(S.me.pid)p.pid=S.me.pid;
       p.ownerDev=devId();p.tee=null;
-      p.rules=RULES_VER;   // ...on today's rules: the match pass above ran before this seat was mine, and nothing re-ran it -- every other phone showed "NEEDS AN UPDATE" for him all round (10/27 tap walk)
+      p.rules=rulesVer();   // ...on today's rules: the match pass above ran before this seat was mine, and nothing re-ran it -- every other phone showed "NEEDS AN UPDATE" for him all round (10/27 tap walk)
       // widen to the REAL roster, as THE DOUG FIX does (stress sim 10/18): widening to my own seat number
       // left a joiner in seat 3 behind a friend already in seat 4 at n=3 -- his phone paid Quota without
       // that friend for 50 minutes while every other phone counted four
@@ -3655,12 +3655,51 @@ function lobbyClose(){
 
 // ---------- engine ----------
 function teeOf(p){return S.course.teeSets.find(t=>t.id===p.tee)||S.course.teeSets[0];}
-function parTotal(){return S.course.holes.reduce((a,h)=>a+h.par,0);}
+function parTotal(){
+  if(cardN())return S.course.holes.slice(0,cardN()).reduce((a,h)=>a+h.par,0);   // a short card: its own N holes, never the padding
+  return S.course.holes.reduce((a,h)=>a+h.par,0);}
+// SHORT COURSES (Nathan 10/30 3:20 PM: "learn 12 holes (any hole combination really) but make sure not to
+// 'break' anything weve built"). Woodside in Lansing is 12 holes, par 47. A card of N holes -- any N but 9 or
+// 18 -- keeps its N real holes first and is padded to the 18 slots every round, sync key and older phone
+// expects; nHoles marks it, and the round plays holes 1-N once (roundSpan / playOrder). The padding repeats
+// the card from hole 1 with stroke indexes N+1..18, so a phone without this code still reads a sane 18; this
+// code never shows it. cardN() is 0 for every 9 and 18, and every rule below keeps its old path on a 0.
+function cardN(c){if(!arguments.length)c=S.course;const n=c?Math.round(+c.nHoles)||0:0;return (n>=1&&n<=17&&n!==9)?n:0;}
+// a padding slot past a short card's last hole -- never played here; an older phone in the group that walks 18 could
+// still card one, and no engine counts it (false on every 9 and 18)
+function padHole(h){const n=cardN();return !!n&&h>=n;}
+function cardHoles(c){const n=cardN(c);return (c&&c.holes)?(n?c.holes.slice(0,n):c.holes):[];}
+function normalizeShort(c){
+  if(!c||!Array.isArray(c.holes))return c;
+  if(cardN(c)&&c.holes.length===18)return c;                  // padded already
+  const real=cardN(c)?c.holes.slice(0,cardN(c)):c.holes, n=real.length;
+  if(n<1||n>=18||n===9)return c;
+  c.holes=real.concat(Array.from({length:18-n},(_,k)=>({par:(real[k%n]||{}).par||4,si:n+1+k})));
+  c.nHoles=n;delete c.loop9;delete c.nineCard;
+  return c;
+}
+// STROKES ON A SHORT CARD. A course handicap stays an 18-hole number; N holes take their share of it,
+// round(CH x N/18) -- an 18 gets 12 strokes on Woodside's 12, a 10 gets 7 -- the way a nine of an 18 takes
+// about half. They fall on the card's hardest holes: its stroke indexes RANKED within its N holes, so a card
+// printed 1-12 and one carrying an 18-hole card's numbers both work. A plus handicap gives its share back on
+// the easiest. holeDots' rule over N holes instead of 18 (shortDots); a 9 or an 18 never comes here.
+function shortRank(c,h){const n=cardN(c),v=k=>{const s=+((c.holes[k]||{}).si);return s>0?s:99;},me=v(h);
+  let r=1;for(let k=0;k<n;k++)if(k!==h&&(v(k)<me||(v(k)===me&&k<h)))r++;return r;}
+function shortStrokes(s,n){return Math.round(Math.trunc(+s||0)*n/18);}   // an 18-hole stroke count's share of n holes
+function shortDots(c,s,h){const n=cardN(c);s=shortStrokes(s,n);if(s===0)return 0;const r=shortRank(c,h);
+  if(s>0)return Math.floor(s/n)+((s%n)>=r?1:0);
+  const a=-s;return -(Math.floor(a/n)+((a%n)>=n+1-r?1:0));}
+// A short card's rating, when it has one, is for its N holes: rating minus par scales up to 18 holes. One that
+// cannot be an N-hole rating (further from par than half a stroke a hole) is left out -- that tee plays as an
+// unrated one does, par/113 (UNRATED_OK).
+function shortRateAdj(t,tp,n){const r=+(t&&t.rating);return (r>0&&Math.abs(r-tp)<=n/2)?(r-tp)*18/n:0;}
 // 9-hole courses live in the app as a LOGICAL 18: the nine repeats (twice
 // around), SI 10-18 on the second loop, per-9 ratings doubled. loop9 marks the
 // course; physHole() maps a logical hole back to the real ground for GPS/geo.
+// Every other card length goes to normalizeShort -- each place a card comes in already calls this.
 function normalizeNine(c){
-  if(!c||!c.holes||c.holes.length!==9)return c;
+  if(!c||!c.holes||c.holes.length!==9)return normalizeShort(c);
+  delete c.nHoles;
   const sis=c.holes.map(h=>+h.si||0), maxSi=Math.max(...sis);
   // A nine printed the 18-hole way carries the odd SIs 1-17 (Vintner's 1,17,11,...): the second
   // loop is the evens, si+1. Copying the same odd SI put two holes on every number, so 9 strokes
@@ -3681,6 +3720,7 @@ function physHole(h){return (S.course&&S.course.loop9)?h%9:h;}
 function fixLoop9(c){
   try{
     if(!c)return;
+    if(cardN(c)){delete c.loop9;return;}                    // a short card plays its holes once, never a loop
     const nineCard=c.nineCard||(c.teeSets||[]).some(t=>t&&(t.nine||(t.yds&&t.yds.length===9)))||(c.holes||[]).length===9;
     if(nineCard){c.loop9=true;return;}
     const hs=c.geo&&c.geo.holes;
@@ -3763,13 +3803,14 @@ function hcpLockMerge(inc){
   return JSON.stringify(out)!==JSON.stringify(inc);
 }
 function hcpLiveCH(){
-  const pt=parTotal();
+  const pt=parTotal(),sn=cardN();
   return S.players.map(p=>{
     const t=teeOf(p)||{};   // a course with no tee sets plays as par/113
     // A TEE'S OWN PAR (9/26). Course Handicap = Index x Slope/113 + (Rating - Par), and the par is
     // the TEE's: 3,272 women's tee sets play to a different par than the card's men's holes
     // (Lake Shore CC White (W): 73 vs 71), so her strokes came out off by the difference.
     const tp=+t.par||pt;
+    if(sn)return Math.round(p.index*((+t.slope||113)/113)+shortRateAdj(t,tp,sn));   // a short card: still an 18-hole number (shortDots)
     return Math.round(p.index*((+t.slope||113)/113)+((+t.rating||tp)-tp));
   });
 }
@@ -3803,6 +3844,10 @@ function hcpDiffFor(entry,mi){
   try{
     const snap=(entry.playersSnap||[])[mi];if(!snap)return null;
     const course=S.courses.find(c=>c.id===entry.courseId)||entry.courseSnap;
+    // A SHORT CARD NEVER MOVES AN INDEX (Nathan 10/30 5:11 PM: "no handicap for 12 holes"): there is no 18-hole
+    // rating behind a 12-hole course, and filling six holes that do not exist would be a guess -- the round is
+    // scored and saved, not posted
+    if(cardN(course)||cardN(entry.courseSnap))return null;
     const hs=(course&&course.holes&&course.holes.length)?course.holes
       :Array.from({length:18},(_,i)=>({par:4,si:i+1}));
     const pt=hs.reduce((a,h)=>a+(h.par||4),0);
@@ -3993,7 +4038,7 @@ function fullStrokes(){
 }
 function fullDotsOn(pi,h){
   const st=fullStrokes()[pi], si=S.course.holes[h].si;
-  return holeDots(st,si);
+  return cardN()?shortDots(S.course,st,h):holeDots(st,si);
 }
 // A THIRD STROKE from a course handicap of 37 up, a fourth from 55 (stress sweep 10/18): every stroke
 // table here stopped at two, so an index 40 off a 72/113 card (CH 43) carded 36 dots and a net 7 strokes
@@ -4009,7 +4054,7 @@ function holeDots(s,si){s=Math.trunc(+s||0);if(s===0)return 0;
   const a=-s;return -(Math.floor(a/18)+((a%18)>=19-si?1:0));}
 function dotsOn(pi,h){
   const s=playingStrokes()[pi], si=S.course.holes[h].si;
-  return holeDots(s,si);
+  return cardN()?shortDots(S.course,s,h):holeDots(s,si);
 }
 function activeLenses(){return S.config.lens==='both'?['net','gross']:[S.config.lens];}
 // A round is DECLARED net or gross at setup. This is the one that is shared, so
@@ -4135,10 +4180,20 @@ function settlePairs(g,seats){
 // and his phone said $60 where the captain's said $38, on identical scores).
 let engineDepth=0;
 function roundSpan(){
-  if(engineDepth>0&&S.round.started&&S.round.span)return S.round.span;
-  return (S.round.started&&(S.round.mySpan||S.round.span))||S.config.span||{count:18,start:0};}
+  if(engineDepth>0&&S.round.started&&S.round.span)return shortSpan(S.round.span);
+  return shortSpan((S.round.started&&(S.round.mySpan||S.round.span))||S.config.span||{count:18,start:0});}
+// A SHORT CARD PLAYS ALL ITS HOLES (10/30): whatever was picked for the last course -- All 18, a front or back
+// nine -- a 12-hole course is 12 holes, from hole 1 or from the first tee picked on an All-18 card if it is one of
+// its holes. The span the round stores says so ({count:12}), which is what history and the relay read.
+// A 9 or an 18 gets its span back untouched.
+function shortSpan(sp){
+  const n=cardN();if(!n||!sp)return sp;
+  const st=+sp.start||0;
+  return {count:n,start:((sp.count===n||sp.count===18)&&st>=0&&st<n)?st:0};
+}
 function playOrder(){
   const {count,start}=roundSpan();
+  {const n=cardN();if(n)return Array.from({length:n},(_,k)=>(start+k)%n);}
   if(count===9){const base=start<9?0:9;return Array.from({length:9},(_,k)=>base+((start-base+k)%9));}
   return Array.from({length:18},(_,k)=>(start+k)%18);
 }
@@ -4307,7 +4362,7 @@ function computeAll(){
       wolf=((Math.max(0,pos)-sw)%4+4)%4;
     }
     const info={wolf,results:{},ledgerAfter:{},carryAfter:{}};
-    if(rec.confirmed&&rec.mode&&!sinceSkip('wolf',h)){
+    if(rec.confirmed&&rec.mode&&!sinceSkip('wolf',h)&&!padHole(h)){
       const wolfSide=rec.mode==='partner'?[rec.wolfAt,rec.partner]:[rec.wolfAt];
       const field=[0,1,2,3].filter(i=>!wolfSide.includes(i));
       for(const L of lenses){
@@ -4358,7 +4413,7 @@ function computeNines(){
   for(let h=0;h<HOLES;h++){
     const rec=S.round.holes[h];
     const info={results:{},ledgerAfter:{}};
-    if(rec.confirmed){
+    if(rec.confirmed&&!padHole(h)){
       for(const L of lenses){
         const rk=act.map(i=>({i,s:rec.gross[i]==null?99:(L==='net'?rec.gross[i]-dotsOn(i,h):rec.gross[i])}))
           .sort((a,b)=>a.s-b.s);
@@ -4406,7 +4461,7 @@ function computeVegas(){
     const rec=S.round.holes[h];
     const T=vegasTeamsFor(h);
     const info={results:{},ledgerAfter:{},teams:T};
-    if(rec.confirmed){
+    if(rec.confirmed&&!padHole(h)){
       const par=S.course.holes[h].par;
       for(const L of lenses){
         const sc=[0,1,2,3].map(i=>{const g=rec.gross[i];if(g==null)return 99;return L==='net'?g-dotsOn(i,h):g;});
@@ -4497,7 +4552,7 @@ function scrambleStrokes(){
   const m=Math.min(...tch);
   return tch.map(c=>Math.max(0,c-m));
 }
-function scrambleDots(k,h){const st=scrambleStrokes()[k],si=S.course.holes[h].si;return holeDots(st,si);}
+function scrambleDots(k,h){const st=scrambleStrokes()[k],si=S.course.holes[h].si;return cardN()?shortDots(S.course,st,h):holeDots(st,si);}
 function computeScramble(){
   const T=scrambleTeams(),capt=T.map(t=>t[0]);
   const ledgers={net:[0,0,0,0],gross:[0,0,0,0]},par={net:[0,0,0,0],gross:[0,0,0,0]};
@@ -4681,7 +4736,7 @@ function computeSnake(){
 // +rabbits, everyone else 0 -- Snake's shape reversed). A nine still in play pays whoever
 // holds its rabbit now, so Standings reads "if it ended here".
 function rabbitCfg(){return Object.assign({steal:false,split:'nines'},S.config.rabbit||{});}
-function rabbitSegs(){const o=playOrder();return (rabbitCfg().split==='all'||o.length<=9)?[o]:[o.slice(0,9),o.slice(9)];}
+function rabbitSegs(){const o=playOrder();return (rabbitCfg().split==='all'||o.length<=9||cardN())?[o]:[o.slice(0,9),o.slice(9)];}   // a short card has no front and back: one rabbit
 function computeRabbit(){
   const seats=actIdx(),c=rabbitCfg(),segs=rabbitSegs();
   const out={lenses:['net','gross'],ledgers:{net:[0,0,0,0],gross:[0,0,0,0]},segs:{net:[],gross:[]},perHole:null,carries:{net:0,gross:0}};
@@ -4908,7 +4963,8 @@ function computeNassau(){
 // Sixes: 2v2 best-ball hole wins, partners rotate every six holes (three for a
 // nine) so everyone partners everyone. Ties break on both balls, then push.
 const PAIRINGS=[[[0,1],[2,3]],[[0,2],[1,3]],[[0,3],[1,2]]];
-function segLen(){return playOrder().length===9?3:6;}
+// a short card splits into three sets too, as near even as its holes allow: 12 holes rotate every 4, 13 every 5
+function segLen(){if(cardN())return Math.max(1,Math.ceil(cardN()/3));return playOrder().length===9?3:6;}
 function segCount(){return Math.max(1,Math.ceil(playOrder().length/segLen()));}
 function segOf(h){return Math.floor(Math.max(0,posOf(h))/segLen());}
 // PER-SEGMENT PAIRINGS. One opening pairing used to drive every segment as
@@ -5571,7 +5627,7 @@ function closeCoursePreview(){
   delete S._previewOf;
   S.screen='courses';save();render();
 }
-function previewHoleCount(){return (S.course&&(S.course.loop9||(S.course.holes||[]).length===9))?9:18;}
+function previewHoleCount(){if(cardN())return cardN();return (S.course&&(S.course.loop9||(S.course.holes||[]).length===9))?9:18;}
 // MAP CREDITS. Esri (imagery) and OSM (course data) both require attribution,
 // but not a permanent banner: on a phone the accepted form (OSM's attribution
 // guideline) is a collapsed control that expands on tap. Tiny ⓘ, tap to read,
@@ -5606,6 +5662,7 @@ function closeMap(){S.screen='hole';render();}
 function mapPrev(){clearScoreNag(false);
   if(coursePreview){const n=previewHoleCount();mapHole=(mapHole+n-1)%n;render();return;}
   mapBounceSnap();
+  if(cardN()){const n=cardN();mapHole=(mapHole+n-1)%n;render();return;}   // a short card: its own holes only
   mapHole=(mapHole+17)%18;render();}
 // Walking off the hole you are playing without scoring it is how holes go
 // missing from cards. The FIRST press of ▶ on an unscored current hole stays
@@ -5624,6 +5681,7 @@ function mapNext(){
     }
   }catch(e){}
   clearScoreNag(false);
+  if(cardN()){mapHole=(mapHole+1)%cardN();mapBounceBack(mapHole);render();return;}   // a short card: its own holes only
   mapHole=(mapHole+1)%18;mapBounceBack(mapHole);render();
 }
 function clearScoreNag(ack){
@@ -6393,11 +6451,18 @@ async function refreshStaleCards(){
         c.holes=rec.holes.map(h=>({par:h.par,si:h.si}));
         if(!c.teeEdit&&Array.isArray(rec.teeSets))c.teeSets=rec.teeSets.map(x=>Object.assign({id:x.id,name:x.name,rating:x.rating,slope:x.slope,yds:x.yds||null},x.par?{par:x.par}:{}));
       }
-      if(!rec||!Array.isArray(rec.holes)||rec.holes.length!==(c.holes||[]).length)continue;
+      // A SHORT CARD ARRIVES (10/30): Woodside was listed as 18 placeholder par 4s until its 12-hole card was found. A
+      // saved copy that is still that placeholder -- 18 holes, nothing on them a person decided -- takes the record's
+      // short card (normalizeShort pads it). A 9 or 18 record never comes in here.
+      if(rec&&Array.isArray(rec.holes)&&rec.holes.length&&normalizeShort({holes:rec.holes.slice()}).nHoles&&!cardN(c)
+        &&(c.holes||[]).length===18&&!(c.holes||[]).some(h=>h&&(h.parOk||h.siOk))){
+        c.holes=rec.holes.map(h=>({par:h.par,si:h.si}));normalizeShort(c);   // its tees follow below, as any refresh's do
+      }
+      if(!rec||!Array.isArray(rec.holes)||rec.holes.length!==(cardN(c)||(c.holes||[]).length))continue;   // a short card: its N holes against the record's
       // HIS ANSWERS WIN, EVERY TIME. A par somebody typed on the "what's the par?" sheet
       // and a stroke index somebody corrected are the most reliable facts we hold about
       // that course — better than the card, because a person was standing on the hole.
-      (c.holes||[]).forEach((hd,i)=>{
+      (cardN(c)?cardHoles(c):(c.holes||[])).forEach((hd,i)=>{
         const fresh=rec.holes[i]||{};
         if(!hd.parOk&&fresh.par){hd.par=fresh.par;if(fresh.parOk){hd.parOk=true;hd.parSrc=fresh.parSrc||'card';}}
         if(!hd.parOk){if(fresh.parDoubt)hd.parDoubt=true;else delete hd.parDoubt;}else delete hd.parDoubt;
@@ -6414,7 +6479,7 @@ async function refreshStaleCards(){
       }
       if(!c.nameEdit&&rec.name)c.name=rec.name;
       if(!rec.cardGuess)delete c._cardGuess;
-      else if((c.holes||[]).some(h=>h&&!h.parOk))c._cardGuess=true;
+      else if((cardN(c)?cardHoles(c):(c.holes||[])).some(h=>h&&!h.parOk))c._cardGuess=true;
       // A MAP THAT ARRIVED AFTER THE COURSE WAS SAVED (9/26: 355 courses matched to OSM holes
       // inside a boundary carrying their own name, 178 of them held back on 9/5). The saved
       // record has no geoUrl, or cached the held file's "no map", or the live-OSM guess —
@@ -8911,7 +8976,7 @@ function setParPick(v){
   set(()=>{
     const hd=S.course.holes[ph];if(!hd)return;
     hd.par=v;hd.parOk=true;delete hd.parDoubt;
-    if((S.course.holes||[]).every(x=>x&&x.parOk))delete S.course._cardGuess;
+    if((cardN()?cardHoles(S.course):(S.course.holes||[])).every(x=>x&&x.parOk))delete S.course._cardGuess;   // a short card: its own holes
     // a prefill dressed in the guessed par re-dresses; a typed or ratified
     // score is somebody's golf and is never touched
     const rec=S.round.holes[h];
@@ -9837,6 +9902,11 @@ function pickerSeats(){
     return f?Math.min(4,f):0;
   }catch(e){return 0;}
 }
+// GAMES THAT NEED HOLES (10/30, short courses): Wolf gives every golfer a turn as the Wolf -- four holes at least;
+// Sixes plays three sets of partners -- three at least. Every other game plays any number of holes. Grayed the way
+// a wrong crew size is; '' on every 9 and 18, so nothing there is ever grayed for it.
+const GAME_HOLES={wolf:4,sixes:3};
+function holeWhy(g){const n=cardN(),m=GAME_HOLES[g];return (n&&m&&n<m)?'needs '+m+'+ holes':'';}
 function seatsSay(g){
   const ok=GAME_SEATS[g]||[];
   if(!ok.length)return '';
@@ -9870,6 +9940,7 @@ function gamePickWhy(g){
   // for wolf before the tee, which let a twosome stack a four-man rotation).
   const seat=seatWhy(g,NP());
   if(seat)return seat;
+  {const hw=holeWhy(g);if(hw)return hw;}   // too few holes on a short card
   // A tee-tap game picked up MID-ROUND scores from this hole on (see
   // setRoundGames); it is no longer 'start only'. Wolf and Scramble take the
   // hole screen, BBB rides as a guest -- its taps already show when stacked.
@@ -10213,9 +10284,10 @@ function gameGridHTML(fn,showPick){
   // Only the real picker judges: the rules index is navigation and the stack
   // sheet paints its own state through gridDeco.
   const seats=live?pickerSeats():0;
-  const pick=k=>seatWhy(k,seats)?' seatoff':'';
-  const go_=k=>seatWhy(k,seats)?'':`${fn}('${k}')`;
-  const note=k=>seatNote(k,seats);
+  const off=k=>seatWhy(k,seats)||(live&&holeWhy(k));   // a short card's hole count too (holeWhy)
+  const pick=k=>off(k)?' seatoff':'';
+  const go_=k=>off(k)?'':`${fn}('${k}')`;
+  const note=k=>seatNote(k,seats)||(live&&holeWhy(k)?`<div class="tiny seatwhy">${holeWhy(k)}</div>`:'');
   // STROKE ONLY BELONGS WHERE YOU ARE CHOOSING. It is not a game -- it is what a
   // round is when nobody picks one -- so it stands apart above the line on the
   // PICKER, sits inline on the stack sheet (a stroke card can be scored next to
@@ -11708,7 +11780,7 @@ function vBfWatch(){
     // spectator back to hole 1 mid-swipe.
     let scCard='';
     if(confirmed>0){
-      const is9=(S.round.span&&S.round.span.count===9);
+      const is9=(S.round.span&&S.round.span.count===9)||cardN()&&cardN()<=9;   // a short card of nine or fewer: no back nine to swipe to
       const sc=scorecardHTML(L).replace('class="sc-wrap"','class="sc-wrap" id="bfsc" data-keepscroll');
       scCard=`<div class="card">
         <h2>Scorecard · ${L==='net'?'net':'gross'}${is9?'':' <span class="tiny" style="font-weight:400">— swipe for the back nine</span>'}</h2>
@@ -11811,7 +11883,7 @@ function roundStatsCardHTML(act,holes,course,shotMap,players,title){
         <div style="flex:1;min-width:0"><b style="font-family:Rajdhani,sans-serif;font-size:19px">${esc(p.name)}</b>${idxLbl(p)}
           <div class="tiny">${mix.join(' · ')||'—'}</div></div>
         <div style="text-align:right"><b class="num" style="font-size:26px">${x.gross}</b> <span class="num" style="font-size:16px;color:${x.toPar<0?'var(--good)':x.toPar>0?'var(--amber)':'var(--ink3)'}">${tp}</span>
-          <div class="tiny">${x.holes<((course&&course.holes)||[]).length?`thru ${x.holes}`:'18 holes'}</div></div></div>
+          <div class="tiny">${cardN(course)?(x.holes<cardN(course)?`thru ${x.holes}`:`${cardN(course)} holes`):x.holes<((course&&course.holes)||[]).length?`thru ${x.holes}`:'18 holes'}</div></div></div>
       ${cells.length?`<div class="rsg">${cells.join('')}</div>`:''}
     </div>`;}).filter(Boolean).join('');
   if(!blocks)return '';
@@ -12222,6 +12294,18 @@ function vStart(){
       <input type="text" id="joincode" placeholder="ABCDE" maxlength="8" autocapitalize="characters" style="width:46%;text-transform:uppercase;font-family:Rajdhani,sans-serif;font-size:20px;letter-spacing:3px">
       <button class="ghost sel" style="flex:1" onclick="joinRound()">Join</button></div></details>`;
 
+  if(step==='span'&&cardN()){   // the exception: the course picked so far has a short card
+    const n=cardN(),sp=roundSpan();
+    return head('Start a round','How many holes?')+`<main>
+    ${wiz.preGame?inviteCardsHTML():''}
+    <button class="big" style="margin:0" onclick="setSpan(18,${sp.start});render()">All ${n}</button>
+    <div class="card mt"><div class="row"><span class="muted">First tee</span>
+      ${spanSelHTML(n,sp.start,'background:var(--field);border:2px solid var(--line);border-radius:10px;color:var(--ink);font:600 16px Rajdhani,Inter,sans-serif;padding:8px 10px')}</div>
+      <div class="tiny">${esc(S.course.name)} has ${n} holes.</div></div>
+    <button class="big" onclick="wizSpanNext()">Next \u2192</button>
+    ${wiz.preGame?`<button class="big mt" style="background:var(--card);color:var(--green-mid);border-color:var(--green)" onclick="wizKind('join')">👥 Join an existing round</button>`:''}
+    </main>`;
+  }
   if(step==='span'){
     const sp=S.config.span||{count:18,start:0};
     const first=sp.count===18?0:(sp.start<9?0:9), n=sp.count===18?18:9;
@@ -12332,7 +12416,7 @@ function vStart(){
       ${finder.status==='idle'?courseListHTML(true):''}
       ${courseFinderHTML(true)}</div>
     <button class="big mt" style="width:100%" onclick="startRound()">${wiz&&wiz.gpsOnly?'\ud83d\udccd Start GPS':'Start Round'} \u2014 ${esc(S.course.name)}</button>
-    <div class="tiny mt center">The round opens on the GPS map of hole 1.</div>
+    <div class="tiny mt center">${cardN()?`${cardN()}-hole course — you play all ${cardN()}. `:''}The round opens on the GPS map of hole ${cardN()?roundSpan().start+1:1}.</div>
     </main>`;
 
   if(step==='join'){
@@ -12817,12 +12901,13 @@ function exFullStrokes(e,cs,me){
     const lk=e.round&&e.round.hcpLock&&(e.round.hcpLock.s||[])[(e.playersSnap||[]).indexOf(me)];   // set for the round (hcpLockStamp)
     if(holes.length&&hcpSameSeat(lk,me))return Math.round(lk.ch*allow0/100);
     if(!holes.length||me.index==null)return null;
-    const parTot=holes.reduce((a,h)=>a+((h&&h.par)||0),0);
+    const sn=cardN(cs);   // a short card: its own N holes' par, and hcpLiveCH's rating rule
+    const parTot=(sn?holes.slice(0,sn):holes).reduce((a,h)=>a+((h&&h.par)||0),0);
     const ts=cs.teeSets||[];
     const tee=ts.find(t=>t.id===me.tee)||ts[0]||null;
     const tp=(tee&&+tee.par)||parTot;
     const slope=(tee&&+tee.slope)||113, rating=(tee&&+tee.rating)||tp;
-    const ch=Math.round((+me.index)*(slope/113)+(rating-tp));
+    const ch=Math.round((+me.index)*(slope/113)+(sn?shortRateAdj(tee,tp,sn):(rating-tp)));
     const allow=(e.config&&e.config.allowance!=null)?+e.config.allowance:100;
     return Math.round(ch*allow/100);
   }catch(err){return null;}
@@ -12877,7 +12962,7 @@ function exportTables(only){
       const d=gross-p;
       if(netOk){
         const si=hole.si!=null?hole.si:18;
-        net+=gross-(holeDots(fullSt,si));
+        net+=gross-(cardN(cs)?shortDots(cs,fullSt,h):holeDots(fullSt,si));
       }
       if(d<=-2)eag++;else if(d===-1)bird++;else if(d===0)prs++;else if(d===1)bog++;else dbl++;
       n++;g+=gross;par+=p;
@@ -13489,7 +13574,7 @@ function courseFinderHTML(noBlank){
       <input type="text" id="natQ" placeholder="Course name or state" value="${esc(finder.natQ||'')}" oninput="natFilter(this.value)">
       <div class="tiny mt mb">${finder.natMsg||`${(window.__natIdx||[]).length} US courses — nearest first. ⛳ = GPS hole maps.`}</div>
       ${(finder.natList||[]).map((c,j)=>`<div class="row"><div style="flex:1;min-width:0"><b>${c[5]==='gps'?'⛳ ':''}${esc(c[1])}</b>
-        <div class="tiny">${esc((c[2]||'').toUpperCase())} · par ${c[6]}${c[7]?' · 9-hole':''}${c._mi!=null?` · ${c._mi<10?c._mi.toFixed(1):Math.round(c._mi)} mi`:''}</div></div>
+        <div class="tiny">${esc((c[2]||'').toUpperCase())} · par ${c[6]}${c[7]>1?' · '+c[7]+'-hole':c[7]?' · 9-hole':''}${c._mi!=null?` · ${c._mi<10?c._mi.toFixed(1):Math.round(c._mi)} mi`:''}</div></div>
         <button class="ghost sel" onclick="natUse('${c[0]}')" style="flex:none">Add</button></div>`).join('')}
       <button class="ghost mt" onclick="cancelFind()">Cancel</button></div>`:''}
     ${finder.status==='locating'?'<div class="tiny mt">📍 Locating the nearest course…</div>':''}
@@ -13504,7 +13589,7 @@ function courseFinderHTML(noBlank){
 }
 function courseRowHTML(x,forPick){
   const {c,i,mi}=x;
-  const par=c.holes.reduce((a,h)=>a+h.par,0);
+  const par=cardN(c)?cardHoles(c).reduce((a,h)=>a+h.par,0)+' · '+cardN(c)+' holes':c.holes.reduce((a,h)=>a+h.par,0);   // a short card says so
   const active=c.id===S.course.id;
   const miTag=mi!=null?`<span class="tiny" style="flex:none;color:var(--ink3);margin-left:8px">${mi<10?mi.toFixed(1):Math.round(mi)} mi</span>`:'';
   if(forPick)return `<div class="row" onclick="pickCourse(${i})" style="cursor:pointer;${active?'background:var(--green-lt);border-radius:10px;padding:9px 12px;border-top:none;margin:2px 0':''}">
@@ -13572,7 +13657,7 @@ function pickNearList(near){
 function natNearRowHTML(x){
   const r=x.nat;
   return `<div class="row" onclick="natUse('${r[0]}')" style="cursor:pointer">
-    <div style="flex:1;min-width:0"><b>${esc(r[1])}</b><div class="tiny">Par ${r[6]}${r[7]?' · 9 holes':''} · tap to add</div></div>
+    <div style="flex:1;min-width:0"><b>${esc(r[1])}</b><div class="tiny">Par ${r[6]}${r[7]>1?' · '+r[7]+' holes':r[7]?' · 9 holes':''} · tap to add</div></div>
     <span class="tiny" style="flex:none;color:var(--ink3);margin-left:8px">${x.mi<10?x.mi.toFixed(1):Math.round(x.mi)} mi</span>
   </div>`;
 }
@@ -13876,7 +13961,7 @@ function roundSummary(){
     try{
       const st=fullStrokes()[mi];
       const dots=h=>{const si=(S.course.holes[h]||{si:18}).si;
-        return holeDots(st,si);};
+        return cardN()?shortDots(S.course,st,h):holeDots(st,si);};
       net=holes.reduce((t,h)=>t+S.round.holes[h].gross[mi]-dots(h),0);
     }catch(e){}
     // WIN/LOSS is only meaningful against somebody. A solo round records neither.
@@ -14502,7 +14587,7 @@ function addBlankCourse(){
 // ----- course editor -----
 function vCourse(){
   const c=S.course;
-  const holes=c.holes.map((h,i)=>`
+  const holes=(cardN(c)?cardHoles(c):c.holes).map((h,i)=>`
     <div class="scorebar">
       <b class="num" style="width:26px">${i+1}</b>
       <div class="stepper"><button onclick="chPar(${i},-1)">−</button><span class="val num">${h.par}</span><button onclick="chPar(${i},1)">+</button></div>
@@ -14538,7 +14623,7 @@ function courseMapStatusHTML(c){
     const g=c.geo;
     if(g&&g.none)return `<div class="tiny mt">🗺 No hole map for this course — the card and the rangefinder still work.</div>`;
     if(g&&g.holes&&Object.keys(g.holes).length){
-      const n=Object.keys(g.holes).length, tot=(c.holes||[]).length||18;
+      const n=Object.keys(g.holes).length, tot=cardN(c)||(c.holes||[]).length||18;
       return `<div class="tiny mt">🗺 Hole map on this phone: <b>${n} of ${tot}</b> holes have a line and a green${n<tot?' — the rest open with the rangefinder only':''}.</div>`;
     }
     if(hosted)return `<div class="tiny mt">🗺 A hole map exists for this course — it downloads the first time you open the map here, or now: <button class="ghost" style="margin-left:6px" onclick="fetchMapNow()">⬇ Get the hole map</button><span id="mapNowNote"></span></div>`;
@@ -14556,7 +14641,7 @@ async function fetchMapNow(){
   if(mine)try{preloadCourseTiles(false);}catch(e){}
 }
 function chPar(i,d){set(()=>{const hd=S.course.holes[i];hd.par=Math.min(6,Math.max(3,hd.par+d));hd.parOk=true;
-  if((S.course.holes||[]).every(x=>x&&x.parOk))delete S.course._cardGuess;});}
+  if((cardN()?cardHoles(S.course):(S.course.holes||[])).every(x=>x&&x.parOk))delete S.course._cardGuess;});}
 function chSI(i,v){set(()=>{const hd=S.course.holes[i];
   hd.si=Math.min(18,Math.max(1,Math.round(+v||1)));hd.siOk=true;});}   // siOk: his, never overwritten by a refresh
 // teeEdit / nameEdit / siOk / parOk are the four marks that say A PERSON DECIDED THIS.
@@ -14640,7 +14725,7 @@ function gameOptionsHTML(){
   ${(sixes&&!inWiz)?`<div class="card"><h2>Starting partners</h2>
     ${[[[0,1],[2,3]],[[0,2],[1,3]],[[0,3],[1,2]]].map((T,pi)=>`
       <button class="ghost ${S.config.sixes.pairing===pi?'sel':''}" style="width:100%;text-align:left;margin-bottom:8px" onclick="set(()=>S.config.sixes.pairing=${pi})">${pairLbl(T)}</button>`).join('')}
-    <div class="tiny mt">Partners rotate every ${(S.config.span&&S.config.span.count===9)?'three':'six'} holes so everyone teams with everyone. Best ball wins the hole — 1 point each.</div>
+    <div class="tiny mt">Partners rotate every ${cardN()?segLen():(S.config.span&&S.config.span.count===9)?'three':'six'} holes so everyone teams with everyone. Best ball wins the hole — 1 point each.</div>
   </div>`:''}
   ${(bestball||sixes)?`<div class="card hamcard" style="padding:0;overflow:hidden">
     <div style="display:flex;align-items:center;gap:14px;padding:14px 16px;background:linear-gradient(90deg,rgba(184,115,51,.28),rgba(184,115,51,.06))">
@@ -14682,7 +14767,7 @@ function gameOptionsHTML(){
       <span class="seg" style="display:inline-flex;gap:6px">
         ${[['off','Off'],['manual','Anytime'],['auto2','2-down auto']].map(([k,l])=>`<button class="ghost ${(S.config.nassau.press||'manual')===k?'sel':''}" onclick="set(()=>S.config.nassau.press='${k}')">${l}</button>`).join('')}
       </span></div>
-    <div class="tiny mt">Three separate match-play bets: front nine, back nine, and the overall. ${(S.config.nassau.press||'manual')==='off'?'No presses — just the three bets.':(S.config.nassau.press||'manual')==='manual'?'A side that is down can press — a fresh bet on the remaining holes of that nine.':'Every bet automatically presses the first time a side falls exactly 2 down.'}${(S.config.span&&S.config.span.count===9)?' <b>9-hole round: collapses to a single overall match.</b>':''}</div>
+    <div class="tiny mt">Three separate match-play bets: front nine, back nine, and the overall. ${(S.config.nassau.press||'manual')==='off'?'No presses — just the three bets.':(S.config.nassau.press||'manual')==='manual'?'A side that is down can press — a fresh bet on the remaining holes of that nine.':'Every bet automatically presses the first time a side falls exactly 2 down.'}${cardN()?` <b>${cardN()}-hole course: one overall match, no presses.</b>`:(S.config.span&&S.config.span.count===9)?' <b>9-hole round: collapses to a single overall match.</b>':''}</div>
   </div>`:''}
   ${inWiz?(scramble?`<div class="card"><h2>🤝 Scramble</h2>${scrFmt()}
       <div class="tiny mt">${scrNote(S.config.scramble.teams).replace(' — pick your partners','')}</div></div>`:''):(()=>{const pairBtns=g2=>[[[0,1],[2,3]],[[0,2],[1,3]],[[0,3],[1,2]]].map((T,pi)=>`
@@ -14728,7 +14813,7 @@ function gameOptionsHTML(){
     ${[['par','Par'],['birdie','Birdie'],['eagle','Eagle'],['alba','Albatross'],['bogey','Bogey']].map(([k,l])=>`
       <div class="row"><span class="muted">${l}</span>
         <div class="stepper"><button onclick="chQuotaPt('${k}',-1)">−</button><span class="val num">${S.config.quota.pts[k]}</span><button onclick="chQuotaPt('${k}',1)">+</button></div></div>`).join('')}
-    <div class="tiny mt">Your quota = ${playOrder().length===9?'18':'36'} minus your course handicap — beat it by the most and you win. Points come from gross scores; the handicap lives in the target.
+    <div class="tiny mt">Your quota = ${cardN()?2*cardN():playOrder().length===9?'18':'36'} minus your course handicap — beat it by the most and you win. Points come from gross scores; the handicap lives in the target.
     <b>Quotas today: ${actIdx().map(i=>`${esc((S.players[i].name||'').split(' ')[0])} ${quotaTargets()[i]}`).join(' · ')}</b></div>
   </div>`:''}
   ${junk?junkOptsHTML():''}${snake?snakeOptsHTML():''}${rabbit?rabbitOptsHTML():''}${banker?bankerOptsHTML():''}
@@ -14765,7 +14850,7 @@ function gameOptionsHTML(){
       <button class="ghost ${S.config.nines.ctp?'sel':''}" onclick="set(()=>S.config.nines.ctp=!S.config.nines.ctp)">${S.config.nines.ctp?'On':'Off'}</button></div>
     <div class="tiny mt">${NP()===3?'Best score takes 5, middle 3, worst 1.':'Best score takes 5, then 3, then 1 — worst gets 0.'} Ties pool those spots and split evenly.</div>
   </div>`:''}
-  ${inWiz?'':`<div class="card"><h2>Round</h2>
+  ${inWiz?'':cardN()?roundCardShortHTML():`<div class="card"><h2>Round</h2>
     <div class="row"><span class="muted">Holes</span>
       <span class="seg" style="display:inline-flex;gap:6px">
         <button class="ghost ${S.config.span.count===18?'sel':''}" onclick="setSpan(18,0)">18</button>
@@ -14841,7 +14926,8 @@ function vSetup(){
           :`<input id="plIdx${i}" data-rec="${esc(p.name)}" type="text" inputmode="decimal" value="${fmtIdx(p.index)}" onfocus="tapClear(this)" onblur="commitPl(this,${i},'index')">`}</div>
         <div></div>
       </div>
-      <div class="tiny mt">Course hcp <b>${ch[i]}</b> → plays with <b>${st[i]}</b> stroke${st[i]===1?'':'s'} (${stWhy}).${i===0?' Handicaps adjust themselves as rounds are saved.':''}</div>
+      <div class="tiny mt">${cardN()?(k=>`Course hcp <b>${ch[i]}</b> → plays with <b>${k}</b> stroke${k===1?'':'s'} on ${cardN()} holes (${stWhy}).`)(shortStrokes(st[i],cardN()))
+        :`Course hcp <b>${ch[i]}</b> → plays with <b>${st[i]}</b> stroke${st[i]===1?'':'s'} (${stWhy}).`}${i===0?' Handicaps adjust themselves as rounds are saved.':''}</div>
     </div>`;
   }).join('');
   const P=S.config.pts;
@@ -15050,7 +15136,7 @@ function pairsAskSheetHTML(){
   const name={vegas:'Vegas',sixes:'Sixes',bestball:'Best Ball',umbrella:'Umbrella',nassau:'Nassau',scramble:'Scramble'};
   return `<div class="vfWrap"><div class="vfCard" style="max-width:430px">
     <h2 class="vfTitle" style="margin-bottom:2px">⚔️ Captain — confirm the partners</h2>
-    <div class="tiny mb">These teams score the round. Tap to change, then lock them in.${pairsAsk.games.includes('sixes')?' Sixes rotates pairs every six holes — choose each six on the Sixes card in Standings.':''}</div>
+    <div class="tiny mb">These teams score the round. Tap to change, then lock them in.${pairsAsk.games.includes('sixes')?' Sixes rotates pairs every '+(cardN()?segLen():'six')+' holes — choose each six on the Sixes card in Standings.':''}</div>
     ${pairsAsk.games.map(g=>`<div class="mt"><b>${name[g]||g}</b>${teamPickerRow(g)}</div>`).join('')}
     <button class="big mt" style="width:100%" onclick="pairsAskDone()">✓ &nbsp;These are the teams</button>
   </div></div>`;
@@ -15080,11 +15166,12 @@ function joinSpanSheetHTML(){
   if(!joinSpanAsk)return '';
   const a=joinSpanAsk;
   const g=S.round.span||{count:18,start:0};
-  const lbl=sp=>sp.count===18?'All 18':(sp.start<9?'Front 9':'Back 9');
+  const sn=cardN();   // the exception: a short card is all its holes, from any of them
+  const lbl=sp=>sn?'All '+sn:sp.count===18?'All 18':(sp.start<9?'Front 9':'Back 9');
   const groupLine=(S.round.started&&(g.count!==a.count||g.start!==a.start))
     ?`<div class="tiny mt">The group's card is <b>${lbl(g)} from h${g.start+1}</b> —
        <span style="color:var(--elec);text-decoration:underline;cursor:pointer" onclick="joinSpanPick(${g.count},${g.start})">match them</span></div>`:'';
-  const first=a.count===18?0:(a.start<9?0:9), n=a.count===18?18:9;
+  const first=sn?0:a.count===18?0:(a.start<9?0:9), n=sn?sn:a.count===18?18:9;
   const holes=`<select onchange="joinSpanPick(${a.count},+this.value)"
       style="width:100%;margin-top:4px;background:var(--field);border:2px solid var(--line);border-radius:10px;color:var(--ink);font:600 17px Rajdhani,Inter,sans-serif;padding:11px 12px">
     ${Array.from({length:n},(_,k)=>first+k).map(h=>
@@ -15094,9 +15181,9 @@ function joinSpanSheetHTML(){
     <h2 class="vfTitle" style="margin-bottom:2px">What are you playing?</h2>
     <div class="tiny mb">Your card — the group's scores line up either way.</div>
     <div style="display:flex;gap:6px">
-      <button class="ghost ${a.count===18?'sel':''}" style="flex:1" onclick="joinSpanPick(18,0)">All 18</button>
+      ${sn?`<button class="ghost sel" style="flex:1" onclick="joinSpanPick(${sn},${a.start})">All ${sn}</button>`:`<button class="ghost ${a.count===18?'sel':''}" style="flex:1" onclick="joinSpanPick(18,0)">All 18</button>
       <button class="ghost ${a.count===9&&a.start<9?'sel':''}" style="flex:1" onclick="joinSpanPick(9,0)">Front 9</button>
-      <button class="ghost ${a.count===9&&a.start>=9?'sel':''}" style="flex:1" onclick="joinSpanPick(9,9)">Back 9</button>
+      <button class="ghost ${a.count===9&&a.start>=9?'sel':''}" style="flex:1" onclick="joinSpanPick(9,9)">Back 9</button>`}
     </div>
     <div class="tiny mt">Starting on</div>
     ${holes}
@@ -15647,6 +15734,21 @@ function chAllow(d){if(roundLocked())return;set(()=>{S.config.allowance=Math.min
 function setRecLens(v){if(roundLocked())return;set(()=>{S.config.recLens=(v==='gross'?'gross':'net');});}
 let pickingCourse=false;
 function startPick(){pickingCourse=true;finder={status:'idle',choices:[],error:''};S.screen='pickcourse';save();render();}
+// THE EXCEPTION, SAID PLAINLY (Nathan 10/30 3:39 PM: "the 'standard' should still be 9 or 18 holes, but have
+// 'exceptions' whenever a course with a different number of holes is chosen"). On a short card the Round card and the
+// wizard's holes step show its hole count where 18 / Front 9 / Back 9 sit; the first tee is any of its holes. The
+// pick is stored as an All-18 first tee, so the config span stays a 9/18 one (shortSpan reads it).
+function spanSelHTML(n,cur,style){return `<select style="${style}" onchange="setSpan(18,+this.value)">
+  ${[...Array(n).keys()].map(hh=>`<option value="${hh}" ${cur===hh?'selected':''}>Hole ${hh+1}</option>`).join('')}</select>`;}
+function roundCardShortHTML(){
+  const n=cardN(),sp=roundSpan();
+  return `<div class="card"><h2>Round</h2>
+    <div class="row"><span class="muted">Holes</span><b class="num" style="font-size:17px">${n} holes</b></div>
+    <div class="row"><span class="muted">First tee</span>
+      ${spanSelHTML(n,sp.start,'padding:8px 10px;border:2px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);font-size:16px')}</div>
+    <div class="tiny mt">${esc(S.course.name)} has ${n} holes — the round plays all ${n}.</div>
+  </div>`;
+}
 function setSpan(count,start){set(()=>{S.config.span={count,start};});}
 function saveGroupFromRoster(){
   const nm=(S.config.groupName||'').trim();
@@ -15989,7 +16091,7 @@ function startRound(){
       if(g==='nassau')S.config.nassau.n=nn>=4?S.config.nassau.n:2;
     });
     quotaBogeyOne(S);
-    S.round.span=clone(S.config.span||{count:18,start:0});S.round.startedAt=Date.now();S.round.myStartedAt=Date.now();
+    S.round.span=clone(shortSpan(S.config.span||{count:18,start:0}));S.round.startedAt=Date.now();S.round.myStartedAt=Date.now();   // a short card stores its own count (shortSpan)
     S.config.fullHcp=1;   // every net game on full handicaps (playingStrokes); a round started before keeps the low man
     if(S.config.banker){S.config.banker.toss=1;S.config.banker.lowNet=1;}   // the tee-toss and low-net rules (bankerOf); a round started before them keeps the old ones
     // A round opens on the GPS map of the first tee, not the scorecard — you are
@@ -16390,11 +16492,11 @@ function crewRowHTML(g,lo){const n=Math.min(4,Math.max(lo,S.config[g].n||4));
     <span class="seg" style="display:inline-flex;gap:6px">${[2,3,4].filter(x=>x>=lo).map(x=>`<button class="ghost ${n===x?'sel':''}" onclick="set(()=>S.config.${g}.n=${x})">${x}</button>`).join('')}</span></div>`;}
 function rabbitOptsHTML(){const c=rabbitCfg();return `<div class="card"><h2>🐇 Rabbit</h2>${crewRowHTML('rabbit',2)}
     <div class="row"><span class="muted">Rabbits</span><span class="seg" style="display:inline-flex;gap:6px">
-      <button class="ghost ${c.split!=='all'?'sel':''}" onclick="set(()=>S.config.rabbit.split='nines')">Front &amp; back</button>
-      <button class="ghost ${c.split==='all'?'sel':''}" onclick="set(()=>S.config.rabbit.split='all')">One for 18</button></span></div>
+      ${cardN()?`<span class="num" style="font-size:17px">One for ${cardN()}</span>`:`<button class="ghost ${c.split!=='all'?'sel':''}" onclick="set(()=>S.config.rabbit.split='nines')">Front &amp; back</button>
+      <button class="ghost ${c.split==='all'?'sel':''}" onclick="set(()=>S.config.rabbit.split='all')">One for 18</button>`}</span></div>
     <div class="row"><span class="muted">Next outright win steals it</span>
       <button class="ghost ${c.steal?'sel':''}" onclick="set(()=>{S.config.rabbit.steal=!rabbitCfg().steal;})">${c.steal?'On':'Off'}</button></div>
-    <div class="tiny mt">${c.steal?'Win a hole outright to take the rabbit.':'Win a hole outright to catch it; the next outright win sets it loose.'} Whoever has it at the end of the nine wins.</div></div>`;}
+    <div class="tiny mt">${c.steal?'Win a hole outright to take the rabbit.':'Win a hole outright to catch it; the next outright win sets it loose.'} Whoever has it at the end of the ${cardN()?'round':'nine'} wins.</div></div>`;}
 function bankerOptsHTML(){const c=bankerCfg();return `<div class="card"><h2>🏦 Banker</h2>${crewRowHTML('banker',3)}
     <div class="row"><span class="muted">Smallest bet</span><div class="stepper"><button onclick="chBanker('min',-1)">−</button><span class="val num">${c.min}</span><button onclick="chBanker('min',1)">+</button></div></div>
     <div class="row"><span class="muted">Biggest bet</span><div class="stepper"><button onclick="chBanker('max',-1)">−</button><span class="val num">${c.max}</span><button onclick="chBanker('max',1)">+</button></div></div>
@@ -16479,7 +16581,7 @@ function nassauCardHTML(){
   return `<div class="card"><h2>Nassau — ${tn(0)} <span class="tiny" style="text-transform:none">vs</span> ${tn(1)}</h2>
     <div class="tiny mb">+ favors ${tn(0)} · ${L} scores</div>
     ${rows}${pressBtn}
-    ${o.length<18?'<div class="tiny mt">9-hole round — single match, no front/back split.</div>':''}
+    ${cardN()?`<div class="tiny mt">${cardN()}-hole course — single match, no front/back split.</div>`:o.length<18?'<div class="tiny mt">9-hole round — single match, no front/back split.</div>':''}
   </div>`;
 }
 // The Hammer card on the hole screen: idle → throw, pending → accept/fold.
@@ -16942,15 +17044,25 @@ function joinPlay(k){
 // and the rest of the group sees whose phone is behind (an app older than this check says nothing, so
 // its row carries no stamp and reads as behind).
 const RULES_VER=20261104;   // 10/27 4:37 PM: every net game plays each golfer's FULL course handicap (no more strokes off the low man; rounds started before keep it). Before that, 3:12 PM: handicaps are set for the round once the second hole is confirmed (a late arrival's at his own second hole), and each game's low man with them -- a late joiner never moves anyone else's strokes. Before that, 9:51 AM: in a net round the low NET score on the hole before banks the next (rounds started before keep gross). Before that, 9:22 AM: a Junk eagle never pays less than a birdie (Eagle Off or set below Birdie pays the Birdie points). Before that, 10/27: Banker clashes settle the same on every phone (banker's double > bet > confirm, then earlier; a tapped pick loses to the banker's double), a rotating bank waits for the hole-1 toss, the low score comes from the golfers who played the hole, a carded hole keeps its bet range + junk points. 10/26 late: game options set before the first hole and locked for the round, Stableford dots = full strokes / Quota + BBB none, Score It scores only you (typed golfers on their own sheet), Banker: hole 1 waits for the toss, a confirmed or bet-on hole keeps its banker (bkAt). 10/26 night: Best Ball + Match Play pay the match as won (stop at the clinch), Quota bogey = 1, mid-round Junk/Banker changes count from the next hole, a confirmed hole keeps its banker, no Banker bets until the hole before is in (the 4th change on 10/26). 10/26 eve: Banker tee toss (first banker + ties). 10/26 pm: Rabbit + Banker (a 2nd change on 10/26, so it takes the next day's number). 10/26: Junk + Snake side games. 10/18: 3rd/4th strokes, plus handicaps, Stableford/team results, Vegas CTP, Scramble
+// A SHORT CARD IS ITS OWN RULE SET (10/30): an app without it plays a 12-hole round as 18 and pays it wrong. On a
+// short card every phone stamps RULES_VER + 0.5 -- past the RULES_VER of every app without it, so that phone is asked
+// to update and the group sees whose is behind; below the next whole-number bump, so a later app still outranks this
+// one on a short card too. A 9 or 18 stamps RULES_VER, exactly as before, and reads a half-stamp a row kept from the
+// group's last short round as the whole RULES_VER it rides on (never a nag). The ROUND's course decides, never one
+// being previewed.
+const RULES_SHORT=RULES_VER+0.5;
+function rulesShortRound(){let c=S.course;try{if(coursePreview&&coursePreview.keep)c=coursePreview.keep;}catch(e){}return !!cardN(c);}
+function rulesVer(){return rulesShortRound()?RULES_SHORT:RULES_VER;}
 function rulesRound(){return !!(S.share&&S.share.on&&S.round&&S.round.started&&!isReview()&&!S.round.myEndedAt);}
 function rulesBehind(){
   if(!rulesRound())return 0;
-  const top=Math.max(0,...S.players.map(p=>+(p&&p.rules)||0));
-  return top>RULES_VER?top:0;
+  const sh=rulesShortRound();
+  const top=Math.max(0,...S.players.map(p=>{const v=+(p&&p.rules)||0;return sh?v:Math.floor(v);}));   // a 9/18: whole stamps, as always
+  return top>rulesVer()?top:0;
 }
 function rulesLagging(){
   if(!rulesRound())return [];
-  return S.players.filter(p=>p&&p.ownerDev&&p.ownerDev!==devId()&&!p.ended&&(+p.rules||0)<RULES_VER);
+  return S.players.filter(p=>p&&p.ownerDev&&p.ownerDev!==devId()&&!p.ended&&(+p.rules||0)<rulesVer());
 }
 let rulesAskShown=0,appUpdating=false;
 function appUpdateNow(){
@@ -17356,7 +17468,7 @@ function scSegTable(idx,segLabel,extraTot){
   const cell=scCell;
   const parSeg=idx.reduce((a,i)=>a+hs[i].par,0);
   let out='<div class="sc-wrap"><table class="sc" style="width:100%"><tr><th class="nm">Hole</th>'+idx.map(i=>`<th>${i+1}</th>`).join('')+`<th>${segLabel}</th>`+(extraTot?'<th>TOT</th>':'')+'</tr>';
-  out+='<tr class="parrow"><td class="nm">Par</td>'+idx.map(i=>`<td>${hs[i].par}</td>`).join('')+`<td>${parSeg}</td>`+(extraTot?`<td>${hs.reduce((a,h)=>a+h.par,0)}</td>`:'')+'</tr>';
+  out+='<tr class="parrow"><td class="nm">Par</td>'+idx.map(i=>`<td>${hs[i].par}</td>`).join('')+`<td>${parSeg}</td>`+(extraTot?`<td>${cardN()?parTotal():hs.reduce((a,h)=>a+h.par,0)}</td>`:'')+'</tr>';
   out+=scHcpRow(hs,[...idx,null,...(extraTot?[null]:[])]);
   const rowDefs=gameOn()==='scramble'?scrambleTeams().map(t=>({name:teamNameFor(t)||t.map(i=>S.players[i].name).join(' & '),pi:t[0]})):cardIdx().map(pi=>({name:S.players[pi].name,pi}));   // the stroke-only player past the seats is on the card too
   rowDefs.forEach(({name:rowName,pi})=>{
@@ -17375,7 +17487,10 @@ function scSegTable(idx,segLabel,extraTot){
   return out+'</table></div>';
 }
 function fullScorecardHTML(){
-  const sp=roundSpan();
+  const sp=roundSpan(),sn=cardN();
+  // a short card: one table up to nine holes; past nine, OUT 1-9 and IN 10-N, the way its own scorecard prints
+  if(sn)return sn<=9?scSegTable([...Array(sn).keys()],'TOT',false)
+    :scSegTable([...Array(9).keys()],'OUT',false)+'<div style="height:12px"></div>'+scSegTable(Array.from({length:sn-9},(_,k)=>9+k),'IN',true);
   if(sp.count===9){const base=sp.start<9?0:9;return scSegTable(Array.from({length:9},(_,k)=>base+k),'TOT',false);}
   return scSegTable([...Array(9).keys()],'OUT',false)+'<div style="height:12px"></div>'+scSegTable([9,10,11,12,13,14,15,16,17],'IN',true);
 }
@@ -17407,6 +17522,7 @@ function scHcpRow(hs,groups){
 function scorecardHTML(lens){
   const hs=S.course.holes;
   const sp=roundSpan();
+  if(cardN())return scorecardShortHTML(lens);   // the exception: a short card prints its own holes
   if(sp.count===9)return scorecard9HTML(sp.start<9?0:9,lens);
   const net=lens==='net';
   const idx=[...Array(18).keys()];
@@ -17432,6 +17548,32 @@ function scorecardHTML(lens){
     html+=`<tr><td class="nm">${esc(rowName)}</td>`+idx.slice(0,9).map(i=>cell(g(i),hs[i].par)).join('')
       +`<td class="tt">${out??''}</td>`+idx.slice(9).map(i=>cell(g(i),hs[i].par)).join('')
       +`<td class="tt">${inn??''}</td><td class="tt">${totTxt}</td></tr>`;
+  });
+  return html+'</table></div>';
+}
+// A SHORT CARD'S SCORECARD (10/30): its own N holes and nothing past them -- nine or fewer in one table with a
+// TOT, more as OUT 1-9 and IN 10-N with a TOT, the way a 12-hole club prints its card. Same cells as the 18's.
+function scorecardShortHTML(lens){
+  const hs=S.course.holes, sn=cardN(), net=lens==='net', cell=scCell;
+  const idx=[...Array(sn).keys()], split=sn>9, A=split?idx.slice(0,9):idx, B=split?idx.slice(9):[];
+  const par=xs=>xs.reduce((a,i)=>a+hs[i].par,0);
+  let html='<div class="sc-wrap"><table class="sc"><tr><th class="nm">Hole</th>'+A.map(i=>`<th>${i+1}</th>`).join('')
+    +(split?'<th>OUT</th>'+B.map(i=>`<th>${i+1}</th>`).join('')+'<th>IN</th>':'')+'<th>TOT</th></tr>';
+  html+='<tr class="parrow"><td class="nm">Par</td>'+A.map(i=>`<td>${hs[i].par}</td>`).join('')
+    +(split?`<td>${par(A)}</td>`+B.map(i=>`<td>${hs[i].par}</td>`).join('')+`<td>${par(B)}</td>`:'')+`<td>${par(idx)}</td></tr>`;
+  html+=scHcpRow(hs,split?[...A,null,...B,null,null]:[...A,null]);
+  const rowDefs=gameOn()==='scramble'?scrambleTeams().map(t=>({name:teamNameFor(t)||t.map(i=>S.players[i].name).join(' & '),pi:t[0]})):cardIdx().map(pi=>({name:S.players[pi].name,pi}));
+  rowDefs.forEach(({name:rowName,pi})=>{
+    const g=i=>{if(!S.round.holes[i].confirmed)return null;
+      const raw=S.round.holes[i].gross[pi];if(raw==null)return null;
+      return net?raw-fullDotsOn(pi,i):raw;};
+    const sum=xs=>{let t=0,n=0;xs.forEach(i=>{const v=g(i);if(v!=null){t+=v;n++;}});return n?t:null;};
+    const played=idx.filter(i=>g(i)!=null);
+    const tot=played.reduce((a,i)=>a+g(i),0), diff=tot-played.reduce((a,i)=>a+hs[i].par,0);
+    const totTxt=played.length?`${tot}<span style="font-size:11px"> ${diff===0?'E':(diff>0?'+':'')+diff}</span>`:'';
+    html+=`<tr><td class="nm">${esc(rowName)}</td>`+A.map(i=>cell(g(i),hs[i].par)).join('')
+      +(split?`<td class="tt">${sum(A)??''}</td>`+B.map(i=>cell(g(i),hs[i].par)).join('')+`<td class="tt">${sum(B)??''}</td>`:'')
+      +`<td class="tt">${totTxt}</td></tr>`;
   });
   return html+'</table></div>';
 }
@@ -17515,7 +17657,7 @@ function lensScore(rec,i,h,L){const g=rec.gross[i];return g==null?null:(L==='net
 function computeStroke(){
   const led={net:[0,0,0,0],gross:[0,0,0,0]},par={net:[0,0,0,0],gross:[0,0,0,0]};
   const sc=(rec,i,h,L)=>{const g=rec.gross[i];return g==null?null:(L==='net'?g-fullDotsOn(i,h):g);};
-  for(let h=0;h<HOLES;h++){const rec=S.round.holes[h];if(!rec.confirmed)continue;
+  for(let h=0;h<HOLES;h++){const rec=S.round.holes[h];if(!rec.confirmed||padHole(h))continue;
     for(const L of ['net','gross'])actIdx().forEach(i=>{const s=sc(rec,i,h,L);
       if(s!=null){led[L][i]+=s;par[L][i]+=S.course.holes[h].par;}});}
   return {ledgers:led,par};
@@ -17524,7 +17666,7 @@ function stblPts(){return (S.config.stbl&&S.config.stbl.pts)||{alba:5,eagle:4,bi
 function computeStableford(){
   const P=stblPts();
   const led={net:[0,0,0,0],gross:[0,0,0,0]};
-  for(let h=0;h<HOLES;h++){const rec=S.round.holes[h];if(!rec.confirmed)continue;
+  for(let h=0;h<HOLES;h++){const rec=S.round.holes[h];if(!rec.confirmed||padHole(h))continue;
     const p=S.course.holes[h].par;
     for(const L of ['net','gross'])actIdx().forEach(i=>{const g=rec.gross[i];if(g==null)return;
       const s=L==='net'?g-fullDotsOn(i,h):g;
@@ -17613,6 +17755,7 @@ function chalGoal(k){
   const raw=chalOf(k).val;
   if(!CHAL_CUM[k])return raw;
   const sp=roundSpan();
+  if(cardN())return Math.round(raw*cardN()/18);   // a short card: the goal scaled to its holes
   return (sp&&sp.count===9)?Math.round(raw/2):raw;
 }
 
@@ -18151,8 +18294,8 @@ function vStandings(){
         return `<td class="r num" style="font-size:34px">${thru?`${vv} <span style="font-size:17px">${d===0?'E':(d>0?'+':'')+d}</span>`:'–'}</td>`;}).join('')}</tr>`).join('')}
       </table>${T.length===1?'':teamPickerRow('scramble')}
       <div class="tiny mt">${T.length>1?'One ball per team — lowest total wins. Net gives the higher-handicap team strokes via the 35%/15% scramble allowance.'
-        :T[0].length===2?'Two-man team, one ball. Net plays off the 35%/15% scramble allowance ('+scrambleStrokes()[0]+' strokes).'
-        :'Tournament tracker — one ball, whole group. Net plays off the 25/20/15/10% four-player allowance ('+scrambleStrokes()[0]+' strokes).'}</div></div>`;
+        :T[0].length===2?'Two-man team, one ball. Net plays off the 35%/15% scramble allowance ('+(cardN()?shortStrokes(scrambleStrokes()[0],cardN())+' strokes on '+cardN()+' holes':scrambleStrokes()[0]+' strokes')+').'
+        :'Tournament tracker — one ball, whole group. Net plays off the 25/20/15/10% four-player allowance ('+(cardN()?shortStrokes(scrambleStrokes()[0],cardN())+' strokes on '+cardN()+' holes':scrambleStrokes()[0]+' strokes')+').'}</div></div>`;
   }else if(view==='bestball'){
     const bb=computeBestBall();
     const blocks=cols.map(L=>{
@@ -18182,7 +18325,7 @@ function vStandings(){
     tables=genericCard('Stableford',computeStableford().ledgers,v=>String(v),false,
       `<div class="tiny mt">Birdie ${P.birdie} · par ${P.par} · bogey ${P.bogey} · double+ ${P.dbl} · eagle ${P.eagle} · albatross ${P.alba}. Highest wins.</div>`);
   }else if(view==='sixes'){
-    const seg=playOrder().length===9?3:6;
+    const seg=cardN()?segLen():playOrder().length===9?3:6;
     const T=sixesTeamsFor(S.round.cur);
     // Sixes keeps PLAYER rows on purpose — partners rotate every few holes, so
     // by the end the points are individual. The picker sets which pairing it
@@ -18391,7 +18534,7 @@ function vStandings(){
   // tracked shots — the group's lines plus mine, from the round itself
   const shotsCard=S.round.started?trackedShotsCardHTML(shotsForShare(),S.players,S.course,S.round.holes):'';
   const extra=(thru>0?`
-    <div class="card" onclick="openFullCard()" style="cursor:pointer"><h2>Scorecard · gross strokes <span class="tiny" style="font-weight:400">— tap for all 18</span></h2>${scorecardHTML()}
+    <div class="card" onclick="openFullCard()" style="cursor:pointer"><h2>Scorecard · gross strokes <span class="tiny" style="font-weight:400">— tap for all ${cardN()||18}</span></h2>${scorecardHTML()}
       <div class="tiny mt"><span style="color:var(--good)">○</span> birdie · <span style="color:var(--good2)">◎</span> eagle · <span style="color:var(--amber)">□</span> bogey · <span style="color:var(--red)">▣</span> double+ · HCP = hole handicap. Swipe the card sideways.</div></div>`:'')+shotsCard+statsCard;
   // "who hasn't ended yet" belongs here: this is where the last hole lands you
   const stillIn=(()=>{try{
@@ -18700,7 +18843,7 @@ function vSettle(){
            `<b class="num">${ptsTxt(marg/2)} ${un}${marg/2===1?'':'s'}</b>${v?` <span class="muted">(${fmtMoney(each)})</span>`:''}</div>`).join('');
       return `<div class="card"><h2>${LL==='net'?'Net':'Gross'} settlement · thru ${thru}</h2>
         <div class="center mb"><span class="bigscore num">${marg===0?'—':`+${ptsTxt(marg)}`}</span>
-          <div class="muted">${marg===0?'All square':`${nm(winT)} ${thru===18?'win':'lead'} by ${ptsTxt(marg)}`}</div></div>
+          <div class="muted">${marg===0?'All square':`${nm(winT)} ${(thru===18||(cardN()&&thru>=cardN()))?'win':'lead'} by ${ptsTxt(marg)}`}</div></div>
         <table class="st"><tr><th>Team</th><th class="r">${un==='stroke'?'Strokes':un==='hole'?'Holes':un==='bet'?'Bets':'Pts'}</th></tr>
         ${[winT,loseT].map(k=>`<tr><td>${nm(k)}</td><td class="r num" style="font-size:18px">${ptsTxt(led[FT[k][0]])}</td></tr>`).join('')}</table>
         <div class="mt"><h2>Team settlement</h2>${lines}</div>
@@ -18718,7 +18861,7 @@ function vSettle(){
     });
     const order=act.slice().sort((a,b)=>(led[b]-led[a])*inv);
     const leaders=act.filter(i=>led[i]===led[order[0]]);
-    const verb=thru===18?'wins':'leads';
+    const verb=(thru===18||(cardN()&&thru>=cardN()))?'wins':'leads';   // a short card is done at its last hole
     const leadTxt=leaders.length===1?`${esc(S.players[leaders[0]].name)} ${verb}`
       :leaders.length===act.length?`All square — ${act.length}-way tie`
       :`${leaders.length}-way tie: ${leaders.map(i=>esc(S.players[i].name)).join(', ')}`;
