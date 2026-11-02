@@ -583,7 +583,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-center in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1793583607';
+const BUILD='1793584237';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1179,9 +1179,23 @@ function abStamp(fp){abFp=fp;try{localStorage.setItem('btAbFp',fp);localStorage.
 // MUST carry everything doBackup() sends: auto-backup fires on every save, so
 // anything missing here gets stripped from the cloud copy within seconds of a
 // manual backup that did include it.
+// PAST ROUNDS KEEP 50 (Nathan 11/1; it was 30). A round is ~9 KB in the backup, a foursome's up to ~15 KB, and the
+// relay refuses a backup over 800 KB (books.js backupOp) -- so a big library leaves its OLDEST rounds off the upload.
+// They went up when they were new, and the relay keeps every round it has been sent (up to 60), so nothing is lost.
+// Function, not const: load() runs before most top-level consts exist (the 9/5 wipe).
+function histCap(){return 50;}
+var histSizeW;
+function histForBackup(rest){
+  const h=S.history||[];
+  if(h.length<=30)return h;   // the old cap always fit
+  histSizeW=histSizeW||new WeakMap();
+  let n=JSON.stringify(rest).length;const out=[];
+  for(const e of h){let z=histSizeW.get(e);if(z==null){z=JSON.stringify(e).length;histSizeW.set(e,z);}if(n+z>700000)break;n+=z;out.push(e);}
+  return out;
+}
 function abPayload(){
   const courses=S.courses.map(c=>{const {geo,...rest}=c;return rest;});
-  return {me:S.me,playerLib:S.playerLib,courses,history:S.history||[],ledger:S.ledger||[],groups:S.groupLib||[],teams:S.teamLib||[],
+  const d={me:S.me,playerLib:S.playerLib,courses,history:[],ledger:S.ledger||[],groups:S.groupLib||[],teams:S.teamLib||[],
     // TEE CORRECTIONS. manualGreens rides inside each archived round, so greens
     // were always recoverable — teeFix lives on S and was in NO backup at all,
     // which is why Cypress Lakes 8/12 came back with 18 greens and only 12 tees.
@@ -1192,6 +1206,8 @@ function abPayload(){
     tomb:S.tomb||{},          // Personal Challenges were in NO backup at all (9/5 wipe took Nathan's)
     shotLog:trimShotLog(S.shotLog),shotLast:S.shotLast||{},bag:S.bag||null,
     retention:retentionRead()};
+  d.history=histForBackup(d);
+  return d;
 }
 // ...and the same for a newly placed tee: without this the payload would carry
 // teeFix but nothing would ever notice it changed, so the backup would not fire.
@@ -1835,6 +1851,28 @@ function endOutboxStash(){
     const me=S.players[myPlayerIdx()]||{};
     S.endOutbox=(S.endOutbox||[]).filter(x=>x&&x.code!==S.share.code);
     S.endOutbox.push({code:S.share.code,docs,pid:me.pid||null,dev:devId(),ended:Date.now(),at:Date.now(),tries:0});
+  }catch(e){}
+}
+// A REVIEW'S FIXES REACH THE BATTLEFIELD (Nathan 11/1: "it should change on the Battlefield too"). A past round
+// opens offline when it is older than 6 h or was played solo (reopenRound), so a score or a closest to the pin fixed
+// there stayed on this phone. The holes the review changed now ride the outbox above: it joins the round's room,
+// merges each hole per player (the review's stamps are the newest, so its fixes win and nothing else moves) and the
+// relay rebuilds the Battlefield card from the room. Push only: nothing comes back from the room into the review.
+// An offline review never stamps _ts (stampChanges runs only in a share), so each changed hole is stamped here: the
+// review is the newest copy of its closest to the pin and other hole fields; scores still merge per player on their own
+// stamps. rv marks it as a fix, not play -- the relay must not read it as scoring resumed on a round it closed for time.
+function reviewOutboxStash(prev){   // prev: the Past Rounds entry, before reviewCommit writes the review into it
+  try{
+    if(!S.round.reopened||(S.share&&S.share.on))return;
+    if(!prev||!prev.code||!prev.round)return;
+    const docs={};
+    S.round.holes.forEach((r,h)=>{const o=(prev.round.holes||[])[h];if(r&&JSON.stringify(r)!==JSON.stringify(o)){const d=docs['h'+h]=clone(r);d.rv=Date.now();d._ts=Math.max(Date.now(),(r._ts||0)+1);}});
+    if(!Object.keys(docs).length)return;
+    // the round's own end may still be waiting for signal: add to that job, never replace it
+    const job=(S.endOutbox||[]).find(x=>x&&x.code===prev.code);
+    if(job){job.docs=Object.assign(job.docs||{},docs);job.at=Date.now();job.tries=0;return;}
+    const me=S.players[myPlayerIdx()]||{};
+    (S.endOutbox=S.endOutbox||[]).push({code:prev.code,docs,pid:me.pid||null,dev:devId(),ended:prev.endedAt||Date.now(),at:Date.now(),tries:0});
   }catch(e){}
 }
 let endOutboxSock=null;
@@ -3092,8 +3130,10 @@ async function doBackup(){
     const courses=S.courses.map(c=>{const {geo,...rest}=c;return rest;});
     // shot lines were local-only until now: a cleared cache or a new phone lost
     // every tracked shot, including the per-course "last time out" ghost lines
-    const r=await relayBackup({op:'save',email:em,data:{me:S.me,playerLib:S.playerLib,courses,history:S.history||[],ledger:S.ledger||[],groups:S.groupLib||[],teams:S.teamLib||[],
-      shotLog:trimShotLog(S.shotLog),shotLast:S.shotLast||{},bag:S.bag||null,retention:retentionRead()}});
+    const data={me:S.me,playerLib:S.playerLib,courses,history:[],ledger:S.ledger||[],groups:S.groupLib||[],teams:S.teamLib||[],
+      shotLog:trimShotLog(S.shotLog),shotLast:S.shotLast||{},bag:S.bag||null,retention:retentionRead()};
+    data.history=histForBackup(data);
+    const r=await relayBackup({op:'save',email:em,data});
     if(r&&r.ok){const d=abPayload();abStamp(JSON.stringify([d.me,d.playerLib,d.courses,d.history.map(h=>h.id)]));}
     const nh=(S.history||[]).length;
     backupUI.msg=r.ok?`✓ ${S.playerLib.length} player${S.playerLib.length===1?'':'s'} + ${S.courses.length} course${S.courses.length===1?'':'s'}${nh?` + ${nh} round${nh===1?'':'s'}`:''} safely backed up${r.emailed?' — confirmation emailed':''}.`:(r.error||'Backup failed.');
@@ -3413,9 +3453,9 @@ function applyLibrary(d){
         if(tombHas('rounds',e.id))return;
         if(!(S.history||[]).some(x=>x.id===e.id)){(S.history=S.history||[]).push(e);hAdded++;}
       });
-      if(hAdded){S.history.sort((a,b)=>(b.endedAt||0)-(a.endedAt||0));S.history=S.history.slice(0,30);}
+      if(hAdded){S.history.sort((a,b)=>(b.endedAt||0)-(a.endedAt||0));S.history=S.history.slice(0,histCap());}
       // SEASON LEDGER. Union by round id and never capped — these rows are the only
-      // record of a season once the 30-round history cap has thrown the round away,
+      // record of a season once the 50-round history cap has thrown the round away,
       // so a restore must bring back every one of them, not the most recent thirty.
       // A tombstoned round stays deleted here too.
       if(Array.isArray(d.ledger)){
@@ -10761,7 +10801,7 @@ const FAQ=[
   ['Fairways, greens and your stats',
    'Tap <b>FW</b> or <b>GIR</b> on the map or the Score screen as you play. Home › <b>Stats</b> shows your won–lost record against other players, your scoring, fairways and greens hit, putting and the other extras, and your club distances from Track It. Rounds where you didn’t track something are left out of that stat, never counted as zero.'],
   ['Past rounds',
-   'Home › <b>Rounds</b> keeps your last 30 finished rounds. <b>Review</b> reopens one to look at it or fix a score; tap <b>Done — Close This Round</b> on Home when you’re finished. <b>Save Data</b> downloads a round to your phone or emails it.'],
+   'Home › <b>Rounds</b> keeps your last 50 finished rounds. <b>Review</b> reopens one to look at it or fix a score; tap <b>Done — Close This Round</b> on Home when you’re finished. <b>Save Data</b> downloads a round to your phone or emails it.'],
   ['Personal Challenges',
    '<b>Players</b> › <b>⛳ Personal Challenges</b> › <b>Set challenges</b>. Turn on the goals you want — total strokes, pars, birdies, putts, fairways, greens in regulation, longest drive — set each target and tap <b>Save my challenges</b>. Pars and birdies cheer the moment you get there; the rest are judged when the round ends. When you beat one, every phone in the group gets the celebration. Stroke and putt targets are for 18 holes and halve on a nine. The results are kept with the round.'],
  ]],
@@ -12692,7 +12732,7 @@ function vHistory(){
 }
 // ---------- the season ----------
 const SEASON_ON=false;   // tabled 9/12 -- flip to show the card + screen again
-// Built entirely from S.ledger, so it keeps working after the 30-round history cap
+// Built entirely from S.ledger, so it keeps working after the 50-round history cap
 // has thrown the rounds themselves away. A season is a calendar year: golf already
 // has one, nobody has to declare it, and it needs no setup on the first tee.
 function seasonYears(){
@@ -14002,8 +14042,8 @@ function roundSummary(){
 // ----- the season ledger ------------------------------------------------------
 // A finished round leaves ONE compact row behind: a few hundred bytes, against the
 // tens of kilobytes a history entry carries (it clones the whole round, the config,
-// the roster and the course). S.history is also capped at 30 rounds, and a weekly
-// group plays past 30 by August — so a season can never be built out of it. These
+// the roster and the course). S.history is also capped at 50 rounds (30 until 11/1), and a weekly
+// group plays past 50 by October — so a season can never be built out of it. These
 // rows are what a season IS, which is why they are small and never capped.
 //
 // The money comes from settleNet(), the same function the settlement card reads,
@@ -14087,8 +14127,8 @@ function archiveRound(){
   S.history=(S.history||[]).filter(e=>e.id!==entry.id);
   S.history.unshift(entry);
   histSort();
-  S.history=S.history.slice(0,30);
-  ledgerPut(ledgerRow(entry));   // the season keeps what the 30-round cap drops
+  S.history=S.history.slice(0,histCap());
+  ledgerPut(ledgerRow(entry));   // the season keeps what the 50-round cap drops
   hcpAfterArchive(entry);   // the round now speaks for everyone's handicap
   try{setTimeout(()=>hcpSync(true),1500);}catch(e){}
 }
@@ -14115,6 +14155,7 @@ function reviewCommit(){
   });
   const e=(S.history||[]).find(x=>x.id===S.round._histId);
   if(e){
+    reviewOutboxStash(e);   // the fixes go to the round's room too (the Battlefield), measured against what is saved
     e.round=clone(S.round);
     e.playersSnap=clone(S.players);
     e.config=clone(S.config);
@@ -14313,7 +14354,8 @@ function endRound(){
   S.round=blankRound();S.screen='home';stView=null;
   resetRoster();   // next round starts with just you — pick a fresh group
   save();
-  if(wasShared){leaveShare();setTimeout(()=>{try{endOutboxFlush();}catch(e){}},1500);}else render();
+  if(wasShared){leaveShare();setTimeout(()=>{try{endOutboxFlush();}catch(e){}},1500);}
+  else{render();if(wasReview)setTimeout(()=>{try{endOutboxFlush();}catch(e){}},1500);}
   // Playing never requires a confirmed address — but once the round is in the books,
   // ask, because nothing has been saved anywhere yet.
   // ...but closing a PAST round you reopened to review is not a round ending: it was
