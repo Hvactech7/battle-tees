@@ -583,7 +583,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-center in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1793605510';
+const BUILD='1793642157';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -6403,6 +6403,7 @@ function mapChScore(d){reviewTouch();
     const el0=document.getElementById('mapsc');
     if(el0)el0.textContent=r.gross[myPlayerIdx()];
     showMapConfirm();return;}
+  if(closedHoleNote(mapHole,'map'))return;
   stageScore(mapHole,myPlayerIdx(),d);
   const el=document.getElementById('mapsc');
   if(el)el.textContent=stagedG(r,mapHole,myPlayerIdx());
@@ -9841,6 +9842,7 @@ function morphKids(a,b){
 }
 function selDefault(sel){try{const o=[...sel.options].find(x=>x.defaultSelected)||sel.options[0];return o?o.value:'';}catch(e){return '';}}
 function render(){
+  try{dropClosedStages();}catch(e){}
   if(S.screen!=='gate'&&gatePick.timer){clearInterval(gatePick.timer);gatePick.timer=null;gatePick.open=false;}
   const el=$('#app');
   const scr=S.screen;
@@ -10834,7 +10836,7 @@ const FAQ=[
   ['Add a game mid-round',
    'Tap the <b>Setup</b> tab, then <b>⚙️ Adjust Round Settings</b>, and add or drop games with <b>Choose Game(s)</b>. Game options — the <b>Handicap allowance</b>, <b>Scored as</b> and each game’s own settings — are set before the first hole and stay for the round; a game you add mid-round can be set until its first hole is in. Most games added mid-round score the whole round from the scores already on the card; Wolf, Bingo Bango Bongo, Banker, Junk and Snake count from the hole you add them. Team pairings and which holes you’re playing are set for the round once scoring starts. Every phone in a group plays the same options: when someone changes one before the first hole, the other phones get a note like “Greg changed Handicap % 100% → 90%”, and Standings shows the last change.'],
   ['Score a hole',
-   'On the <b>Score</b> screen, set each golfer’s score with − and +. Dots (●) beside a name mark a handicap stroke on that hole — the main game’s strokes (Quota and Bingo Bango Bongo show none). If every row is on your phone, tap <b>Confirm hole</b>. In a group where others have the app, each phone confirms its own rows with <b>Confirm my score</b>; the last one in closes the hole, and the winner splash pops up on every phone. A row another phone keeps is locked — tap ✎ to score a golfer whose phone died. To fix a hole, tap its number in the strip at the bottom, then <b>Edit this hole</b>.'],
+   'On the <b>Score</b> screen, set each golfer’s score with − and +. Dots (●) beside a name mark a handicap stroke on that hole — the main game’s strokes (Quota and Bingo Bango Bongo show none). If every row is on your phone, tap <b>Confirm hole</b>. In a group where others have the app, each phone confirms its own rows with <b>Confirm my score</b>; the last one in closes the hole, and the winner splash pops up on every phone. Change your score after you’ve confirmed it and <b>Confirm my score</b> comes back — tap it to send the change. A row another phone keeps is locked — tap ✎ to score a golfer whose phone died. To fix a hole, tap its number in the strip at the bottom, then <b>Edit this hole</b>.'],
   ['Putts, bunkers, chips and penalties',
    'Settings › <b>📊 Track extras</b> turns each one on for you: <b>Putts</b> (on to start), <b>Bunker shots</b>, <b>Chips</b> and <b>Penalties</b>. With Putts on, a 0–4+ sheet asks for your putts the moment you confirm a hole (<b>Not this hole</b> skips one). The others add an <b>Extras</b> card with − and + on the Score screen. Each golfer switches their own on from their own phone. Your putting stats only count rounds where you answered every hole.'],
   ['Someone joins late',
@@ -16499,10 +16501,26 @@ function wolfTakeOver(h){wolfOverride[h]=true;const a=wolfAsk;if(a){paintWolfAsk
 // repairs the real record, staging there would break it.
 function stageMap(){const at=S.round.startedAt||0;
   if(!S.stage||S.stage.at!==at)S.stage={at,v:{}};return S.stage.v;}
+// A CLOSED HOLE SHOWS ITS CARD (fresh4 walk 11/2): a stage left on a hole that has closed -- a change made
+// after my confirm that never went in, or one the group's last confirm closed over -- is dropped, so the
+// screen never shows a number the card doesn't hold. A closed hole changes through Edit this hole.
 function stagedG(rec,h,i){const st=S.stage;
   const k=h+'-'+i;
-  if(st&&st.at===(S.round.startedAt||0)&&(k in st.v))return st.v[k];
+  if(st&&st.at===(S.round.startedAt||0)&&(k in st.v)){
+    if(rec.confirmed&&!isReview()){delete st.v[k];return rec.gross[i];}
+    return st.v[k];}
   return rec.gross[i];}
+// swept on every render too, so a hole that closes while another one is on screen, then reopens, comes back
+// with its card and not with a change nobody sent
+function dropClosedStages(){const st=S.stage;if(!st||!st.v||!S.round||isReview())return;
+  for(const k of Object.keys(st.v)){const r=S.round.holes[+k.split('-')[0]];if(r&&r.confirmed)delete st.v[k];}}
+// a number on screen that isn't the one stored: changed after it was confirmed, and not sent yet
+function stagePending(rec,h,i){const st=S.stage,k=h+'-'+i;
+  return !!(st&&st.at===(S.round.startedAt||0)&&(k in st.v)&&st.v[k]!==rec.gross[i]);}
+// − / + on a closed hole: its card stands until Edit this hole reopens it
+function closedHoleNote(h,where){const r=S.round.holes[h];if(!r||!r.confirmed||isReview())return false;
+  shotToast(where==='map'?`Hole ${h+1} is in. To change it: Score, tap ${h+1} in the strip, then Edit this hole.`
+    :`Hole ${h+1} is in. To change a score, tap Edit this hole.`,3400);return true;}
 function stageScore(h,i,d){const rec=S.round.holes[h];
   const cur=stagedG(rec,h,i)??(S.course.holes[h]||{par:4}).par;
   stageMap()[h+'-'+i]=Math.min(15,Math.max(1,cur+d));save();}
@@ -16512,6 +16530,7 @@ function commitStage(h,rows){const rec=S.round.holes[h],m=stageMap();
 function clearStage(){S.stage={at:0,v:{}};}
 function chScore(i,d){reviewTouch();
   if(isReview()){set(()=>{const r=S.round.holes[S.round.cur];const v=(r.gross[i]??S.course.holes[S.round.cur].par)+d;r.gross[i]=Math.min(15,Math.max(1,v));if(!r.gts)r.gts=[0,0,0,0];r.gts[i]=stampAfter(r.gts[i]);});return;}
+  if(closedHoleNote(S.round.cur))return;
   stageScore(S.round.cur,i,d);render();}
 // A par 3 gets a closest-to-pin pick regardless of what game is running.
 // Games that SCORE ctp (wolf, nines, vegas, umbrella) still require it before the
@@ -17402,9 +17421,13 @@ function confirmBlockInner(done){
   if(!S.share.on||act.every(i=>mine.includes(i)))
     return gp!=null?bankOrderBtnHTML(gp):`<button class="big" ${done?'':'disabled'} onclick="confirmHole()">Confirm hole</button>`;
   const first=i=>esc((S.players[i].name||'').split(' ')[0]);
-  const chips=act.map(i=>`<span class="pill ${cfOn(rec,i)?'wolf':'gray'}" style="margin-right:6px">${cfOn(rec,i)?'✓ ':''}${first(i)}</span>`).join('');
-  const waitingOn=act.filter(i=>!cfOn(rec,i));
-  if(mine.every(i=>cfOn(rec,i)))
+  // A CHANGE AFTER YOUR CONFIRM ISN'T IN until you confirm it again (fresh4 walk 11/2: + on my own confirmed
+  // row showed 6 while the card and every other phone kept 4, and no button was left to send it)
+  const isIn=i=>cfOn(rec,i)&&!stagePending(rec,S.round.cur,i);
+  const changed=mine.some(i=>cfOn(rec,i)&&!isIn(i));
+  const chips=act.map(i=>`<span class="pill ${isIn(i)?'wolf':'gray'}" style="margin-right:6px">${isIn(i)?'✓ ':''}${first(i)}</span>`).join('');
+  const waitingOn=act.filter(i=>!isIn(i));
+  if(mine.every(isIn))
     return `<div class="center" style="margin:4px 0 2px">${chips}</div>
       <div class="tiny center mt">✓ You're in — waiting on ${waitingOn.map(first).join(' · ')||'…'}</div>`;
   if(gp!=null)return `<div class="center" style="margin:4px 0 2px">${chips}</div>${bankOrderBtnHTML(gp)}`;
@@ -17415,6 +17438,7 @@ function confirmBlockInner(done){
   const ok=myScored&&(!final||done);
   return `<div class="center" style="margin:4px 0 2px">${chips}</div>
     <button class="big mt" ${ok?'':'disabled'} onclick="confirmMine()">✓ Confirm my score${final?' — closes the hole':''}</button>
+    ${changed?`<div class="tiny center mt">Your change goes in when you confirm it.</div>`:''}
     ${final&&myScored&&!done?`<div class="tiny center mt">the hole still needs its picks/taps before it can close</div>`:''}`;
 }
 function unconfirm(){set(()=>{const r=S.round.holes[S.round.cur];r.confirmed=false;r.cfts=[-Date.now(),-Date.now(),-Date.now(),-Date.now()];});}
