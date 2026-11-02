@@ -583,7 +583,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-center in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1793591863';
+const BUILD='1793600610';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -11845,7 +11845,7 @@ function vBfWatch(){
       // strokes: low wins; Stableford is POINTS -- high wins (stress sweep 10/18: the leader was listed last)
       const order=act.slice().sort((a,b)=>['stroke','scramble'].includes(g)?(led[L][a]-led[L][b]):(led[L][b]-led[L][a]));
       return `<div class="card"><h2>${gameName(g)}</h2>
-        ${order.map(i=>`<div class="row"><span>${esc((S.players[i]||{}).name||'?')}${idxLbl(S.players[i])}</span><b class="num" style="font-size:24px">${g==='nines'?fmtPts(led[L][i]):g==='quota'?(led[L][i]>0?'+':'')+led[L][i]:led[L][i]}</b></div>`).join('')}
+        ${order.map(i=>`<div class="row"><span>${esc((S.players[i]||{}).name||'?')}${idxLbl(S.players[i])}</span><b class="num" style="font-size:24px">${g==='nines'?fmtPts(led[L][i]):g==='quota'?(led[L][i]>0?'+':'')+led[L][i]:g==='snake'?(-led[L][i]||0):led[L][i]}</b></div>`).join('')}
       </div>`;}).join('')}
     ${roundStatsCardHTML(act,S.round.holes,course,meta.shots,S.players,'Round stats')}
     ${wolfBits.length?`<div class="card"><h2>🐺 Lone wolves</h2><div class="tiny">${wolfBits.join('<br>')}</div></div>`:''}
@@ -18762,7 +18762,10 @@ function vSettleStack(G){
     const pot=gs.reduce((a,i)=>a+Math.max(0,gn[i]||0),0);
     const priced=(g==='skins')||rate>0;
     const order=gs.slice().sort((a,b)=>(led[b]-led[a])*inv);
-    const fmt=v=>g==='skins'?fmtMoney(v):g==='nines'?fmtPts(v):g==='quota'?(v>0?'+':'')+v:String(v);
+    // Snake: the holder's ledger is -value so the pairs pay it; the Pts column shows what the snake is worth,
+    // positive -- "This game" carries the minus (Nathan 11/1: the holder read -5, "i want this number to show
+    // as a positive")
+    const fmt=v=>g==='skins'?fmtMoney(v):g==='nines'?fmtPts(v):g==='quota'?(v>0?'+':'')+v:g==='snake'?String(-v||0):String(v);
     return `<div class="card"><h2>${gameName(g)} · thru ${thru}</h2>
       <table class="st"><tr><th>Player</th><th class="r">${unit==='$'?'$ won':unit==='stroke'?'Strokes':unit==='hole'?'Holes':unit==='bet'?'Bets':g==='quota'?'+/−':'Pts'}</th><th class="r">This game</th></tr>
       ${order.map(i=>`<tr><td>${esc(S.players[i].name)}</td><td class="r num" style="font-size:18px">${fmt(led[i])}</td>
