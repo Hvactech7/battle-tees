@@ -582,7 +582,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-center in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1793864396';
+const BUILD='1793866627';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -2166,7 +2166,9 @@ function postRoomInvite(){
           // The fence still gates everyone else. Names are matched to verified
           // profiles on the relay; addresses never travel.
           to:{pids:S.players.filter(p=>p&&p.pid&&p.pid!==(S.me&&S.me.pid)).map(p=>p.pid),
-              names:S.players.filter(p=>p&&isRealPl(p)&&(p.name||'').trim().toLowerCase()!==(S.me&&S.me.name||'').trim().toLowerCase()).map(p=>p.name.trim())}}}));
+              names:S.players.filter(p=>p&&isRealPl(p)&&(p.name||'').trim().toLowerCase()!==(S.me&&S.me.name||'').trim().toLowerCase()).map(p=>p.name.trim()),
+              // golfers added from the online list: their relay handles (11/5) -- the relay knows who they are, this phone doesn't
+              ids:S.players.filter(p=>p&&isRealPl(p)&&!p.pid&&typeof p.nearby==='string').map(p=>p.nearby)}}}));
   }catch(e){}
 }
 // A SOLO round is one tap from a group. Its Battlefield room already has a code
@@ -2476,7 +2478,9 @@ function lobbyRetry(){lobbyDownSince=Date.now()-1;lobbyClose();lobbyConnect();re
 // actions (iOS web apps re-prompt daily; ask only when it makes sense).
 let myCoords=(()=>{try{const v=JSON.parse(localStorage.getItem('wolfLastCoords'));return (v&&v.c)||null;}catch(e){return null;}})();
 let myCoordsAt=0;
-function cacheCoords(c){myCoords=c;myCoordsAt=Date.now();try{localStorage.setItem('wolfLastCoords',JSON.stringify({c,ts:Date.now()}));}catch(e){}}
+function cacheCoords(c){myCoords=c;myCoordsAt=Date.now();try{localStorage.setItem('wolfLastCoords',JSON.stringify({c,ts:Date.now()}));}catch(e){}
+  // the first fix this session (and one every 15 minutes) tells the relay, so "nearby" is worked out from where you are
+  try{if(!helloFixAt||Date.now()-helloFixAt>15*60000)sendHello();}catch(e){}}
 // Usage telemetry: tiny fire-and-forget events to the relay (buffered offline).
 // Installed to the home screen, or still a browser tab? The single most useful
 // beta signal there is: a golfer who never installed it will not have it with
@@ -2596,10 +2600,17 @@ function retentionMerge(b){
   }catch(e){}
 }
 function kmBetween(a,b,c,d){const R=6371,dl=(c-a)*Math.PI/180,dn=(d-b)*Math.PI/180;const x=Math.sin(dl/2)**2+Math.cos(a*Math.PI/180)*Math.cos(c*Math.PI/180)*Math.sin(dn/2)**2;return 2*R*Math.asin(Math.sqrt(x));}
+// HELLO CARRIES ONLY A FIX FROM THIS APP SESSION (Nathan 11/5/2026). myCoords is restored at launch from wolfLastCoords,
+// which can be days old (home, yesterday's course) -- that used to go out as this phone's position. Now a position goes
+// only when this session took it (myCoordsAt is set by cacheCoords alone), marked fresh with its age so the relay can
+// tell it from an older build's cached one. The relay decides `near` and keeps the coordinates; no other phone gets them.
+let helloFixAt=0;
 function sendHello(){
   if(!lobbySock||lobbySock.readyState!==1||!S.me||!S.me.name)return;
-  try{lobbySock.send(JSON.stringify({t:'hello',info:{id:devId(),name:S.me.name,index:S.me.index,
-    tee:S.me.teeName||'',pid:S.me.pid||null,lat:myCoords?myCoords[0]:null,lon:myCoords?myCoords[1]:null}}));}catch(e){}
+  const fresh=!!(myCoordsAt&&myCoords&&isFinite(myCoords[0])&&isFinite(myCoords[1]));
+  try{lobbySock.send(JSON.stringify({t:'hello',info:Object.assign({id:devId(),name:S.me.name,index:S.me.index,
+    tee:S.me.teeName||'',pid:S.me.pid||null},fresh?{lat:myCoords[0],lon:myCoords[1],fresh:true,age:Math.max(0,Date.now()-myCoordsAt)}:{})}));
+    if(fresh)helloFixAt=Date.now();}catch(e){}
 }
 function grabCoords(){
   if(!navigator.geolocation)return;
@@ -2688,7 +2699,8 @@ function onlineList(){
   // icon have separate storage on iOS) broadcasts your name under its own devId
   const me=(S.me&&S.me.name||'').trim().toLowerCase();
   return nearby.filter(p=>(!me||(p.name||'').trim().toLowerCase()!==me)&&!isBlocked(p.pid))
-    .map(p=>({...p,near:!!(myCoords&&p.lat!=null&&kmBetween(myCoords[0],myCoords[1],p.lat,p.lon)<5)}))
+    // `near` comes from the relay (11/5: positions stay there); an older relay still sent lat/lon
+    .map(p=>({...p,near:typeof p.near==='boolean'?p.near:!!(myCoordsAt&&myCoords&&p.lat!=null&&kmBetween(myCoords[0],myCoords[1],p.lat,p.lon)<5)}))
     .sort((a,b)=>(b.near?1:0)-(a.near?1:0));
 }
 let addingPlayer=false,editingPlayer=null,scanOpen=false,scanShown=[];
@@ -3635,7 +3647,7 @@ function pickPlayerOpt(i,v){
     if(!n)return;
     set(()=>{
       const p=S.players[i];
-      p.name=n.name;p.index=+n.index||10;p.chOverride=null;p.nearby=true;delete p.libId;delete p.scorer;
+      p.name=n.name;p.index=+n.index||10;p.chOverride=null;p.nearby=n.id||true;delete p.libId;delete p.scorer;
       const t=S.course.teeSets.find(ts=>ts.name.toLowerCase()===String(n.tee||'').toLowerCase());
       if(t)p.tee=t.id;
       upsertLib(p);
@@ -11762,14 +11774,15 @@ function bfHiddenByBlock(e){
     return ppl.some(p=>Object.prototype.hasOwnProperty.call(b,p));}catch(x){return false;}
 }
 let pMenu=null;   // {pid,name,photo,code,ctx,near,note,busy}
-const pMoreBtn=(pid,name,photo,ctx,code,near)=>`<button class="pmore" aria-label="Player options: report or block" onclick="if(window.event)window.event.stopPropagation();openPlayerMenu('${bfArg(pid||'')}','${bfArg(name||'')}',${photo?1:0},'${ctx}','${bfArg(code||'')}',${near?1:0})">⋯</button>`;
+const pMoreBtn=(pid,name,photo,ctx,code,near,handle)=>`<button class="pmore" aria-label="Player options: report or block" onclick="if(window.event)window.event.stopPropagation();openPlayerMenu('${bfArg(pid||'')}','${bfArg(name||'')}',${photo?1:0},'${ctx}','${bfArg(code||'')}',${near?1:0}${handle?`,'${bfArg(handle)}'`:''})">⋯</button>`;
+// an online player is only an opaque handle on this phone (11/5): the relay turns it into the player for Report/Block
 function pMenuPhoto(pid){
   if(!pid)return null;
   const hit=[...(S.players||[]),...(S.playerLib||[])].find(p=>p&&p.pid===pid&&p.photo&&/^data:image\//.test(p.photo));
   return hit?hit.photo:null;
 }
-function openPlayerMenu(pid,name,photo,ctx,code,near){
-  pMenu={pid:decodeURIComponent(pid||''),name:decodeURIComponent(name||''),photo:!!photo,ctx:ctx||'',code:decodeURIComponent(code||''),near:!!near,note:'',busy:false};
+function openPlayerMenu(pid,name,photo,ctx,code,near,handle){
+  pMenu={pid:decodeURIComponent(pid||''),name:decodeURIComponent(name||''),photo:!!photo,ctx:ctx||'',code:decodeURIComponent(code||''),near:!!near,handle:decodeURIComponent(handle||''),note:'',busy:false};
   pMenuPaint();
 }
 function closePlayerMenu(){pMenu=null;try{document.querySelectorAll('#pmenu').forEach(x=>x.remove());}catch(e){}}
@@ -11783,7 +11796,7 @@ function pMenuPaint(){
     <div class="tiny mb">Is their name or photo offensive? Report it, or block them.</div>
     <button class="ghost" style="width:100%" ${m.busy?'disabled':''} onclick="pmReport('name')">Report name</button>
     ${m.photo?`<button class="ghost mt" style="width:100%" ${m.busy?'disabled':''} onclick="pmReport('photo')">Report photo</button>`:''}
-    ${(m.pid||m.near)?(blocked?`<button class="ghost mt" style="width:100%" ${m.busy?'disabled':''} onclick="pmUnblock()">Unblock ${who}</button>`
+    ${(m.pid||m.near||m.handle)?(blocked?`<button class="ghost mt" style="width:100%" ${m.busy?'disabled':''} onclick="pmUnblock()">Unblock ${who}</button>`
       :`<button class="ghost danger mt" style="width:100%" ${m.busy?'disabled':''} onclick="pmBlock()">Block ${who}</button>`):''}
     <div class="tiny mt" id="pmNote" style="min-height:18px;color:var(--green-mid)">${esc(m.note)}</div>
     <div class="tiny">Questions? <button class="linkish" onclick="contactMail()">${CONTACT_EMAIL}</button></div>
@@ -11795,7 +11808,7 @@ function pmReport(what){
   if(!myPid()){pmSay('Set up your profile first.');return;}
   m.busy=true;pMenuPaint();
   const photo=what==='photo'?pMenuPhoto(m.pid):null;
-  relayBattle(Object.assign({op:'preport',pid:myPid(),name:(S.me&&S.me.name)||'',who:m.pid,whoName:m.name,what,ctx:m.ctx},m.code?{code:m.code}:{},photo?{photo}:{})).then(r=>{
+  relayBattle(Object.assign({op:'preport',pid:myPid(),name:(S.me&&S.me.name)||'',who:m.pid,whoName:m.name,what,ctx:m.ctx},m.code?{code:m.code}:{},photo?{photo}:{},(!m.pid&&m.handle)?{handle:m.handle}:{})).then(r=>{
     if(pMenu!==m)return;
     if(!r||!r.ok){pmSay((r&&r.error)||'Could not report. Try again.');return;}
     if(what==='photo'&&m.pid){const h=phHideGet();h[m.pid]=1;try{localStorage.setItem('btPhHide',JSON.stringify(h));}catch(e){}m.photo=false;render();}
@@ -11816,10 +11829,11 @@ function pmBlock(){
     }).catch(()=>{if(pMenu===m)pmSay('Could not block. Check your signal.');});
     return;
   }
-  relayBattle({op:'block',pid:myPid(),blocked:m.pid,name:m.name}).then(r=>{
+  relayBattle(Object.assign({op:'block',pid:myPid()},m.pid?{blocked:m.pid}:{handle:m.handle},{name:m.name})).then(r=>{
     if(pMenu!==m)return;
     if(!r||!r.ok){pmSay((r&&r.error)||'Could not block. Try again.');return;}
-    const b=blocksGet();b[m.pid]=m.name||'';blocksPut(b);done();
+    if(m.pid){const b=blocksGet();b[m.pid]=m.name||'';blocksPut(b);}else{m.handle='';blocksSync(true);}   // the relay lists a handle block by key
+    done();
   }).catch(()=>{if(pMenu===m)pmSay('Could not block. Check your signal.');});
 }
 function pmUnblock(){
@@ -11827,8 +11841,9 @@ function pmUnblock(){
   m.busy=true;pMenuPaint();
   playerUnblock(m.pid).then(ok=>{if(pMenu===m)pmSay(ok?'Unblocked.':'Could not unblock. Check your signal.');});
 }
-function playerUnblock(pid){
-  return relayBattle({op:'unblock',pid:myPid(),blocked:pid}).then(r=>{
+function playerUnblock(pid){   // pid, or 'k:<key>' for a block made from the online list / Players nearby
+  const k=/^k:/.test(pid)?pid.slice(2):null;
+  return relayBattle(Object.assign({op:'unblock',pid:myPid()},k?{key:k}:{blocked:pid})).then(r=>{
     if(!r||!r.ok)return false;
     const b=blocksGet();delete b[pid];blocksPut(b);render();return true;
   }).catch(()=>false);
@@ -11844,7 +11859,7 @@ function blocksSync(force){
     if(!r||!r.ok)return;
     try{if(r.mail)mailPrefsApply(r.mail);}catch(e){}   // the email switches, as the relay will really send (11/4)
     if(!Array.isArray(r.list))return;
-    const was=JSON.stringify(blocksGet()),b={};r.list.forEach(x=>{if(x&&x.pid)b[x.pid]=x.name||'';});
+    const was=JSON.stringify(blocksGet()),b={};r.list.forEach(x=>{if(x&&x.pid)b[x.pid]=x.name||'';else if(x&&x.key)b['k:'+x.key]=x.name||'';});
     blocksPut(b);if(JSON.stringify(b)!==was&&S.screen==='settings')render();
   }).catch(()=>{});
 }
@@ -12833,7 +12848,7 @@ function vStart(){
     const nearbyRows=(gatePick.list||[]).filter(n=>!inRoster(n.name)).map(n=>`
       <div class="row" style="cursor:pointer" onclick="gateAddOne('${esc(n.id)}')">
         <div style="flex:1;min-width:0"><b>${n.near?'📍':'🌐'} ${esc(n.name)}</b><div class="tiny">Index ${n.index!=null?n.index:'?'} · ${n.near?'nearby':'online'}</div></div>
-        ${n.pid?pMoreBtn(n.pid,n.name,false,'online'):''}<span class="pill wolf">+ add</span></div>`).join('');
+        ${pMoreBtn(n.pid||'',n.name,false,'online','',0,n.pid?'':n.id)}<span class="pill wolf">+ add</span></div>`).join('');
     const libRows=(S.playerLib||[]).filter(e=>e.name&&!inRoster(e.name)&&low(e.name)!==meNm).map(e=>`
       <div class="row" style="cursor:pointer" onclick="addFromLib('${e.id}')">
         <div><b>${esc(e.name)}</b><div class="tiny">Index ${fmtIdx(e.index)}${e.teeName?` · ${esc(e.teeName)}`:''}</div></div>
@@ -12951,7 +12966,7 @@ function gateAddGroup(){
     ensureMeFirst();
     chosen.forEach((n,k)=>{
       const pl=S.players[k+1];
-      pl.name=uniqueRosterName(n.name,k+1);pl.index=+n.index||10;pl.chOverride=null;pl.nearby=true;delete pl.libId;delete pl.scorer;
+      pl.name=uniqueRosterName(n.name,k+1);pl.index=+n.index||10;pl.chOverride=null;pl.nearby=n.id||true;delete pl.libId;delete pl.scorer;
       if(n.pid)pl.pid=n.pid;else delete pl.pid;
       const t=S.course.teeSets.find(ts=>ts.name.toLowerCase()===String(n.tee||'').toLowerCase());
       if(t)pl.tee=t.id;
@@ -12982,7 +12997,7 @@ function vGate(){
   const nearbyRows=(gatePick.list||[]).filter(n=>!inRoster(n.name)).map(n=>`
     <div class="row" style="cursor:pointer" onclick="gateAddOne('${esc(n.id)}')">
       <div style="flex:1;min-width:0"><b>${n.near?'📍':'🌐'} ${esc(n.name)}</b><div class="tiny">Index ${n.index!=null?n.index:'?'} · ${n.near?'nearby':'online'}</div></div>
-      ${n.pid?pMoreBtn(n.pid,n.name,false,'online'):''}<span class="pill wolf">+ add</span>
+      ${pMoreBtn(n.pid||'',n.name,false,'online','',0,n.pid?'':n.id)}<span class="pill wolf">+ add</span>
     </div>`).join('');
   const libRows=(S.playerLib||[]).filter(e=>e.name&&!inRoster(e.name)&&low(e.name)!==meNm).map(e=>`
     <div class="row" style="cursor:pointer" onclick="addFromLib('${e.id}')">
@@ -14232,8 +14247,8 @@ function vPlayers(){
       <div class="tiny mt">${(lobbySock&&lobbySock.readyState===1)?((scanShown=onlineList()).length?'On the app right now:':'Scanning… no one else is on the app at the moment.'):'Connecting…'}</div>
       ${(scanShown||[]).map((n,j)=>{
         const saved=S.playerLib.some(x=>x.name.trim().toLowerCase()===n.name.trim().toLowerCase());
-        return `<div class="row"><div><b>${n.near?'📍':'🌐'} ${esc(n.name)}</b><div class="tiny">Index ${n.index!=null?n.index:'?'}${n.tee?` · ${esc(n.tee)} tees`:''} · ${n.near?'nearby':'online'}</div></div>
-          ${saved?'<span class="pill gray">saved</span>':`<button class="ghost sel" onclick="savePresencePlayer(${j})">Save</button>`}</div>`;}).join('')}
+        return `<div class="row"><div style="flex:1;min-width:0"><b>${n.near?'📍':'🌐'} ${esc(n.name)}</b><div class="tiny">Index ${n.index!=null?n.index:'?'}${n.tee?` · ${esc(n.tee)} tees`:''} · ${n.near?'nearby':'online'}</div></div>
+          ${pMoreBtn(n.pid||'',n.name,false,'online','',0,n.pid?'':n.id)}${saved?'<span class="pill gray">saved</span>':`<button class="ghost sel" onclick="savePresencePlayer(${j})">Save</button>`}</div>`;}).join('')}
       <button class="ghost mt" onclick="toggleScan()">Done</button>`
     :`<button class="ghost mt" onclick="toggleScan()">📍 Find nearby players</button>`}
     ${addingPlayer?`<div class="grid2 mt">
@@ -16396,6 +16411,7 @@ function dismissInvite(code){dismissedInvites.add(code);render();}
 // 3 km around where the room opened, or kept for the card only).
 function inviteForMe(i){
   try{
+    if(i&&typeof i.for==='string')return true;   // 11/5: the relay decided it is for this phone (card, name or fence) and sent it here alone
     const to=i.to||{}; const me=(S.me&&S.me.name||'').trim().toLowerCase();
     if(S.me&&S.me.pid&&(to.pids||[]).includes(S.me.pid))return true;
     if(me&&(to.names||[]).some(n=>String(n).trim().toLowerCase()===me)){
@@ -16465,7 +16481,7 @@ function gateAddOne(id){
     ensureMeFirst();
     const j=firstEmptySlot();if(j<0)return;
     const pl=S.players[j];
-    pl.name=uniqueRosterName(n.name,j);pl.index=+n.index||10;pl.chOverride=null;pl.nearby=true;delete pl.libId;delete pl.scorer;delete pl.ownerDev;
+    pl.name=uniqueRosterName(n.name,j);pl.index=+n.index||10;pl.chOverride=null;pl.nearby=n.id||true;delete pl.libId;delete pl.scorer;delete pl.ownerDev;   // the handle: the relay finds who to invite
     if(n.pid)pl.pid=n.pid;else delete pl.pid;
     const t=S.course.teeSets.find(ts=>ts.name.toLowerCase()===String(n.tee||'').toLowerCase());
     if(t)pl.tee=t.id;
