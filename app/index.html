@@ -567,6 +567,10 @@
   html.light .sc td.eag{background:#cde5d2;color:#1c5c34}
   html.light button.ghost.sel{color:var(--elec)}
   html.light nav.tabs button.sel{color:var(--elec)}
+  .satcredit{position:fixed;left:max(10px,calc(50vw - 230px));top:calc(80px + env(safe-area-inset-top));z-index:5;pointer-events:none;
+    font:600 10px/1.25 Inter,sans-serif;letter-spacing:.2px;color:rgba(255,255,255,.82);text-shadow:0 1px 2px rgba(0,0,0,.9);
+    background:rgba(10,16,26,.38);border-radius:6px;padding:1px 5px}
+  .satcredit.inmap{position:absolute;left:auto;top:auto;right:4px;bottom:4px;z-index:900}
   #holemap{position:fixed;top:62px;bottom:calc(66px + env(safe-area-inset-bottom));left:0;right:0;margin:0 auto;width:100%;max-width:480px;z-index:1;background:#0a0f18}
   /* extra side/bottom padding keeps the arrow buttons clear of iPhone rounded screen corners */
   /* the GPS screen's button blocks sit 8 px above the bottom bar (Nathan 10/26: 4 px, then "lets try 8"); --mapbarH is the
@@ -583,7 +587,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-center in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1793908755';
+const BUILD='1793917015';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1291,6 +1295,7 @@ function vfNagHTML(){
     </div></div>`;
 }
 function autoBackupCheck(){
+  if(ageOffline())return;   // under 13: no cloud backups (A2)
   let why='';
   const em=(localStorage.getItem('wolfBackupEmail')||'').trim();
   if(!S.autoBackup)why='off';
@@ -1777,6 +1782,7 @@ function previewSandboxed(){
 function syncConnect(){
   if(!S.share||!S.share.on||sock)return;
   if(previewSandboxed())return;
+  if(ageOffline())return;   // under 13: no shared rounds (A2)
   try{sock=new WebSocket(RELAY+(RELAY.includes('?')?'&':'?')+'room='+encodeURIComponent(S.share.code||''));}catch(e){sock=null;scheduleReconnect();return;}
   const ws=sock;
   sock.onopen=()=>{
@@ -1907,7 +1913,7 @@ function endOutboxFlush(){
   try{
     const q=(S.endOutbox||[]).filter(x=>x&&x.code&&Date.now()-(x.at||0)<3*86400e3);
     if(q.length!==(S.endOutbox||[]).length){S.endOutbox=q;save();}
-    if(!q.length||endOutboxSock||previewSandboxed())return;
+    if(!q.length||endOutboxSock||previewSandboxed()||ageOffline())return;
     const job=q[0];
     // back in that room (a review inside 6 h): its own sync may carry it -- but keep the job until a pass
     // from OUTSIDE the room finds nothing missing (a review opened and Done'd offline delivered nothing)
@@ -2241,6 +2247,7 @@ function inviteFromMap(){
   }else shotToast('Anyone joins with '+S.share.code+' — players near you can pick it from Join a round');
 }
 function shareRound(){
+  if(ageOffline())return;   // under 13: no rooms (A2)
   lobbyClose();
   const midRound=!!(S.round&&S.round.started);
   if(S.share.on&&S.share.code){
@@ -2563,6 +2570,7 @@ try{
   btCheerLink=/[?&]bf=[A-Za-z0-9]{4,8}/.test(location.search||'');
 }catch(e){}
 function stat(ev,extra){
+  if(ageOffline())return;   // under 13: nothing about this phone goes to the relay, not even counts (A2)
   // A local preview build shares the live relay, so testing here used to post real
   // rounds into production stats. Anything served from localhost stays local.
   if(/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname))return;
@@ -2663,7 +2671,7 @@ function kmBetween(a,b,c,d){const R=6371,dl=(c-a)*Math.PI/180,dn=(d-b)*Math.PI/1
 // tell it from an older build's cached one. The relay decides `near` and keeps the coordinates; no other phone gets them.
 let helloFixAt=0;
 function sendHello(){
-  if(!lobbySock||lobbySock.readyState!==1||!S.me||!S.me.name)return;
+  if(!lobbySock||lobbySock.readyState!==1||!S.me||!S.me.name||ageOffline())return;
   const fresh=!!(myCoordsAt&&myCoords&&isFinite(myCoords[0])&&isFinite(myCoords[1]));
   // v:2 (round 2, 11/5): this build -- the relay nudges it for a name invitation it needs a fix for (fixplease), and lists
   // far golfers to it by name alone (an older build, which seats a golfer with no index at 10, hears only what it can use)
@@ -2792,6 +2800,9 @@ let addingPlayer=false,editingPlayer=null,scanOpen=false,scanShown=[],addPrefill
 // ---- library backup to the Pi (email-verified restore) ----
 let backupUI={mode:null,stage:0,msg:''};
 async function relayAccount(payload){
+  // under 13 (A2): Delete account is the one thing that still reaches the relay -- its socket opens for it alone
+  if(ageOffline()){if(!/^(delcode|erase)$/.test(String(payload&&payload.op||'')))return {ok:false,age:true,error:'Online features are for players 13 and up.'};
+    ageDelLink=true;lobbyConnect();}
   payload=pkAttach(payload);   // the player key (11/5 overnight)
   const ws=await waitForRelay(6000);
   return new Promise((res0,rej)=>{
@@ -2804,6 +2815,7 @@ async function relayAccount(payload){
   });
 }
 async function relayBackup(payload){
+  if(ageOffline())return {ok:false,age:true,error:'Online features are for players 13 and up.'};   // A2
   const ws=await waitForRelay(6000);
   // v:2 = this build; bt = this phone's backup token for the address, once it has one (backup ownership, 11/5)
   payload=Object.assign({},payload,{v:2});
@@ -2825,6 +2837,7 @@ async function relayBackup(payload){
 // second hole; the nearby-players prompt (nearTick) opens it earlier, the first time another
 // round shows up right beside this one -- that code is what the other phone joins.
 function openSoloRoom(early){
+  if(ageOffline())return false;   // A2
   if(!S.round.started||(S.share&&S.share.on))return false;
   S.share={on:true,code:makeCode(),creator:true,bf:true};   // bf: broadcast-only, no lobby invite
   if(early)S.share.early=true;   // opened by Players nearby, holes before the Battlefield's: Home keeps the merge door
@@ -2834,6 +2847,7 @@ function openSoloRoom(early){
   return true;
 }
 function bfBroadcastStart(){
+  if(ageOffline())return;   // A2: no Battlefield
   try{
     if(!S.config.bf||!S.config.bf.broadcast)return;
     if(!S.round.started)return;
@@ -2933,6 +2947,7 @@ function nearStop(){
   if(nearPop){nearPop=null;render();}
 }
 async function nearTick(){
+  if(ageOffline())return;   // A2: no Players nearby
   try{
     if(previewSandboxed())return;            // a localhost preview never advertises a round on the live relay (8/18)
     if(!nearWindow()){nearStop();return;}
@@ -3145,6 +3160,69 @@ function shellRoundTick(text){   // the notification line, at most every 10 s, a
     if(h===shellRoundLast.h&&now-shellRoundLast.at<10000)return;
     shellRoundLast={h,at:now};shellRound('update',shellRoundInfo(text));}catch(e){}
 }
+// ---- AGE SIGNALS (A1 + A2, 11/5/2026) ----
+// The shells read the store's age signal and hand it here: battle-tees-ios through Apple's Declared Age Range
+// (iOS 26+, read by itself once per launch only where iOS says an age law covers the person), battle-tees-android
+// through Google Play Age Signals (only when the page asks: BTNative.ageSignal(); the library is not in the build until
+// Nathan approves it). Both call window.onAgeSignal(r) with
+//   {source:'apple'|'google', status:'sharing'|'declined'|'unavailable'|'error'|'verificationRequired',
+//    lower, upper (years, null = open/unknown), declaration, parental:[...], eligible, required, reason, at}
+// and keep the last one on BTNative.age. It is recorded on THIS phone only (btAgeSignal: {last, range}) -- never sent
+// to the relay, never backed up. `range` is the newest signal that carried an age range: a later read that fails, is
+// declined or isn't supported never clears it, so a time-out can't switch a child's online account back on; a newer
+// range (a 13th birthday) replaces it.
+// UNDER 13 = NO ONLINE ACCOUNT (A2, Nathan 11/5/2026 1:06 PM, option a): when the range says under 13 the phone keeps
+// score on its own -- solo, or a group scored on this phone -- and gets no profile registration, Battlefield, nearby
+// players or online list, invitations or shared rounds, cloud backups or e-mails. ageOffline() gates every relay path
+// (lobbyConnect, syncConnect, the end-of-round outbox, sendHello, stat, registerProfile, relayBattle / relayBackup,
+// relayAccount except Delete account, auto-backup, rooms, Players nearby, the Battlefield broadcast), and the entry
+// points show one card (ageCardHTML). A phone that already had a profile keeps everything on the phone; its sockets
+// close the moment the signal lands and Delete account still works (its two calls are the only relay traffic left).
+// No signal, a declined one, an unsupported platform, a web browser (no shell, no signal) or 13 and up: nothing changes.
+// Course maps, scorecards, weather and the elevation files are public downloads with no account in them: they stay.
+function ageSignalRead(){try{return JSON.parse(localStorage.getItem('btAgeSignal')||'null');}catch(e){return null;}}
+// var, not let: stat() and the sockets can ask before this line has run (a let here would be a TDZ throw, 9/5)
+var ageGateMemo=null,ageDelLink=false;
+function ageGateCalc(){
+  const a=ageSignalRead(),g=a&&a.range;
+  return !!(g&&typeof g.upper==='number'&&g.upper<13&&!/^(declined|unavailable|error)$/.test(String(g.status||'')));
+}
+function ageOffline(){try{if(ageGateMemo==null)ageGateMemo=ageGateCalc();return !!ageGateMemo;}catch(e){return false;}}
+function onAgeSignal(r){
+  try{
+    if(!r||typeof r!=='object')return;
+    const n=v=>(v===null||v===undefined||v==='')?null:(Number.isFinite(+v)?Math.max(0,Math.min(150,Math.round(+v))):null);
+    const s=(v,k)=>v==null?null:String(v).slice(0,k||40);
+    const rec={source:s(r.source,10),status:s(r.status,24),lower:n(r.lower),upper:n(r.upper),declaration:s(r.declaration),
+      parental:Array.isArray(r.parental)?r.parental.slice(0,8).map(x=>s(x)):[],eligible:typeof r.eligible==='boolean'?r.eligible:null,
+      reason:s(r.reason,80),at:Number.isFinite(+r.at)&&+r.at>0?+r.at:Date.now()};
+    const prev=ageSignalRead()||{};
+    const hasRange=(rec.lower!=null||rec.upper!=null)&&!/^(declined|unavailable|error)$/.test(rec.status||'');
+    const was=ageOffline();
+    localStorage.setItem('btAgeSignal',JSON.stringify({last:rec,range:hasRange?rec:(prev.range||null)}));
+    ageGateMemo=null;
+    const now=ageOffline();
+    if(now&&!was)ageCutOff();
+    if(now!==was)try{render();}catch(e){}
+  }catch(e){}
+}
+// the signal just said under 13: this phone stops talking to the relay now -- its sockets close, queued telemetry goes,
+// nothing reconnects (every connect path checks ageOffline). The library, rounds and profile stay on the phone.
+function ageCutOff(){
+  try{nearStop();}catch(e){}
+  try{if(lobbySock){lobbySock.onclose=null;lobbySock.close();}}catch(e){}
+  try{lobbySock=null;nearby=[];invites=[];}catch(e){}
+  try{if(sock){sock.onclose=null;sock.close();}}catch(e){}
+  try{sock=null;sockOpen=false;}catch(e){}
+  try{if(endOutboxSock){endOutboxSock.onclose=null;endOutboxSock.close();}endOutboxSock=null;}catch(e){}
+  try{localStorage.removeItem('btStatQ');}catch(e){}
+  // a shared round in progress carries on HERE, on this phone's own card: the room is simply no longer synced
+  try{if(S.share&&S.share.on){S.share={on:false};save();}}catch(e){}
+}
+// THE card (Nathan's words, the short-copy rule: a title and one sentence), wherever an online feature used to start
+function ageCardHTML(){return `<div class="card" id="agecard"><h2>🔒 Online features are for players 13 and up</h2><div class="tiny">You can still keep score on this phone.</div></div>`;}
+// a signal that reached the shell before this script ran (the shells deliver after the page loads, so normally none)
+try{const sh=nativeShell();if(sh&&sh.age)onAgeSignal(sh.age);}catch(e){}
 // Play Integrity (Android shell): the ops the relay may one day refuse without a
 // verdict carry a token bound to `op|CODE|pid|its` — the relay recomputes that
 // string from what it receives. No shell, no token, no delay: the relay's log
@@ -3179,6 +3257,7 @@ async function withIntegrity(p){
   }catch(e){return Object.assign({},p,{plat:'android'});}
 }
 async function relayBattle(payload){
+  if(ageOffline())return {ok:false,age:true,error:'Online features are for players 13 and up.'};   // A2
   payload=await withIntegrity(payload);
   payload=pkAttach(payload);   // the player key, wherever the op acts as this player (11/5 overnight)
   const ws=await waitForRelay(6000);
@@ -3193,6 +3272,7 @@ async function relayBattle(payload){
 }
 let verifyUI=null;   // {email,stage,msg,after}
 function openVerify(after){
+  if(ageOffline())return;   // A2: no cloud backups, no e-mail
   verifyUI={email:(localStorage.getItem('wolfBackupEmail')||'').trim(),stage:0,msg:'',after:after||null,code:bkPaused()};
   // who is asked, who types, who finishes: without this the funnel is invisible (9/17 —
   // not one player has ever confirmed from the end-of-round sheet and nothing said so)
@@ -3212,7 +3292,14 @@ async function sendVerifyLink(){
   const em=(el&&el.value||'').trim().toLowerCase();
   if(!/^\S+@\S+\.\S+$/.test(em)){verifyUI.msg='Enter a valid email address.';render();return;}
   verifyUI.email=em;verifyUI.stage=4;verifyUI.msg='';render();
-  const ok=await sendMagicLink(em,(msg)=>{if(verifyUI){verifyUI.msg=msg;render();}});
+  const ok=await sendMagicLink(em,(msg)=>{if(verifyUI){verifyUI.msg=msg;render();}},()=>{
+    // THE ADDRESS TAKES A CODE, NOT A LINK (AP10, 11/5/2026): the relay answers useCode for the one address that signs in
+    // with a fixed code -- the store reviewers' (cloud/src/books.js REVIEW_EMAIL). The app never names that address
+    // itself; this sheet just turns into the code sheet and asks for the code.
+    if(!verifyUI)return;
+    verifyUI.code=true;verifyUI.useCode=true;verifyUI.stage=0;verifyUI.msg='';sendVerifyCode();
+  });
+  if(verifyUI&&verifyUI.useCode)return;
   try{stat(ok?'verify_link_sent':'verify_link_fail',{from:(verifyUI||{}).after||''});}catch(e){}
   if(!ok&&verifyUI)verifyUI.stage=0;
   render();
@@ -3238,7 +3325,7 @@ async function confirmVerifyCode(){
   verifyUI.msg='Checking…';render();
   try{const r=await relayBackup({op:'confirm',email:verifyUI.email,code:c});
     if(!verifyUI)return;
-    if(r&&r.ok){try{localStorage.setItem('btEmailOk',verifyUI.email);}catch(e){}verifyUI.stage=2;verifyUI.msg='✓ Backups are on again.';
+    if(r&&r.ok){try{localStorage.setItem('btEmailOk',verifyUI.email);}catch(e){}verifyUI.stage=2;verifyUI.msg=verifyUI.useCode?'✓ Email confirmed. Backups are on.':'✓ Backups are on again.';
       try{stat('verify_ok',{from:'code'});}catch(e){}abFp=null;abKick();}
     else verifyUI.msg=(r&&r.error)||'Wrong code — check the email and try again.';}
   catch(e){if(verifyUI)verifyUI.msg='Could not connect — check your signal and try again.';}
@@ -3292,6 +3379,9 @@ async function doBackup(){
       shotLog:trimShotLog(S.shotLog),shotLast:S.shotLast||{},bag:S.bag||null,retention:retentionRead()};
     data.history=histForBackup(data);
     const r=await relayBackup({op:'save',email:em,data});
+    // an address not confirmed yet: the Confirm-your-email sheet, not the relay's bare "unverified" (AP10 11/5: this is
+    // also the store reviewer's shortest way to the code sheet -- Players › Back up › Back up now)
+    if(r&&!r.ok&&r.needVerify){backupUI.msg='';render();openVerify('backupRow');return;}
     if(r&&r.ok){const d=abPayload();abStamp(JSON.stringify([d.me,d.playerLib,d.courses,d.history.map(h=>h.id)]));}
     const nh=(S.history||[]).length;
     backupUI.msg=r.ok?`✓ ${S.playerLib.length} player${S.playerLib.length===1?'':'s'} + ${S.courses.length} course${S.courses.length===1?'':'s'}${nh?` + ${nh} round${nh===1?'':'s'}`:''} safely backed up${r.emailed?' — confirmation emailed':''}.`:(r.error||'Backup failed.');
@@ -3311,13 +3401,14 @@ async function requestRestoreCode(){
 // Ask the relay to email a fresh sign-in link. Used from the restore panel and
 // from the banner when a link turns out to be expired or already used — so a
 // dead link never strands anyone without a way forward.
-async function sendMagicLink(em, onMsg){
+async function sendMagicLink(em, onMsg, onUseCode){
   em = String(em||'').trim().toLowerCase();
   if(!/^\S+@\S+\.\S+$/.test(em)){ onMsg('Enter a valid email address.', false); return false; }
   try{ localStorage.setItem('wolfBackupEmail', em); }catch(e){}
   onMsg('Sending your link…', null);
   try{
     const r = await relayBackup({op:'maglink', email:em});
+    if(r && r.useCode && onUseCode){ onUseCode(); return false; }   // this address signs in with a code (AP10)
     if(r && r.ok){
       onMsg(r.returning
         ? '✓ Sent. Open it on this phone and your library comes back with it.'
@@ -3749,13 +3840,16 @@ function addManualPlayer(){
   set(()=>{upsertLib({name,index:parseIdx(x&&x.value,10),tee:S.players[0]?S.players[0].tee:undefined,libId:null});});
 }
 function lobbyConnect(){
-  if((S.share&&S.share.on)||lobbySock)return;
+  if(ageOffline()&&!ageDelLink)return;   // A2: no online list, invitations or nearby players (Delete account opens it alone)
+  if((S.share&&S.share.on&&!ageOffline())||lobbySock)return;
   try{lobbySock=new WebSocket(RELAY);}catch(e){lobbySock=null;setTimeout(lobbyConnect,10000);return;}
   if(!lobbyDownSince)lobbyDownSince=Date.now();
   setTimeout(()=>{if(!relayUp()&&lobbyDownSince)render();},8500);   // flip "Connecting…" into the plain warning
-  lobbySock.onopen=()=>{const wasDown=!!lobbyDownSince;lobbyDownSince=0;try{lobbySock.send('{"t":"lobby"}');}catch(e){}sendHello();try{if(myPid()&&!localStorage.getItem('btBlkSalt')){localStorage.setItem('btBlkSalt','1');setTimeout(()=>{blocksSync(true);blocksSyncAt=0;},1500);}}catch(e){}   /* round 2: the relay's block keys are salted now -- fetch the list once so they match (Settings still fetches its own when it opens) */statFlush();try{abKick();}catch(e){}registerProfile();loadMarkNotes();bfReannounce();libWhois();try{endOutboxFlush();}catch(e){}try{bfInboxPoll(true);}catch(e){}if(wasDown)render();};
+  // (A2: under 13 the lobby opens only for Delete account -- no lobby join, no hello, nothing else)
+  lobbySock.onopen=()=>{if(ageOffline()){lobbyDownSince=0;return;}const wasDown=!!lobbyDownSince;lobbyDownSince=0;try{lobbySock.send('{"t":"lobby"}');}catch(e){}sendHello();try{if(myPid()&&!localStorage.getItem('btBlkSalt')){localStorage.setItem('btBlkSalt','1');setTimeout(()=>{blocksSync(true);blocksSyncAt=0;},1500);}}catch(e){}   /* round 2: the relay's block keys are salted now -- fetch the list once so they match (Settings still fetches its own when it opens) */statFlush();try{abKick();}catch(e){}registerProfile();loadMarkNotes();bfReannounce();libWhois();try{endOutboxFlush();}catch(e){}try{bfInboxPoll(true);}catch(e){}if(wasDown)render();};
   lobbySock.onmessage=ev=>{
     let m;try{m=JSON.parse(ev.data);}catch(e){return;}
+    if(ageOffline()&&!/Result$/.test(String(m.t||'')))return;   // A2: only the answers to Delete account
     if(m.t==='invites'){invites=m.list||[];if(invites.length)fixAsk=null;inviteFixCheck();render();}
     else if(m.t==='invite'){invites=invites.filter(i=>i.code!==m.info.code).concat([m.info]);fixAsk=null;inviteFixCheck();render();}
     else if(m.t==='uninvite'){invites=invites.filter(i=>i.code!==m.code);render();}
@@ -6164,6 +6258,11 @@ function previewHoleCount(){if(cardN())return cardN();return (S.course&&(S.cours
 // guideline) is a collapsed control that expands on tap. Tiny ⓘ, tap to read,
 // folds itself back up. Direct DOM — a render here would rebuild Leaflet.
 const MAP_CREDITS='Imagery © Esri, Maxar · Course data © OpenStreetMap contributors';
+// ...AND THE IMAGERY CREDIT ALWAYS SHOWS (D4, 11/5/2026): a small line in the map's top-left corner,
+// under the header and above where the 📍 Me chip appears, on every satellite map (hole map, course preview, the shot
+// viewer); the Battlefield's little card map carries it in its own corner (inmap). It never takes a tap.
+const SAT_CREDIT='Imagery © Esri, Maxar';
+function satCreditHTML(inmap){return `<div class="satcredit${inmap?' inmap':''}" aria-hidden="true">${SAT_CREDIT}</div>`;}
 let mapCreditsT=0;
 function toggleMapCredits(){
   const b=document.getElementById('mapattrib');if(!b)return;
@@ -6856,7 +6955,7 @@ function vMap(){
       codeShown?`<div onclick="inviteFromMap()" style="text-align:center;flex:none;margin-right:4px;color:var(--gold,#e8c552);font-family:Rajdhani,Inter,sans-serif;font-weight:700;line-height:1.05;cursor:pointer">
         <div style="font-size:10px;font-weight:600;opacity:.85;letter-spacing:.5px">${S.share.bf?'TAP TO INVITE':'JOIN CODE'}</div>
         <div class="num" style="font-size:22px;letter-spacing:3px">${esc(S.share.code)}</div></div>`:''}${codeShown?'':gameBadgeHTML()}</div>`)+`
-  <div id="holemap"></div>
+  <div id="holemap"></div>${satCreditHTML()}
   <div id="windrose" onclick="toggleWindMode()" onpointerdown="windRosePD(event)" onpointerup="windRosePU()" onpointercancel="windRosePU()" oncontextmenu="return false" style="display:none${manualShown?';bottom:calc(var(--mapbarH) + 210px)':''}"></div>
   ${mapStatChipsHTML(hole)}${mapBetChipHTML(manualShown)}
   ${greadBtnHTML()}
@@ -6913,7 +7012,7 @@ function vMap(){
 function vMapPreview(hole){
   return topbar(`Hole ${mapHole+1} · Par ${hole.par}`,`Handicap ${hole.si} · ${S.course.name||''}`,'','hero maphero',
     `<div style="display:flex;align-items:center;margin-left:auto;gap:10px"><span class="pill gray" style="flex:none;letter-spacing:.6px">PREVIEW</span></div>`)+`
-  <div id="holemap"></div>
+  <div id="holemap"></div>${satCreditHTML()}
   <button onclick="closeCoursePreview()" style="position:fixed;right:max(10px,calc(50vw - 230px));top:calc(100px + env(safe-area-inset-top));z-index:6;background:rgba(15,21,34,.82);border:1.5px solid var(--line);border-radius:12px;color:#fff;padding:10px 17px;font-size:17px;font-weight:600;font-family:inherit">Back</button>
   <div class="mapbar">${mapCreditsChipHTML()}
     <div class="row" style="border:none;padding:2px 0">
@@ -10257,13 +10356,15 @@ function verifySheetHTML(){
   return `<div class="vfWrap" role="dialog" aria-modal="true" aria-labelledby="vfTitle">
     <div class="vfCard">
       <h2 id="vfTitle" class="vfTitle">${done?'You&rsquo;re all set':(atEnd?'Save this round?':'Confirm your email')}</h2>
-      ${done?'':`<div class="tiny mb">${verifyUI.code
+      ${done?'':`<div class="tiny mb">${verifyUI.useCode
+        ? 'This address confirms with a 6-digit code.'
+        : verifyUI.code
         ? 'Enter the code we email you to keep backing up on this phone.'
         : atEnd
         ? `Your ${esc(((S.history||[])[0]||{}).courseName||'')} round is on this phone only. Confirm your email and it saves itself — rounds, players and courses, back on any phone.`
         : 'We&rsquo;ll email you a link. One tap and your rounds, players and courses back themselves up — until then nothing leaves this phone.'}</div>`}
       ${done?'':verifyUI.code?(verifyUI.stage===5?`
-        <div class="tiny">Code sent to <b>${em}</b></div>
+        <div class="tiny">${verifyUI.useCode?'Code for':'Code sent to'} <b>${em}</b></div>
         <input id="vfCode" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6-digit code" style="letter-spacing:5px;font-family:Rajdhani,sans-serif;font-size:20px">
         <button class="big mt" onclick="confirmVerifyCode()">Confirm</button>
         <button class="ghost mt" style="width:100%" onclick="sendVerifyCode()">Send a new code</button>`:`
@@ -10902,22 +11003,23 @@ function vPickGame(){
 function vWelcome(){
   return `<main class="welcome">
   <div class="center" style="margin:18px 0 26px"><img src="${art('/banner.jpg')}" alt="Battle Tees" style="width:100%;aspect-ratio:1200/509;display:block;border-radius:14px;border:2px solid var(--green);box-shadow:4px 4px 0 var(--green)" onerror="this.outerHTML='<h1 style=&quot;color:var(--green-ink);font-size:26px&quot;>Battle Tees</h1>'"></div>
+  ${ageOffline()?ageCardHTML():''}
   <div class="card welcome-card">
     <h2 class="welcome-h">Create Your Profile</h2>
-    <div class="tiny mb">Takes a few seconds. Your name is all that's required — it's how nearby phones add you to a round.</div>
+    <div class="tiny mb">${ageOffline()?"Takes a few seconds. Your name is all that's required.":"Takes a few seconds. Your name is all that's required — it's how nearby phones add you to a round."}</div>
     <div class="grid2">
       <div><div class="tiny">Your name</div><input type="text" id="meName" onfocus="tapClear(this)" autocomplete="name"></div>
       <div><div class="tiny">Handicap index</div><input type="text" inputmode="decimal" id="meIdx" placeholder="10.0" onfocus="tapClear(this)"></div>
     </div>
-    <div class="mt"><div class="tiny">Email</div>
+    ${ageOffline()?'':`<div class="mt"><div class="tiny">Email</div>
       <input type="text" inputmode="email" autocapitalize="off" id="meEmail" placeholder="you@email.com" value="${esc(localStorage.getItem('wolfBackupEmail')||'')}">
-      <div class="tiny mt">Your players, courses &amp; round history back up automatically — and you can restore them on any phone.</div></div>
+      <div class="tiny mt">Your players, courses &amp; round history back up automatically — and you can restore them on any phone.</div></div>`}
     <div id="meErr" class="tiny mt" style="color:var(--red);font-weight:600"></div>
     <button class="big mt welcome-go" onclick="saveMe()">Create profile</button>
-    <div class="tiny mt center" style="padding-top:12px;border-top:1px solid var(--line)">
+    ${ageOffline()?'':`<div class="tiny mt center" style="padding-top:12px;border-top:1px solid var(--line)">
       Already have a backup?
       <a href="#" onclick="welcomeRestore();return false" style="color:var(--elec);font-weight:600">Restore it</a>
-    </div>
+    </div>`}
   </div>
   </main>`;
 }
@@ -10957,7 +11059,7 @@ function vHome(){
   return `<main>${roomFullHTML()}${rulesNoticeHTML()}
   ${markNotesHTML()}
   <div class="center" style="margin:10px 0 18px"><img src="${art('/banner.jpg')}" alt="Battle Tees" style="width:100%;aspect-ratio:1200/509;display:block;border-radius:14px;border:2px solid var(--green);box-shadow:4px 4px 0 var(--green)" onerror="this.outerHTML='<h1 style=&quot;color:var(--green-ink);font-size:20px&quot;>Battle Tees</h1>'"></div>
-  ${inRound?'':vfNagHTML()}
+  ${inRound||ageOffline()?'':vfNagHTML()}
   ${(!inRound&&S.share&&S.share.on&&S.share.creator&&S.share.code)?`<div class="card" style="border-color:var(--amber)">
     <h2 style="color:var(--amber)">Room open · code ${esc(S.share.code)}</h2>
     <div class="tiny mb">${esc(S.config.groupName||'Your group')} has been invited but the round hasn't started. Pick it back up, or close the room to take the invitation off their phones.</div>
@@ -10973,7 +11075,7 @@ function vHome(){
     <button class="ghost hb" style="padding:12px" onclick="go('history')">🕰 Rounds</button>
   </div>
   <button class="ghost hb" style="width:100%;padding:12px;margin-bottom:10px" onclick="startRangefinder()">\ud83d\udccd GPS Rangefinder (No Score)</button>
-  ${(bfLivePeek(),bfHomeBtnHTML())}
+  ${ageOffline()?ageCardHTML():(bfLivePeek(),bfHomeBtnHTML())}
   `:''}
   ${!S.me.name?`<div class="card"><h2>Your profile</h2>
     <div class="tiny mb">So nearby phones can add you to a round by name.</div>
@@ -10981,8 +11083,8 @@ function vHome(){
       <div><div class="tiny">Your name</div><input type="text" id="meName" onfocus="tapClear(this)"></div>
       <div><div class="tiny">Handicap index</div><input type="text" inputmode="decimal" id="meIdx" placeholder="10.0" onfocus="tapClear(this)"></div>
     </div>
-    <div class="mt"><div class="tiny">Email</div><input type="text" inputmode="email" autocapitalize="off" id="meEmail" placeholder="you@email.com" value="${esc(localStorage.getItem('wolfBackupEmail')||'')}">
-      <div class="tiny mt">Your players, courses &amp; round history back up automatically — and you can restore them on any phone.</div></div>
+    ${ageOffline()?'':`<div class="mt"><div class="tiny">Email</div><input type="text" inputmode="email" autocapitalize="off" id="meEmail" placeholder="you@email.com" value="${esc(localStorage.getItem('wolfBackupEmail')||'')}">
+      <div class="tiny mt">Your players, courses &amp; round history back up automatically — and you can restore them on any phone.</div></div>`}
     <div id="meErr" class="tiny mt" style="color:var(--red);font-weight:600"></div>
     <button class="big mt" onclick="saveMe()">Save profile</button>
   </div>`:''}
@@ -11020,7 +11122,7 @@ function vHome(){
     <button class="ghost hb" style="padding:12px" onclick="go('stats')">📊 Stats</button>
     <button class="ghost hb" style="padding:12px" onclick="go('history')">🕰 Rounds</button>
   </div>
-  ${(bfLivePeek(),bfHomeBtnHTML())}
+  ${ageOffline()?ageCardHTML():(bfLivePeek(),bfHomeBtnHTML())}
   `:''}
   <div class="card"><h2>Games &amp; rules</h2>
     ${gameGridHTML('showRules')}
@@ -11096,7 +11198,9 @@ function daCode(){
   daErase(c);
 }
 function daWipe(){
+  let age=null;try{age=localStorage.getItem('btAgeSignal');}catch(e){}
   try{localStorage.clear();}catch(e){}
+  try{if(age)localStorage.setItem('btAgeSignal',age);}catch(e){}   // A2: the store's age signal is not account data
   try{sessionStorage.clear();}catch(e){}
   location.replace(location.pathname);
 }
@@ -11308,7 +11412,7 @@ const FAQ=[
   ['Watch friends play',
    'Home › <b>Community Battlefield</b> lists your friends’ rounds. When one is on the course right now, the button lights up with LIVE on both sides; tap a round to watch it hole by hole, scores, stats and tracked shots included. Rounds you’ve watched stay on this phone.'],
   ['Announcements and emails',
-   'Settings › <b>⚔️ Battlefield</b>. <b>Announce my rounds</b>: two holes into a round, your Battle friends get a watch link and the round goes on the Community Battlefield. <b>Email me when friends play</b>: you get the “Battlefield is set” email when someone who has you on their players list tees off. One email per round, from Battle Tees, never from a personal address — and only to a confirmed email.'],
+   'Settings › <b>⚔️ Battlefield</b>. <b>Announce my rounds</b>: two holes into a round, your Battle friends get a watch link and the round goes on the Community Battlefield. <b>Email me when friends play</b>: you get the “Battlefield is set” email when someone who has you on their players list tees off. One email per round, from Battle Tees, never from a personal address. It goes to the email on your profile; if that address isn’t confirmed yet, the email has a link to confirm it.'],
   ['Reactions and comments',
    'On the Battlefield, every golfer’s row and the round as a whole have <b>+ React</b> and <b>Comment</b>. You get one reaction on each — tap another to switch, tap yours to take it back — and tapping a reaction shows who sent it. Comments run up to 140 characters; tap <b>Reply</b> to answer someone. When a friend reacts to or comments on your round it pops up on your screen (during a round, it waits until the hole is scored) and stays until you tap <b>GOT IT</b> or <b>REPLY</b>. Turn them off in Settings › <b>⚔️ Battlefield</b> › <b>Reaction pop-ups</b> and <b>Reaction emails</b>.'],
   ['Report or block someone',
@@ -11377,13 +11481,53 @@ function openDoc(which){
   document.body.appendChild(d);
 }
 function closeDoc(){try{document.querySelectorAll('#docsheet').forEach(x=>x.remove());}catch(e){}}
+// OPEN-SOURCE LICENSES (P7, 11/5/2026; Settings, the card under Data credits). The list is built into the app at BUILD time from
+// .build/licenses/manifest.json (.build/licenses.py fills OSS_LICENSES in, with the full text of each license); this
+// unbuilt source carries null. One list for every phone, the simplest correct answer: the web app's own (Leaflet, the
+// three fonts) everywhere, plus the native shell's list inside that shell -- the iPhone app (Apple frameworks only)
+// or the Android app (AndroidX, Kotlin, Google Play services...) -- told apart by BTNative.platform. The shells load
+// this page, so their lists ship with it. Same sheet as the Privacy policy; it works offline (nothing to fetch).
+const OSS_LICENSES={"updated":"2026-11-05","lists":{"web":{"title":"In Battle Tees","note":"","items":[{"name":"Leaflet","version":"1.9.4","use":"The hole maps","copyright":"Copyright (c) 2010-2023, Volodymyr Agafonkin; Copyright (c) 2010-2011, CloudMade","license":"BSD 2-Clause License","text":"leaflet","url":"https://leafletjs.com"},{"name":"Inter","version":"font","use":"Body text","copyright":"Copyright 2020 The Inter Project Authors (https://github.com/rsms/inter)","license":"SIL Open Font License 1.1","text":"ofl-1.1","url":"https://github.com/rsms/inter"},{"name":"Rajdhani","version":"font","use":"Headings and numbers","copyright":"Copyright (c) 2014, Indian Type Foundry (info@indiantypefoundry.com)","license":"SIL Open Font License 1.1","text":"ofl-1.1","url":"https://fonts.google.com/specimen/Rajdhani"},{"name":"Cinzel","version":"font","use":"Title lettering","copyright":"Copyright 2020 The Cinzel Project Authors (https://github.com/NDISCOVER/Cinzel)","license":"SIL Open Font License 1.1","text":"ofl-1.1","url":"https://github.com/NDISCOVER/Cinzel"}]},"ios":{"title":"In the iPhone app","note":"The iPhone app is built only on Apple's own frameworks. It contains no third-party code.","items":[]},"android":{"title":"In the Android app","note":"","items":[{"name":"AndroidX (Jetpack) libraries","use":"The app window, web view and lifecycle","copyright":"Copyright The Android Open Source Project","license":"Apache License 2.0","text":"apache-2.0","url":"https://developer.android.com/jetpack/androidx","artifacts":["androidx.core:core-ktx:1.16.0","androidx.appcompat:appcompat:1.7.1","androidx.activity:activity-ktx:1.10.1","androidx.webkit:webkit:1.14.0","androidx.lifecycle:lifecycle-runtime-ktx:2.9.1","androidx.activity:activity:1.10.1","androidx.annotation:annotation:1.9.1","androidx.annotation:annotation-experimental:1.4.1","androidx.appcompat:appcompat-resources:1.7.1","androidx.arch.core:core-common:2.2.0","androidx.arch.core:core-runtime:2.2.0","androidx.collection:collection:1.4.2","androidx.concurrent:concurrent-futures:1.1.0","androidx.core:core:1.16.0","androidx.core:core-viewtree:1.0.0","androidx.cursoradapter:cursoradapter:1.0.0","androidx.customview:customview:1.0.0","androidx.drawerlayout:drawerlayout:1.0.0","androidx.emoji2:emoji2:1.3.0","androidx.emoji2:emoji2-views-helper:1.3.0","androidx.fragment:fragment:1.5.4","androidx.interpolator:interpolator:1.0.0","androidx.lifecycle (common, livedata, process, runtime, viewmodel, savedstate):2.9.1","androidx.loader:loader:1.0.0","androidx.profileinstaller:profileinstaller:1.4.0","androidx.resourceinspection:resourceinspection-annotation:1.0.1","androidx.savedstate:savedstate:1.3.0","androidx.startup:startup-runtime:1.1.1","androidx.tracing:tracing:1.2.0","androidx.vectordrawable:vectordrawable:1.1.0","androidx.vectordrawable:vectordrawable-animated:1.1.0","androidx.versionedparcelable:versionedparcelable:1.1.1","androidx.viewpager:viewpager:1.0.0"]},{"name":"Kotlin standard library","version":"2.1.21","use":"The language the app is written in","copyright":"Copyright JetBrains s.r.o. and Kotlin Programming Language contributors","license":"Apache License 2.0","text":"apache-2.0","url":"https://kotlinlang.org","artifacts":["org.jetbrains.kotlin:kotlin-stdlib:2.1.21"]},{"name":"kotlinx.coroutines","version":"1.10.2","use":"Background work","copyright":"Copyright JetBrains s.r.o. and contributors","license":"Apache License 2.0","text":"apache-2.0","url":"https://github.com/Kotlin/kotlinx.coroutines","artifacts":["org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2","org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.10.2","org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2"]},{"name":"kotlinx.serialization","version":"1.7.3","use":"Used by AndroidX","copyright":"Copyright JetBrains s.r.o. and contributors","license":"Apache License 2.0","text":"apache-2.0","url":"https://github.com/Kotlin/kotlinx.serialization","artifacts":["org.jetbrains.kotlinx:kotlinx-serialization-core:1.7.3"]},{"name":"JetBrains Java Annotations","version":"23.0.0","use":"Used by Kotlin","copyright":"Copyright JetBrains s.r.o.","license":"Apache License 2.0","text":"apache-2.0","url":"https://github.com/JetBrains/java-annotations","artifacts":["org.jetbrains:annotations:23.0.0"]},{"name":"Guava ListenableFuture","version":"1.0","use":"Used by AndroidX","copyright":"Copyright The Guava Authors","license":"Apache License 2.0","text":"apache-2.0","url":"https://github.com/google/guava","artifacts":["com.google.guava:listenablefuture:1.0"]},{"name":"JSpecify","version":"1.0.0","use":"Used by AndroidX","copyright":"Copyright The JSpecify Authors","license":"Apache License 2.0","text":"apache-2.0","url":"https://jspecify.dev","artifacts":["org.jspecify:jspecify:1.0.0"]},{"name":"Google Play services","use":"Location on the course","copyright":"Copyright Google LLC","license":"Android Software Development Kit License (Google's terms, not open source)","url":"https://developer.android.com/studio/terms","artifacts":["com.google.android.gms:play-services-location:21.3.0","com.google.android.gms:play-services-base:18.5.0","com.google.android.gms:play-services-basement:18.4.0","com.google.android.gms:play-services-tasks:18.2.0"]},{"name":"Play Integrity API","version":"1.4.0","use":"Checks the app is the real one from Google Play","copyright":"Copyright Google LLC","license":"Play Integrity API Terms of Service (Google's terms, not open source)","url":"https://developer.android.com/google/play/integrity/overview#tos","artifacts":["com.google.android.play:integrity:1.4.0"]},{"name":"Play Core common","version":"2.0.4","use":"Used by Play Integrity","copyright":"Copyright Google LLC","license":"Play Core Software Development Kit Terms of Service (Google's terms, not open source)","url":"https://developer.android.com/guide/playcore/license","artifacts":["com.google.android.play:core-common:2.0.4"]}]}},"texts":{"apache-2.0":"Apache License\n                           Version 2.0, January 2004\n                        http://www.apache.org/licenses/\n\n   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION\n\n   1. Definitions.\n\n      \"License\" shall mean the terms and conditions for use, reproduction,\n      and distribution as defined by Sections 1 through 9 of this document.\n\n      \"Licensor\" shall mean the copyright owner or entity authorized by\n      the copyright owner that is granting the License.\n\n      \"Legal Entity\" shall mean the union of the acting entity and all\n      other entities that control, are controlled by, or are under common\n      control with that entity. For the purposes of this definition,\n      \"control\" means (i) the power, direct or indirect, to cause the\n      direction or management of such entity, whether by contract or\n      otherwise, or (ii) ownership of fifty percent (50%) or more of the\n      outstanding shares, or (iii) beneficial ownership of such entity.\n\n      \"You\" (or \"Your\") shall mean an individual or Legal Entity\n      exercising permissions granted by this License.\n\n      \"Source\" form shall mean the preferred form for making modifications,\n      including but not limited to software source code, documentation\n      source, and configuration files.\n\n      \"Object\" form shall mean any form resulting from mechanical\n      transformation or translation of a Source form, including but\n      not limited to compiled object code, generated documentation,\n      and conversions to other media types.\n\n      \"Work\" shall mean the work of authorship, whether in Source or\n      Object form, made available under the License, as indicated by a\n      copyright notice that is included in or attached to the work\n      (an example is provided in the Appendix below).\n\n      \"Derivative Works\" shall mean any work, whether in Source or Object\n      form, that is based on (or derived from) the Work and for which the\n      editorial revisions, annotations, elaborations, or other modifications\n      represent, as a whole, an original work of authorship. For the purposes\n      of this License, Derivative Works shall not include works that remain\n      separable from, or merely link (or bind by name) to the interfaces of,\n      the Work and Derivative Works thereof.\n\n      \"Contribution\" shall mean any work of authorship, including\n      the original version of the Work and any modifications or additions\n      to that Work or Derivative Works thereof, that is intentionally\n      submitted to Licensor for inclusion in the Work by the copyright owner\n      or by an individual or Legal Entity authorized to submit on behalf of\n      the copyright owner. For the purposes of this definition, \"submitted\"\n      means any form of electronic, verbal, or written communication sent\n      to the Licensor or its representatives, including but not limited to\n      communication on electronic mailing lists, source code control systems,\n      and issue tracking systems that are managed by, or on behalf of, the\n      Licensor for the purpose of discussing and improving the Work, but\n      excluding communication that is conspicuously marked or otherwise\n      designated in writing by the copyright owner as \"Not a Contribution.\"\n\n      \"Contributor\" shall mean Licensor and any individual or Legal Entity\n      on behalf of whom a Contribution has been received by Licensor and\n      subsequently incorporated within the Work.\n\n   2. Grant of Copyright License. Subject to the terms and conditions of\n      this License, each Contributor hereby grants to You a perpetual,\n      worldwide, non-exclusive, no-charge, royalty-free, irrevocable\n      copyright license to reproduce, prepare Derivative Works of,\n      publicly display, publicly perform, sublicense, and distribute the\n      Work and such Derivative Works in Source or Object form.\n\n   3. Grant of Patent License. Subject to the terms and conditions of\n      this License, each Contributor hereby grants to You a perpetual,\n      worldwide, non-exclusive, no-charge, royalty-free, irrevocable\n      (except as stated in this section) patent license to make, have made,\n      use, offer to sell, sell, import, and otherwise transfer the Work,\n      where such license applies only to those patent claims licensable\n      by such Contributor that are necessarily infringed by their\n      Contribution(s) alone or by combination of their Contribution(s)\n      with the Work to which such Contribution(s) was submitted. If You\n      institute patent litigation against any entity (including a\n      cross-claim or counterclaim in a lawsuit) alleging that the Work\n      or a Contribution incorporated within the Work constitutes direct\n      or contributory patent infringement, then any patent licenses\n      granted to You under this License for that Work shall terminate\n      as of the date such litigation is filed.\n\n   4. Redistribution. You may reproduce and distribute copies of the\n      Work or Derivative Works thereof in any medium, with or without\n      modifications, and in Source or Object form, provided that You\n      meet the following conditions:\n\n      (a) You must give any other recipients of the Work or\n          Derivative Works a copy of this License; and\n\n      (b) You must cause any modified files to carry prominent notices\n          stating that You changed the files; and\n\n      (c) You must retain, in the Source form of any Derivative Works\n          that You distribute, all copyright, patent, trademark, and\n          attribution notices from the Source form of the Work,\n          excluding those notices that do not pertain to any part of\n          the Derivative Works; and\n\n      (d) If the Work includes a \"NOTICE\" text file as part of its\n          distribution, then any Derivative Works that You distribute must\n          include a readable copy of the attribution notices contained\n          within such NOTICE file, excluding those notices that do not\n          pertain to any part of the Derivative Works, in at least one\n          of the following places: within a NOTICE text file distributed\n          as part of the Derivative Works; within the Source form or\n          documentation, if provided along with the Derivative Works; or,\n          within a display generated by the Derivative Works, if and\n          wherever such third-party notices normally appear. The contents\n          of the NOTICE file are for informational purposes only and\n          do not modify the License. You may add Your own attribution\n          notices within Derivative Works that You distribute, alongside\n          or as an addendum to the NOTICE text from the Work, provided\n          that such additional attribution notices cannot be construed\n          as modifying the License.\n\n      You may add Your own copyright statement to Your modifications and\n      may provide additional or different license terms and conditions\n      for use, reproduction, or distribution of Your modifications, or\n      for any such Derivative Works as a whole, provided Your use,\n      reproduction, and distribution of the Work otherwise complies with\n      the conditions stated in this License.\n\n   5. Submission of Contributions. Unless You explicitly state otherwise,\n      any Contribution intentionally submitted for inclusion in the Work\n      by You to the Licensor shall be under the terms and conditions of\n      this License, without any additional terms or conditions.\n      Notwithstanding the above, nothing herein shall supersede or modify\n      the terms of any separate license agreement you may have executed\n      with Licensor regarding such Contributions.\n\n   6. Trademarks. This License does not grant permission to use the trade\n      names, trademarks, service marks, or product names of the Licensor,\n      except as required for reasonable and customary use in describing the\n      origin of the Work and reproducing the content of the NOTICE file.\n\n   7. Disclaimer of Warranty. Unless required by applicable law or\n      agreed to in writing, Licensor provides the Work (and each\n      Contributor provides its Contributions) on an \"AS IS\" BASIS,\n      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or\n      implied, including, without limitation, any warranties or conditions\n      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A\n      PARTICULAR PURPOSE. You are solely responsible for determining the\n      appropriateness of using or redistributing the Work and assume any\n      risks associated with Your exercise of permissions under this License.\n\n   8. Limitation of Liability. In no event and under no legal theory,\n      whether in tort (including negligence), contract, or otherwise,\n      unless required by applicable law (such as deliberate and grossly\n      negligent acts) or agreed to in writing, shall any Contributor be\n      liable to You for damages, including any direct, indirect, special,\n      incidental, or consequential damages of any character arising as a\n      result of this License or out of the use or inability to use the\n      Work (including but not limited to damages for loss of goodwill,\n      work stoppage, computer failure or malfunction, or any and all\n      other commercial damages or losses), even if such Contributor\n      has been advised of the possibility of such damages.\n\n   9. Accepting Warranty or Additional Liability. While redistributing\n      the Work or Derivative Works thereof, You may choose to offer,\n      and charge a fee for, acceptance of support, warranty, indemnity,\n      or other liability obligations and/or rights consistent with this\n      License. However, in accepting such obligations, You may act only\n      on Your own behalf and on Your sole responsibility, not on behalf\n      of any other Contributor, and only if You agree to indemnify,\n      defend, and hold each Contributor harmless for any liability\n      incurred by, or claims asserted against, such Contributor by reason\n      of your accepting any such warranty or additional liability.\n\n   END OF TERMS AND CONDITIONS\n\n   APPENDIX: How to apply the Apache License to your work.\n\n      To apply the Apache License to your work, attach the following\n      boilerplate notice, with the fields enclosed by brackets \"[]\"\n      replaced with your own identifying information. (Don't include\n      the brackets!)  The text should be enclosed in the appropriate\n      comment syntax for the file format. We also recommend that a\n      file or class name and description of purpose be included on the\n      same \"printed page\" as the copyright notice for easier\n      identification within third-party archives.\n\n   Copyright [yyyy] [name of copyright owner]\n\n   Licensed under the Apache License, Version 2.0 (the \"License\");\n   you may not use this file except in compliance with the License.\n   You may obtain a copy of the License at\n\n       http://www.apache.org/licenses/LICENSE-2.0\n\n   Unless required by applicable law or agreed to in writing, software\n   distributed under the License is distributed on an \"AS IS\" BASIS,\n   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\n   See the License for the specific language governing permissions and\n   limitations under the License.","leaflet":"BSD 2-Clause License\n\nCopyright (c) 2010-2023, Volodymyr Agafonkin\nCopyright (c) 2010-2011, CloudMade\nAll rights reserved.\n\nRedistribution and use in source and binary forms, with or without\nmodification, are permitted provided that the following conditions are met:\n\n1. Redistributions of source code must retain the above copyright notice, this\n   list of conditions and the following disclaimer.\n\n2. Redistributions in binary form must reproduce the above copyright notice,\n   this list of conditions and the following disclaimer in the documentation\n   and/or other materials provided with the distribution.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\nAND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\nIMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE\nDISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE\nFOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL\nDAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR\nSERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER\nCAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,\nOR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE\nOF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.","ofl-1.1":"This Font Software is licensed under the SIL Open Font License, Version 1.1.\nThis license is copied below, and is also available with a FAQ at:\nhttps://scripts.sil.org/OFL\n\n\n-----------------------------------------------------------\nSIL OPEN FONT LICENSE Version 1.1 - 26 February 2007\n-----------------------------------------------------------\n\nPREAMBLE\nThe goals of the Open Font License (OFL) are to stimulate worldwide\ndevelopment of collaborative font projects, to support the font creation\nefforts of academic and linguistic communities, and to provide a free and\nopen framework in which fonts may be shared and improved in partnership\nwith others.\n\nThe OFL allows the licensed fonts to be used, studied, modified and\nredistributed freely as long as they are not sold by themselves. The\nfonts, including any derivative works, can be bundled, embedded, \nredistributed and/or sold with any software provided that any reserved\nnames are not used by derivative works. The fonts and derivatives,\nhowever, cannot be released under any other type of license. The\nrequirement for fonts to remain under this license does not apply\nto any document created using the fonts or their derivatives.\n\nDEFINITIONS\n\"Font Software\" refers to the set of files released by the Copyright\nHolder(s) under this license and clearly marked as such. This may\ninclude source files, build scripts and documentation.\n\n\"Reserved Font Name\" refers to any names specified as such after the\ncopyright statement(s).\n\n\"Original Version\" refers to the collection of Font Software components as\ndistributed by the Copyright Holder(s).\n\n\"Modified Version\" refers to any derivative made by adding to, deleting,\nor substituting -- in part or in whole -- any of the components of the\nOriginal Version, by changing formats or by porting the Font Software to a\nnew environment.\n\n\"Author\" refers to any designer, engineer, programmer, technical\nwriter or other person who contributed to the Font Software.\n\nPERMISSION & CONDITIONS\nPermission is hereby granted, free of charge, to any person obtaining\na copy of the Font Software, to use, study, copy, merge, embed, modify,\nredistribute, and sell modified and unmodified copies of the Font\nSoftware, subject to the following conditions:\n\n1) Neither the Font Software nor any of its individual components,\nin Original or Modified Versions, may be sold by itself.\n\n2) Original or Modified Versions of the Font Software may be bundled,\nredistributed and/or sold with any software, provided that each copy\ncontains the above copyright notice and this license. These can be\nincluded either as stand-alone text files, human-readable headers or\nin the appropriate machine-readable metadata fields within text or\nbinary files as long as those fields can be easily viewed by the user.\n\n3) No Modified Version of the Font Software may use the Reserved Font\nName(s) unless explicit written permission is granted by the corresponding\nCopyright Holder. This restriction only applies to the primary font name as\npresented to the users.\n\n4) The name(s) of the Copyright Holder(s) or the Author(s) of the Font\nSoftware shall not be used to promote, endorse or advertise any\nModified Version, except to acknowledge the contribution(s) of the\nCopyright Holder(s) and the Author(s) or with their explicit written\npermission.\n\n5) The Font Software, modified or unmodified, in part or in whole,\nmust be distributed entirely under this license, and must not be\ndistributed under any other license. The requirement for fonts to\nremain under this license does not apply to any document created\nusing the Font Software.\n\nTERMINATION\nThis license becomes null and void if any of the above conditions are\nnot met.\n\nDISCLAIMER\nTHE FONT SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND,\nEXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO ANY WARRANTIES OF\nMERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT\nOF COPYRIGHT, PATENT, TRADEMARK, OR OTHER RIGHT. IN NO EVENT SHALL THE\nCOPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,\nINCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL\nDAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING\nFROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM\nOTHER DEALINGS IN THE FONT SOFTWARE."}};
+function ossShell(){try{const p=(nativeShell()||{}).platform;return p==='ios'||p==='android'?p:'';}catch(e){return '';}}
+function ossHTML(){
+  const L0=OSS_LICENSES;
+  if(!L0||!L0.lists)return `<div class="tiny" style="padding:10px 4px">The list is added when the app is built.</div>`;
+  const pre=s=>`<pre style="white-space:pre-wrap;word-break:break-word;font:11.5px/1.45 ui-monospace,Menlo,monospace;color:var(--ink2);margin:6px 0 0;max-height:none">${esc(s)}</pre>`;
+  const item=it=>{
+    const txt=it.text&&L0.texts[it.text]?(it.copyright?it.copyright+'\n\n':'')+L0.texts[it.text]:'';
+    return `<details class="faq"><summary>${esc(it.name)}${it.version&&it.version!=='font'?' '+esc(it.version):''}<div class="tiny" style="font-weight:400;margin-top:2px">${esc(it.license)}${it.use?' · '+esc(it.use):''}</div></summary>
+      <div class="tiny" style="padding:0 0 10px 2px;line-height:1.4">${it.copyright&&!txt?esc(it.copyright)+'<br>':''}${it.artifacts&&it.artifacts.length?`<div style="color:var(--ink3);margin-bottom:4px">${it.artifacts.map(esc).join('<br>')}</div>`:''}
+        ${txt?pre(txt):''}${it.url?`<div class="mt"><a href="${esc(it.url)}" target="_blank" rel="noopener">${esc(it.url)}</a></div>`:''}</div></details>`;
+  };
+  const sec=k=>{const l=L0.lists[k];if(!l)return '';
+    return `<div class="tiny" style="color:var(--gold,var(--green));font-weight:700;letter-spacing:.4px;margin:12px 0 2px;text-transform:uppercase">${esc(l.title)}</div>
+      ${l.note?`<div class="tiny" style="padding:6px 0">${esc(l.note)}</div>`:''}${(l.items||[]).map(item).join('')}`;};
+  const sh=ossShell();
+  return sec('web')+(sh?sec(sh):'');
+}
+function openLicenses(){
+  try{stat('doc_open',{doc:'oss'});}catch(e){}
+  closeDoc();
+  const d=document.createElement('div');
+  d.className='vfWrap';d.id='docsheet';d.setAttribute('role','dialog');d.setAttribute('aria-modal','true');d.setAttribute('aria-label','Open-source licenses');
+  d.style.padding='10px';
+  d.onclick=ev=>{if(ev.target===d)closeDoc();};
+  d.innerHTML=`<div class="vfCard" style="display:flex;flex-direction:column;height:min(92vh,900px);padding:10px 10px 12px">
+    <div style="display:flex;align-items:center;gap:8px"><h2 class="vfTitle" style="margin:0 0 0 4px;flex:1">Open-source licenses</h2>
+      <button class="ghost xbtn" onclick="closeDoc()" aria-label="Close">${XICON}</button></div>
+    <div id="osslist" style="flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:0 4px">
+      <div class="tiny" style="padding:6px 0 2px">Battle Tees is built with these. Tap one for its license.</div>
+      ${ossHTML()}</div>
+  </div>`;
+  document.body.appendChild(d);
+}
 function vSettings(){
   const bf=S.config.bf||{broadcast:true,emails:true};
   const row=(label,sub,key)=>`<div class="row"><div style="flex:1;min-width:0"><b>${label}</b>
       <div class="tiny">${sub}</div></div>
     <button class="ghost ${bf[key]!==false?'sel':''}" onclick="bfToggle('${key}')">${bf[key]!==false?'On':'Off'}</button></div>`;   // a missing key is On (added later)
   return topbar('Settings','','home')+`<main>
-  ${pkHTML()}${emLockHTML()}
+  ${ageOffline()?'':pkHTML()+emLockHTML()}
   <div class="card"><h2>📲 Share Battle Tees</h2>
     <div style="display:flex;gap:16px;align-items:center">
       <div style="flex:none;background:#fff;border-radius:12px;padding:8px;line-height:0" title="https://battletees.app/app/?src=qr_app">
@@ -11398,7 +11542,7 @@ function vSettings(){
     <button class="ghost mt" style="width:100%" onclick="contactMail()">${CONTACT_EMAIL}</button>
   </div>
   ${faqHTML()}
-  <div class="card"><h2>⚔️ Battlefield</h2>
+  ${ageOffline()?ageCardHTML():`<div class="card"><h2>⚔️ Battlefield</h2>
     ${row('Announce my rounds','Two holes into a round, your Battle Friends get a watch link and the round goes on the Community Battlefield.','broadcast')}
     <div class="tiny mt" style="color:var(--ink3)">Relay: <b>${/relay\.vexcomllc\.com|workers\.dev/.test(RELAY)?'Cloud':/raspi5/.test(RELAY)?'Pi':'custom'}</b> · ${relayUp()?'connected':'not connected'}${localStorage.getItem('wolfRelay')?' · manual override':''}</div>
     ${row('Email me when friends play','Get the “Battlefield is set” email when someone who has you in their library tees off.','emails')}
@@ -11406,7 +11550,7 @@ function vSettings(){
     ${row('Reaction pop-ups','Show reactions and comments on your rounds on screen.','popups')}
     ${row('Reaction emails','Email me about them after a round. One a day at most.','reactMail')}
   </div>
-  ${blockedCardHTML()}
+  ${blockedCardHTML()}`}
   ${trackCardHTML()}
   <div class="card">
     <div class="row" style="border-top:none;padding:0;align-items:center"><h2 style="margin:0">📏 Distances</h2>
@@ -11463,6 +11607,10 @@ function vSettings(){
     <div class="tiny">Scorecards and course listings: <b>© OpenStreetMap contributors (ODbL 1.0) via OpenGolfAPI</b>, plus licensed scorecard data from GolfCourseAPI.</div>
     <div class="tiny mt">Hole maps: course geometry © OpenStreetMap contributors (ODbL 1.0), hand-mapped by players where OSM had none · Imagery © Esri, Maxar.</div>
     <div class="tiny mt" style="color:var(--ink3)">Battle Tees build ${BUILD}</div>
+  </div>
+  <div class="card"><h2>📄 Open-source licenses</h2>
+    <div class="tiny">The software Battle Tees is built with.</div>
+    <button class="ghost mt" style="width:100%" onclick="openLicenses()">Open-source licenses</button>
   </div>
   </main>`;
 }
@@ -11548,6 +11696,7 @@ function markNotesHTML(){
   </div>`;
 }
 function registerProfile(force){
+  if(ageOffline())return;   // A2: the profile stays on this phone
   try{
     const pid=myPid(), nm=(S.me&&S.me.name||'').trim();
     if(!pid||!nm)return;
@@ -12455,6 +12604,7 @@ function openBattlefield(){
   });
 }
 function vBattlefield(){
+  if(ageOffline())return topbar('Community Battlefield','','home')+`<main>${ageCardHTML()}</main>`;   // A2
   const L=Array.isArray(bfList)?bfList.filter(e=>!bfHiddenByBlock(e)):bfList;
   const dur=e=>{
     const end=e.endedAt?e.endedAt*1000:Date.now();
@@ -12795,7 +12945,7 @@ function vShotView(){
       <span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${SV_COLS[i%SV_COLS.length]};flex:none"></span>
       <b>${esc(x.club||'shot')}</b> · <span class="num" style="font-size:16px">${ydDisp(x.yds)}${uLbl()}</span>${nm(x.pk)?` <span class="muted">· ${nm(x.pk)}</span>`:''}</div>`).join('');
   return topbar(`Hole ${v.h+1} · Par ${hole.par}`,`${esc((v.course&&v.course.name)||'')} · tracked shots`,'','hero maphero','')+`
-  <div id="svmap" style="position:fixed;top:62px;bottom:0;left:0;right:0;margin:0 auto;width:100%;max-width:480px;z-index:1;background:#0a0f18"></div>
+  <div id="svmap" style="position:fixed;top:62px;bottom:0;left:0;right:0;margin:0 auto;width:100%;max-width:480px;z-index:1;background:#0a0f18"></div>${satCreditHTML()}
   <button onclick="closeShotView()" style="position:fixed;right:max(10px,calc(50vw - 230px));top:calc(100px + env(safe-area-inset-top));z-index:6;background:rgba(15,21,34,.82);border:1.5px solid var(--line);border-radius:12px;color:#fff;padding:10px 17px;font-size:17px;font-weight:600;font-family:inherit">Back</button>
   <div id="svlegend" style="position:fixed;left:max(10px,calc(50vw - 230px));right:max(10px,calc(50vw - 230px));bottom:calc(14px + env(safe-area-inset-bottom));z-index:6;background:rgba(15,21,34,.9);border:1.5px solid var(--line);border-radius:12px;padding:8px 12px">${rows}
     <div class="tiny" style="color:var(--ink3);margin-top:4px">Pinch to zoom · drag to look around · nothing here can be changed</div></div>`;
@@ -12890,6 +13040,7 @@ async function bfMiniMap(shotMap,players,course){
   const openFull=()=>{try{openShotView(bfHole,shotMap,players,course||S.course);}catch(e){}};
   m.on('click',openFull);   // Leaflet's own click — the DOM listener as well fired it TWICE
   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19}).addTo(m);
+  try{el.insertAdjacentHTML('beforeend',satCreditHTML(true));}catch(e){}
   const pts=[];
   // now that all four players' lines land here, one color would be a tangle —
   // color by whose phone logged it, in roster order
@@ -13064,10 +13215,10 @@ function vGpsSetup(){
     <button class="big" onclick="go('map')">\ud83d\udccd Back to the GPS</button>
     <button class="ghost mt" style="width:100%" onclick="pickingCourse=true;finder={status:'idle',choices:[],error:''};go('pickcourse')">\u26f3 Change course</button>
   </div>
-  <div class="card"><h2>Playing with others?</h2>
+  ${ageOffline()?'':`<div class="card"><h2>Playing with others?</h2>
     <div class="tiny mb">Joining a round ends the rangefinder and puts you on their card.</div>
     <button class="big" style="background:var(--card);color:var(--green-mid);border-color:var(--green)" onclick="set(()=>{S.round=blankRound();});wiz={step:'join',n:4};S.screen='start';render()">\ud83d\udc65 Join an existing round</button>
-  </div>
+  </div>`}
   <button class="big danger mt" onclick="endRangefinder()">${endGpsArm?'\u26a0\ufe0f Tap again \u2014 end the rangefinder':'End rangefinder'}</button>
   </main>`;
 }
@@ -13082,7 +13233,7 @@ function startWizard(){
   set(()=>{S.config.game='stroke';S.config.games=['stroke'];});
   wiz={step:'kind',n:4};
   preCourseStart();                       // AFTER wiz exists: a fresh fix resolves synchronously
-  addMode='nearby';                       // the who-card scans nearby automatically
+  addMode=ageOffline()?'lib':'nearby';    // the who-card scans nearby automatically (under 13: no nearby list, A2)
   S.screen='start';save();render();
 }
 function wizKind(k){
@@ -13104,7 +13255,7 @@ function wizCount(n){
   wiz.n=n;wiz.step='who';
   ensureMeFirst();
   try{openGatePick();}catch(e){}          // start the nearby scan the moment the card opens
-  addMode='nearby';render();
+  addMode=ageOffline()?'lib':'nearby';render();
 }
 // A room opened from the group tap and then abandoned (Nathan 9/6 18:00: backed
 // out of the wizard, the invitation stayed on three phones and his phone kept
@@ -13175,7 +13326,7 @@ function vStart(){
       ${spanSelHTML(n,sp.start,'background:var(--field);border:2px solid var(--line);border-radius:10px;color:var(--ink);font:600 16px Rajdhani,Inter,sans-serif;padding:8px 10px')}</div>
       <div class="tiny">${esc(S.course.name)} has ${n} holes.</div></div>
     <button class="big" onclick="wizSpanNext()">Next \u2192</button>
-    ${wiz.preGame?`<button class="big mt" style="background:var(--card);color:var(--green-mid);border-color:var(--green)" onclick="wizKind('join')">👥 Join an existing round</button>`:''}
+    ${wiz.preGame&&!ageOffline()?`<button class="big mt" style="background:var(--card);color:var(--green-mid);border-color:var(--green)" onclick="wizKind('join')">👥 Join an existing round</button>`:''}
     </main>`;
   }
   if(step==='span'){
@@ -13192,7 +13343,7 @@ function vStart(){
         ${Array.from({length:n},(_,k)=>first+k).map(h=>`<option value="${h}" ${sp.start===h?'selected':''}>Hole ${h+1}</option>`).join('')}</select></div>
       <div class="tiny">Start from any tee — play wraps around.</div></div>
     <button class="big" onclick="wizSpanNext()">Next \u2192</button>
-    ${wiz.preGame?`<button class="big mt" style="background:var(--card);color:var(--green-mid);border-color:var(--green)" onclick="wizKind('join')">👥 Join an existing round</button>`:''}
+    ${wiz.preGame&&!ageOffline()?`<button class="big mt" style="background:var(--card);color:var(--green-mid);border-color:var(--green)" onclick="wizKind('join')">👥 Join an existing round</button>`:''}
     </main>`;
   }
 
@@ -13200,7 +13351,7 @@ function vStart(){
     ${inviteCardsHTML()}
     <button class="big hb" style="padding:16px 12px" onclick="wizKind('solo')">⛳ Just me<div style="font-size:14px;font-weight:500;margin-top:4px;color:inherit;opacity:.92;font-family:Inter,-apple-system,sans-serif">Solo stroke play — score and GPS</div></button>
     <button class="big mt hb" style="padding:16px 12px" onclick="wizKind('multi')">⚔️ Multi-player<div style="font-size:14px;font-weight:500;margin-top:4px;color:inherit;opacity:.92;font-family:Inter,-apple-system,sans-serif">2–4 golfers, any game — you pick the course and the game</div></button>
-    <button class="big mt hb" style="padding:16px 12px;background:var(--card);color:var(--green-mid);border-color:var(--green)" onclick="wizKind('join')">👥 Join an existing round<div style="font-size:14px;font-weight:500;margin-top:4px;color:var(--ink);opacity:.9;font-family:Inter,-apple-system,sans-serif">Someone already started it — find it nearby or by code</div></button>
+    ${ageOffline()?ageCardHTML():`<button class="big mt hb" style="padding:16px 12px;background:var(--card);color:var(--green-mid);border-color:var(--green)" onclick="wizKind('join')">👥 Join an existing round<div style="font-size:14px;font-weight:500;margin-top:4px;color:var(--ink);opacity:.9;font-family:Inter,-apple-system,sans-serif">Someone already started it — find it nearby or by code</div></button>`}
     </main>`;
 
   if(step==='count'){
@@ -13252,7 +13403,7 @@ function vStart(){
     <div class="card">${slotRows}
       ${!full?`<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--line)"><div class="tiny" style="text-transform:uppercase;letter-spacing:.6px;color:var(--ink3)">Add Player ${nFilled+1}</div></div>
       <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
-        <button class="ghost ${addMode==='nearby'?'sel':''}" onclick="setAddMode('nearby')">📍 Nearby</button>
+        ${ageOffline()?'':`<button class="ghost ${addMode==='nearby'?'sel':''}" onclick="setAddMode('nearby')">📍 Nearby</button>`}
         <button class="ghost ${addMode==='lib'?'sel':''}" onclick="setAddMode('lib')">👥 Saved</button>
         <button class="ghost ${addMode==='type'?'sel':''}" onclick="setAddMode('type')">⌨️ Type a name</button></div>
       ${addMode==='nearby'?`<div class="mt">${nearbyRows||`<div class="tiny">${relayStatusHTML('Scanning\u2026 anyone nearby with Battle Tees open shows up here.')}</div>`}
@@ -13291,6 +13442,7 @@ function vStart(){
     <div class="tiny mt center">${cardN()?`${cardN()}-hole course — you play all ${cardN()}. `:''}The round opens on the GPS map of hole ${cardN()?roundSpan().start+1:1}.</div>
     </main>`;
 
+  if(step==='join'&&ageOffline())return head('Join a round','')+`<main>${ageCardHTML()}</main>`;
   if(step==='join'){
     const rows=liveInvites().map(inv=>`<div class="card" style="border-color:var(--amber)">
       <h2 style="color:var(--amber)">${inv.group?`\u201c${esc(inv.group)}\u201d`:'Round in progress'} <span class="tiny" style="font-weight:400">\u00b7 code ${esc(inv.code)}</span></h2>
@@ -13411,7 +13563,7 @@ function vGate(){
     ${slotRows}
     ${nFilled<4?`
       <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
-        <button class="ghost ${addMode==='nearby'?'sel':''}" onclick="setAddMode('nearby')">📍 Nearby</button>
+        ${ageOffline()?'':`<button class="ghost ${addMode==='nearby'?'sel':''}" onclick="setAddMode('nearby')">📍 Nearby</button>`}
         <button class="ghost ${addMode==='lib'?'sel':''}" onclick="setAddMode('lib')">👥 Saved</button>
         <button class="ghost ${addMode==='type'?'sel':''}" onclick="setAddMode('type')">⌨️ Type a name</button>
       </div>
@@ -13503,7 +13655,7 @@ function startWithGame(g){
   if(!S.round.started)resetRoster();
   wiz={step:'span',n:4,preGame:g};
   preCourseStart();                       // AFTER wiz exists, as in startWizard
-  addMode='nearby';S.screen='start';save();render();
+  addMode=ageOffline()?'lib':'nearby';S.screen='start';save();render();
 }
 function vPickCourse(){
   return topbar(`Where are you playing?`,`${gameName(S.config.game)} · ${actIdx().map(i=>esc((S.players[i].name||'').split(' ')[0])).join(', ')}`,'setup')+`<main>
@@ -14259,6 +14411,8 @@ function vRules(){
   </main>`;
 }
 function backupBlockHTML(){
+  if(ageOffline())return `<div style="border-top:1px solid var(--line);margin-top:12px;padding-top:10px"><b>🔒 Online features are for players 13 and up</b>
+    <div class="tiny">You can still keep score on this phone.</div></div>`;   // A2: no cloud backups
   const abEmail=(localStorage.getItem('wolfBackupEmail')||'').trim();
   const abAt=+localStorage.getItem('btAbAt')||0;
   return `<div class="row" style="border-top:1px solid var(--line);margin-top:12px"><span class="muted">☁ Auto-backup</span>
@@ -16870,7 +17024,7 @@ function liveInvites(){
   // 6-hour TTL, and the card on top must be the one the group just opened
   return (invites||[]).filter(i=>inviteForMe(i)&&!dismissedInvites.has(i.code)&&!(mine.has(i.code)&&i.code!==cur)).sort((a,b)=>(b.ts||0)-(a.ts||0));
 }
-function setAddMode(m){addMode=addMode===m?null:m;if(addMode==='nearby'&&!gatePick.open)openGatePick();render();}
+function setAddMode(m){if(m==='nearby'&&ageOffline())m='lib';addMode=addMode===m?null:m;if(addMode==='nearby'&&!gatePick.open)openGatePick();render();}
 function isRealPl(p){return p&&p.name&&!/^Player \d$/.test(p.name);}
 function firstEmptySlot(){return S.players.findIndex(p=>!isRealPl(p));}
 // filled slots drive the flexible games' player counts so setup Just Works
