@@ -587,7 +587,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-center in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1793917015';
+const BUILD='1793921680';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -6303,7 +6303,7 @@ let scoreNagAckHole=-1;
 function mapNext(){
   if(coursePreview){const n=previewHoleCount();mapHole=(mapHole+1)%n;render();return;}
   try{
-    if(S.round.started&&!isReview()&&mapHole===S.round.cur){
+    if(S.round.started&&!gpsOnly()&&!isReview()&&mapHole===S.round.cur){   // GPS only keeps no score: never ask for one (Nathan 11/5)
       const rec=S.round.holes[mapHole];
       // the arrow does not move on until the hole is scored or the popup was
       // CLOSED — an auto-fading toast let the reminder slip by unread
