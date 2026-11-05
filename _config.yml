@@ -1,0 +1,2 @@
+# GitHub Pages: publish the Android app-link file (Jekyll skips dot-folders by default).
+include: [".well-known"]
