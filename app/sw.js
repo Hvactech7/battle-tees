@@ -1,7 +1,7 @@
 // Wolf service worker — offline cache + auto-update (stale-while-revalidate).
 // The app loads instantly from cache and refreshes in the background; a new
 // version appears the next time it's opened while online.
-const CACHE = 'battletees-1793853794';
+const CACHE = 'battletees-1793864396';
 // Offline course-map pack: satellite tiles cached cache-first, SURVIVES app
 // updates (excluded from the activate cleanup below).
 const TILES = 'bt-tiles';
@@ -13,7 +13,8 @@ const CORE = ['./', 'index.html', 'manifest.json', '/icon-180.png', '/icon-512.p
 // makes the satellite view and the two-finger rotation work with no signal.
 // SOFT: a vendor file that 404s must not abort the whole install (see below),
 // because an older shell falls back to the CDN and still works.
-const VENDOR = ['vendor/leaflet.js', 'vendor/leaflet.css', 'vendor/leaflet-rotate.js'];
+// 11/4/2026: leaflet-rotate (GPL-3.0) is gone -- the rotation is the app's own code now (index.html installMapRotation).
+const VENDOR = ['vendor/leaflet.js', 'vendor/leaflet.css'];
 
 // Safari refuses to let a service worker answer a page load with a response
 // that arrived through a redirect ("Response served by service worker has

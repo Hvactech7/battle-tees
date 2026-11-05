@@ -272,6 +272,7 @@
   @keyframes bfNoteGlow{50%{box-shadow:4px 4px 0 var(--green-dk),0 0 0 4px rgba(232,197,82,.35),0 10px 28px rgba(0,0,0,.55)}}
   @media (prefers-reduced-motion:reduce){.bfNoteItem{animation:none}}
   .linkish{background:none;border:0;color:var(--elec-mid);font-weight:600;padding:6px 4px;min-height:36px}
+  .pmore{flex:none;width:36px;height:36px;padding:0;margin:0;background:none;border:0;color:var(--ink3);font:700 17px/1 Inter,sans-serif}
   @media (prefers-reduced-motion:reduce){.vfWrap,.vfCard{animation:none}}
   /* rules cards render the same sections as battletees.app/rules */
   .rsec{margin-top:16px}
@@ -581,7 +582,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-center in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1793853794';
+const BUILD='1793864396';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -2615,6 +2616,7 @@ function saveMe(){
     if(err)err.textContent='Enter your name first — that’s all you need.';
     return;
   }
+  if(nameGuard(name,err)){if(n)n.style.borderColor='var(--red)';return;}
   const em=(e&&e.value||'').trim();
   if(em&&!/^\S+@\S+\.\S+$/.test(em)){
     if(e)e.style.borderColor='var(--red)';
@@ -2639,6 +2641,7 @@ function saveEditMe(){
   const n=document.getElementById('meEName'),x=document.getElementById('meEIdx'),e=document.getElementById('meEEmail');
   const name=(n&&n.value||'').trim();
   if(!name){editingMe=false;render();return;}
+  if(nameGuard(name,document.getElementById('meEErr'))){if(n)n.style.borderColor='var(--red)';return;}
   const em=(e&&e.value||'').trim();
   if(em&&!/^\S+@\S+\.\S+$/.test(em)){
     if(e)e.style.borderColor='var(--red)';
@@ -2684,7 +2687,7 @@ function onlineList(){
   // never show yourself — another copy of the app (Safari tab vs home-screen
   // icon have separate storage on iOS) broadcasts your name under its own devId
   const me=(S.me&&S.me.name||'').trim().toLowerCase();
-  return nearby.filter(p=>!me||(p.name||'').trim().toLowerCase()!==me)
+  return nearby.filter(p=>(!me||(p.name||'').trim().toLowerCase()!==me)&&!isBlocked(p.pid))
     .map(p=>({...p,near:!!(myCoords&&p.lat!=null&&kmBetween(myCoords[0],myCoords[1],p.lat,p.lon)<5)}))
     .sort((a,b)=>(b.near?1:0)-(a.near?1:0));
 }
@@ -2837,7 +2840,7 @@ async function nearTick(){
     const code=(S.share&&S.share.on&&S.share.code)||null;
     nearBusy=true;
     let r=null;
-    try{r=await relayBattle({op:'near',code,dev:devId(),lat:+fix[0],lon:+fix[1],
+    try{r=await relayBattle({op:'near',code,dev:devId(),pid:myPid(),lat:+fix[0],lon:+fix[1],
       age:Date.now()-S.round.startedAt,scored:nearScored(),n:nearRoomN(),move:nearMoveN(),
       names:S.players.filter(isRealPl).map(p=>String(p.name||'').trim()).filter(Boolean).slice(0,4),
       course:(S.course&&S.course.name)||''});}catch(e){}
@@ -2864,7 +2867,8 @@ function nearKey(c,mine){return c.code+'|'+nearNames(c.names)+(mine!=null?'|'+mi
 function nearOffer(r){
   const mine=(S.share&&S.share.on&&S.share.code)||'';
   const myN=nearRoomN(),move=nearMoveN(),h=(r&&r.host)||{};
-  const ok=(Array.isArray(r&&r.list)?r.list:[]).filter(c=>c&&c.code&&c.code!==mine&&!(+c.age>NEAR_WIN_MS)&&!(+c.scored>NEAR_MAX_HOLES));
+  const nb=nearBlockedGet();
+  const ok=(Array.isArray(r&&r.list)?r.list:[]).filter(c=>c&&c.code&&c.code!==mine&&!nb[c.code]&&!(+c.age>NEAR_WIN_MS)&&!(+c.scored>NEAR_MAX_HOLES));
   const myNames=nearNames((S.players||[]).filter(isRealPl).map(p=>p.name));
   const rowOf=(c,role)=>({code:c.code,key:nearKey(c,role==='join'?myNames:null),names:(Array.isArray(c.names)?c.names:[]).slice(0,4).map(String),course:String(c.course||''),n:+c.n||1,role});
   // what this pass offers: 'host' -- I am the round they gather on; 'join' -- the host on top, the rest joining too
@@ -2918,7 +2922,7 @@ function nearAskSheetHTML(){
     const who=r.names.length?r.names.map(esc).join(' · '):'A golfer';
     const right=r.role!=='join'?`<span class="tiny" style="flex:none;color:var(--green-mid);font-weight:600">${r.role==='too'?'Joining too':'Can join you'}</span>`
       :`<button class="big warn" style="flex:none;width:auto;margin:0;padding:10px 16px" onclick="nearJoin('${esc(r.code)}')">${nearPop.busy===r.code?'Joining…':armJoinSwap===r.code?'⚠️ Tap again':'Join'}</button>`;
-    return `<div class="row"><div style="flex:1;min-width:0"><b>${who}</b><div class="tiny">${esc(r.course)}</div></div>${right}</div>`;
+    return `<div class="row"><div style="flex:1;min-width:0"><b>${who}</b><div class="tiny">${esc(r.course)}</div></div>${pMoreBtn('',r.names.join(' · ')||'A golfer',false,'nearby',r.code,true)}${right}</div>`;
   }).join('');
   return `<div class="vfWrap" id="nearAsk" role="dialog" aria-modal="true" aria-labelledby="naTitle"><div class="vfCard">
     <h2 id="naTitle" class="vfTitle">⚔️ Players nearby</h2>
@@ -3584,6 +3588,7 @@ function cancelEditPlayer(){editingPlayer=null;render();}
 function saveEditPlayer(){
   const n=document.getElementById('epName'),x=document.getElementById('epIdx');
   const name=(n&&n.value||'').trim();
+  if(nameGuard(name)){if(n)n.style.borderColor='var(--red)';return;}
   const id=editingPlayer;
   editingPlayer=null;
   if(!name||!id){render();return;}
@@ -3599,6 +3604,7 @@ function addManualPlayer(){
   const n=document.getElementById('npName'),x=document.getElementById('npIdx');
   const name=(n&&n.value||'').trim();
   if(!name)return;
+  if(nameGuard(name)){if(n)n.style.borderColor='var(--red)';return;}
   addingPlayer=false;
   set(()=>{upsertLib({name,index:parseIdx(x&&x.value,10),tee:S.players[0]?S.players[0].tee:undefined,libId:null});});
 }
@@ -5327,6 +5333,7 @@ function toggleShots(){
 }
 function loadLeaflet(){
   if(window.L&&L.Map.prototype.setBearing){fixTouchGestures();return Promise.resolve();}
+  if(window.L&&!leafletP){installMapRotation(window.L);fixTouchGestures();return Promise.resolve();}   // Leaflet already on the page
   if(leafletP)return leafletP;
   const script=src=>new Promise((res,rej)=>{
     const sc=document.createElement('script');sc.src=src;
@@ -5340,9 +5347,11 @@ function loadLeaflet(){
   // sit in the SW's CORE list. unpkg stays as a fallback for the one case the
   // local copy can fail: an old install whose cached shell predates the vendor
   // folder.
+  // ROTATION IS OURS NOW (11/4/2026, store review D5): leaflet-rotate 0.2.8 is GPL-3.0, so it and its unpkg fallback
+  // are gone. installMapRotation() below gives the maps the same API (rotate:true, setBearing/getBearing, the 'rotate'
+  // event, touchRotate) on top of Leaflet's own BSD code.
   const CDN={css:'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
-             js:'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
-             rot:'https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate.js'};
+             js:'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'};
   leafletP=(async()=>{
     if(!window.L){
       const c=document.createElement('link');c.rel='stylesheet';
@@ -5351,36 +5360,18 @@ function loadLeaflet(){
       document.head.appendChild(c);
       try{await script('vendor/leaflet.js');}catch(e){await script(CDN.js);}
     }
-    // rotation plugin — green-up orientation and the two-finger twist on an
-    // unmapped hole. Raster satellite cannot rotate on its own.
-    if(!L.Map.prototype.setBearing){
-      try{await script('vendor/leaflet-rotate.js');}
-      catch(e){try{await script(CDN.rot);}catch(e2){}}
-    }
+    // green-up orientation and the two-finger twist. Raster satellite cannot rotate on its own.
+    installMapRotation(window.L);
     fixTouchGestures();
   })().catch(e=>{leafletP=null;throw e;});
   return leafletP;
 }
-// LEAFLET-ROTATE 0.2.8 LEAVES A TWO-FINGER TAP HALF-RESET (Chardonnay 10/25: "t.lat" on three phones, once
-// each). Two fingers down and up without moving: its touchend clears _zooming but not _rotating, and keeps
-// listening. The next pinch is then read as a twist with no zoom centre and moves the map to `undefined` --
-// an uncaught TypeError, and the view lands on latitude -90 until the map is rebuilt. A gesture that never
-// moved now ends cleanly, and a move to no place is ignored rather than wrecking the view.
+// A MOVE TO NO PLACE IS IGNORED (Chardonnay 10/25: "t.lat" on three phones). leaflet-rotate's two-finger tap left a
+// gesture half-open and the next pinch moved the map to `undefined`, landing the view on latitude -90. Our own
+// gesture code (installMapRotation) always closes a gesture, but the guard stays: a move with no centre is dropped
+// rather than wrecking the view.
 function fixTouchGestures(){
   try{
-    const TG=L.Map.TouchGestures&&L.Map.TouchGestures.prototype;
-    if(TG&&!TG._btFixed){
-      const end=TG._onTouchEnd;
-      TG._onTouchEnd=function(e){
-        const moved=this._moved&&(this._zooming||this._rotating);
-        end.call(this,e);
-        if(!moved){
-          this._zooming=false;this._rotating=false;
-          L.DomEvent.off(document,'touchmove',this._onTouchMove,this).off(document,'touchend touchcancel',this._onTouchEnd,this);
-        }
-      };
-      TG._btFixed=true;
-    }
     const MP=L.Map.prototype;
     if(!MP._btMoveSafe){
       const mv=MP._move;
@@ -5388,6 +5379,233 @@ function fixTouchGestures(){
       MP._btMoveSafe=true;
     }
   }catch(e){}
+}
+// ---------- MAP ROTATION (our own code, 11/4/2026) ----------
+// Replaces leaflet-rotate 0.2.8 (GPL-3.0 -- not allowed in a store app) with the same behaviour, written on Leaflet
+// 1.9.4's own (BSD-2) internals. A map made with {rotate:true} gets:
+//   setBearing(deg) / getBearing()  bearing in degrees [0,360), CLOCKWISE turn of the picture (so the compass heading
+//                                   at the top of the screen is -bearing); the point at the middle of the screen
+//                                   stays put; fires 'rotate' synchronously (autoBearing relies on that)
+//   touchRotate                     a handler: when enabled, two fingers twist the map as they pinch it
+// The model: a container (screen) point C = M + R + rot(bearing) * L, where L is Leaflet's ordinary layer point,
+// M the map pane's offset (drags and pans move it, in screen pixels -- so dragging needs no change at all) and R the
+// rotate pane's own offset. Tiles and vector paths sit in a pane that turns; markers, tooltips and popups sit in a
+// pane that does not, placed at their turned positions -- so labels and pins stay upright. Every Leaflet method that
+// converts between screen and layer points goes through the two conversions below, so clicks, taps, fitBounds,
+// setView, getBounds and latLngToContainerPoint all read the turned map correctly. Maps without rotate:true are
+// untouched apart from bounceAtZoomLimits:false, which leaflet-rotate set for every map.
+function installMapRotation(L){
+  if(!L||!L.Map||L.Map.prototype.setBearing)return;
+  const MP=L.Map.prototype,D2R=Math.PI/180,P=(x,y)=>new L.Point(x,y);
+  const rot=(p,a)=>{if(!a)return P(p.x,p.y);const c=Math.cos(a),s=Math.sin(a);return P(p.x*c-p.y*s,p.x*s+p.y*c);};
+  const on=m=>!!(m&&m._btRot);
+  const panePt=(m,lp)=>rot(lp,m._bearing).add(m._rotPos);                 // layer point -> spot in the map pane
+  const layerPt=(m,pp)=>rot(L.point(pp).subtract(m._rotPos),-m._bearing); // and back
+  const paint=m=>{const pn=m._panes&&m._panes.rotatePane;if(!pn)return;
+    pn.style[L.DomUtil.TRANSFORM]=`translate3d(${m._rotPos.x}px,${m._rotPos.y}px,0)`+(m._bearing?` rotate(${m._bearing}rad)`:'');};
+  L.Map.mergeOptions({rotate:false,bearing:0,touchRotate:false,shiftKeyRotate:true,bounceAtZoomLimits:false});
+  // panes: tiles + paths turn with the map, markers/tooltips/popups stay upright
+  const initPanes=MP._initPanes;
+  MP._initPanes=function(){
+    initPanes.call(this);
+    if(!this.options.rotate)return;
+    this._btRot=true;this._bearing=0;this._rotPos=P(0,0);
+    const rp=this.createPane('rotatePane',this._mapPane),np=this.createPane('norotatePane',this._mapPane);
+    ['tilePane','overlayPane'].forEach(n=>rp.appendChild(this._panes[n]));
+    ['shadowPane','markerPane','tooltipPane','popupPane'].forEach(n=>np.appendChild(this._panes[n]));
+    paint(this);
+  };
+  MP.setBearing=function(deg){
+    if(!on(this)||!L.Browser.any3d||!isFinite(deg))return this;
+    const th=L.Util.wrapNum(+deg,[0,360])*D2R,c=this.getSize()._divideBy(2),M=this._getMapPanePos();
+    const lc=rot(c.subtract(M).subtract(this._rotPos),-this._bearing);   // the layer point in the middle of the screen
+    this._bearing=th;this._rotPos=c.subtract(M).subtract(rot(lc,th));   // ...stays in the middle
+    paint(this);this.fire('rotate');
+    return this;
+  };
+  MP.getBearing=function(){return on(this)?this._bearing/D2R:0;};
+  const c2l=MP.containerPointToLayerPoint,l2c=MP.layerPointToContainerPoint;
+  MP.containerPointToLayerPoint=function(p){return on(this)?layerPt(this,L.point(p).subtract(this._getMapPanePos())):c2l.call(this,p);};
+  MP.layerPointToContainerPoint=function(p){return on(this)?panePt(this,L.point(p)).add(this._getMapPanePos()):l2c.call(this,p);};
+  const npo=MP._getNewPixelOrigin;   // the origin that puts `center` in the middle of the screen at this bearing
+  MP._getNewPixelOrigin=function(center,zoom){
+    if(!on(this))return npo.call(this,center,zoom);
+    const half=this.getSize()._divideBy(2);
+    return this.project(center,zoom)._subtract(layerPt(this,half.subtract(this._getMapPanePos())))._round();
+  };
+  const gco=MP._getCenterOffset;     // pans happen in screen pixels
+  MP._getCenterOffset=function(ll){const o=gco.call(this,ll);return on(this)?rot(o,this._bearing):o;};
+  const gb=MP.getBounds;             // everything on the turned screen
+  MP.getBounds=function(){
+    if(!on(this))return gb.call(this);
+    const s=this.getSize();
+    return L.latLngBounds([[0,0],[s.x,0],[s.x,s.y],[0,s.y]].map(q=>this.containerPointToLatLng(q)));
+  };
+  const gbz=MP.getBoundsZoom;        // fit the TURNED box of the bounds (as leaflet-rotate: from about 3 degrees)
+  MP.getBoundsZoom=function(bounds,inside,padding){
+    if(!on(this)||Math.abs(this._bearing)<0.05)return gbz.call(this,bounds,inside,padding);
+    bounds=L.latLngBounds(bounds);padding=L.point(padding||[0,0]);
+    const z0=this.getZoom()||0,size=this.getSize().subtract(padding);
+    const bx=L.bounds([bounds.getNorthWest(),bounds.getNorthEast(),bounds.getSouthEast(),bounds.getSouthWest()].map(ll=>rot(this.project(ll,z0),this._bearing))).getSize();
+    const sx=size.x/bx.x,sy=size.y/bx.y,snap=this.options.zoomSnap;
+    let z=this.getScaleZoom(inside?Math.max(sx,sy):Math.min(sx,sy),z0);
+    if(snap){z=Math.round(z/(snap/100))*(snap/100);z=inside?Math.ceil(z/snap)*snap:Math.floor(z/snap)*snap;}
+    return Math.max(this.getMinZoom(),Math.min(this.getMaxZoom(),z));
+  };
+  // tiles: load what covers the turned screen, and on a desktop (updateWhenIdle off) refresh as it turns
+  const corners=m=>{const s=m.getSize();return L.bounds([[0,0],[s.x,0],[0,s.y],[s.x,s.y]].map(q=>m.containerPointToLayerPoint(q).floor()));};
+  const GL=L.GridLayer.prototype,tpb=GL._getTiledPixelBounds,gle=GL.getEvents;
+  GL._getTiledPixelBounds=function(center){
+    const m=this._map;if(!on(m))return tpb.call(this,center);
+    const mz=m._animatingZoom?Math.max(m._animateToZoom,m.getZoom()):m.getZoom();
+    const pc=m.project(center,this._tileZoom).floor(),half=corners(m).getSize().divideBy(2*m.getZoomScale(mz,this._tileZoom));
+    return new L.Bounds(pc.subtract(half),pc.add(half));
+  };
+  GL.getEvents=function(){
+    const ev=gle.call(this);
+    if(on(this._map)&&!this.options.updateWhenIdle){
+      if(!this._btOnRot)this._btOnRot=L.Util.throttle(this._onMoveEnd,this.options.updateInterval,this);
+      ev.rotate=this._btOnRot;
+    }
+    return ev;
+  };
+  // vector paths (the hole line, rings, shot lines): draw across the turned screen
+  const RP=L.Renderer.prototype,rup=RP._update,rut=RP._updateTransform,rge=RP.getEvents;
+  RP._update=function(){
+    const m=this._map;if(!on(m))return rup.call(this);
+    const p=this.options.padding,s=m.getSize(),a=s.multiplyBy(-p),b=s.multiplyBy(1+p);
+    this._bounds=L.bounds([[a.x,a.y],[a.x,b.y],[b.x,a.y],[b.x,b.y]].map(q=>m.containerPointToLayerPoint(q).floor()));
+    this._topLeft=m.layerPointToLatLng(this._bounds.min);
+    this._center=m.getCenter();this._zoom=m.getZoom();
+  };
+  RP._updateTransform=function(center,zoom){
+    const m=this._map;if(!on(m)||!this._topLeft)return rut.call(this,center,zoom);
+    L.DomUtil.setTransform(this._container,m._latLngToNewLayerPoint(this._topLeft,zoom,center),m.getZoomScale(zoom,this._zoom));
+  };
+  RP.getEvents=function(){const ev=rge.call(this);if(on(this._map))ev.rotate=this._update;return ev;};
+  // markers stay upright at their turned spot (and drag in screen space)
+  const MK=L.Marker.prototype,msp=MK._setPos,mge=MK.getEvents,mii=MK._initInteraction;
+  MK._setPos=function(pos){return msp.call(this,on(this._map)?panePt(this._map,pos):pos);};
+  MK.getEvents=function(){const ev=mge.call(this);if(on(this._map))ev.rotate=this.update;return ev;};
+  MK._initInteraction=function(){
+    const r=mii.apply(this,arguments),d=this.dragging,pr=d&&Object.getPrototypeOf(d);
+    if(pr&&pr._onDrag&&!pr._btRot){
+      pr._btRot=true;
+      const od=pr._onDrag,oe=pr._onDragEnd;
+      pr._onDrag=function(e){
+        const mk=this._marker,m=mk&&mk._map;if(!on(m))return od.call(this,e);
+        const ip=L.DomUtil.getPosition(mk._icon);
+        if(mk._shadow)L.DomUtil.setPosition(mk._shadow,ip);
+        const ll=m.layerPointToLatLng(layerPt(m,ip));
+        mk._latlng=ll;e.latlng=ll;e.oldLatLng=this._oldLatLng;
+        mk.fire('move',e).fire('drag',e);
+      };
+      pr._onDragEnd=function(e){const mk=this._marker;if(mk&&on(mk._map))mk.update();return oe.call(this,e);};
+      if(d.enabled()){d.disable();d.enable();}   // this marker's drag listeners were bound before the patch
+    }
+    return r;
+  };
+  // tooltips + popups: upright, placed at the turned spot
+  const TT=L.Tooltip.prototype,tup=TT._updatePosition,taz=TT._animateZoom;
+  TT._updatePosition=function(){const m=this._map;if(!on(m))return tup.call(this);this._setPosition(panePt(m,m.latLngToLayerPoint(this._latlng)));};
+  TT._animateZoom=function(e){const m=this._map;if(!on(m))return taz.call(this,e);this._setPosition(panePt(m,m._latLngToNewLayerPoint(this._latlng,e.zoom,e.center)));};
+  const DO=L.DivOverlay.prototype,dup=DO._updatePosition,dge=DO.getEvents;
+  DO.getEvents=function(){const ev=dge.call(this);if(on(this._map))ev.rotate=this._updatePosition;return ev;};
+  const turnBox=o=>{const m=o._map;if(!m||!on(m)||!o._zoomAnimated)return;const a=o._getAnchor();
+    L.DomUtil.setPosition(o._container,panePt(m,L.DomUtil.getPosition(o._container).subtract(a)).add(a));};
+  DO._updatePosition=function(){dup.call(this);turnBox(this);};
+  const PU=L.Popup.prototype,paz=PU._animateZoom;
+  PU._animateZoom=function(e){paz.call(this,e);turnBox(this);};
+  // TWO FINGERS: pinch zooms around the fingers and, with touchRotate on, a twist turns the map with them. Every
+  // gesture ends cleanly -- even two fingers down and up without moving (the 10/25 leaflet-rotate bug).
+  const Twist=L.Handler.extend({
+    addHooks(){L.DomEvent.on(this._map._container,'touchstart',this._start,this);},
+    removeHooks(){L.DomEvent.off(this._map._container,'touchstart',this._start,this);this._finish(false);},
+    _listen(on){L.DomEvent[on?'on':'off'](document,'touchmove',this._move,this)[on?'on':'off'](document,'touchend touchcancel',this._end,this);},
+    _start(e){
+      const m=this._map;
+      if(!e.touches||e.touches.length!==2||m._animatingZoom||this._live)return;
+      const zoomOn=!!(m.touchZoom&&m.touchZoom.enabled()),rotOn=!!(m.touchRotate&&m.touchRotate.enabled());
+      if(!zoomOn&&!rotOn)return;
+      const p1=m.mouseEventToContainerPoint(e.touches[0]),p2=m.mouseEventToContainerPoint(e.touches[1]);
+      this._zoomOn=zoomOn;this._rotOn=rotOn;this._live=true;this._moved=false;this._bearing=null;
+      this._centerPoint=m.getSize()._divideBy(2);
+      this._startLatLng=m.containerPointToLatLng(this._centerPoint);
+      this._pinchStartLatLng=m.containerPointToLatLng(p1.add(p2)._divideBy(2));
+      this._startDist=p1.distanceTo(p2)||1;this._startZoom=m.getZoom();
+      this._startAngle=Math.atan2(p2.y-p1.y,p2.x-p1.x);this._startBearing=m.getBearing();
+      m._stop();
+      this._listen(true);
+      L.DomEvent.preventDefault(e);
+    },
+    _move(e){
+      if(!e.touches||e.touches.length!==2||!this._live)return;
+      const m=this._map,p1=m.mouseEventToContainerPoint(e.touches[0]),p2=m.mouseEventToContainerPoint(e.touches[1]);
+      const bearing=this._rotOn?this._startBearing+(Math.atan2(p2.y-p1.y,p2.x-p1.x)-this._startAngle)/D2R:null;
+      const turned=bearing!=null&&Math.abs(bearing-this._startBearing)>1e-9;
+      if(this._zoomOn){
+        const scale=p1.distanceTo(p2)/this._startDist;
+        let zoom=m.getScaleZoom(scale,this._startZoom);
+        if(!m.options.bounceAtZoomLimits&&((zoom<m.getMinZoom()&&scale<1)||(zoom>m.getMaxZoom()&&scale>1)))zoom=m._limitZoom(zoom);
+        let center;
+        if(m.options.touchZoom==='center'){center=this._startLatLng;if(scale===1&&!turned)return;}
+        else{
+          // the spot first pinched stays under the fingers, at the new zoom AND the new bearing
+          const delta=p1.add(p2)._divideBy(2)._subtract(this._centerPoint);
+          if(scale===1&&delta.x===0&&delta.y===0&&!turned)return;
+          const th=(bearing!=null?L.Util.wrapNum(bearing,[0,360]):m.getBearing())*D2R;
+          center=m.unproject(m.project(this._pinchStartLatLng,zoom).subtract(rot(delta,-th)),zoom);
+        }
+        this._center=center;this._zoom=zoom;
+        if(!this._moved){m._moveStart(true,false);this._moved=true;}
+      }else if(!turned)return;
+      this._bearing=bearing;
+      L.Util.cancelAnimFrame(this._raf);
+      this._raf=L.Util.requestAnimFrame(()=>{
+        if(this._bearing!=null)m.setBearing(this._bearing);
+        if(this._zoomOn&&this._center)m._move(this._center,this._zoom,{pinch:true,round:false});
+      },this,true);
+      L.DomEvent.preventDefault(e);
+    },
+    _end(){this._finish(true);},
+    _finish(settle){
+      if(!this._live)return;
+      const m=this._map;
+      this._live=false;this._listen(false);L.Util.cancelAnimFrame(this._raf);
+      if(!settle)return;
+      if(this._bearing!=null)m.setBearing(this._bearing);
+      if(!this._moved||!this._zoomOn||!this._center)return;
+      if(m.options.zoomAnimation)m._animateZoom(this._center,m._limitZoom(this._zoom),true,m.options.zoomSnap);
+      else m._resetView(this._center,m._limitZoom(this._zoom));
+    }
+  });
+  const twist=m=>m.btTwist||m.addHandler('btTwist',Twist).btTwist;
+  const twistSync=m=>{const t=m.btTwist;if(!t)return;
+    if((m.touchZoom&&m.touchZoom.enabled())||(m.touchRotate&&m.touchRotate.enabled()))t.enable();else t.disable();};
+  // on a turning map the pinch belongs to the two-finger handler (Leaflet's own would anchor it unturned)
+  const TZ=L.Map.TouchZoom.prototype,tzA=TZ.addHooks,tzR=TZ.removeHooks;
+  TZ.addHooks=function(){if(!on(this._map))return tzA.call(this);L.DomUtil.addClass(this._map._container,'leaflet-touch-zoom');twist(this._map).enable();};
+  TZ.removeHooks=function(){if(!on(this._map))return tzR.call(this);L.DomUtil.removeClass(this._map._container,'leaflet-touch-zoom');twistSync(this._map);};
+  L.Map.TouchRotate=L.Handler.extend({
+    addHooks(){if(on(this._map))twist(this._map).enable();},
+    removeHooks(){if(on(this._map))twistSync(this._map);}
+  });
+  L.Map.addInitHook('addHandler','touchRotate',L.Map.TouchRotate);
+  // desktop: shift + scroll wheel turns the map 5 degrees a notch (as leaflet-rotate did)
+  L.Map.ShiftKeyRotate=L.Handler.extend({
+    addHooks(){L.DomEvent.on(this._map._container,'wheel',this._wheel,this);},
+    removeHooks(){L.DomEvent.off(this._map._container,'wheel',this._wheel,this);},
+    _wheel(e){const m=this._map;if(!on(m)||!m.scrollWheelZoom)return;
+      if(e.shiftKey){L.DomEvent.preventDefault(e);if(m.scrollWheelZoom.enabled()){m.scrollWheelZoom.disable();this._off=true;}m.setBearing(m.getBearing()+5*Math.sign(e.deltaY));}
+      else if(this._off){this._off=false;m.scrollWheelZoom.enable();}}
+  });
+  L.Map.addInitHook('addHandler','shiftKeyRotate',L.Map.ShiftKeyRotate);
+  L.Map.addInitHook(function(){
+    if(!on(this))return;
+    // the wheel zoom listens AFTER the shift turn, so a shift-scroll turns and does not also zoom
+    if(this.scrollWheelZoom&&this.scrollWheelZoom.enabled()&&this.shiftKeyRotate&&this.shiftKeyRotate.enabled()){this.scrollWheelZoom.disable();this.scrollWheelZoom.enable();}
+    if(this.options.bearing)this.setBearing(this.options.bearing);
+  });
 }
 // Frame the satellite view at a KNOWN scale. `spanYds` is the ground covered
 // ACROSS the screen's narrower dimension — so 300 means the view is 300 yards
@@ -7846,7 +8064,7 @@ async function initHoleMap(){
   camBegin();   // everything this builder frames is OURS, not the user's
   const sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
     {maxZoom:20,maxNativeZoom:19}).addTo(LMAP);   // credits live on the ⓘ chip
-  // ROTATED CORNERS. leaflet-rotate widens the tile bounds for the current
+  // ROTATED CORNERS. The rotation code (installMapRotation) widens the tile bounds for the current
   // bearing correctly (814x840 px for a 375x684 viewport at 42°), but nothing
   // re-runs the tile pass when the bearing CHANGES — so a twisted map kept the
   // 8 tiles it fetched while north-up and showed black wedges in the corners,
@@ -8181,7 +8399,7 @@ async function initHoleMap(){
   // from the view's center Leaflet blanks a marker's path, so the old read came
   // back "unknown" exactly when the dot was far off the glass, and nothing
   // re-framed until ◀▶ rebuilt the map. Nate, Rancho h3 + h6 9/27: two bounces with
-  // fresh 4-8 m fixes and frac null. leaflet-rotate's latLngToContainerPoint
+  // fresh 4-8 m fixes and frac null. latLngToContainerPoint (installMapRotation)
   // carries the bearing (measured equal to the drawn marker wherever both exist).
   mapMarks.meFrac=()=>{try{
     if(!lMe||!LMAP)return null;
@@ -8406,7 +8624,7 @@ function windLevel(mph){return mph<8?1:mph<15?2:3;}   // arrows: 1 for 0–7, 2 
 function windArrowsSVG(w,mapB,active){
   const mph=w?w.mph:0,lvl=windLevel(mph);
   let ang=0;
-  // leaflet-rotate's bearing is the NEGATIVE of the compass heading at the top
+  // The map's bearing (installMapRotation, as leaflet-rotate before it) is the NEGATIVE of the compass heading at the top
   // of the screen (greenUpCamera returns -heading). The wind blows TOWARD
   // dir+180; on screen that is (dir+180) - headingAtTop = (dir+180) + mapB.
   // It was written with a minus, which REFLECTED the arrows on every rotated
@@ -10880,6 +11098,31 @@ function contactMail(){
   try{stat('contact_tap',{});}catch(e){}
   location.href='mailto:'+CONTACT_EMAIL+'?subject='+encodeURIComponent('Battle Tees feedback');
 }
+// PRIVACY + TERMS INSIDE THE APP (store review 11/4: Apple 5.1.1(i) and Play both want the policy one tap away in the
+// app). The pages live on the site and open in a sheet OVER the app: in the iPhone shell a plain link to battletees.app
+// loads in place with no way back (it is our own host, so the shell keeps it), and a sheet never takes anyone out of a
+// round. TERMS_LIVE stays false until the marketing session says battletees.app/terms/ is up (the draft is with the lawyer).
+const PRIVACY_URL='https://battletees.app/privacy/',TERMS_URL='https://battletees.app/terms/',TERMS_LIVE=false;
+const DOC_PAGES={privacy:['Privacy policy',PRIVACY_URL],terms:['Terms of Service',TERMS_URL]};
+function openDoc(which){
+  const d0=DOC_PAGES[which];if(!d0||(which==='terms'&&!TERMS_LIVE))return;
+  const [title,url]=d0;
+  try{stat('doc_open',{doc:which});}catch(e){}
+  closeDoc();
+  const off=(typeof navigator!=='undefined'&&navigator.onLine===false);
+  const d=document.createElement('div');
+  d.className='vfWrap';d.id='docsheet';d.setAttribute('role','dialog');d.setAttribute('aria-modal','true');d.setAttribute('aria-label',title);
+  d.style.padding='10px';
+  d.onclick=ev=>{if(ev.target===d)closeDoc();};
+  d.innerHTML=`<div class="vfCard" style="display:flex;flex-direction:column;height:min(92vh,900px);padding:10px 10px 12px">
+    <div style="display:flex;align-items:center;gap:8px"><h2 class="vfTitle" style="margin:0 0 0 4px;flex:1">${esc(title)}</h2>
+      <button class="ghost xbtn" onclick="closeDoc()" aria-label="Close">${XICON}</button></div>
+    ${off?`<div class="tiny" style="padding:14px 4px">You're offline. It opens when you have signal.</div>`
+      :`<iframe src="${url}" title="${esc(title)}" style="flex:1;width:100%;min-height:0;border:0;border-radius:10px;background:#fff;margin-top:8px"></iframe>`}
+  </div>`;
+  document.body.appendChild(d);
+}
+function closeDoc(){try{document.querySelectorAll('#docsheet').forEach(x=>x.remove());}catch(e){}}
 function vSettings(){
   const bf=S.config.bf||{broadcast:true,emails:true};
   const row=(label,sub,key)=>`<div class="row"><div style="flex:1;min-width:0"><b>${label}</b>
@@ -10908,6 +11151,7 @@ function vSettings(){
     ${row('Reaction pop-ups','Show reactions and comments on your rounds on screen.','popups')}
     ${row('Reaction emails','Email me about them after a round. One a day at most.','reactMail')}
   </div>
+  ${blockedCardHTML()}
   ${trackCardHTML()}
   <div class="card">
     <div class="row" style="border-top:none;padding:0;align-items:center"><h2 style="margin:0">📏 Distances</h2>
@@ -10954,6 +11198,11 @@ function vSettings(){
   </div>
   <div class="card"><h2>🗑️ Delete account</h2>
     ${daHTML()}
+  </div>
+  <div class="card"><h2>🔒 Privacy</h2>
+    <div class="tiny">What we collect and why.</div>
+    <button class="ghost mt" style="width:100%" onclick="openDoc('privacy')">Privacy policy</button>
+    ${TERMS_LIVE?`<button class="ghost mt" style="width:100%" onclick="openDoc('terms')">Terms of Service</button>`:''}
   </div>
   <div class="card"><h2>📜 Data credits</h2>
     <div class="tiny">Scorecards and course listings: <b>© OpenStreetMap contributors (ODbL 1.0) via OpenGolfAPI</b>, plus licensed scorecard data from GolfCourseAPI.</div>
@@ -11066,6 +11315,7 @@ function registerProfile(force){
       // ONE GOLFER, ONE ID (9/5): the relay retired this pid and handed back the
       // real one — switch to it everywhere this phone keeps it, then re-announce.
       try{ if(r&&r.ok&&r.adopt&&r.pid&&r.retired===pid&&r.pid!==pid) adoptPid(pid,r.pid); }catch(e){}
+      try{ if(r&&r.ok&&r.mail) mailPrefsApply(r.mail); }catch(e){}   // an Unsubscribe link turns its switch Off here
     }).catch(()=>{pidSent='';});
   }catch(e){}
 }
@@ -11479,12 +11729,137 @@ function bfCmBlock(pid){const c=bfCm;if(!c)return;pid=decodeURIComponent(pid);
   relayBattle({op:'block',pid:myPid(),blocked:pid,name}).then(r=>{
     if(!r||!r.ok){c.note=(r&&r.error)||'Could not block.';bfCmPaint();return;}
     if(!c.blocked.some(b=>b.pid===pid))c.blocked.push({pid,name});
+    {const bl=blocksGet();bl[pid]=name||'';blocksPut(bl);}   // the same block as a player's (Settings > Blocked players)
     bfCmDrop(y=>y.pid===pid,`You blocked ${name||'them'}. You won't see each other's comments.`);
   }).catch(()=>{c.note='Could not block. Check your signal.';bfCmPaint();});}
 function bfCmUnblock(pid){const c=bfCm;if(!c)return;pid=decodeURIComponent(pid);
   relayBattle({op:'unblock',pid:myPid(),blocked:pid}).then(r=>{
-    if(!r||!r.ok)return;const code=c.code,t=c.t;openBfComments(bfArg(code),bfArg(t));bfSocLoad();
+    if(!r||!r.ok)return;{const bl=blocksGet();delete bl[pid];blocksPut(bl);}const code=c.code,t=c.t;openBfComments(bfArg(code),bfArg(t));bfSocLoad();
   }).catch(()=>{});}
+// ---------- REPORT + BLOCK A PLAYER: names and photos (store review 11/4/2026: Apple 1.2, Play UGC) ----------
+// The comment safeguards now cover the other things players put in front of each other: their NAMES and PROFILE
+// PHOTOS. A "⋯" beside another player's name (a Battlefield card, a golfer in your round, a saved player, Players
+// nearby) opens one small sheet: Report name, Report photo (when they have one), Block / Unblock, and the Contact us
+// address. A report goes to the relay (`preport`, kept for Nathan's review; he is texted). A reported photo turns
+// back into initials on this phone at once. A block is the SAME block the comments use (bf_block): neither of you
+// sees the other's comments, reactions, Battlefield rounds or nearby-round offers, and their photo is gone from this
+// phone. Settings lists who you blocked, with Unblock. Names also go through the comment word filter when set.
+function blocksGet(){try{return JSON.parse(localStorage.getItem('btBlocks')||'{}')||{};}catch(e){return {};}}
+function blocksPut(o){try{localStorage.setItem('btBlocks',JSON.stringify(o||{}));}catch(e){}}
+function isBlocked(pid){return !!(pid&&Object.prototype.hasOwnProperty.call(blocksGet(),pid));}
+function phHideGet(){try{return JSON.parse(localStorage.getItem('btPhHide')||'{}')||{};}catch(e){return {};}}
+function photoHidden(pid){return !!(pid&&pid!==myPid()&&(isBlocked(pid)||phHideGet()[pid]));}
+// a name is held to the same word filter as a comment, wherever it is typed
+function nameBad(nm){return !!(nm&&!bfCmClean(String(nm).replace(/\bdick\b/gi,' ')));}   // "Dick" alone is a real first name (Richard)
+const NAME_BAD_MSG="Keep it clean. That name isn't allowed.";
+function nameGuard(nm,errEl){if(!nameBad(nm))return false;if(errEl){errEl.textContent=NAME_BAD_MSG;}else{try{shotToast(NAME_BAD_MSG);}catch(e){}}return true;}
+// a Battlefield round with someone you blocked stays off your list (unless you played in it) -- the relay does the
+// same for rounds it sends; this covers the copies already kept on the phone
+function bfHiddenByBlock(e){
+  try{const b=blocksGet(),me=myPid();if(!e||!Object.keys(b).length)return false;
+    const ppl=[e.starterPid,...(e.players||[]),...((e.sum||[]).map(x=>x&&x.pid))].filter(Boolean);
+    if(me&&(ppl.includes(me)||(e.holders||[]).includes(me)))return false;
+    return ppl.some(p=>Object.prototype.hasOwnProperty.call(b,p));}catch(x){return false;}
+}
+let pMenu=null;   // {pid,name,photo,code,ctx,near,note,busy}
+const pMoreBtn=(pid,name,photo,ctx,code,near)=>`<button class="pmore" aria-label="Player options: report or block" onclick="if(window.event)window.event.stopPropagation();openPlayerMenu('${bfArg(pid||'')}','${bfArg(name||'')}',${photo?1:0},'${ctx}','${bfArg(code||'')}',${near?1:0})">⋯</button>`;
+function pMenuPhoto(pid){
+  if(!pid)return null;
+  const hit=[...(S.players||[]),...(S.playerLib||[])].find(p=>p&&p.pid===pid&&p.photo&&/^data:image\//.test(p.photo));
+  return hit?hit.photo:null;
+}
+function openPlayerMenu(pid,name,photo,ctx,code,near){
+  pMenu={pid:decodeURIComponent(pid||''),name:decodeURIComponent(name||''),photo:!!photo,ctx:ctx||'',code:decodeURIComponent(code||''),near:!!near,note:'',busy:false};
+  pMenuPaint();
+}
+function closePlayerMenu(){pMenu=null;try{document.querySelectorAll('#pmenu').forEach(x=>x.remove());}catch(e){}}
+function pMenuPaint(){
+  const m=pMenu;if(!m)return;
+  let d=document.getElementById('pmenu');
+  if(!d){d=document.createElement('div');d.className='vfWrap';d.id='pmenu';d.setAttribute('role','dialog');d.setAttribute('aria-modal','true');d.setAttribute('aria-labelledby','pmT');
+    d.onclick=ev=>{if(ev.target===d)closePlayerMenu();};document.body.appendChild(d);}
+  const blocked=m.pid&&isBlocked(m.pid),who=esc(m.name||'this player');
+  d.innerHTML=`<div class="vfCard"><h2 class="vfTitle" id="pmT">${who}</h2>
+    <div class="tiny mb">Is their name or photo offensive? Report it, or block them.</div>
+    <button class="ghost" style="width:100%" ${m.busy?'disabled':''} onclick="pmReport('name')">Report name</button>
+    ${m.photo?`<button class="ghost mt" style="width:100%" ${m.busy?'disabled':''} onclick="pmReport('photo')">Report photo</button>`:''}
+    ${(m.pid||m.near)?(blocked?`<button class="ghost mt" style="width:100%" ${m.busy?'disabled':''} onclick="pmUnblock()">Unblock ${who}</button>`
+      :`<button class="ghost danger mt" style="width:100%" ${m.busy?'disabled':''} onclick="pmBlock()">Block ${who}</button>`):''}
+    <div class="tiny mt" id="pmNote" style="min-height:18px;color:var(--green-mid)">${esc(m.note)}</div>
+    <div class="tiny">Questions? <button class="linkish" onclick="contactMail()">${CONTACT_EMAIL}</button></div>
+    <button class="ghost mt" style="width:100%" onclick="closePlayerMenu()">Close</button></div>`;
+}
+function pmSay(msg){if(!pMenu)return;pMenu.note=msg;pMenu.busy=false;pMenuPaint();}
+function pmReport(what){
+  const m=pMenu;if(!m||m.busy)return;
+  if(!myPid()){pmSay('Set up your profile first.');return;}
+  m.busy=true;pMenuPaint();
+  const photo=what==='photo'?pMenuPhoto(m.pid):null;
+  relayBattle(Object.assign({op:'preport',pid:myPid(),name:(S.me&&S.me.name)||'',who:m.pid,whoName:m.name,what,ctx:m.ctx},m.code?{code:m.code}:{},photo?{photo}:{})).then(r=>{
+    if(pMenu!==m)return;
+    if(!r||!r.ok){pmSay((r&&r.error)||'Could not report. Try again.');return;}
+    if(what==='photo'&&m.pid){const h=phHideGet();h[m.pid]=1;try{localStorage.setItem('btPhHide',JSON.stringify(h));}catch(e){}m.photo=false;render();}
+    pmSay(what==='photo'?"Reported. The photo is hidden for you, and we'll review it.":"Reported. We'll review it.");
+  }).catch(()=>{if(pMenu===m)pmSay('Could not report. Check your signal.');});
+}
+function pmBlock(){
+  const m=pMenu;if(!m||m.busy)return;
+  if(!myPid()){pmSay('Set up your profile first.');return;}
+  m.busy=true;pMenuPaint();
+  const done=()=>{if(pMenu!==m)return;pmSay("Blocked. You won't see each other's rounds, comments or photos.");render();};
+  if(!m.pid&&m.near){   // a nearby round: the relay blocks whoever is in it (their ids never come to this phone)
+    relayBattle({op:'nearblk',pid:myPid(),dev:devId(),to:m.code}).then(r=>{
+      if(pMenu!==m)return;
+      if(!r||!r.ok){pmSay((r&&r.gone)?'They have moved on.':(r&&r.error)||'Could not block. Try again.');return;}
+      nearBlockedAdd(m.code);if(nearPop){nearPop.rows=nearPop.rows.filter(x=>x.code!==m.code);if(!nearPop.rows.length)nearPop=null;}
+      blocksSync(true);done();
+    }).catch(()=>{if(pMenu===m)pmSay('Could not block. Check your signal.');});
+    return;
+  }
+  relayBattle({op:'block',pid:myPid(),blocked:m.pid,name:m.name}).then(r=>{
+    if(pMenu!==m)return;
+    if(!r||!r.ok){pmSay((r&&r.error)||'Could not block. Try again.');return;}
+    const b=blocksGet();b[m.pid]=m.name||'';blocksPut(b);done();
+  }).catch(()=>{if(pMenu===m)pmSay('Could not block. Check your signal.');});
+}
+function pmUnblock(){
+  const m=pMenu;if(!m||m.busy||!m.pid)return;
+  m.busy=true;pMenuPaint();
+  playerUnblock(m.pid).then(ok=>{if(pMenu===m)pmSay(ok?'Unblocked.':'Could not unblock. Check your signal.');});
+}
+function playerUnblock(pid){
+  return relayBattle({op:'unblock',pid:myPid(),blocked:pid}).then(r=>{
+    if(!r||!r.ok)return false;
+    const b=blocksGet();delete b[pid];blocksPut(b);render();return true;
+  }).catch(()=>false);
+}
+function unblockFromSettings(pid){playerUnblock(decodeURIComponent(pid));}
+// the relay holds the real list (comment blocks, nearby blocks, another phone): fetch it now and then
+let blocksSyncAt=0;
+function blocksSync(force){
+  if(!myPid()||previewSandboxed())return;
+  if(!force&&Date.now()-blocksSyncAt<60000)return;
+  blocksSyncAt=Date.now();
+  relayBattle({op:'blocks',pid:myPid(),email:(localStorage.getItem('wolfBackupEmail')||'').trim()||undefined}).then(r=>{
+    if(!r||!r.ok)return;
+    try{if(r.mail)mailPrefsApply(r.mail);}catch(e){}   // the email switches, as the relay will really send (11/4)
+    if(!Array.isArray(r.list))return;
+    const was=JSON.stringify(blocksGet()),b={};r.list.forEach(x=>{if(x&&x.pid)b[x.pid]=x.name||'';});
+    blocksPut(b);if(JSON.stringify(b)!==was&&S.screen==='settings')render();
+  }).catch(()=>{});
+}
+function blockedCardHTML(){
+  const b=blocksGet(),ids=Object.keys(b);
+  setTimeout(()=>blocksSync(false),0);
+  if(!ids.length)return '';
+  return `<div class="card"><h2>🚫 Blocked players</h2>
+    <div class="tiny">You don't see each other's rounds, comments or photos.</div>
+    ${ids.map(pid=>`<div class="row"><b style="flex:1;min-width:0">${esc(b[pid]||'A player')}</b><button class="ghost" onclick="unblockFromSettings('${bfArg(pid)}')">Unblock</button></div>`).join('')}
+  </div>`;
+}
+// a nearby round you blocked is never offered again on this phone (the relay keeps it away from both of you too)
+function nearBlockedGet(){try{return JSON.parse(localStorage.getItem('btNearBlk')||'{}')||{};}catch(e){return {};}}
+function nearBlockedAdd(code){const o=nearBlockedGet();o[code]=Date.now();try{localStorage.setItem('btNearBlk',JSON.stringify(o));}catch(e){}}
 // ---------- reaction + comment notices (Nathan 9/14) ----------
 // A reaction or comment aimed at you (your row, or a round you played) pops up
 // over whatever screen you're on and stays until you tap it. The relay keeps
@@ -11679,7 +12054,7 @@ function openBattlefield(){
   });
 }
 function vBattlefield(){
-  const L=bfList;
+  const L=Array.isArray(bfList)?bfList.filter(e=>!bfHiddenByBlock(e)):bfList;
   const dur=e=>{
     const end=e.endedAt?e.endedAt*1000:Date.now();
     const m=Math.max(1,Math.round((end-e.at*1000)/60000));
@@ -11714,6 +12089,7 @@ function vBattlefield(){
           <div style="text-align:right;flex:none">
             <div class="num" style="font-size:28px;line-height:1;color:${x.toPar<0?'var(--good)':x.toPar>0?'var(--amber-bd)':'var(--ink)'}">${tp(x.toPar)}</div>
             <div class="tiny">${x.gross} · thru ${x.thru}</div></div>
+          ${x.pid&&x.pid===myPid()?'':pMoreBtn(x.pid,x.name,false,'battlefield',e.code)}
         </div>${bfRxHTML(e.code,bfTarget(x),bfFitIcon(x,ppl))}`).join('')
         :`<div class="tiny" style="padding-top:6px;color:var(--ink3)">${e.live?'No holes carded yet.':'No scores were recorded.'}</div>`;
       // Every card leads with the course; the players are listed below it (Nathan 9/14 for
@@ -11949,6 +12325,7 @@ function roundStatsCardHTML(act,holes,course,shotMap,players,title){
       <div style="display:flex;align-items:center;gap:10px">${avatarHTML(p,36)}
         <div style="flex:1;min-width:0"><b style="font-family:Rajdhani,sans-serif;font-size:19px">${esc(p.name)}</b>${idxLbl(p)}
           <div class="tiny">${mix.join(' · ')||'—'}</div></div>
+        ${(p.pid&&p.pid===myPid())||(p.scorer&&p.scorer===devId())?'':pMoreBtn(p.pid||'',p.name,!!(p.photo&&!photoHidden(p.pid)),'round',(S.screen==='bfwatch'&&bfWatch&&bfWatch.code)||(S.share&&S.share.code)||'')}
         <div style="text-align:right"><b class="num" style="font-size:26px">${x.gross}</b> <span class="num" style="font-size:16px;color:${x.toPar<0?'var(--good)':x.toPar>0?'var(--amber)':'var(--ink3)'}">${tp}</span>
           <div class="tiny">${cardN(course)?(x.holes<cardN(course)?`thru ${x.holes}`:`${cardN(course)} holes`):x.holes<((course&&course.holes)||[]).length?`thru ${x.holes}`:'18 holes'}</div></div></div>
       ${cells.length?`<div class="rsg">${cells.join('')}</div>`:''}
@@ -12135,12 +12512,39 @@ async function bfMiniMap(shotMap,players,course){
 }
 function bfToggle(key){
   set(()=>{S.config.bf=S.config.bf||{broadcast:true,emails:true};S.config.bf[key]=S.config.bf[key]===false;});   // a missing key was On
-  if(key==='emails'){
-    const em=(localStorage.getItem('wolfBackupEmail')||'').trim();
-    if(em)relayBattle({op:'optout',email:em,out:!S.config.bf.emails}).catch(()=>{});
-  }
+  if(MAIL_SW[key]){mailPendSet(key,true);mailSwSend(key);}   // the relay's opt-out follows the switch, both ways
   if(key==='popups'){if(S.config.bf.popups===false){bfInbox=[];bfNotePaint();}else bfInboxPoll(true);}
-  if(key==='reactMail'&&myPid())relayBattle({op:'socmail',pid:myPid(),off:S.config.bf.reactMail===false}).catch(()=>{});
+}
+// THE EMAIL SWITCHES FOLLOW THE RELAY (Nathan 11/4/2026, 11 PM: "can you have the switch turn off automatically if they
+// unsubscribe?"). Each email's Unsubscribe link stops one kind and writes the same opt-out as one switch here:
+// round-start mail = "Email me when friends play" (op optout, by address), reaction/comment mail = "Reaction emails"
+// (op socmail, by player). The relay hands back what it will really send ({start, react}) on calls the app already
+// makes -- `profile` at every launch, `blocks` when Settings opens -- and the switches take it, so a switch never says
+// On while its mail is stopped. A change made HERE that the relay has not confirmed yet (no signal, app closed first)
+// is pending: it is sent again instead of being overwritten, so the newest choice wins either way.
+const MAIL_SW={emails:'start',reactMail:'react'};
+function mailPendGet(){try{return JSON.parse(localStorage.getItem('btMailPend')||'{}')||{};}catch(e){return {};}}
+function mailPendSet(k,v){const o=mailPendGet();if(v)o[k]=1;else delete o[k];try{localStorage.setItem('btMailPend',JSON.stringify(o));}catch(e){}}
+function mailSwSend(key){
+  const on=!(S.config.bf&&S.config.bf[key]===false);
+  let p=null;
+  if(key==='emails'){const em=(localStorage.getItem('wolfBackupEmail')||'').trim();if(!em){mailPendSet(key,false);return;}   // no address: nothing is mailed either way
+    p=relayBattle({op:'optout',email:em,out:!on});}
+  else if(key==='reactMail'){if(!myPid())return;p=relayBattle({op:'socmail',pid:myPid(),off:!on});}
+  if(p)p.then(r=>{if(r&&r.ok&&!r.testMuted)mailPendSet(key,false);}).catch(()=>{});
+}
+function mailPrefsApply(m){
+  if(!m||typeof m!=='object')return;
+  // a switch turned Off before this existed may never have reached the relay: send it once rather than lose it
+  try{if(!localStorage.getItem('btMailPendInit')){Object.keys(MAIL_SW).forEach(k=>{if(S.config.bf&&S.config.bf[k]===false)mailPendSet(k,true);});localStorage.setItem('btMailPendInit','1');}}catch(e){}
+  const pend=mailPendGet();let changed=false;
+  for(const [key,f] of Object.entries(MAIL_SW)){
+    const v=m[f];if(typeof v!=='boolean')continue;          // null: the relay has no address for this player
+    if(pend[key]){mailSwSend(key);continue;}
+    const cur=!(S.config.bf&&S.config.bf[key]===false);
+    if(cur!==v){S.config.bf=S.config.bf||{broadcast:true,emails:true};S.config.bf[key]=v;changed=true;}
+  }
+  if(changed){save();if(S.screen==='settings')render();}
 }
 function pickGame(g){set(()=>{S.config.game=g;S.config.games=[g];S.screen='gate';});}
 // After picking a game: join a nearby group or build your own.
@@ -12428,8 +12832,8 @@ function vStart(){
       +Array.from({length:Math.max(0,want-nFilled)},(_,k)=>`<div class="row" style="opacity:.55"><div>${seatTag(nFilled+k+1)}<span class="muted">Open</span></div></div>`).join('');
     const nearbyRows=(gatePick.list||[]).filter(n=>!inRoster(n.name)).map(n=>`
       <div class="row" style="cursor:pointer" onclick="gateAddOne('${esc(n.id)}')">
-        <div><b>${n.near?'📍':'🌐'} ${esc(n.name)}</b><div class="tiny">Index ${n.index!=null?n.index:'?'} · ${n.near?'nearby':'online'}</div></div>
-        <span class="pill wolf">+ add</span></div>`).join('');
+        <div style="flex:1;min-width:0"><b>${n.near?'📍':'🌐'} ${esc(n.name)}</b><div class="tiny">Index ${n.index!=null?n.index:'?'} · ${n.near?'nearby':'online'}</div></div>
+        ${n.pid?pMoreBtn(n.pid,n.name,false,'online'):''}<span class="pill wolf">+ add</span></div>`).join('');
     const libRows=(S.playerLib||[]).filter(e=>e.name&&!inRoster(e.name)&&low(e.name)!==meNm).map(e=>`
       <div class="row" style="cursor:pointer" onclick="addFromLib('${e.id}')">
         <div><b>${esc(e.name)}</b><div class="tiny">Index ${fmtIdx(e.index)}${e.teeName?` · ${esc(e.teeName)}`:''}</div></div>
@@ -12577,8 +12981,8 @@ function vGate(){
   }).join('');
   const nearbyRows=(gatePick.list||[]).filter(n=>!inRoster(n.name)).map(n=>`
     <div class="row" style="cursor:pointer" onclick="gateAddOne('${esc(n.id)}')">
-      <div><b>${n.near?'📍':'🌐'} ${esc(n.name)}</b><div class="tiny">Index ${n.index!=null?n.index:'?'} · ${n.near?'nearby':'online'}</div></div>
-      <span class="pill wolf">+ add</span>
+      <div style="flex:1;min-width:0"><b>${n.near?'📍':'🌐'} ${esc(n.name)}</b><div class="tiny">Index ${n.index!=null?n.index:'?'} · ${n.near?'nearby':'online'}</div></div>
+      ${n.pid?pMoreBtn(n.pid,n.name,false,'online'):''}<span class="pill wolf">+ add</span>
     </div>`).join('');
   const libRows=(S.playerLib||[]).filter(e=>e.name&&!inRoster(e.name)&&low(e.name)!==meNm).map(e=>`
     <div class="row" style="cursor:pointer" onclick="addFromLib('${e.id}')">
@@ -13778,6 +14182,7 @@ function grpEdAddNew(){
   const nEl=document.getElementById('grpNewName'),iEl=document.getElementById('grpNewIdx');
   const nm=((nEl&&nEl.value)||'').trim();
   if(!nm)return;
+  if(nameGuard(nm)){if(nEl)nEl.style.borderColor='var(--red)';return;}
   const idx=parseIdx(iEl&&iEl.value,10);
   const low=nm.toLowerCase();
   const t=grpEditTarget;if(!t)return;
@@ -13906,6 +14311,7 @@ function vPlayers(){
         ${action}
             <button class="ghost" onclick="startEditPlayer('${e.id}')">Edit</button>
             <button class="ghost danger xbtn" aria-label="Delete player" onclick="delPlayer('${e.id}')">${XICON}</button>
+            ${e.pid&&e.pid!==myPid()?pMoreBtn(e.pid,e.name,!!(e.photo&&!photoHidden(e.pid)),'saved'):''}
       </span>`}</div>`;})()).join('')
     :'<div class="tiny">Golfers you set up in a round are saved here automatically.</div>';})()}
     ${backupBlockHTML()}
@@ -14986,7 +15392,7 @@ function vSetup(){
       <div class="row"><b>Golfer ${i+1}${isMe?' <span class="pill gray">you</span>':''}${(!isMe&&p.scorer===devId()&&(S.share.on||S.players.some(x=>x.nearby)))?' <span class="pill gray">you score them</span>':''}${S.config.game==='wolf'?` — tees off ${['1st','2nd','3rd','4th'][i]}`:''}</b>
         <span>${i>0?`<button class="ghost" onclick="movePl(${i})">↑</button>`:''}</span></div>
       <div class="grid2 mt">
-        <div><div class="tiny">Name</div><div style="padding:6px 2px;font-weight:700;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:8px">${avatarHTML(p,30)}<span style="min-width:0;overflow:hidden;text-overflow:ellipsis">${esc(p.name)}</span></div></div>
+        <div><div class="tiny">Name</div><div style="padding:6px 2px;font-weight:700;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:8px">${avatarHTML(p,30)}<span style="min-width:0;overflow:hidden;text-overflow:ellipsis">${esc(p.name)}</span>${(!isMe&&ownedElsewhere(p)&&p.pid&&p.pid!==myPid())?pMoreBtn(p.pid,p.name,!!(p.photo&&!photoHidden(p.pid)),'round',(S.share&&S.share.code)||''):''}</div></div>
         <div><div class="tiny">Tees</div><select style="width:100%;padding:9px;border:2px solid var(--line);border-radius:8px;font-size:15px;background:var(--card)" onchange="setPl(${i},'tee',this.value)">${teeOpts}</select></div>
         <div><div class="tiny">Handicap index</div>${hcpSeatSet(i)
           ?`<div style="padding:9px 2px;font-weight:700;font-size:17px">${esc(fmtIdx(hcpSeatSet(i).ix))} <span class="tiny muted">🔒 set for this round</span></div>`
@@ -15308,7 +15714,7 @@ let PHOTOS_ON=true;
 function avatarHTML(p,size){
   if(!PHOTOS_ON)return '';
   const s2=size||34;
-  const ph=p&&p.photo;
+  const ph=p&&p.photo&&!photoHidden(p.pid)?p.photo:null;   // a blocked or reported player's photo is initials here (11/4)
   if(ph&&/^data:image\//.test(ph))
     return `<span style="flex:none;width:${s2}px;height:${s2}px;border-radius:50%;background-image:url(${ph});background-size:cover;background-position:center;display:inline-block;border:1.5px solid var(--gold,#e8c552);vertical-align:middle"></span>`;
   const ini=esc(String((p&&p.name)||'?').trim().split(/\s+/).map(w=>w[0]||'').slice(0,2).join('').toUpperCase()||'?');
@@ -15941,6 +16347,7 @@ function saveGroupEdit(){
   const nmEl=document.getElementById('grpEdName');
   const name=((nmEl&&nmEl.value)||t.name||'').trim();
   if(t.sel.size<2||t.sel.size>4||!name)return;
+  if(nameGuard(name)){if(nmEl)nmEl.style.borderColor='var(--red)';return;}
   let newId=null;
   set(()=>{
     let g2=t.id?(S.groupLib||[]).find(x=>x.id===t.id):null;
@@ -15962,6 +16369,7 @@ function saveGroupEdit(){
 function wizEditGroup(id){openGroupEditor(id);if(grpEditTarget)grpEditTarget.wizRepick=true;}
 function closeGroupEditor(){const d=document.getElementById('grpeditor');if(d)d.remove();grpEditTarget=null;}
 function groupNameCommit(v){
+  if(nameGuard((v||'').trim())){set(()=>{S.config.groupName='';});return;}   // a group's name rides invitations to other phones
   set(()=>{S.config.groupName=v;});
   const nm=(v||'').trim().toLowerCase();
   const ex=nm?(S.groupLib||[]).find(g2=>g2.name.trim().toLowerCase()===nm):null;
@@ -16069,6 +16477,7 @@ function addFromLib(libId){const i=firstEmptySlot();if(i<0)return;loadPlayer(i,l
 function addTypedGolfer(){
   const n=document.getElementById('newName'),x=document.getElementById('newIdx');
   const nm=(n&&n.value||'').trim();if(!nm)return;
+  if(nameGuard(nm)){if(n)n.style.borderColor='var(--red)';return;}
   const i=firstEmptySlot();if(i<0)return;
   // name and index in ONE change: a seat with two carded holes is set for the round the moment it is real (hcpLockStamp)
   const ix=x&&String(x.value).trim();
