@@ -126,6 +126,7 @@
   button.ghost.sel{background:var(--elec-lt);border-color:var(--elec);color:var(--elec-mid);box-shadow:2px 2px 0 var(--elec-dk)}
   button.ghost.danger{background:var(--red);color:#fff2ef;border-color:#7f1f16;box-shadow:2px 2px 0 #7f1f16}
   button.ghost.danger:active{box-shadow:1px 1px 0 #7f1f16}
+  #pmenu button.ghost.danger{background:#c0392b}   /* "Block <name>": the dark theme's red was 3.09:1 under its text; this is 4.97:1 (11/5 overnight) */
   /* every red delete X (Nathan 9/16): one drawn X, dead center, same box everywhere; a
      confirm word ("Del?", "Delete?") widens it instead of reflowing the row */
   button.ghost.xbtn{flex:none;min-width:46px;height:40px;padding:0 10px;margin:0;display:inline-flex;align-items:center;justify-content:center}
@@ -582,7 +583,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-center in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1793866627';
+const BUILD='1793908755';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1194,7 +1195,8 @@ function histForBackup(rest){
 }
 function abPayload(){
   const courses=S.courses.map(c=>{const {geo,...rest}=c;return rest;});
-  const d={me:S.me,playerLib:S.playerLib,courses,history:[],ledger:S.ledger||[],groups:S.groupLib||[],teams:S.teamLib||[],
+  const d={me:S.me,pk:(S.me&&S.me.pid)?{pid:S.me.pid,key:myKey()}:null,   // the player key rides the e-mail-verified backup (11/5 overnight)
+    playerLib:S.playerLib,courses,history:[],ledger:S.ledger||[],groups:S.groupLib||[],teams:S.teamLib||[],
     // TEE CORRECTIONS. manualGreens rides inside each archived round, so greens
     // were always recoverable — teeFix lives on S and was in NO backup at all,
     // which is why Cypress Lakes 8/12 came back with 18 greens and only 12 tees.
@@ -1222,7 +1224,30 @@ function shotFp(){
 }
 function emailVerified(){
   const em=(localStorage.getItem('wolfBackupEmail')||'').trim().toLowerCase();
-  return !!em && (localStorage.getItem('btEmailOk')||'').trim().toLowerCase()===em;
+  return !!em && (localStorage.getItem('btEmailOk')||'').trim().toLowerCase()===em && bkNeed()!==em;
+}
+// BACKUP OWNERSHIP (11/5/2026, Nathan "fix the email/cloud backup issue"). A backup belongs to the player(s) who made it:
+// the relay takes a save that proves one of them with its player key, or proves the address itself with a backup token.
+// The relay hands this phone a token whenever it proves the address here (the e-mailed link, a confirm or restore code,
+// Confirm it's you); it rides every backup from then on. Kept outside S, by address, so it is never backed up or restored.
+// btBkNeed: the relay said this address's backup is someone else's until this phone proves the address -- backups pause
+// here (emailVerified() is false for it) and the "Confirm my email" card asks for a code.
+function bkToks(){try{const o=JSON.parse(localStorage.getItem('btBkTok')||'{}');return o&&typeof o==='object'?o:{};}catch(e){return {};}}
+function bkTok(em){return bkToks()[String(em||'').trim().toLowerCase()]||'';}
+function bkNeed(){try{return (localStorage.getItem('btBkNeed')||'').trim().toLowerCase();}catch(e){return '';}}
+function bkTokSet(em,t){
+  em=String(em||'').trim().toLowerCase();
+  if(!em||!/^[A-Za-z0-9_-]{20,64}$/.test(String(t||'')))return;
+  const o=bkToks();o[em]=t;try{localStorage.setItem('btBkTok',JSON.stringify(o));}catch(e){}
+  if(bkNeed()===em){try{localStorage.removeItem('btBkNeed');}catch(e){}setTimeout(()=>{try{abKick();render();}catch(e){}},0);}   // proven here: backups go again
+}
+// every backup reply: a token to keep, a key the relay says this phone can't prove (Confirm it's you), or "not yours yet"
+function bkHeard(p,r){
+  if(!r||!p)return;
+  const em=String(r.email||p.email||'').trim().toLowerCase();
+  if(r.bt&&em)bkTokSet(em,r.bt);
+  if(r.keyBad)pkHeard(r);
+  else if(r.bkProof&&p.op==='save'&&em&&bkNeed()!==em){try{localStorage.setItem('btBkNeed',em);localStorage.removeItem('btVerifyLater');}catch(e){}try{stat('backup_proof',{});}catch(e){}render();}
 }
 // 9/5: every phone had gone silent since 8/23 without a trace. The old check
 // fired only after 8 quiet seconds with the relay up, and a missed window was
@@ -1230,7 +1255,7 @@ function emailVerified(){
 // 45 s however busy the app is, failures retry with backoff, launch/foreground/
 // reconnect re-check, and every skip or failure is a stat the Pi can see.
 let abFirstPending=0,abRetryTimer=null,abRetryMs=30000,abSkipSaid='',abBusy=false;
-function abFingerprint(){const d=abPayload();return JSON.stringify([d.me,d.playerLib,d.courses,d.history.map(h=>h.id),d.groups,d.teams,shotFp(),teeFixFp()]);}
+function abFingerprint(){const d=abPayload();return JSON.stringify([d.me,d.playerLib,d.courses,d.history.map(h=>h.id),d.groups,d.teams,shotFp(),teeFixFp(),d.pk?d.pk.key:'']);}   // a new key backs up too
 // NOT SAVED ANYWHERE YET (Nathan 9/17). A modal 450 ms after End Round is dismissed while
 // the golfer is walking off — nobody has ever confirmed an address from it (the relay's
 // verified list, 9/17: every entry is Nathan's own magic link or a manual row). So the ask
@@ -1239,11 +1264,14 @@ function abFingerprint(){const d=abPayload();return JSON.stringify([d.me,d.playe
 // next round ends, never for good — the rounds it protects are the ones already played.
 function vfNagDue(){
   try{
-    if(emailVerified()||!(S.history||[]).length)return false;
+    const paused=bkPaused();
+    if(emailVerified()||(!(S.history||[]).length&&!paused))return false;
     const later=+(localStorage.getItem('btVerifyLater')||0);
+    if(paused&&later&&!(S.history||[]).length)return false;
     return !(later&&(S.history[0]||{}).endedAt&&later>=S.history[0].endedAt);
   }catch(e){return false;}
 }
+function bkPaused(){const em=(localStorage.getItem('wolfBackupEmail')||'').trim().toLowerCase();return !!em&&bkNeed()===em;}
 function vfNagLater(){
   try{localStorage.setItem('btVerifyLater',String(Date.now()));}catch(e){}
   try{stat('verify_later',{rounds:(S.history||[]).length});}catch(e){}
@@ -1253,9 +1281,10 @@ function vfNagHTML(){
   if(!vfNagDue())return '';
   const n=(S.history||[]).length, one=S.history[0]||{};
   const what=n===1?`Your round at ${esc(one.courseName||'the course')}`:`Your ${n} rounds`;
+  const paused=bkPaused();
   return `<div class="card" style="border-color:var(--amber);box-shadow:4px 4px 0 var(--amber-bd,#c9922e)">
-    <h2 style="color:var(--amber)">☁ ${what} ${n===1?'is':'are'} only on this phone</h2>
-    <div class="tiny mb">Confirm your email and everything backs up by itself — lose the phone, get it all back.</div>
+    <h2 style="color:var(--amber)">${paused?'☁ Backups paused on this phone':`☁ ${what} ${n===1?'is':'are'} only on this phone`}</h2>
+    <div class="tiny mb">${paused?'Confirm your email to keep backing up.':'Confirm your email and everything backs up by itself — lose the phone, get it all back.'}</div>
     <div class="row" style="border-top:none;padding:0;gap:8px">
       <button class="big" style="flex:1" onclick="openVerify('nagCard')">Confirm my email</button>
       <button class="ghost" style="flex:none" onclick="vfNagLater()">Later</button>
@@ -1267,7 +1296,7 @@ function autoBackupCheck(){
   if(!S.autoBackup)why='off';
   else if(!em)why='no-email';
   else if(!S.playerLib.length)why='empty-library';   // never auto-save an empty library over a good backup
-  else if(!emailVerified())why='unverified';          // nothing is saved until the address is confirmed
+  else if(!emailVerified())why=bkPaused()?'bkproof':'unverified';   // nothing is saved until the address is confirmed (here)
   if(why){
     if(abSkipSaid!==why){abSkipSaid=why;try{stat('backup_skip',{why});}catch(e){}}
     return;
@@ -2154,7 +2183,8 @@ function postRoomInvite(){
     if(!S.share.since)S.share.since=Date.now();
     if(typeof sockOpen!=='undefined'&&sockOpen&&sock)
       sock.send(JSON.stringify({t:'invite',room:S.share.code,
-        info:{course:S.course.name,players:S.players.filter(isRealPl).map(p=>p.name),group:S.config.groupName||'',ts:S.share.since,   // when the room opened: the relay's 6 h / 30 min limits count from here, however often this phone reconnects
+        info:{course:S.course.name,players:S.players.filter(isRealPl).map(p=>p.name),group:S.config.groupName||'',ts:S.share.since,
+          ...(S.me&&S.me.pid?{pid:S.me.pid,pkey:myKey()}:{}),   // its owner: only this player (or this socket) changes or withdraws it (11/5 overnight)   // when the room opened: the relay's 6 h / 30 min limits count from here, however often this phone reconnects
           // A room that never recorded where it opened (a group started from Start Round,
           // a Battlefield broadcast re-shared) went out UNFENCED, and every phone with the
           // app open, anywhere, got "Round invitation" (Nathan 10/20). Fence it where this
@@ -2446,7 +2476,7 @@ function leaveShare(){
   // after every score was in. Any open socket will do; the relay also retires
   // it on 'battle end' as a backstop.
   if(S.share.creator){
-    const msg=JSON.stringify({t:'uninvite',room:S.share.code});
+    const msg=JSON.stringify(Object.assign({t:'uninvite',room:S.share.code},S.me&&S.me.pid?{pid:S.me.pid,pkey:myKey()}:{}));   // only the owner withdraws it (11/5 overnight)
     const ws=(sockOpen&&sock)||((lobbySock&&lobbySock.readyState===1)?lobbySock:null);
     if(ws){try{ws.send(msg);}catch(e){}}
   }
@@ -2559,6 +2589,33 @@ function statFlush(){
   }catch(x){}
 }
 function devId(){let d=localStorage.getItem('wolfDevId');if(!d){d='d'+Math.random().toString(36).slice(2,10);localStorage.setItem('wolfDevId',d);}return d;}
+// THE PLAYER KEY (11/5/2026 overnight build). A player id used to work like a password on the relay: anyone who had it
+// could act as that player. Now each profile has a random 128-bit key, made here, kept on this phone (btPkeys, by player
+// id) and carried in the e-mail-verified backup (pk), so a restore brings it to a new phone. Every relay op that acts AS
+// this player sends it; the relay keeps only a hash, binds it the first time it sees one, and from then on refuses that
+// player's id without it. A phone whose key does not prove its player (pkState 'bad') gets Settings > Confirm it's you:
+// a code to the profile's confirmed email adds this phone's key.
+var PK_RE=/^[0-9a-f]{32}$/;   // var, not const: render() may read these before this line runs (the 9/5 TDZ wipe)
+function pkStore(){try{const o=JSON.parse(localStorage.getItem('btPkeys')||'{}');return o&&typeof o==='object'?o:{};}catch(e){return {};}}
+function pkNew(){const a=new Uint8Array(16);let ok=false;try{const c=(typeof crypto!=='undefined'&&crypto)||(typeof window!=='undefined'&&window.crypto);if(c&&c.getRandomValues){c.getRandomValues(a);ok=true;}}catch(e){}
+  if(!ok)for(let i=0;i<16;i++)a[i]=Math.floor(Math.random()*256);return Array.from(a).map(x=>x.toString(16).padStart(2,'0')).join('');}
+function pkSet(pid,key){if(!pid||!PK_RE.test(String(key||'')))return;const o=pkStore();o[pid]=key;try{localStorage.setItem('btPkeys',JSON.stringify(o));}catch(e){}}
+function myKey(){const pid=(S&&S.me&&S.me.pid)||'';if(!pid)return '';const o=pkStore();if(!PK_RE.test(String(o[pid]||''))){pkSet(pid,pkNew());return pkStore()[pid]||'';}return o[pid];}
+var pkState='';   // '' not heard yet · 'ok' this phone's key proves its player · 'open' not bound yet · 'bad' it does not
+function pkHeard(r){try{
+  if(!r||!(S&&S.me&&S.me.pid))return;
+  if(r.keyBad){const st=r.keyWhy==='erased'?'gone':'bad';if(pkState!==st){pkState=st;render();}return;}   // gone: deleted on another phone (round 2)
+  if(r.pk==='ok'||r.pk==='open'){const was=pkState;pkState=r.pk;if(was==='bad')render();}
+}catch(e){}}
+// what goes on a relay op: this phone's player id where the op names nobody, and the key wherever it acts as this player
+var PK_NOPID=new Set(['marks','vlink','export','unsublnk']);
+function pkAttach(p){
+  const pid=(S&&S.me&&S.me.pid)||'';if(!pid||!p)return p;
+  const o=Object.assign({},p);
+  if(!o.pid&&!PK_NOPID.has(o.op))o.pid=pid;
+  if(o.pid===pid||o.starterPid===pid||(o.typed&&o.typed.pid===pid)){const k=myKey();if(k)o.pkey=k;}   // pkey: `key` is unblock's block key
+  return o;
+}
 // HOW LONG THIS PERSON HAS HAD THE APP, kept where a restore can reach it. Both keys are
 // plain localStorage, so re-adding the app to the home screen wipes them; the backup now
 // carries them and retentionMerge() folds the older history back in. The device id is
@@ -2608,8 +2665,10 @@ let helloFixAt=0;
 function sendHello(){
   if(!lobbySock||lobbySock.readyState!==1||!S.me||!S.me.name)return;
   const fresh=!!(myCoordsAt&&myCoords&&isFinite(myCoords[0])&&isFinite(myCoords[1]));
-  try{lobbySock.send(JSON.stringify({t:'hello',info:Object.assign({id:devId(),name:S.me.name,index:S.me.index,
-    tee:S.me.teeName||'',pid:S.me.pid||null},fresh?{lat:myCoords[0],lon:myCoords[1],fresh:true,age:Math.max(0,Date.now()-myCoordsAt)}:{})}));
+  // v:2 (round 2, 11/5): this build -- the relay nudges it for a name invitation it needs a fix for (fixplease), and lists
+  // far golfers to it by name alone (an older build, which seats a golfer with no index at 10, hears only what it can use)
+  try{lobbySock.send(JSON.stringify({t:'hello',info:Object.assign({v:2,id:devId(),name:S.me.name,index:S.me.index,
+    tee:S.me.teeName||'',pid:S.me.pid||null},S.me.pid?{pkey:myKey()}:{},fresh?{lat:myCoords[0],lon:myCoords[1],fresh:true,age:Math.max(0,Date.now()-myCoordsAt)}:{})}));
     if(fresh)helloFixAt=Date.now();}catch(e){}
 }
 function grabCoords(){
@@ -2671,11 +2730,13 @@ function saveEditMe(){
     const pid=(S.me&&S.me.pid)||('u'+Date.now().toString(36)+Math.random().toString(36).slice(2,8));
     const photo=S.me&&S.me.photo;   // the photo rides through a profile save (8/20: Save wiped it back to initials)
     const track=S.me&&S.me.track;   // ...and so do my trackers (putts), which live on the phone since 9/13
+    const past=S.me&&S.me.pastPids;   // ...and every id I have had (rowIsMine, 11/5 overnight)
     const was=S.me.index;
     S.me={name,index:parseIdx(x&&x.value,S.me.index),pid};
     if(S.me.index!=null&&+S.me.index!==+was)hcpTypedMine(S.me.index);   // a newly typed index plays my next round
     if(photo)S.me.photo=photo;
     if(track)S.me.track=track;
+    if(past)S.me.pastPids=past;
     // my library card — by pid first, old name as the grandfathered fallback
     const e=S.playerLib.find(p=>p.pid===pid)
       ||S.playerLib.find(p=>p.name.trim().toLowerCase()===old.trim().toLowerCase());
@@ -2703,13 +2764,39 @@ function onlineList(){
     .map(p=>({...p,near:typeof p.near==='boolean'?p.near:!!(myCoordsAt&&myCoords&&p.lat!=null&&kmBetween(myCoords[0],myCoords[1],p.lat,p.lon)<5)}))
     .sort((a,b)=>(b.near?1:0)-(a.near?1:0));
 }
-let addingPlayer=false,editingPlayer=null,scanOpen=false,scanShown=[];
+// INDEX AND TEES COME ONLY WITH "NEARBY" (Nathan 11/5/2026, "lets fix the leftovers"): the relay sends a golfer's
+// handicap index and tees only to a phone near them; anyone else online is a name and "online". What a row says:
+function onlineIdx(n){return (n&&n.near&&n.index!=null&&n.index!==''&&isFinite(+n.index))?+n.index:null;}
+function onlineSub(n,tees){const b=[],ix=onlineIdx(n);if(ix!=null)b.push('Index '+fmtIdx(ix));if(tees&&n.near&&n.tee)b.push(esc(n.tee)+' tees');b.push(n.near?'nearby':'online');return b.join(' · ');}
+// A SEAT FOR AN ONLINE GOLFER: index and tees from the relay when they are near; far away, from your saved player of
+// that name; with neither, they play off 10 and Round setup says so ("not shared") until someone types theirs or their
+// own phone joins and sets it. Returns false for that stand-in: the library is never told a number nobody gave.
+function seatOnline(pl,n,j){
+  const low=s=>String(s||'').trim().toLowerCase();
+  const lib=(S.playerLib||[]).find(e=>e&&low(e.name)===low(n.name));
+  let ix=onlineIdx(n);
+  if(ix==null&&lib&&lib.index!=null&&lib.index!==''&&isFinite(+lib.index))ix=+lib.index;
+  pl.name=uniqueRosterName(n.name,j);pl.index=ix!=null?ix:10;pl.chOverride=null;pl.nearby=n.id||true;delete pl.libId;delete pl.scorer;
+  if(ix==null)pl.idxAsk=1;else delete pl.idxAsk;
+  if(n.pid)pl.pid=n.pid;else delete pl.pid;
+  const tn=(n.near&&n.tee)||(lib&&lib.teeName)||'';
+  const t=tn&&S.course.teeSets.find(ts=>ts.name.toLowerCase()===String(tn).toLowerCase());
+  if(t)pl.tee=t.id;
+  return ix!=null;
+}
+// still the stand-in: the seat is still that online golfer (nearby = his handle; every other way into a seat clears it),
+// nobody has typed his index, and no phone of his owns the seat
+const idxAsked=p=>!!(p&&p.idxAsk&&p.nearby&&!p.ownerDev);
+const seatIdx=p=>idxAsked(p)?'not shared':fmtIdx(p.index);
+let addingPlayer=false,editingPlayer=null,scanOpen=false,scanShown=[],addPrefill=null;
 // ---- library backup to the Pi (email-verified restore) ----
 let backupUI={mode:null,stage:0,msg:''};
 async function relayAccount(payload){
+  payload=pkAttach(payload);   // the player key (11/5 overnight)
   const ws=await waitForRelay(6000);
-  return new Promise((res,rej)=>{
+  return new Promise((res0,rej)=>{
     if(!ws)return rej(new Error('relay offline'));
+    const res=r=>{pkHeard(r);res0(r);};
     const rid='a'+Math.random().toString(36).slice(2,8);
     pendingCourse[rid]={res,timer:setTimeout(()=>{delete pendingCourse[rid];rej(new Error('timeout'));},20000)};
     try{ws.send(JSON.stringify({t:'account',rid,...payload}));}
@@ -2718,8 +2805,12 @@ async function relayAccount(payload){
 }
 async function relayBackup(payload){
   const ws=await waitForRelay(6000);
-  return new Promise((res,rej)=>{
+  // v:2 = this build; bt = this phone's backup token for the address, once it has one (backup ownership, 11/5)
+  payload=Object.assign({},payload,{v:2});
+  if(payload.email&&!payload.bt){const t=bkTok(payload.email);if(t)payload.bt=t;}
+  return new Promise((res0,rej)=>{
     if(!ws)return rej(new Error('relay offline'));
+    const res=r=>{try{bkHeard(payload,r);}catch(e){}res0(r);};
     const rid='b'+Math.random().toString(36).slice(2,8);
     pendingCourse[rid]={res,timer:setTimeout(()=>{delete pendingCourse[rid];rej(new Error('timeout'));},20000)};
     try{ws.send(JSON.stringify({t:'backup',rid,...payload}));}
@@ -3006,8 +3097,8 @@ function bfBroadcastEnd(){
     const endedAt=S.round.myEndedAt||Date.now();
     const ws=(sockOpen&&sock)||((lobbySock&&lobbySock.readyState===1)?lobbySock:null);
     if(ws&&ws.readyState===1){
-      ws.send(JSON.stringify({t:'battle',op:'end',code:S.share.code,endedAt,byTime:!!S.round._endedByTime,
-        rid:'f'+Math.random().toString(36).slice(2,8)}));
+      ws.send(JSON.stringify(pkAttach({t:'battle',op:'end',code:S.share.code,endedAt,byTime:!!S.round._endedByTime,   // the key: only the owner retires the invitation (11/5 overnight)
+        rid:'f'+Math.random().toString(36).slice(2,8)})));
       return;
     }
     relayBattle({op:'end',code:S.share.code,endedAt,byTime:!!S.round._endedByTime}).catch(()=>{});   // no socket: best effort
@@ -3089,9 +3180,11 @@ async function withIntegrity(p){
 }
 async function relayBattle(payload){
   payload=await withIntegrity(payload);
+  payload=pkAttach(payload);   // the player key, wherever the op acts as this player (11/5 overnight)
   const ws=await waitForRelay(6000);
-  return new Promise((res,rej)=>{
+  return new Promise((res0,rej)=>{
     if(!ws)return rej(new Error('relay offline'));
+    const res=r=>{pkHeard(r);res0(r);};
     const rid='f'+Math.random().toString(36).slice(2,8);
     pendingCourse[rid]={res,timer:setTimeout(()=>{delete pendingCourse[rid];rej(new Error('timeout'));},20000)};
     try{ws.send(JSON.stringify({t:'battle',rid,...payload}));}
@@ -3100,7 +3193,7 @@ async function relayBattle(payload){
 }
 let verifyUI=null;   // {email,stage,msg,after}
 function openVerify(after){
-  verifyUI={email:(localStorage.getItem('wolfBackupEmail')||'').trim(),stage:0,msg:'',after:after||null};
+  verifyUI={email:(localStorage.getItem('wolfBackupEmail')||'').trim(),stage:0,msg:'',after:after||null,code:bkPaused()};
   // who is asked, who types, who finishes: without this the funnel is invisible (9/17 —
   // not one player has ever confirmed from the end-of-round sheet and nothing said so)
   try{stat('verify_open',{from:after||'settings',rounds:(S.history||[]).length});}catch(e){}
@@ -3122,6 +3215,33 @@ async function sendVerifyLink(){
   const ok=await sendMagicLink(em,(msg)=>{if(verifyUI){verifyUI.msg=msg;render();}});
   try{stat(ok?'verify_link_sent':'verify_link_fail',{from:(verifyUI||{}).after||''});}catch(e){}
   if(!ok&&verifyUI)verifyUI.stage=0;
+  render();
+}
+// BACKUPS PAUSED ON THIS PHONE (backup ownership, 11/5): the address's backup is another phone's profile's until this phone
+// proves the address. A link often opens in the browser, whose storage the installed app never sees (9/17), so this sheet
+// asks for the 6-digit code instead: it is typed here, and the token it earns lands in this app.
+async function sendVerifyCode(){
+  const el=document.getElementById('vfEmail');
+  const em=String(el?el.value:(verifyUI&&verifyUI.email)||'').trim().toLowerCase();
+  if(!/^\S+@\S+\.\S+$/.test(em)){verifyUI.msg='Enter a valid email address.';render();return;}
+  verifyUI.email=em;verifyUI.msg='Sending…';render();
+  try{const r=await relayBackup({op:'verify',email:em});
+    if(!verifyUI)return;
+    if(r&&r.ok){try{localStorage.setItem('wolfBackupEmail',em);}catch(e){}verifyUI.stage=5;verifyUI.msg='';}
+    else verifyUI.msg=(r&&r.error)||'Could not send the code.';}
+  catch(e){if(verifyUI)verifyUI.msg='Could not connect — check your signal and try again.';}
+  render();
+}
+async function confirmVerifyCode(){
+  const el=document.getElementById('vfCode');const c=String(el&&el.value||'').replace(/\D/g,'');
+  if(c.length!==6){verifyUI.msg='Enter the 6-digit code from the email.';render();return;}
+  verifyUI.msg='Checking…';render();
+  try{const r=await relayBackup({op:'confirm',email:verifyUI.email,code:c});
+    if(!verifyUI)return;
+    if(r&&r.ok){try{localStorage.setItem('btEmailOk',verifyUI.email);}catch(e){}verifyUI.stage=2;verifyUI.msg='✓ Backups are on again.';
+      try{stat('verify_ok',{from:'code'});}catch(e){}abFp=null;abKick();}
+    else verifyUI.msg=(r&&r.error)||'Wrong code — check the email and try again.';}
+  catch(e){if(verifyUI)verifyUI.msg='Could not connect — check your signal and try again.';}
   render();
 }
 async function backupNow(){
@@ -3168,7 +3288,7 @@ async function doBackup(){
     const courses=S.courses.map(c=>{const {geo,...rest}=c;return rest;});
     // shot lines were local-only until now: a cleared cache or a new phone lost
     // every tracked shot, including the per-course "last time out" ghost lines
-    const data={me:S.me,playerLib:S.playerLib,courses,history:[],ledger:S.ledger||[],groups:S.groupLib||[],teams:S.teamLib||[],
+    const data={me:S.me,pk:(S.me&&S.me.pid)?{pid:S.me.pid,key:myKey()}:null,playerLib:S.playerLib,courses,history:[],ledger:S.ledger||[],groups:S.groupLib||[],teams:S.teamLib||[],
       shotLog:trimShotLog(S.shotLog),shotLast:S.shotLast||{},bag:S.bag||null,retention:retentionRead()};
     data.history=histForBackup(data);
     const r=await relayBackup({op:'save',email:em,data});
@@ -3473,7 +3593,7 @@ function applyLibrary(d){
       // Pi's handicap book know you by. 9/5: a fresh install adopted a stray
       // pid from another device's copy and showed that book's index (11.7, not 13.7).
       else if(d.me&&d.me.pid&&S.me&&(S.me.name||'').trim().toLowerCase()===String(d.me.name||'').trim().toLowerCase()&&S.me.pid!==d.me.pid){
-        S.me.pid=d.me.pid; if(typeof d.me.index==='number')S.me.index=d.me.index;
+        pastPid(S.me.pid);S.me.pid=d.me.pid; if(typeof d.me.index==='number')S.me.index=d.me.index;
       }
       let cAdded=0;
       (d.courses||[]).forEach(c=>{
@@ -3536,6 +3656,8 @@ function applyLibrary(d){
         if(!(S.teamLib=S.teamLib||[]).some(x=>x.key===t2.key))S.teamLib.push(t2);
       });
       if(d.me&&d.me.pid&&!(S.me&&S.me.pid))S.me.pid=d.me.pid;
+      // THE PLAYER KEY COMES BACK WITH THE PROFILE (11/5 overnight): the backup's is the one the relay kept as proven
+      if(d.pk&&typeof d.pk==='object'&&S.me&&S.me.pid&&d.pk.pid===S.me.pid&&PK_RE.test(String(d.pk.key||''))){pkSet(S.me.pid,d.pk.key);pkState='';try{pidSent='';setTimeout(()=>{try{registerProfile(true);sendHello();}catch(e){}},0);}catch(e){}}
     });
   retentionMerge(d.retention);
   return {added, updated, cAdded, hAdded, lAdded};
@@ -3567,15 +3689,21 @@ function toggleScan(){
 function savePresencePlayer(j){
   const n=(scanShown||[])[j];
   if(!n)return;
+  const ix=onlineIdx(n);
+  if(ix==null){   // far away their index isn't shared (11/5): Add player opens with the name in, and asks for it
+    addingPlayer=true;editingPlayer=null;addPrefill={name:n.name};render();
+    setTimeout(()=>{try{const x=document.getElementById('npIdx');if(x){x.scrollIntoView({block:'center'});x.focus();}}catch(e){}},80);
+    return;
+  }
   set(()=>{
     let e=S.playerLib.find(x=>x.name.trim().toLowerCase()===n.name.trim().toLowerCase());
     if(!e){e={id:'pl'+Date.now()+Math.floor(Math.random()*1e4)};S.playerLib.push(e);tombLift('players',tombName(n.name));}   // was tombName(nm): nm is not defined here, so Save threw and saved nobody (9/28)
     e.name=n.name;
-    e.index=+n.index||10;
+    e.index=ix;   // a scratch golfer's 0 stays 0 (+n.index||10 made it 10)
     if(n.tee)e.teeName=n.tee;
   });
 }
-function toggleAddPlayer(){addingPlayer=!addingPlayer;editingPlayer=null;render();}
+function toggleAddPlayer(){addingPlayer=!addingPlayer;editingPlayer=null;addPrefill=null;render();}
 // A library row is YOU when its pid is your pid, or (before any pid exists) when
 // the name matches your profile. Clubs are per-phone, so only your own row can
 // open My Bag — you cannot set what is in someone else's bag.
@@ -3617,7 +3745,7 @@ function addManualPlayer(){
   const name=(n&&n.value||'').trim();
   if(!name)return;
   if(nameGuard(name)){if(n)n.style.borderColor='var(--red)';return;}
-  addingPlayer=false;
+  addingPlayer=false;addPrefill=null;
   set(()=>{upsertLib({name,index:parseIdx(x&&x.value,10),tee:S.players[0]?S.players[0].tee:undefined,libId:null});});
 }
 function lobbyConnect(){
@@ -3625,12 +3753,14 @@ function lobbyConnect(){
   try{lobbySock=new WebSocket(RELAY);}catch(e){lobbySock=null;setTimeout(lobbyConnect,10000);return;}
   if(!lobbyDownSince)lobbyDownSince=Date.now();
   setTimeout(()=>{if(!relayUp()&&lobbyDownSince)render();},8500);   // flip "Connecting…" into the plain warning
-  lobbySock.onopen=()=>{const wasDown=!!lobbyDownSince;lobbyDownSince=0;try{lobbySock.send('{"t":"lobby"}');}catch(e){}sendHello();statFlush();try{abKick();}catch(e){}registerProfile();loadMarkNotes();bfReannounce();libWhois();try{endOutboxFlush();}catch(e){}try{bfInboxPoll(true);}catch(e){}if(wasDown)render();};
+  lobbySock.onopen=()=>{const wasDown=!!lobbyDownSince;lobbyDownSince=0;try{lobbySock.send('{"t":"lobby"}');}catch(e){}sendHello();try{if(myPid()&&!localStorage.getItem('btBlkSalt')){localStorage.setItem('btBlkSalt','1');setTimeout(()=>{blocksSync(true);blocksSyncAt=0;},1500);}}catch(e){}   /* round 2: the relay's block keys are salted now -- fetch the list once so they match (Settings still fetches its own when it opens) */statFlush();try{abKick();}catch(e){}registerProfile();loadMarkNotes();bfReannounce();libWhois();try{endOutboxFlush();}catch(e){}try{bfInboxPoll(true);}catch(e){}if(wasDown)render();};
   lobbySock.onmessage=ev=>{
     let m;try{m=JSON.parse(ev.data);}catch(e){return;}
-    if(m.t==='invites'){invites=m.list||[];inviteFixCheck();render();}
-    else if(m.t==='invite'){invites=invites.filter(i=>i.code!==m.info.code).concat([m.info]);inviteFixCheck();render();}
+    if(m.t==='invites'){invites=m.list||[];if(invites.length)fixAsk=null;inviteFixCheck();render();}
+    else if(m.t==='invite'){invites=invites.filter(i=>i.code!==m.info.code).concat([m.info]);fixAsk=null;inviteFixCheck();render();}
     else if(m.t==='uninvite'){invites=invites.filter(i=>i.code!==m.code);render();}
+    else if(m.t==='pkbad'){pkHeard({keyBad:true,keyWhy:m.why});}   // the relay: this phone's key does not prove its player (11/5 overnight)
+    else if(m.t==='fixplease'){fixPlease(!!m.off);}   // a name invitation may be waiting: it needs a fix (round 2)
     else if(m.t==='nearby'){nearby=(m.list||[]).filter(p=>p.id!==devId());if(S.screen==='home'||S.screen==='players'||S.screen==='setup'||S.screen==='gate'||S.screen==='start')render();}
     else if(m.t==='whois')libWhoisApply(m);
     else if(m.t==='bfnote')bfNoteNudge(m);
@@ -3647,10 +3777,7 @@ function pickPlayerOpt(i,v){
     if(!n)return;
     set(()=>{
       const p=S.players[i];
-      p.name=n.name;p.index=+n.index||10;p.chOverride=null;p.nearby=n.id||true;delete p.libId;delete p.scorer;
-      const t=S.course.teeSets.find(ts=>ts.name.toLowerCase()===String(n.tee||'').toLowerCase());
-      if(t)p.tee=t.id;
-      upsertLib(p);
+      if(seatOnline(p,n,i))upsertLib(p);   // index and tees only when near (11/5)
     });
   }
 }
@@ -3671,7 +3798,14 @@ function libWhois(){
     const pids=[...new Set(S.playerLib.filter(e=>e&&e.pid).map(e=>e.pid))].slice(0,64);
     const names=[...new Set(S.playerLib.filter(e=>e&&e.name).map(e=>e.name.trim()))].slice(0,64);
     if(!pids.length&&!names.length)return;
-    lobbySock.send(JSON.stringify({t:'whois',pids,names}));
+    // pairs (11/5 overnight): each saved entry's name with its id -- the relay says whether an id now called something else
+    // was renamed or is misfiled (another account carries that name), without handing out anyone's id
+    const pairs=S.playerLib.filter(e=>e&&e.pid&&e.name).slice(0,64).map(e=>[e.name.trim(),e.pid]);
+    // hist (round 2): ids this phone already holds from its own rounds -- a misfiled entry gets its player's id back when
+    // this phone has played with him (the relay names an account only for ids the phone holds or players it is tied to)
+    const lp=new Set(pids);const hist=[];
+    (S.history||[]).forEach(h=>{((h&&h.playersSnap)||[]).forEach(p=>{if(p&&typeof p.pid==='string'&&p.pid&&!lp.has(p.pid)&&!hist.includes(p.pid)&&hist.length<64)hist.push(p.pid);});});
+    lobbySock.send(JSON.stringify({t:'whois',pids,names,pairs,hist}));
   }catch(e){}
 }
 // THE ACCOUNT IS THE PERSON, THE NAME IS A LABEL (Nathan 10/18: "id rather the name change to whatever the
@@ -3703,6 +3837,18 @@ function libWhoisApply(m){
       }
       // a stray second copy of an account already saved here under its current name: it loses the copy
       if(S.playerLib.some(x=>x&&x!==e&&x.pid===e.pid&&low(x.name)===low(reg))){delete e.pid;changed++;log.push(e.name+': stray copy of '+reg+"'s pid");return;}
+      // SILENCE IS "UNKNOWN", NEVER "RENAMED" (11/5/2026 overnight): since 11/5 the relay names an account only for players
+      // tied to you, so a name it does not answer may well be someone else's account -- NateBall's row carrying Justin's
+      // id turned into Justin, NateBall vanished, and the next round seated "Justin 2". Only a change of capitals is taken.
+      if(low(reg)!==low(e.name)&&!ownOrig){
+        const v=(m.verdicts||{})[String(e.name).trim()+'|'+e.pid];
+        if(v==='misfile'){   // another account carries this entry's name: the id is not this player's (its home entry may take it)
+          const home=entry(reg);
+          if(home&&home!==e&&!home.pid){home.pid=e.pid;log.push(reg+': took pid from '+e.name);}
+          delete e.pid;changed++;log.push(e.name+': pid was '+reg+"'s, dropped");return;
+        }
+        if(v!=='renamed'){log.push(e.name+': the relay names this id '+reg+', left as it is');return;}   // no word either way
+      }
       if(e.name!==reg){renamed.push([e.name,reg,e.pid]);log.push(e.name+' is now '+reg);e.name=reg;changed++;}
       // an old id the relay merged into another account (Patrick Kanoran 10/18): the name's one registered
       // pid is the account now -- take it, unless another entry here already holds it
@@ -4057,8 +4203,14 @@ async function hcpSync(force){
     const r=await relayBattle(Object.assign({op:'hcp',push,pull:pids},typed?{typed}:{}));
     hcpSyncAt=Date.now();
     if(r&&r.ok){
-      if(!r.testMuted&&push.length)S.hcpPending=pend.slice(push.length);
-      if(!r.testMuted&&typed&&hm.typed&&hm.typed.at===typed.at)hm.push=false;
+      // HELD ROWS STAY QUEUED (round 2, 11/5): a row for my own player that my key cannot prove yet (before Confirm it's
+      // you) comes back in `keep` -- it is sent again, never dropped. Rows for other players the relay would not take
+      // go (their own phones send them). An older relay sends no `keep`: as before.
+      if(Array.isArray(r.keep)&&!r.testMuted){
+        const kk=new Set(r.keep.map(x=>Array.isArray(x)?x[0]+'|'+x[1]:''));
+        S.hcpPending=push.filter(x=>x&&kk.has(x.pid+'|'+x.k)).concat(pend.slice(push.length));
+      }else if(!r.testMuted&&push.length)S.hcpPending=pend.slice(push.length);
+      if(!r.testMuted&&!r.typedHeld&&typed&&hm.typed&&hm.typed.at===typed.at)hm.push=false;
       const idx=r.idx||{};
       let changed=false;
       Object.entries(idx).forEach(([pid,v])=>{
@@ -10105,10 +10257,20 @@ function verifySheetHTML(){
   return `<div class="vfWrap" role="dialog" aria-modal="true" aria-labelledby="vfTitle">
     <div class="vfCard">
       <h2 id="vfTitle" class="vfTitle">${done?'You&rsquo;re all set':(atEnd?'Save this round?':'Confirm your email')}</h2>
-      ${done?'':`<div class="tiny mb">${atEnd
+      ${done?'':`<div class="tiny mb">${verifyUI.code
+        ? 'Enter the code we email you to keep backing up on this phone.'
+        : atEnd
         ? `Your ${esc(((S.history||[])[0]||{}).courseName||'')} round is on this phone only. Confirm your email and it saves itself — rounds, players and courses, back on any phone.`
         : 'We&rsquo;ll email you a link. One tap and your rounds, players and courses back themselves up — until then nothing leaves this phone.'}</div>`}
-      ${done?'':(verifyUI.stage===0?`
+      ${done?'':verifyUI.code?(verifyUI.stage===5?`
+        <div class="tiny">Code sent to <b>${em}</b></div>
+        <input id="vfCode" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6-digit code" style="letter-spacing:5px;font-family:Rajdhani,sans-serif;font-size:20px">
+        <button class="big mt" onclick="confirmVerifyCode()">Confirm</button>
+        <button class="ghost mt" style="width:100%" onclick="sendVerifyCode()">Send a new code</button>`:`
+        <div class="tiny">Email</div>
+        <input id="vfEmail" type="text" inputmode="email" autocapitalize="off" placeholder="you@email.com" value="${em}">
+        <button class="big mt" onclick="sendVerifyCode()">✉️ &nbsp;Email me a code</button>`)
+      :(verifyUI.stage===0?`
         <div class="tiny">Email</div>
         <input id="vfEmail" type="text" inputmode="email" autocapitalize="off" placeholder="you@email.com" value="${em}">
         <button class="big mt" onclick="sendVerifyLink()">✉️ &nbsp;Email me a link</button>
@@ -10772,7 +10934,7 @@ function welcomeRestore(){
 // fresh-user sim). Now they lead the home screen and the first wizard step.
 function inviteCardsHTML(){
   if(S.share&&S.share.on)return '';
-  return liveInvites().map(inv=>`<div class="card invcard" style="border-color:var(--amber);background:#fffcf7">
+  return fixAskHTML()+liveInvites().map(inv=>`<div class="card invcard" style="border-color:var(--amber);background:#fffcf7">
     <h2 style="color:var(--amber)">${inv.group?`“${esc(inv.group)}”`:'Round invitation'}</h2>
     <div class="mb"><b>${esc(inv.course||'Shared round')}</b>
       <div class="tiny">${(inv.players||[]).map(esc).join(' · ')}</div></div>
@@ -10951,6 +11113,86 @@ function daHTML(){
     <button class="big mt" style="background:var(--red);border-color:var(--red)" onclick="daCode()">Delete my account</button>
     <button class="ghost mt" style="width:100%" onclick="daCancel()">Cancel</button>`;
   return `<div class="tiny">${esc(daMsg)}</div>`;
+}
+// ---------- Confirm it's you (the player key, 11/5/2026 overnight) ----------
+// Shown only when the relay says this phone's key does not prove its player: the profile was set up on another phone
+// too (a backup restored before the key existed), or this phone lost its key. A code to the profile's confirmed email
+// adds this phone's own key; with no confirmed email the relay says to write to us.
+let pkUI={stage:0,msg:'',email:''};
+async function pkSendCode(){
+  const el=document.getElementById('pkEmail');const em=(el&&el.value||'').trim().toLowerCase();
+  if(!/^\S+@\S+\.\S+$/.test(em)){pkUI.msg='Enter the email on your profile.';render();return;}
+  pkUI.email=em;pkUI.msg='Sending…';render();
+  try{const r=await relayAccount({op:'keycode',email:em});
+    if(r&&r.ok){pkUI.stage=1;pkUI.msg='';}else pkUI.msg=(r&&r.error)||DA_OFFLINE;}catch(e){pkUI.msg=DA_OFFLINE;}
+  render();
+}
+async function pkConfirm(){
+  const el=document.getElementById('pkCode');const c=String(el&&el.value||'').replace(/\D/g,'');
+  if(c.length!==6){pkUI.msg='Enter the 6-digit code from the email.';render();return;}
+  pkUI.msg='Checking…';render();
+  try{const r=await relayAccount({op:'keyadd',email:pkUI.email,code:c});
+    if(r&&r.ok){if(r.key&&PK_RE.test(r.key))pkSet(myPid(),r.key);   // the key in this profile's backup: the other phone's, now this one's too
+      if(r.bt)bkTokSet(pkUI.email,r.bt);   // the code proved the address here too: this phone's backups go through (backup ownership)
+      setTimeout(()=>{try{abKick();}catch(e){}},0);
+      pkState='ok';pkUI={stage:0,msg:'',email:''};pidSent='';registerProfile(true);sendHello();try{shotToast('This phone is confirmed.');}catch(e){}}
+    else pkUI.msg=(r&&r.error)||DA_OFFLINE;}catch(e){pkUI.msg=DA_OFFLINE;}
+  render();
+}
+// ---------- Move a confirmed email (round 2, 11/5/2026) ----------
+// The relay keeps a profile's CONFIRMED email until a code sent to it says otherwise: a stranger who got hold of a player
+// could otherwise put his own address on it and use it to take the player over. When this phone's new address was kept
+// back, the profile answer says which (masked) and this card moves it with a code sent to the old one.
+var emLock={kept:'',stage:0,msg:''};   // var: render() may read it before this line runs (the 9/5 TDZ wipe)
+function emLockHeard(r){
+  if(!r||!r.ok)return;
+  if(r.emailKept){const was=emLock.kept;emLock.kept=String(r.emailKept);if(r.emailCodeBad){emLock.stage=1;emLock.msg='Wrong code — check the email and try again.';}if(!was||r.emailCodeBad)render();}
+  else if(emLock.kept){emLock={kept:'',stage:0,msg:''};try{shotToast('Your email is changed.');}catch(e){}render();}
+}
+async function emLockSend(){
+  emLock.msg='Sending…';render();
+  try{const r=await relayAccount({op:'emcode'});
+    if(r&&r.ok&&r.needCode){emLock.stage=1;emLock.msg='';}else if(r&&r.ok){emLock={kept:'',stage:0,msg:''};pidSent='';registerProfile(true);}else emLock.msg=(r&&r.error)||DA_OFFLINE;}
+  catch(e){emLock.msg=DA_OFFLINE;}
+  render();
+}
+async function emLockConfirm(){
+  const el=document.getElementById('emCode');const c=String(el&&el.value||'').replace(/\D/g,'');
+  if(c.length!==6){emLock.msg='Enter the 6-digit code from the email.';render();return;}
+  emLock.msg='Checking…';render();
+  const pid=myPid(),nm=(S.me&&S.me.name||'').trim(),em=(localStorage.getItem('wolfBackupEmail')||'').trim();
+  try{const r=await relayBattle({op:'profile',pid,name:nm,email:em||undefined,emcode:c});
+    if(r&&r.ok){pidSent=pid+'|'+nm+'|'+em;emLockHeard(r);if(emLock.kept&&!r.emailCodeBad)emLock.msg='';}else emLock.msg=(r&&r.error)||DA_OFFLINE;}
+  catch(e){emLock.msg=DA_OFFLINE;}
+  render();
+}
+function emLockHTML(){
+  if(!emLock.kept)return '';
+  const msg=emLock.msg?`<div class="tiny mt" style="color:var(--red)">${esc(emLock.msg)}</div>`:'';
+  return `<div class="card" id="emLockCard"><h2>📧 Your confirmed email stays</h2>
+    <div class="tiny">Your profile still uses <b>${esc(emLock.kept)}</b>. To move it, enter the code we send there.</div>
+    ${emLock.stage===1?`<input id="emCode" class="mt" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6-digit code" style="letter-spacing:5px;font-family:Rajdhani,sans-serif;font-size:20px;margin-top:8px">${msg}
+      <button class="big mt" onclick="emLockConfirm()">Move my email</button>
+      <button class="ghost mt" style="width:100%" onclick="emLockSend()">Send a new code</button>`
+    :`${msg}<button class="big mt" onclick="emLockSend()">Email a code to ${esc(emLock.kept)}</button>`}
+    <div class="tiny mt">Can't get to it? Email <b>hello@battletees.app</b>.</div>
+  </div>`;
+}
+function pkHTML(){
+  // the profile was deleted on another phone (round 2): nothing to confirm -- Delete account below clears this phone too
+  if(pkState==='gone')return `<div class="card" id="pkCard"><h2>🗑️ This profile was deleted</h2>
+    <div class="tiny">It was deleted on another phone. Tap <b>Delete account</b> below to clear it from this phone too, then set up a new profile.</div></div>`;
+  if(pkState!=='bad')return '';
+  const msg=pkUI.msg?`<div class="tiny mt" style="color:var(--red)">${esc(pkUI.msg)}</div>`:'';
+  const em=pkUI.email||(localStorage.getItem('wolfBackupEmail')||'').trim();
+  return `<div class="card" id="pkCard"><h2>🔑 Confirm it's you</h2>
+    ${pkUI.stage===1?`<div class="tiny">Enter the code we sent to <b>${esc(pkUI.email)}</b>.</div>
+      <input id="pkCode" class="mt" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6-digit code" style="letter-spacing:5px;font-family:Rajdhani,sans-serif;font-size:20px;margin-top:8px">${msg}
+      <button class="big mt" onclick="pkConfirm()">Confirm</button>`
+    :`<div class="tiny">This phone can't prove it's you yet. We'll email a code to your profile's confirmed address.</div>
+      <input id="pkEmail" class="mt" type="email" autocomplete="email" placeholder="you@example.com" value="${esc(em)}" style="margin-top:8px">${msg}
+      <button class="big mt" onclick="pkSendCode()">Email me a code</button>`}
+  </div>`;
 }
 // ---------- FAQ: how to use Battle Tees (Settings) ----------
 // Every <b>label</b> below is a real button or card name in this file — the faq
@@ -11141,6 +11383,7 @@ function vSettings(){
       <div class="tiny">${sub}</div></div>
     <button class="ghost ${bf[key]!==false?'sel':''}" onclick="bfToggle('${key}')">${bf[key]!==false?'On':'Off'}</button></div>`;   // a missing key is On (added later)
   return topbar('Settings','','home')+`<main>
+  ${pkHTML()}${emLockHTML()}
   <div class="card"><h2>📲 Share Battle Tees</h2>
     <div style="display:flex;gap:16px;align-items:center">
       <div style="flex:none;background:#fff;border-radius:12px;padding:8px;line-height:0" title="https://battletees.app/app/?src=qr_app">
@@ -11257,6 +11500,11 @@ function bfDocFinal(entryEndedAt,doc,docAt){
 // automatically and permanently. They are the only people who see your rounds
 // on the Battlefield, and the only ones emailed when you start one.
 function myPid(){return (S.me&&S.me.pid)||'';}
+// EVERY ID THIS PHONE'S PLAYER HAS HAD (11/5 overnight, the app sim): a round from before a restore or a merge carries an
+// older id, and its stats row offered Report / Block on yourself. A row is yours by any of them, or by your phone owning it.
+function myPids(){const s=new Set(Object.keys(pkStore()));if(myPid())s.add(myPid());((S.me&&S.me.pastPids)||[]).forEach(p=>p&&s.add(p));return s;}
+function rowIsMine(p){return !!p&&((!!p.pid&&myPids().has(p.pid))||(!!p.ownerDev&&p.ownerDev===devId())||(!!p.scorer&&p.scorer===devId()&&!p.pid));}
+function pastPid(old){try{if(old&&S.me){S.me.pastPids=[...new Set([...(S.me.pastPids||[]),old])].slice(-8);}}catch(e){}}
 // EVERY PROFILE REGISTERS ITS PID, from the moment it exists. The only route to
 // the Pi used to be the library backup, which requires a VERIFIED email — so a
 // new profile was invisible until it verified: unfriendable, unreachable, absent
@@ -11318,7 +11566,7 @@ function registerProfile(force){
       // answer about OUR OWN address is the truth; take it and start saving.
       try{
         const mine=(localStorage.getItem('wolfBackupEmail')||'').trim().toLowerCase();
-        if(r&&r.ok&&r.verified&&mine&&!emailVerified()){
+        if(r&&r.ok&&r.verified&&mine&&!emailVerified()&&bkNeed()!==mine){   // paused for proof (backup ownership): only a code here unpauses it
           localStorage.setItem('btEmailOk',mine);
           try{stat('verify_ok',{from:'relay-says-so',rounds:(S.history||[]).length});}catch(e){}
           abFp=null;abKick();render();
@@ -11328,6 +11576,8 @@ function registerProfile(force){
       // real one — switch to it everywhere this phone keeps it, then re-announce.
       try{ if(r&&r.ok&&r.adopt&&r.pid&&r.retired===pid&&r.pid!==pid) adoptPid(pid,r.pid); }catch(e){}
       try{ if(r&&r.ok&&r.mail) mailPrefsApply(r.mail); }catch(e){}   // an Unsubscribe link turns its switch Off here
+      try{ if(r&&!r.ok&&r.keyBad) pidSent=''; }catch(e){}   // ask again after the fix (Settings > Confirm it's you)
+      try{ emLockHeard(r); }catch(e){}   // a confirmed email moves only with a code to it (round 2)
     }).catch(()=>{pidSent='';});
   }catch(e){}
 }
@@ -11348,7 +11598,7 @@ function tombHas(kind,key){return !!(key&&+tomb()[kind][key]>0);}
 const tombNewest=(a,b)=>Math.abs(+b||0)>Math.abs(+a||0)?(+b||0):(+a||0);
 function adoptPid(oldPid,newPid){
   if(!newPid||oldPid===newPid)return false;
-  if(S.me&&S.me.pid===oldPid)S.me.pid=newPid;
+  if(S.me&&S.me.pid===oldPid){const k=pkStore()[oldPid];if(k&&!pkStore()[newPid])pkSet(newPid,k);pastPid(oldPid);S.me.pid=newPid;}   // the key goes with the id
   (S.playerLib||[]).forEach(e=>{if(e&&e.pid===oldPid)e.pid=newPid;});
   (S.players||[]).forEach(p=>{if(p&&p.pid===oldPid)p.pid=newPid;});
   pidSent='';
@@ -11628,10 +11878,146 @@ function bfSocLoad(list,ready){
 }
 function bfSocBump(code,t,d){const o=bfSoc[code];if(!o)return;o.n=o.n||{};o.n[t]=Math.max(0,(o.n[t]||0)+d);if(S.screen==='bfield')render();}
 // comments ----------------------------------------------------------------
-const BF_CM_BAD_IN=/(fuck|shit|cunt|bitch|nigg|whore|motherf|asshole)/,BF_CM_BAD_WORD=/^(dick(s|head|hole)?|cock(s|sucker)?|fag(s|got|gots)?|sluts?|pussy|retard(s|ed)?|bastards?)$/;
-function bfCmClean(t){return !String(t||'').toLowerCase().split(/\s+/).some(w=>{
-  w=w.replace(/[@4]/g,'a').replace(/[$5]/g,'s').replace(/0/g,'o').replace(/[!1|]/g,'i').replace(/3/g,'e').replace(/[^a-z]/g,'');
-  return BF_CM_BAD_IN.test(w)||BF_CM_BAD_WORD.test(w);});}
+// THE WORD FILTER (11/5/2026 overnight): Dart Keeper's word-aware makeNameFilter, byte-identical to the relay's
+// cloud/src/namefilter.js (cloud/test/namesweep.mjs checks the two agree). The old one refused Kenji Yamashita, Ishita Rao
+// and Matsushita (a swear inside a word) and let "f u c k", "kike" and "Hitler" through.
+/* NAMEFILTER-BEGIN */
+function makeNameFilter(opts) {
+  opts = opts || {};
+  var allow = {}; (opts.allow || []).forEach(function (w) { allow[String(w).toLowerCase()] = 1; });
+  var set = function (s) { var o = {}; s.split(' ').forEach(function (w) { if (w) o[w] = 1; }); return o; };
+  // whole words (with their common inflections spelled out)
+  var WORD = set('fuq fck fcuk fcuking fukk fukking fvck phuck phuk phucking fucc fukin fuking fking fkn' +   // (bare "Fuk" is a Cantonese name)
+    ' shit shits shitty shittier shittiest shite shiit sht shitter shitters shitting' +
+    ' cunt cunts cunty' +
+    ' ass asses arse arses' +
+    ' bitch bitches bitchy bitchin' +
+    ' dick dicks dickhead dickheads dickhole dickholes' +
+    ' cocksucker cocksuckers cocksucking' +
+    ' pussy pussies' +
+    ' fag fags faggy fagboy faggit' +
+    ' slut sluts slutty sluttier sluttiest' +
+    ' whore whores whorish' +
+    ' twat twats twatty prick pricks bollocks wanker wankers wank wanking tosser tossers bellend bellends knobhead knobheads' +
+    ' tits titties titty boobs boobies penis penises vagina vaginas dildo dildos anal rape rapes raped raping rapist rapists rapey' +
+    ' porn porno pornos porns piss pissed pisser pissing pisshead pissheads pisspot pissflaps douche douches douchebag douchebags' +
+    ' skank skanks skanky thot thots cuck cucks cucked minge clunge jizz' +
+    ' retard retards retarded retardo retardos tard tards' +
+    ' bastard bastards bastardo' +
+    ' kike kikes kyke kykes spic spics spick spicks wetback wetbacks beaner beaners chink chinks gook gooks jap japs' +
+    ' coon coons darkie darkies jigaboo jigaboos raghead ragheads towelhead towelheads tranny trannies shemale shemales' +
+    ' lesbo lesbos poof poofs poofter poofters pikey pikeys wop wops polack polacks injun injuns squaw squaws redskin redskins' +
+    ' honky honkies hymie hymies heeb heebs zipperhead zipperheads mongoloid mongoloids spaz spazz spazzes' +
+    ' nig nigs nigga niggas niggaz niggah nigguh niqqa niqqas niqqer nazi nazis neonazi neonazis nazism kys');
+  // anywhere inside a word: long, with no innocent words or names around them
+  // (a few innocent words that contain one: snigger, niggard)
+  var SUB_OK = /snigger|niggard/;
+  var SUB = ['fuck', 'fukker', 'motherf', 'muthaf', 'mothaf', 'nigger', 'nigga', 'faggot', 'cocksuck', 'dicksuck',
+    'asshole', 'arsehole', 'assclown', 'asshat', 'asswipe', 'bullshit', 'dipshit', 'horseshit', 'batshit', 'apeshit',
+    'shithead', 'shitbag', 'shitface', 'shithole', 'shitshow', 'shitstain', 'dickhead', 'dickface', 'dickweed', 'dickwad',
+    'cockface', 'cockhead', 'pussyhole', 'cumshot', 'cumdump', 'cumslut', 'cumbucket', 'blowjob', 'handjob', 'rimjob',
+    'whorehouse', 'jizz', 'hitler', 'kkk', 'wetback', 'jigaboo', 'zipperhead', 'towelhead', 'raghead', 'sandnig',
+    'porchmonk', 'chingchong', 'cameljock', 'whitepower', 'whitepride', 'siegheil', 'heilhit', 'killyourself', 'killurself'];
+  // short roots: refused whole (WORD) and as a clear compound with one of these prefix / suffix words
+  var ROOT = ['shit', 'cunt', 'dick', 'cock', 'ass', 'arse', 'piss', 'cum', 'twat', 'slut', 'whore', 'fag', 'tit', 'prick', 'bitch', 'pussy', 'porn', 'fuk', 'retard', 'nazi'];
+  var PRE = set('big fat small tiny huge giant mega super lil little my ur your yo his her suck eat lick limp hard soft wet dumb' +
+    ' stupid bull dip horse bat ape chicken holy dog cow pig bird deep hot no piece pieceof son sonofa motha mutha mother' +
+    ' ass cock dick shit fuck cum twat slut whore cunt pussy gay crazy sick ugly stinky smelly sweaty hairy nasty dirty' +
+    ' sloppy sexy horny lard smart wank');
+  var SUF = set('s es head heads hole holes bag bags face faces wad wads weed weeds' +
+    ' wit wits stain stains show shows load loads storm pile box house sucker suckers suck sucking lick licker lickers' +
+    ' munch muncher eater eating fest fart rag rags burger nose ring block blocker tease teaser bite less hat hats wipe' +
+    ' wipes clown clowns kisser kissing breath brain brains stick sticks monkey monkeys lord lords star stars hound hounds' +
+    ' fuck fucker shit cock dick ass cunt slut whore pussy twat bucket dump dumpster shot slut');
+  var PHRASE = ['white power', 'white pride', 'sieg heil', 'heil hitler', 'kill yourself', 'kill urself', 'porch monkey',
+    'camel jockey', 'ching chong', 'sand nigger', 'gas the jews', 'white supremacy'];
+  var SAFE = [/\bpussy\s*(willow|cat)s?\b/g];
+  var HOMO = { 'а': 'a', 'в': 'b', 'е': 'e', 'ё': 'e', 'к': 'k', 'м': 'm', 'н': 'h', 'о': 'o', 'р': 'p', 'с': 'c', 'т': 't', 'у': 'y', 'х': 'x',
+    'і': 'i', 'ї': 'i', 'ј': 'j', 'ѕ': 's', 'ԁ': 'd', 'ɡ': 'g', 'α': 'a', 'β': 'b', 'ε': 'e', 'η': 'n', 'ι': 'i', 'κ': 'k', 'ν': 'v',
+    'ο': 'o', 'ρ': 'p', 'τ': 't', 'υ': 'u', 'χ': 'x', 'ı': 'i', 'ſ': 's', 'ƒ': 'f', 'ս': 'u', 'օ': 'o', 'հ': 'h', 'ց': 'g', 'ք': 'p',
+    'ɑ': 'a', 'ʀ': 'r', 'ʜ': 'h', 'ɪ': 'i', 'ᴄ': 'c', 'ᴋ': 'k', 'ᴜ': 'u', 'ꜰ': 'f', 'ß': 'ss', 'æ': 'ae', 'œ': 'oe', 'ø': 'o', 'đ': 'd', 'ł': 'l' };
+  var LEET = { '0': 'o', '1': 'i', '!': 'i', '|': 'i', '3': 'e', '4': 'a', '@': 'a', '$': 's', '5': 's', '7': 't', '+': 't', '9': 'g', '6': 'g', '8': 'b' };
+  var esc = function (s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); };
+  function fold(t) {
+    t = String(t == null ? '' : t);
+    try { t = t.normalize('NFKC'); } catch (e) {}
+    t = t.replace(/[\u00ad\u200b-\u200d\u2060\ufeff\u034f\u180e]/g, '');                 // invisible joiners: the word stays one
+    t = t.replace(/[\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]/g, ' ');       // odd spaces: a space
+    t = t.replace(/[\u2018\u2019\u02bc`\u00b4]/g, "'");
+    var o = ''; for (var i = 0; i < t.length; i++) { var c = t[i], l = c.toLowerCase(); o += HOMO[l] ? (c === l ? HOMO[l] : HOMO[l].toUpperCase()) : c; }
+    try { o = o.normalize('NFD').replace(/[\u0300-\u036f]/g, ''); } catch (e) {}
+    return o;
+  }
+  // one word -> its spellings to judge (leet undone, "*" kept as a wildcard, long runs shrunk)
+  function spellings(w) {
+    var out = {};
+    var base = w.toLowerCase().replace(/'s$/, '').replace(/'/g, '');
+    [LEET, Object.assign({}, LEET, { '1': 'l' })].forEach(function (map, k) {
+      if (k && base.indexOf('1') < 0) return;
+      var s = ''; for (var i = 0; i < base.length; i++) { var c = base[i]; s += /[a-z*]/.test(c) ? c : (map[c] || ''); }
+      if (!s) return;
+      out[s] = 1; out[s.replace(/([a-z])\1{2,}/g, '$1')] = 1; out[s.replace(/([a-z])\1{2,}/g, '$1$1')] = 1;
+    });
+    return Object.keys(out);
+  }
+  function badWord(v) {
+    if (v.indexOf('*') >= 0) {                                       // f*ck, sh*t, f**k: a hidden letter or three
+      if (!/[a-z]/.test(v)) return false;
+      var re = new RegExp('^' + v.split(/\*+/).map(esc).join('[a-z]{1,3}') + '$');
+      for (var w in WORD) if (!allow[w] && re.test(w)) return true;
+      for (var i = 0; i < SUB.length; i++) if (re.test(SUB[i])) return true;
+      var plain = v.replace(/\*+/g, ''), fills = 'aeiou';                // motherf***er; f*cker (each hidden run as one vowel)
+      for (var q = 0; q < SUB.length; q++) if (plain.indexOf(SUB[q]) >= 0) return true;
+      if ((v.match(/\*+/g) || []).length <= 2) for (var x = 0; x < 5; x++) for (var y = 0; y < 5; y++) { var c = 0; if (badWord(v.replace(/\*+/g, function () { return fills[c++ ? y : x]; }))) return true; }
+      return false;
+    }
+    if (WORD[v] && !allow[v]) return true;
+    for (var j = 0; j < SUB.length; j++) if (v.indexOf(SUB[j]) >= 0 && !SUB_OK.test(v)) return true;
+    for (var k = 0; k < ROOT.length; k++) {
+      var r = ROOT[k]; if (v === r || v.length <= r.length) continue;
+      var rest = v.slice(r.length), bareBad = WORD[r] && !allow[r];
+      if (v.indexOf(r) === 0 && (SUF[rest] || WORD[rest]) && (bareBad || !/^e?s$/.test(rest))) return true;   // a plural is only as bad as the word
+      var tail = v.slice(-r.length) === r ? r : (v.slice(-r.length - 1) === r + 's' ? r + 's' : (v.slice(-r.length - 2) === r + 'es' ? r + 'es' : ''));
+      if (tail && PRE[v.slice(0, v.length - tail.length)]) return true;
+    }
+    return false;
+  }
+  return function nameOk(text) {
+    var t = fold(text);
+    if (/(^|[^0-9])14\W{0,2}88([^0-9]|$)/.test(t)) return false;                            // 1488, 14/88
+    var low = t.toLowerCase();
+    SAFE.forEach(function (re) { low = low.replace(re, ' '); });
+    var flat = ' ' + low.replace(/[^a-z0-9*@$!|+]+/g, ' ').trim() + ' ';
+    for (var p = 0; p < PHRASE.length; p++) if (flat.indexOf(' ' + PHRASE[p] + ' ') >= 0) return false;
+    // words: split at spaces and punctuation; camelCase humps give extra words (BigCock -> Big, Cock)
+    var safeT = t; SAFE.forEach(function (re) { safeT = safeT.replace(new RegExp(re.source, 'gi'), ' '); });
+    var raw = safeT.split(/[\s\-_.,\/\\&:;()\[\]{}"<>~^=]+/).filter(Boolean);
+    var words = [];
+    raw.forEach(function (w) {
+      words.push(w);
+      var hump = w.replace(/([a-z])([A-Z])/g, '$1 $2').split(' ');
+      if (hump.length > 1) { hump.forEach(function (h) { words.push(h); }); for (var i = 0; i + 1 < hump.length; i++) words.push(hump[i] + hump[i + 1]); }
+    });
+    // spelled out (f u c k, s.h.i.t) and split short pieces (Fu ck, Sh it): joined and judged too
+    var run = '';
+    raw.concat(['']).forEach(function (w) {
+      var s = spellings(w)[0] || '';
+      if (s.length === 1) { run += s; return; }
+      if (run.length >= 3) words.push(run);
+      run = '';
+    });
+    for (var i = 0; i + 1 < raw.length; i++) {
+      var a = spellings(raw[i])[0] || '', b = spellings(raw[i + 1])[0] || '';
+      if (a && b.length >= 2 && a.length <= 3 && b.length <= 3) { /* f uck, Fu ck, Sh it -- not Fuk K. */ var ab = a + b; if (WORD[ab] && !allow[ab] || SUB.indexOf(ab) >= 0) return false; }
+    }
+    for (var n = 0; n < words.length; n++) { var sp = spellings(words[n]); for (var m = 0; m < sp.length; m++) if (badWord(sp[m])) return false; }
+    return true;
+  };
+}
+/* NAMEFILTER-END */
+// Battle Tees' two uses: comments refuse every listed word; a name may be a bare "Dick" (Richard) -- "bitch" stays out
+var _btCmOk=null,_btNmOk=null;
+function bfCmClean(t){if(!_btCmOk)_btCmOk=makeNameFilter();return _btCmOk(String(t==null?'':t));}
 function bfCmCheck(text){
   const t=String(text||'').replace(/\s+/g,' ').trim();
   if(!t)return 'Type a comment first.';
@@ -11762,7 +12148,7 @@ function isBlocked(pid){return !!(pid&&Object.prototype.hasOwnProperty.call(bloc
 function phHideGet(){try{return JSON.parse(localStorage.getItem('btPhHide')||'{}')||{};}catch(e){return {};}}
 function photoHidden(pid){return !!(pid&&pid!==myPid()&&(isBlocked(pid)||phHideGet()[pid]));}
 // a name is held to the same word filter as a comment, wherever it is typed
-function nameBad(nm){return !!(nm&&!bfCmClean(String(nm).replace(/\bdick\b/gi,' ')));}   // "Dick" alone is a real first name (Richard)
+function nameBad(nm){if(!_btNmOk)_btNmOk=makeNameFilter({allow:['dick']});return !!(nm&&!_btNmOk(String(nm)));}   // "Dick" alone is a real first name (Richard)
 const NAME_BAD_MSG="Keep it clean. That name isn't allowed.";
 function nameGuard(nm,errEl){if(!nameBad(nm))return false;if(errEl){errEl.textContent=NAME_BAD_MSG;}else{try{shotToast(NAME_BAD_MSG);}catch(e){}}return true;}
 // a Battlefield round with someone you blocked stays off your list (unless you played in it) -- the relay does the
@@ -12104,7 +12490,7 @@ function vBattlefield(){
           <div style="text-align:right;flex:none">
             <div class="num" style="font-size:28px;line-height:1;color:${x.toPar<0?'var(--good)':x.toPar>0?'var(--amber-bd)':'var(--ink)'}">${tp(x.toPar)}</div>
             <div class="tiny">${x.gross} · thru ${x.thru}</div></div>
-          ${x.pid&&x.pid===myPid()?'':pMoreBtn(x.pid,x.name,false,'battlefield',e.code)}
+          ${x.pid&&myPids().has(x.pid)?'':pMoreBtn(x.pid,x.name,false,'battlefield',e.code)}
         </div>${bfRxHTML(e.code,bfTarget(x),bfFitIcon(x,ppl))}`).join('')
         :`<div class="tiny" style="padding-top:6px;color:var(--ink3)">${e.live?'No holes carded yet.':'No scores were recorded.'}</div>`;
       // Every card leads with the course; the players are listed below it (Nathan 9/14 for
@@ -12340,7 +12726,7 @@ function roundStatsCardHTML(act,holes,course,shotMap,players,title){
       <div style="display:flex;align-items:center;gap:10px">${avatarHTML(p,36)}
         <div style="flex:1;min-width:0"><b style="font-family:Rajdhani,sans-serif;font-size:19px">${esc(p.name)}</b>${idxLbl(p)}
           <div class="tiny">${mix.join(' · ')||'—'}</div></div>
-        ${(p.pid&&p.pid===myPid())||(p.scorer&&p.scorer===devId())?'':pMoreBtn(p.pid||'',p.name,!!(p.photo&&!photoHidden(p.pid)),'round',(S.screen==='bfwatch'&&bfWatch&&bfWatch.code)||(S.share&&S.share.code)||'')}
+        ${rowIsMine(p)||(p.scorer&&p.scorer===devId())?'':pMoreBtn(p.pid||'',p.name,!!(p.photo&&!photoHidden(p.pid)),'round',(S.screen==='bfwatch'&&bfWatch&&bfWatch.code)||(S.share&&S.share.code)||'')}
         <div style="text-align:right"><b class="num" style="font-size:26px">${x.gross}</b> <span class="num" style="font-size:16px;color:${x.toPar<0?'var(--good)':x.toPar>0?'var(--amber)':'var(--ink3)'}">${tp}</span>
           <div class="tiny">${cardN(course)?(x.holes<cardN(course)?`thru ${x.holes}`:`${cardN(course)} holes`):x.holes<((course&&course.holes)||[]).length?`thru ${x.holes}`:'18 holes'}</div></div></div>
       ${cells.length?`<div class="rsg">${cells.join('')}</div>`:''}
@@ -12842,12 +13228,12 @@ function vStart(){
       const isMe=low(p.name)===meNm;
       seat++;
       return `<div class="row"><div style="flex:1;min-width:0">${seatTag(seat)}<b style="font-size:17px">${esc(p.name)}</b>${isMe?' <span class="pill gray">you</span>':''}
-          <div class="tiny">Index ${fmtIdx(p.index)}${p.nearby?' · <span style="color:var(--amber)">◌ invited when you start</span>':(!isMe?' · <span class="muted">✎ you\'ll score them</span>':'')}</div></div>
+          <div class="tiny">Index ${seatIdx(p)}${p.nearby?' · <span style="color:var(--amber)">◌ invited when you start</span>':(!isMe?' · <span class="muted">✎ you\'ll score them</span>':'')}</div></div>
         ${isMe?'':`<button class="ghost danger xbtn" aria-label="Remove player" onclick="removeGolfer(${i})">${XICON}</button>`}</div>`;}).join('')
       +Array.from({length:Math.max(0,want-nFilled)},(_,k)=>`<div class="row" style="opacity:.55"><div>${seatTag(nFilled+k+1)}<span class="muted">Open</span></div></div>`).join('');
     const nearbyRows=(gatePick.list||[]).filter(n=>!inRoster(n.name)).map(n=>`
       <div class="row" style="cursor:pointer" onclick="gateAddOne('${esc(n.id)}')">
-        <div style="flex:1;min-width:0"><b>${n.near?'📍':'🌐'} ${esc(n.name)}</b><div class="tiny">Index ${n.index!=null?n.index:'?'} · ${n.near?'nearby':'online'}</div></div>
+        <div style="flex:1;min-width:0"><b>${n.near?'📍':'🌐'} ${esc(n.name)}</b><div class="tiny">${onlineSub(n)}</div></div>
         ${pMoreBtn(n.pid||'',n.name,false,'online','',0,n.pid?'':n.id)}<span class="pill wolf">+ add</span></div>`).join('');
     const libRows=(S.playerLib||[]).filter(e=>e.name&&!inRoster(e.name)&&low(e.name)!==meNm).map(e=>`
       <div class="row" style="cursor:pointer" onclick="addFromLib('${e.id}')">
@@ -12966,11 +13352,7 @@ function gateAddGroup(){
     ensureMeFirst();
     chosen.forEach((n,k)=>{
       const pl=S.players[k+1];
-      pl.name=uniqueRosterName(n.name,k+1);pl.index=+n.index||10;pl.chOverride=null;pl.nearby=n.id||true;delete pl.libId;delete pl.scorer;
-      if(n.pid)pl.pid=n.pid;else delete pl.pid;
-      const t=S.course.teeSets.find(ts=>ts.name.toLowerCase()===String(n.tee||'').toLowerCase());
-      if(t)pl.tee=t.id;
-      upsertLib(pl);
+      if(seatOnline(pl,n,k+1))upsertLib(pl);   // index and tees only when near (11/5)
     });
     S.screen='setup';
   });
@@ -12990,13 +13372,13 @@ function vGate(){
       :'<span class="muted">✎ you\'ll score them</span>';
     return `<div class="row">
       <div style="flex:1;min-width:0"><b style="font-size:17px">${esc(p.name)}</b>${isMe?' <span class="pill gray">you</span>':''}
-        <div class="tiny">Index ${fmtIdx(p.index)}${st2?' · '+st2:''}</div></div>
+        <div class="tiny">Index ${seatIdx(p)}${st2?' · '+st2:''}</div></div>
       ${isMe?'':`<button class="ghost danger xbtn" aria-label="Remove player" onclick="removeGolfer(${i})">${XICON}</button>`}
     </div>`;
   }).join('');
   const nearbyRows=(gatePick.list||[]).filter(n=>!inRoster(n.name)).map(n=>`
     <div class="row" style="cursor:pointer" onclick="gateAddOne('${esc(n.id)}')">
-      <div style="flex:1;min-width:0"><b>${n.near?'📍':'🌐'} ${esc(n.name)}</b><div class="tiny">Index ${n.index!=null?n.index:'?'} · ${n.near?'nearby':'online'}</div></div>
+      <div style="flex:1;min-width:0"><b>${n.near?'📍':'🌐'} ${esc(n.name)}</b><div class="tiny">${onlineSub(n)}</div></div>
       ${pMoreBtn(n.pid||'',n.name,false,'online','',0,n.pid?'':n.id)}<span class="pill wolf">+ add</span>
     </div>`).join('');
   const libRows=(S.playerLib||[]).filter(e=>e.name&&!inRoster(e.name)&&low(e.name)!==meNm).map(e=>`
@@ -13882,7 +14264,8 @@ function backupBlockHTML(){
   return `<div class="row" style="border-top:1px solid var(--line);margin-top:12px"><span class="muted">☁ Auto-backup</span>
       <button class="ghost ${S.autoBackup?'sel':''}" onclick="toggleAutoBackup()">${S.autoBackup?'On':'Off'}</button></div>
     <div class="tiny mb">${S.autoBackup
-      ?(abEmail?`Players, courses &amp; round history save themselves whenever they change · last backup ${agoTxt(abAt)}.`
+      ?(abEmail&&bkPaused()?`Paused on this phone. Confirm your email to keep backing up. <button class="ghost" style="margin-top:6px;width:100%" onclick="openVerify('backupRow')">Confirm my email</button>`
+      :abEmail?`Players, courses &amp; round history save themselves whenever they change · last backup ${agoTxt(abAt)}.`
         :'Tap <b>Back up</b> once to set your email — after that everything saves itself automatically.')
       :'Off — only manual backups run.'}</div>
   ${backupUI.mode?`
@@ -14209,7 +14592,7 @@ function grpEdAddNew(){
 function vPlayers(){
   loadFriends();          // fills the ⚔️ markers; no-op once cached
   try{hcpSync();}catch(e){}   // fresh official handicaps for the list (throttled)
-  return topbar('Players','','home')+`<main>
+  return topbar('Players','','home')+`<main>${emLockHTML()}
   ${groupsCardHTML()}
   <div class="card"><h2>Players</h2>
     ${S.me.name?(editingMe?`
@@ -14247,14 +14630,15 @@ function vPlayers(){
       <div class="tiny mt">${(lobbySock&&lobbySock.readyState===1)?((scanShown=onlineList()).length?'On the app right now:':'Scanning… no one else is on the app at the moment.'):'Connecting…'}</div>
       ${(scanShown||[]).map((n,j)=>{
         const saved=S.playerLib.some(x=>x.name.trim().toLowerCase()===n.name.trim().toLowerCase());
-        return `<div class="row"><div style="flex:1;min-width:0"><b>${n.near?'📍':'🌐'} ${esc(n.name)}</b><div class="tiny">Index ${n.index!=null?n.index:'?'}${n.tee?` · ${esc(n.tee)} tees`:''} · ${n.near?'nearby':'online'}</div></div>
+        return `<div class="row"><div style="flex:1;min-width:0"><b>${n.near?'📍':'🌐'} ${esc(n.name)}</b><div class="tiny">${onlineSub(n,1)}</div></div>
           ${pMoreBtn(n.pid||'',n.name,false,'online','',0,n.pid?'':n.id)}${saved?'<span class="pill gray">saved</span>':`<button class="ghost sel" onclick="savePresencePlayer(${j})">Save</button>`}</div>`;}).join('')}
       <button class="ghost mt" onclick="toggleScan()">Done</button>`
     :`<button class="ghost mt" onclick="toggleScan()">📍 Find nearby players</button>`}
     ${addingPlayer?`<div class="grid2 mt">
-        <div><div class="tiny">Name</div><input id="npName" type="text"></div>
+        <div><div class="tiny">Name</div><input id="npName" type="text"${addPrefill?` value="${esc(addPrefill.name)}"`:''}></div>
         <div><div class="tiny">Handicap index</div><input id="npIdx" type="text" inputmode="decimal" placeholder="10.0"></div>
       </div>
+      ${addPrefill?`<div class="tiny mt">Index isn't shared from far away — type theirs (blank is 10).</div>`:''}
       <div class="mt" style="display:flex;gap:6px">
         <button class="ghost sel" onclick="addManualPlayer()">Save player</button>
         <button class="ghost" onclick="toggleAddPlayer()">Cancel</button>
@@ -14326,7 +14710,7 @@ function vPlayers(){
         ${action}
             <button class="ghost" onclick="startEditPlayer('${e.id}')">Edit</button>
             <button class="ghost danger xbtn" aria-label="Delete player" onclick="delPlayer('${e.id}')">${XICON}</button>
-            ${e.pid&&e.pid!==myPid()?pMoreBtn(e.pid,e.name,!!(e.photo&&!photoHidden(e.pid)),'saved'):''}
+            ${e.pid&&!myPids().has(e.pid)?pMoreBtn(e.pid,e.name,!!(e.photo&&!photoHidden(e.pid)),'saved'):''}
       </span>`}</div>`;})()).join('')
     :'<div class="tiny">Golfers you set up in a round are saved here automatically.</div>';})()}
     ${backupBlockHTML()}
@@ -15399,21 +15783,21 @@ function vSetup(){
     const isMe=!!(S.me.name&&(p.name||'').trim().toLowerCase()===S.me.name.trim().toLowerCase());
     const pickSel=(nbShown.length||S.playerLib.length)?`<span style="position:relative;flex:none;width:42px;border:2px solid var(--elec);border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--elec);background:var(--card);font-size:15px;box-shadow:2px 2px 0 var(--elec-dk)">▾<select style="position:absolute;inset:0;opacity:0;width:100%;height:100%" onchange="pickPlayerOpt(${i},this.value)">
         <option value="">Pick a player…</option>
-        ${nbShown.some(n=>n.near)?`<optgroup label="Nearby — on the course">${nbShown.map((n,j)=>n.near?`<option value="nb:${j}">📍 ${esc(n.name)}${n.index!=null?` · ${fmtIdx(n.index)}`:''}</option>`:'').join('')}</optgroup>`:''}
-        ${nbShown.some(n=>!n.near)?`<optgroup label="Online — elsewhere">${nbShown.map((n,j)=>!n.near?`<option value="nb:${j}">🌐 ${esc(n.name)}${n.index!=null?` · ${fmtIdx(n.index)}`:''}</option>`:'').join('')}</optgroup>`:''}
+        ${nbShown.some(n=>n.near)?`<optgroup label="Nearby — on the course">${nbShown.map((n,j)=>n.near?`<option value="nb:${j}">📍 ${esc(n.name)}${onlineIdx(n)!=null?` · ${fmtIdx(onlineIdx(n))}`:''}</option>`:'').join('')}</optgroup>`:''}
+        ${nbShown.some(n=>!n.near)?`<optgroup label="Online — elsewhere">${nbShown.map((n,j)=>!n.near?`<option value="nb:${j}">🌐 ${esc(n.name)}</option>`:'').join('')}</optgroup>`:''}
         ${S.playerLib.length?`<optgroup label="Saved players">${S.playerLib.map(e=>`<option value="lib:${e.id}">${esc(e.name)} · ${fmtIdx(e.index)}${e.teeName?` · ${esc(e.teeName)}`:''}</option>`).join('')}</optgroup>`:''}
       </select></span>`:'';
     return `<div class="card">
       <div class="row"><b>Golfer ${i+1}${isMe?' <span class="pill gray">you</span>':''}${(!isMe&&p.scorer===devId()&&(S.share.on||S.players.some(x=>x.nearby)))?' <span class="pill gray">you score them</span>':''}${S.config.game==='wolf'?` — tees off ${['1st','2nd','3rd','4th'][i]}`:''}</b>
         <span>${i>0?`<button class="ghost" onclick="movePl(${i})">↑</button>`:''}</span></div>
       <div class="grid2 mt">
-        <div><div class="tiny">Name</div><div style="padding:6px 2px;font-weight:700;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:8px">${avatarHTML(p,30)}<span style="min-width:0;overflow:hidden;text-overflow:ellipsis">${esc(p.name)}</span>${(!isMe&&ownedElsewhere(p)&&p.pid&&p.pid!==myPid())?pMoreBtn(p.pid,p.name,!!(p.photo&&!photoHidden(p.pid)),'round',(S.share&&S.share.code)||''):''}</div></div>
+        <div><div class="tiny">Name</div><div style="padding:6px 2px;font-weight:700;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:8px">${avatarHTML(p,30)}<span style="min-width:0;overflow:hidden;text-overflow:ellipsis">${esc(p.name)}</span>${(!isMe&&ownedElsewhere(p)&&p.pid&&!rowIsMine(p))?pMoreBtn(p.pid,p.name,!!(p.photo&&!photoHidden(p.pid)),'round',(S.share&&S.share.code)||''):''}</div></div>
         <div><div class="tiny">Tees</div><select style="width:100%;padding:9px;border:2px solid var(--line);border-radius:8px;font-size:15px;background:var(--card)" onchange="setPl(${i},'tee',this.value)">${teeOpts}</select></div>
         <div><div class="tiny">Handicap index</div>${hcpSeatSet(i)
           ?`<div style="padding:9px 2px;font-weight:700;font-size:17px">${esc(fmtIdx(hcpSeatSet(i).ix))} <span class="tiny muted">🔒 set for this round</span></div>`
           :ownedElsewhere(p)
           ?`<div style="padding:9px 2px;font-weight:700;font-size:17px">${esc(String(p.index))} <span class="tiny muted">🔒 set on their phone</span></div>`
-          :`<input id="plIdx${i}" data-rec="${esc(p.name)}" type="text" inputmode="decimal" value="${fmtIdx(p.index)}" onfocus="tapClear(this)" onblur="commitPl(this,${i},'index')">`}</div>
+          :`<input id="plIdx${i}" data-rec="${esc(p.name)}" type="text" inputmode="decimal" value="${idxAsked(p)?'':fmtIdx(p.index)}"${idxAsked(p)?' placeholder="10"':''} onfocus="tapClear(this)" onblur="commitPl(this,${i},'index')">${idxAsked(p)?'<div class="tiny" style="color:var(--amber)">Not shared — plays off 10 till you type theirs.</div>':''}`}</div>
         <div></div>
       </div>
       <div class="tiny mt">${cardN()?(k=>`Course hcp <b>${ch[i]}</b> → plays with <b>${k}</b> stroke${k===1?'':'s'} on ${cardN()} holes (${stWhy}).`)(shortStrokes(st[i],cardN()))
@@ -15842,6 +16226,7 @@ function upsertLib(p){
   if(!S.playerLib)return;
   const nm=(p.name||'').trim();
   if(!nm||/^Player \d$/.test(nm))return;
+  if(idxAsked(p))return;   // an online golfer whose index nobody has given (seatOnline, 11/5): remembered once someone does
   if(p.pid&&S.me&&S.me.pid&&p.pid===S.me.pid&&nm.toLowerCase()!==(S.me.name||'').trim().toLowerCase()){p=Object.assign({},p);delete p.pid;}   // my own pid belongs to my name only (9/6)
   let e=p.libId?S.playerLib.find(x=>x.id===p.libId):null;
   if(!e&&p.pid){e=S.playerLib.find(x=>x.pid===p.pid);if(e)p.libId=e.id;}
@@ -15942,7 +16327,7 @@ function setPl(i,k,v){set(()=>{
   if(k==='name')v=uniqueRosterName(v,i);
   if(k==='index'){
     S.players[i][k]=parseIdx(v,+S.players[i][k]||0);
-    const p=S.players[i];
+    const p=S.players[i];delete p.idxAsk;   // typed: no longer the stand-in
     if(S.me&&((S.me.pid&&p.pid===S.me.pid)||p.ownerDev===devId())&&+p.index!==+S.me.index){S.me.index=+p.index;hcpTypedMine(S.me.index);}
   }
   else if(k==='chOverride')S.players[i][k]=v===''?null:+v;
@@ -16433,6 +16818,39 @@ function inviteForMe(i){
     return kmBetween(+near.lat,+near.lon,+myCoords[0],+myCoords[1])<=(+near.km||1.5);
   }catch(e){return false;}
 }
+// "FIX PLEASE" (round 2, 11/5). A golfer added to a round by NAME gets the card only with a fix this session within 25 km
+// of where the room opened, and this app takes a fix only at START ROUND / Join / Find nearby -- so a phone sitting on
+// Home never got the card. Now the relay sends a content-free {t:'fixplease'} to a phone with no fix whose name is on a
+// live invitation. Location already allowed: take a fix quietly and say hello with it (the card follows if the round is
+// near). Not allowed yet: a small card that takes the fix on a tap (the system asks). {off:true}: the round went.
+var fixAsk=null;   // var, not let: render() may read it before this line runs (the 9/5 TDZ wipe). null · 'ask' (show the card) · 'busy' (fix being taken) · 'none' (no round near: said once, then gone)
+function fixPlease(off){
+  try{
+    if(off){if(fixAsk){fixAsk=null;render();}return;}
+    if(myCoordsAt&&Date.now()-myCoordsAt<10*60000){sendHello();return;}   // a fresh fix already: the relay decides from it
+    const ask=()=>{if(fixAsk!=='busy'){fixAsk='ask';render();}};
+    const q=(typeof navigator!=='undefined'&&navigator.permissions&&navigator.permissions.query)?navigator.permissions.query({name:'geolocation'}):null;
+    if(!q||!navigator.geolocation){ask();return;}
+    q.then(st=>{if(st&&st.state==='granted')fixTake(false);else ask();}).catch(ask);
+  }catch(e){}
+}
+function fixTake(tapped){
+  if(!navigator.geolocation){fixAsk=null;render();return;}
+  if(tapped){fixAsk='busy';render();}
+  navigator.geolocation.getCurrentPosition(p=>{
+    cacheCoords([p.coords.latitude,p.coords.longitude]);sendHello();
+    if(tapped)setTimeout(()=>{if(fixAsk==='busy'){fixAsk=liveInvites().length?null:'none';render();if(fixAsk==='none')setTimeout(()=>{if(fixAsk==='none'){fixAsk=null;render();}},6000);}},5000);
+  },()=>{if(tapped){fixAsk='denied';render();}},{timeout:10000,maximumAge:60000});
+}
+function fixAskHTML(){
+  if(!fixAsk||(S.share&&S.share.on)||liveInvites().length)return '';
+  const msg=fixAsk==='busy'?'Checking where you are…':fixAsk==='none'?'No round near you right now.':fixAsk==='denied'?'Location is off. Ask them for the round code.':'Someone added your name to a round. Tap to check if it\'s near you.';
+  return `<div class="card invcard" id="fixAskCard" style="border-color:var(--amber);background:#fffcf7">
+    <h2 style="color:var(--amber)">📍 Invited by name?</h2>
+    <div class="tiny mb">${msg}</div>
+    ${fixAsk==='ask'?`<button class="big warn" onclick="fixTake(true)">Check</button>`:fixAsk==='busy'?'':`<button class="ghost" style="width:100%" onclick="fixAsk=null;render()">OK</button>`}
+  </div>`;
+}
 // A card that matches me by NAME only (no pid) on a phone with no fix: get a
 // fix, then re-render — a same-name stranger with location on drops the card
 // once he is more than 100 km from where the room opened.
@@ -16481,11 +16899,8 @@ function gateAddOne(id){
     ensureMeFirst();
     const j=firstEmptySlot();if(j<0)return;
     const pl=S.players[j];
-    pl.name=uniqueRosterName(n.name,j);pl.index=+n.index||10;pl.chOverride=null;pl.nearby=n.id||true;delete pl.libId;delete pl.scorer;delete pl.ownerDev;   // the handle: the relay finds who to invite
-    if(n.pid)pl.pid=n.pid;else delete pl.pid;
-    const t=S.course.teeSets.find(ts=>ts.name.toLowerCase()===String(n.tee||'').toLowerCase());
-    if(t)pl.tee=t.id;
-    upsertLib(Object.assign({},pl));
+    const known=seatOnline(pl,n,j);delete pl.ownerDev;   // nearby = the handle: the relay finds who to invite
+    if(known)upsertLib(Object.assign({},pl));
     syncGroupCounts();
   });
 }
@@ -17435,7 +17850,8 @@ function maybeBroadcastRound(){
     // repeats until the relay ACKS it (_bfSent is set by the ack, not here).
     if(!S.round._bfLive){
       S.round._bfLive=true;
-      try{stat('round_live',{game:S.round.game,course:S.course.name,holes:S.round.span.count,players:NP(),shared:!!S.share.on,
+      try{stat('round_live',{...(S.me&&S.me.pid?{pid:S.me.pid,pkey:myKey()}:{}),   // the text to Nathan names a player only with the key (11/5 overnight)
+        game:S.round.game,course:S.course.name,holes:S.round.span.count,players:NP(),shared:!!S.share.on,
         code:(S.share&&S.share.code)||null,thru:bfScoredHoles(),stack:(S.round.games||[]).join('+')});}catch(e){}
     }
     setTimeout(bfBroadcastStart,300);
