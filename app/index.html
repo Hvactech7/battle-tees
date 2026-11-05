@@ -583,7 +583,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-center in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1793848239';
+const BUILD='1793852952';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -3004,7 +3004,32 @@ function bfBroadcastEnd(){
 // Both inject window.BTNative before any page script. Everything here is
 // optional: in a browser these are no-ops.
 function nativeShell(){try{return (typeof window!=='undefined'&&window.BTNative)||null;}catch(e){return null;}}
-function shellRound(op,info){try{const sh=nativeShell();if(sh&&sh.round&&typeof sh.round[op]==='function')sh.round[op](info);}catch(e){}}
+// THE ANDROID ROUND NOTIFICATION KEEPS ITS YARDAGE (11/4, recording the Play foreground-service video): the shell's
+// round service shows '<yards> to the middle', but the line froze when the app went to the background (gpsPauseHidden
+// dropped the map's GPS) or the golfer left the map for Score / Setup, and it stayed up after End Round (only endRound
+// told the shell; finishMyRound and the other ways a round ends did not). In the shell, during a live round: the map
+// keeps its GPS when hidden, a light watch feeds the line from every other screen, and render() drops the notification
+// the moment no round is live -- however it ended.
+let shellRoundOn=false,shellWatch=null;
+function shellLiveRound(){try{return !!(nativeShell()&&S.round&&S.round.started&&!isReview());}catch(e){return false;}}
+function shellGpsTick(pos){
+  try{if(!shellLiveRound()||amnesiaOn(S.course.id))return;
+    const g=S.course.geo&&S.course.geo.holes&&S.course.geo.holes[physHole(S.round.cur||0)+1],gr=g&&g.green;if(!gr||!gr.length)return;
+    const poly=Array.isArray(gr[0])&&gr.length>2?gr:null,c=poly?centroidOf(poly):(Array.isArray(gr[0])?gr[0]:gr);
+    const m=poly?fmbFrom(pos,poly,c).m:mDist(pos,c);
+    if(m!=null)shellRoundTick(`${yd(m)}${uLbl()} to the middle`);}catch(e){}
+}
+function shellRoundSync(){
+  try{
+    if(shellRoundOn&&!shellLiveRound())shellRound('ended');
+    // by SCREEN, not by the map's watch: render() runs this before teardownMap() clears the map's watch, so leaving the
+    // map for Score still saw it and the notification froze (emulator take 11/4 8 PM); on the map, the map's own GPS feeds it
+    const want=shellLiveRound()&&S.screen!=='map'&&!!navigator.geolocation;
+    if(want&&shellWatch==null)shellWatch=navigator.geolocation.watchPosition(p=>shellGpsTick([p.coords.latitude,p.coords.longitude]),()=>{},{enableHighAccuracy:true,maximumAge:5000});
+    else if(!want&&shellWatch!=null){navigator.geolocation.clearWatch(shellWatch);shellWatch=null;}
+  }catch(e){}
+}
+function shellRound(op,info){if(op==='started')shellRoundOn=true;else if(op==='ended')shellRoundOn=false;try{const sh=nativeShell();if(sh&&sh.round&&typeof sh.round[op]==='function')sh.round[op](info);}catch(e){}}
 function shellRoundInfo(text){
   const h=(S.round&&S.round.cur)||0;
   const par=(S.course&&S.course.holes&&S.course.holes[h]&&S.course.holes[h].par)||'';
@@ -5832,6 +5857,7 @@ function scoreNagToast(){
 // it. Back on the map: start it again, the same way the first open does.
 let gpsPausedHidden=false;
 function gpsPauseHidden(){
+  if(shellLiveRound())return;   // Android round notification: its yardage keeps updating in the background (11/4)
   try{if(mapWatch!=null&&navigator.geolocation){navigator.geolocation.clearWatch(mapWatch);mapWatch=null;gpsPausedHidden=true;}}catch(e){}
 }
 function gpsResumeVisible(){
@@ -9843,6 +9869,7 @@ function morphKids(a,b){
 function selDefault(sel){try{const o=[...sel.options].find(x=>x.defaultSelected)||sel.options[0];return o?o.value:'';}catch(e){return '';}}
 function render(){
   try{dropClosedStages();}catch(e){}
+  try{shellRoundSync();}catch(e){}
   if(S.screen!=='gate'&&gatePick.timer){clearInterval(gatePick.timer);gatePick.timer=null;gatePick.open=false;}
   const el=$('#app');
   const scr=S.screen;
