@@ -587,7 +587,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-center in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1793921680';
+const BUILD='1793923726';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -2185,7 +2185,7 @@ function startGroupFromGate(){shareRound();go('home');}
 // list nearby. Sent on connect for a group room, and the moment a solo room
 // becomes one (below).
 function postRoomInvite(){
-  try{if(!(S.share&&S.share.on&&S.share.code&&S.share.creator&&!S.share.bf))return;
+  try{if(!(S.share&&S.share.on&&S.share.code&&S.share.creator&&!S.share.bf)||gpsOnly())return;   // a GPS round is never announced (gpsQuietEnd)
     if(!S.share.since)S.share.since=Date.now();
     if(typeof sockOpen!=='undefined'&&sockOpen&&sock)
       sock.send(JSON.stringify({t:'invite',room:S.share.code,
@@ -2248,6 +2248,7 @@ function inviteFromMap(){
 }
 function shareRound(){
   if(ageOffline())return;   // under 13: no rooms (A2)
+  if(gpsOnly())return;      // a GPS round never gets a share code (gpsQuietEnd)
   lobbyClose();
   const midRound=!!(S.round&&S.round.started);
   if(S.share.on&&S.share.code){
@@ -2396,6 +2397,7 @@ function guardedJoin(code){
 }
 function joinFromInvite(code){if(!guardedJoin(code))return;joinRoundCode(code);}
 function joinRoundCode(code){
+  if(gpsOnly())gpsQuietEnd(S.screen);          // nothing of a GPS round travels into a room (its flag would hide the new card)
   wiz=null;                                   // the wizard is done with, whichever door we came in by
   lobbyClose();
   stat('round_share',{side:'joiner'});
@@ -2575,7 +2577,7 @@ function stat(ev,extra){
   // rounds into production stats. Anything served from localhost stays local.
   if(/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname))return;
   const e=Object.assign({t:'stat',ev,dev:devId(),who:(S.me&&S.me.name)||'',build:BUILD,
-    mode:btMode(),reh:btReh,src:btSrc,at:Date.now()},btFtag?{ftag:btFtag}:{},extra||{});
+    mode:btMode(),reh:btReh,src:btSrc,at:Date.now()},btFtag?{ftag:btFtag}:{},gpsOnly()?{gps:1}:{},extra||{});   // gps: the relay keeps no round stat of a GPS round (gpsQuietEnd)
   try{
     if(lobbySock&&lobbySock.readyState===1){lobbySock.send(JSON.stringify(e));return;}
     // CAP WAS 50, and it silently ate real field data. Cypress Lakes 8/12: no
@@ -2838,7 +2840,7 @@ async function relayBackup(payload){
 // round shows up right beside this one -- that code is what the other phone joins.
 function openSoloRoom(early){
   if(ageOffline())return false;   // A2
-  if(!S.round.started||(S.share&&S.share.on))return false;
+  if(!S.round.started||gpsOnly()||(S.share&&S.share.on))return false;   // gpsOnly: never a room (gpsQuietEnd)
   S.share={on:true,code:makeCode(),creator:true,bf:true};   // bf: broadcast-only, no lobby invite
   if(early)S.share.early=true;   // opened by Players nearby, holes before the Battlefield's: Home keeps the merge door
   S.shareMetaTs=stampAfter(S.shareMetaTs);
@@ -2850,7 +2852,7 @@ function bfBroadcastStart(){
   if(ageOffline())return;   // A2: no Battlefield
   try{
     if(!S.config.bf||!S.config.bf.broadcast)return;
-    if(!S.round.started)return;
+    if(!S.round.started||gpsOnly())return;   // a GPS round never goes on the Battlefield (gpsQuietEnd)
     if(!S.share.on)openSoloRoom();         // solo round: open a room so spectators have a doc
     // THE ROUND'S roster, not the whole library. Sending the library made the
     // relay treat every saved player as "on the tee with you" — so they were
@@ -3152,7 +3154,7 @@ function shellRound(op,info){if(op==='started')shellRoundOn=true;else if(op==='e
 function shellRoundInfo(text){
   const h=(S.round&&S.round.cur)||0;
   const par=(S.course&&S.course.holes&&S.course.holes[h]&&S.course.holes[h].par)||'';
-  return {title:`${(S.course&&S.course.name)||'Battle Tees'} \u00b7 Hole ${h+1}${par?' \u00b7 Par '+par:''}`,text:text||'Round in progress \u00b7 GPS on'};
+  return {title:`${(S.course&&S.course.name)||'Battle Tees'} \u00b7 Hole ${h+1}${par?' \u00b7 Par '+par:''}`,text:text||(gpsOnly()?'Rangefinder \u00b7 GPS on':'Round in progress \u00b7 GPS on')};
 }
 let shellRoundLast={h:-1,at:0};
 function shellRoundTick(text){   // the notification line, at most every 10 s, always on a new hole
@@ -3258,6 +3260,8 @@ async function withIntegrity(p){
 }
 async function relayBattle(payload){
   if(ageOffline())return {ok:false,age:true,error:'Online features are for players 13 and up.'};   // A2
+  if(gpsOnly()&&payload&&/^(start|near|nearjoin)$/.test(String(payload.op||'')))return {ok:false,gps:true,error:'A GPS round stays on this phone.'};   // gpsQuietEnd
+  if(gpsOnly()&&payload)payload=Object.assign({},payload,{gps:1});   // ...and anything else it sends says so: the relay refuses a gps start/near/invite
   payload=await withIntegrity(payload);
   payload=pkAttach(payload);   // the player key, wherever the op acts as this player (11/5 overnight)
   const ws=await waitForRelay(6000);
@@ -6292,8 +6296,8 @@ function closeMap(){S.screen='hole';render();}
 function mapPrev(){clearScoreNag(false);
   if(coursePreview){const n=previewHoleCount();mapHole=(mapHole+n-1)%n;render();return;}
   mapBounceSnap();
-  if(cardN()){const n=cardN();mapHole=(mapHole+n-1)%n;render();return;}   // a short card: its own holes only
-  mapHole=(mapHole+17)%18;render();}
+  if(cardN()){const n=cardN();mapHole=(mapHole+n-1)%n;gpsHoleMoved();render();return;}   // a short card: its own holes only
+  mapHole=(mapHole+17)%18;gpsHoleMoved();render();}
 // Walking off the hole you are playing without scoring it is how holes go
 // missing from cards. The FIRST press of ▶ on an unscored current hole stays
 // put and points at the score input; pressing again within the toast's life
@@ -6311,8 +6315,8 @@ function mapNext(){
     }
   }catch(e){}
   clearScoreNag(false);
-  if(cardN()){mapHole=(mapHole+1)%cardN();mapBounceBack(mapHole);render();return;}   // a short card: its own holes only
-  mapHole=(mapHole+1)%18;mapBounceBack(mapHole);render();
+  if(cardN()){mapHole=(mapHole+1)%cardN();mapBounceBack(mapHole);gpsHoleMoved();render();return;}   // a short card: its own holes only
+  mapHole=(mapHole+1)%18;mapBounceBack(mapHole);gpsHoleMoved();render();
 }
 function clearScoreNag(ack){
   if(ack)scoreNagAckHole=mapHole;
@@ -10242,6 +10246,9 @@ function render(){
   try{shellRoundSync();}catch(e){}
   if(S.screen!=='gate'&&gatePick.timer){clearInterval(gatePick.timer);gatePick.timer=null;gatePick.open=false;}
   const el=$('#app');
+  // GPS Rangefinder (No Score) has no card: Score, Standings, Settle, round options and "add your group" are not its
+  // screens, whatever door led there (Home's old Continue Round did, 11/5) -- its own GPS card stands in
+  if(gpsOnly()&&/^(hole|standings|settle|roundopts|gate)$/.test(S.screen))S.screen='setup';
   const scr=S.screen;
   if(bfCm&&scr!=='bfield'&&!bfCm.noteK)closeBfComments();   // the comments popup belongs to the Battlefield list (a reply to a notice goes where the notice was)
   // iOS Shake-to-Undo mitigation: on the play screens (no text inputs) drop any
@@ -11088,7 +11095,12 @@ function vHome(){
     <div id="meErr" class="tiny mt" style="color:var(--red);font-weight:600"></div>
     <button class="big mt" onclick="saveMe()">Save profile</button>
   </div>`:''}
-  ${inRound?`<div class="card"><h2>${S.round.reopened?'Past round open':'Round in progress'}</h2>
+  ${(inRound&&gpsOnly())?`<div class="card"><h2>GPS rangefinder on</h2>
+    <div class="muted mb">${esc(S.course.name)} · no game, no card</div>
+    <button class="big" onclick="go('map')">📍 Back to the GPS</button>
+    <button class="big danger mt" onclick="endRangefinder()">${endGpsArm?'⚠️ Tap again — end the rangefinder':'End rangefinder'}</button>
+  </div>`:''}
+  ${(inRound&&!gpsOnly())?`<div class="card"><h2>${S.round.reopened?'Past round open':'Round in progress'}</h2>
     <div class="muted mb">${gameName()} · ${esc(S.course.name)} · thru ${S.round.holes.filter(r=>r.confirmed).length} holes</div>
     ${S.round.reopened?`
       <button class="big" onclick="closeReview()">✓ &nbsp;Done — Close This Round</button>
@@ -11107,7 +11119,7 @@ function vHome(){
       <div class="tiny mt">Met another group on the tee? Whoever's room you join, everyone's holes so far come along — then pick the game for the foursome under <b>Choose Game(s)</b>.</div>
       ${S.share.creator?`<div class="tiny mt">• <b>Cancel &amp; Close Room</b> kicks everyone out and keeps nothing — for a false start.</div>
       <div class="tiny">• <b>End Round Now</b> ends and saves <i>your</i> round — everyone else keeps playing, and can still score your row.</div>`:''}`
-      :S.round.reopened?''
+      :(S.round.reopened||ageOffline())?''   // under 13: no rooms, no codes, no merging (A2) -- the doors were still on Home mid-round (modewalk 11/5)
       :(S.share.on&&S.share.bf&&S.share.creator)?`<button class="ghost mt" style="width:100%" onclick="inviteFromMap();render()">👥 Open Room To Nearby Players — <b class="num" style="letter-spacing:2px">${esc(S.share.code)}</b></button>
         <div class="tiny mt">Players near you pick it from <b>Join a round</b>; anyone can enter the code — your scores so far come with you. Typing the code works even before you tap.</div>
         ${S.share.early&&S.round.started?`<button class="ghost mt" style="width:100%" onclick="mergeIntoRound()">⚔️ Merge into another group's round</button>`:''}`
@@ -11459,8 +11471,8 @@ function contactMail(){
 // PRIVACY + TERMS INSIDE THE APP (store review 11/4: Apple 5.1.1(i) and Play both want the policy one tap away in the
 // app). The pages live on the site and open in a sheet OVER the app: in the iPhone shell a plain link to battletees.app
 // loads in place with no way back (it is our own host, so the shell keeps it), and a sheet never takes anyone out of a
-// round. TERMS_LIVE stays false until the marketing session says battletees.app/terms/ is up (the draft is with the lawyer).
-const PRIVACY_URL='https://battletees.app/privacy/',TERMS_URL='https://battletees.app/terms/',TERMS_LIVE=false;
+// round. battletees.app/terms/ went live 11/5/2026 3:46 PM and Nathan turned the Terms of Service button on (TERMS_LIVE).
+const PRIVACY_URL='https://battletees.app/privacy/',TERMS_URL='https://battletees.app/terms/',TERMS_LIVE=true;
 const DOC_PAGES={privacy:['Privacy policy',PRIVACY_URL],terms:['Terms of Service',TERMS_URL]};
 function openDoc(which){
   const d0=DOC_PAGES[which];if(!d0||(which==='terms'&&!TERMS_LIVE))return;
@@ -13187,7 +13199,50 @@ function preCourseHTML(){
 // opens the map on hole 1, and Back goes to its own small setup card rather than
 // the scorecard. Everything here is gated on S.round.gpsOnly so not one pixel of
 // a normal round changes.
-function gpsOnly(){return !!(S.round&&S.round.gpsOnly);}
+function gpsOnly(){try{return !!(S.round&&S.round.gpsOnly);}catch(e){return false;}}   // try: stat() can run before S exists (a TDZ throw there, 9/5)
+// A GPS ROUND NEVER LEAVES THE PHONE (Nathan 11/5/2026 3:39 PM: "i also dont want a gps round to ever go on the
+// battlefield or past rounds or be announced to anyone"). Every sink says no to it by itself -- archiveRound (Past
+// Rounds, the season ledger, handicaps, backups), the Battlefield announce and solo room, shareRound / the room
+// invitation, Merge, the round stats and Nathan's round-live text -- so no door the app grows later can carry one out.
+// The relay refuses a battle start, an invitation, a nearby offer and a round stat that carry gps:1 (cloud/src).
+// Ending one any way at all (End rangefinder, a join, the 8-hour clock) drops it here: nothing scored, nothing kept.
+function gpsQuietEnd(to){
+  shellRound('ended');
+  S.round=blankRound();S.screen=to||'home';stView=null;idleAsk=null;
+  try{resetRoster();}catch(e){}
+  save();
+}
+// The hole you are on IS the map's hole: nothing is scored, so nothing else moves S.round.cur. A cold relaunch lands
+// on it (landOnBoot), the Android round notification names it and measures to its green, and a Battlefield notice
+// held "until the hole is done" shows when you move to the next one (gpsonlynext.js).
+// GPS ROUNDS ALREADY ON A PHONE (11/5). Before this build Home's Continue Round took a GPS round to the score screen,
+// and from there to Past Rounds, a share code and the Battlefield. On every launch: a filed GPS round with no real
+// score comes off this phone (with its ledger row); one somebody really scored is kept as the round it became, and so
+// is a live one; a live GPS round lets go of its room on this phone only -- nothing is sent (the relay ends a quiet
+// Battlefield round by itself after 2 hours). gpshist.js
+function gpsRealScore(r){return ((r&&r.holes)||[]).some(h=>h&&(h.confirmed||(h.cfts||[]).some(x=>x>0)||(h.gts||[]).some(x=>x>1)));}
+function gpsHistClean(){
+  try{
+    let changed=false;
+    S.history=(S.history||[]).filter(e=>{
+      if(!(e&&e.round&&e.round.gpsOnly))return true;
+      changed=true;
+      if(gpsRealScore(e.round)){delete e.round.gpsOnly;return true;}
+      S.ledger=(S.ledger||[]).filter(r=>!(r&&r.id===e.id));
+      return false;
+    });
+    if(S.round&&S.round.gpsOnly&&gpsRealScore(S.round)){delete S.round.gpsOnly;changed=true;}
+    if(S.round&&S.round.gpsOnly&&S.share&&S.share.on){S.share={on:false,code:null};changed=true;}
+    if(changed)save();
+    return changed;
+  }catch(e){return false;}
+}
+function gpsHoleMoved(){
+  if(!gpsOnly())return;
+  S.round.cur=mapHole;save();
+  try{if(bfDone.key===String(S.round.startedAt||''))bfDone.at=Date.now();}catch(e){}
+  try{shellRoundTick();}catch(e){}
+}
 function startRangefinder(){
   primeGeo();
   if(!S.round.started)resetRoster();
@@ -13204,7 +13259,7 @@ let endGpsArm=false;
 function endRangefinder(){
   if(!endGpsArm){endGpsArm=true;render();setTimeout(()=>{if(endGpsArm){endGpsArm=false;render();}},4000);return;}
   endGpsArm=false;
-  set(()=>{S.round=blankRound();S.screen='home';});
+  gpsQuietEnd('home');render();
 }
 // Back from the map lands here: carry on, stop, or hand the phone over to a
 // real round with other people in it.
@@ -13464,7 +13519,7 @@ function goGroup(){set(()=>{if(!S.round.started)resetRoster();S.screen='gate';})
 // Two groups on one tee. The join step already carries your holes into
 // another room; this is the door to it from a LIVE round, with a way back.
 function mergeIntoRound(){
-  if(!S.round.started||isReview())return;
+  if(!S.round.started||isReview()||gpsOnly())return;
   wiz={step:'join',n:4,from:S.screen};
   S.screen='start';sendHello();grabCoords();render();
 }
@@ -13599,14 +13654,14 @@ function vGate(){
   </div>
   <button ${S.round.started
       ? `<button class="big" onclick="startGroupFromGate()">👥 Start the group round \u2192</button>
-         <div class="tiny mt">Anyone you typed in or picked is already on your card \u2014 you keep their scores. The rest join with the code, or tap the invite when it pops up on their phone.</div>`
+         <div class="tiny mt">Anyone you typed in or picked is already on your card \u2014 you keep their scores.${ageOffline()?'':' The rest join with the code, or tap the invite when it pops up on their phone.'}</div>`
       : `<button class="big" onclick="go('pickgame')">Next \u2014 pick your game \u2192</button>`}
-  <details id="joinDetails" class="card" style="padding:10px 14px;margin-top:12px"><summary class="tiny" style="cursor:pointer;color:var(--ink3)">Join with a code instead</summary>
+  ${ageOffline()?'':`<details id="joinDetails" class="card" style="padding:10px 14px;margin-top:12px"><summary class="tiny" style="cursor:pointer;color:var(--ink3)">Join with a code instead</summary>
     <div class="row" style="border:none">
       <input type="text" id="joincode" placeholder="ABCDE" maxlength="8" autocapitalize="characters" style="width:46%;text-transform:uppercase;font-family:Rajdhani,sans-serif;font-size:20px;letter-spacing:3px">
       <button class="ghost sel" style="flex:1" onclick="joinRound()">Join</button>
     </div>
-  </details>
+  </details>`}
   </main>`;
 }
 // The card body is the website's rules text for that game, section for section.
@@ -14708,7 +14763,7 @@ function vCourses(){
   <div class="card"><h2>Course</h2>
     ${finder.status==='idle'?courseListHTML(false):''}
     ${courseFinderHTML()}
-    ${S.round.started?`<div class="tiny mt">Switching courses re-scores the round in progress against the new card.</div>`:''}
+    ${(S.round.started&&!gpsOnly())?`<div class="tiny mt">Switching courses re-scores the round in progress against the new card.</div>`:''}
     ${backupBlockHTML()}
   </div>
   </main>`;
@@ -15076,7 +15131,7 @@ function ledgerPut(row){
 }
 const MIN_ROUND_HOLES=2;
 function archiveRound(){
-  if(!S.round.started)return;
+  if(!S.round.started||S.round.gpsOnly)return;   // a GPS round is never in Past Rounds, the ledger or the handicaps (gpsQuietEnd)
   const thru=S.round.holes.filter(r=>r.confirmed).length;
   const existing=!!(S.round._histId&&(S.history||[]).some(e=>e.id===S.round._histId));
   if(!existing&&thru<MIN_ROUND_HOLES)return;   // never happened
@@ -15230,6 +15285,7 @@ function lastScoreAt(){
 function idleSince(){return Math.max(lastScoreAt(),S.round._idleOkAt||0);}
 let idleAsk=null;   // {since} while "Still playing?" is up
 function endRoundForTime(how){
+  if(gpsOnly()){gpsQuietEnd('home');render();return true;}   // nothing scored, nothing to file or report
   const last=lastScoreAt();
   const thru=(S.round.holes||[]).filter(r=>r&&r.confirmed).length;
   S.round.myEndedAt=Math.min(last+IDLE_TAIL_MS,Date.now());
@@ -15247,7 +15303,7 @@ function endRoundForTime(how){
 }
 function idleAskSheetHTML(){
   if(!idleAsk)return '';
-  if(!S.round||!S.round.started||(typeof isReview==='function'&&isReview())||Date.now()-idleSince()<IDLE_ASK_MS){idleAsk=null;return '';}   // a score came in meanwhile
+  if(!S.round||!S.round.started||(typeof isReview==='function'&&isReview())||gpsOnly()||Date.now()-idleSince()<IDLE_ASK_MS){idleAsk=null;return '';}   // a score came in meanwhile
   const at=new Date(lastScoreAt()).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
   const scored=(S.round.holes||[]).some(r=>r&&r.confirmed);
   return `<div class="vfWrap" role="dialog" aria-modal="true" aria-labelledby="iaTitle">
@@ -15310,7 +15366,7 @@ function autoEndStaleRound(){
   }
   const idle=Date.now()-idleSince();
   if(idle>=IDLE_END_MS)return endRoundForTime('8h');
-  if(idle>=IDLE_ASK_MS&&!idleAsk){
+  if(idle>=IDLE_ASK_MS&&!idleAsk&&!gpsOnly()){   // GPS only: no scores to wait on -- never "Still playing? No scores yet" (the 8 h end still applies)
     idleAsk={since:lastScoreAt()};
     try{stat('round_idle',{asked:true,idleMin:Math.round(idle/60000)});}catch(e){}
     render();
@@ -15319,6 +15375,7 @@ function autoEndStaleRound(){
 }
 function endRound(){
   if(!S.round.started){S.screen='home';save();render();return;}
+  if(gpsOnly()){gpsQuietEnd('home');render();return;}   // no archive, no Battlefield end, no round_end, no Save-this-round ask
   shellRound('ended');   // the Android shell drops its round notification + background GPS
   // the horn: every challenge is settled, then the roll call — for a round that is ENDING.
   // closeReview() leaves a past round through here too, and pressing Done on a round you
@@ -17165,10 +17222,11 @@ function startRound(){
     S.round.cur=playOrder()[0];mapHole=S.round.cur;S.screen='map';clearStage();
     try{windFetch(true);}catch(e){}   // the parking lot has signal — grab the day's wind now
     try{setTimeout(maybeAskPar,900);}catch(e){}
-    if(S.config.game!=='wolf')prefillNines(S.round.cur);});
+    if(S.config.game!=='wolf'&&!gpsOnlyRound)prefillNines(S.round.cur);});   // GPS only: no card, nothing prefilled
   S.round._sharedAtStart=!!S.share.on;
   try{S.round._optSnap=optSnap();}catch(e){}
-  stat('round_start',{game:S.round.game,course:S.course.name,holes:S.round.span.count,firstTee:S.round.span.start+1,
+  if(gpsOnlyRound)stat('gps_start',{course:S.course.name});   // a rangefinder session, never counted as a round (gpsQuietEnd)
+  else stat('round_start',{game:S.round.game,course:S.course.name,holes:S.round.span.count,firstTee:S.round.span.start+1,
     lens:S.config.lens,players:NP(),shared:!!S.share.on,stack:(S.round.games||[]).join('+'),
     opts:S.round.game==='nines'?{n:S.config.nines.n,blitz:S.config.nines.blitz,ctp:S.config.nines.ctp}
       :S.round.game==='vegas'?{rotate:S.config.vegas.rotate,flip:S.config.vegas.flip,ctp:S.config.vegas.ctp}
@@ -17985,7 +18043,7 @@ function maybeBroadcastRound(){
   // the offer, and the next 10-second poll would leave it listed on other phones until then
   try{if(nearTimer!=null)setTimeout(()=>{try{nearTick();}catch(e){}},300);}catch(e){}
   try{
-    if(!S.round.started||S.round._bfSent||isReview())return;
+    if(!S.round.started||S.round._bfSent||isReview()||gpsOnly())return;   // gpsOnly: no Battlefield, no text to Nathan (gpsQuietEnd)
     // THE CAPTAIN ANNOUNCES THE ROUND. Every phone used to race to open the
     // Battlefield room the moment IT saw two scored holes, so whichever joiner
     // confirmed hole 2 first became the starter of record — Nelson on 8/14,
@@ -20058,6 +20116,7 @@ setInterval(()=>{
   window.addEventListener('unhandledrejection',e=>report('unhandled: '+((e.reason&&e.reason.message)||e.reason),'',0,0,e.reason&&e.reason.stack));
 })();
 applyTheme();
+gpsHistClean();          // a GPS round an older build filed or shared comes off (Nathan 11/5)
 healUnfinishedRound();   // rescue a round stranded between _finished and archive
 try{if(S.round&&S.round.started&&!isReview())shellRound('started',shellRoundInfo());}catch(e){}   // relaunch mid-round: the shell's round service comes back
 autoEndStaleRound();
