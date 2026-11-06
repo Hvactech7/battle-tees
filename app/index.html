@@ -587,7 +587,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-center in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1793923726';
+const BUILD='1793923942';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -6549,6 +6549,7 @@ function updateTrackBtn(){
   b.style.color=armed?'var(--amber-bd)':'var(--green-mid)';
 }
 function trackShotTap(){
+  if(isReview())return;   // a past round reopened never takes a tracked shot (Nathan 11/5: "I dont want track it to be opened in a past round")
   hideUndoTrack();                 // same slot as the ✕ — never show both
   const p=shotPos();
   if(!p){shotToast('Waiting for GPS — without a fix that distance would be a guess.');return;}
@@ -6654,6 +6655,7 @@ function undoTrackShot(){
   updateTrackBtn();
 }
 function saveShot(club){
+  if(isReview()){pendingShot=null;trackShot=null;return;}   // never into a past round (Nathan 11/5)
   if(!pendingShot)return;
   flashYardage(pendingShot.yds,club);
   const key='s'+(S.round.startedAt||0);
@@ -6963,9 +6965,9 @@ function vMap(){
   <div id="windrose" onclick="toggleWindMode()" onpointerdown="windRosePD(event)" onpointerup="windRosePU()" onpointercancel="windRosePU()" oncontextmenu="return false" style="display:none${manualShown?';bottom:calc(var(--mapbarH) + 210px)':''}"></div>
   ${mapStatChipsHTML(hole)}${mapBetChipHTML(manualShown)}
   ${greadBtnHTML()}
-  ${gpsOnly()?'':`<button id="trackbtn" onclick="trackShotTap()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(var(--mapbarH) + 8px);z-index:6;width:120px;height:46px;background:var(--card);border:2px solid ${trackShot&&trackShot.hole===mapHole?'var(--amber-bd)':'var(--green)'};border-radius:12px;color:${trackShot&&trackShot.hole===mapHole?'var(--amber-bd)':'var(--green-mid)'};font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:19px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">${trackShot&&trackShot.hole===mapHole?'Mark It':'Track It'}</button>`}
-  ${gpsOnly()?'':(trackShot&&trackShot.hole===mapHole?`<button id="trackxbtn" onclick="clearTrackStart()" aria-label="Cancel this shot" style="position:fixed;left:max(138px,calc(50vw - 102px));bottom:calc(var(--mapbarH) + 8px);z-index:6;width:46px;height:46px;padding:0;display:flex;align-items:center;justify-content:center;background:var(--card);border:2px solid var(--red,#c0392b);border-radius:12px;color:var(--red,#c0392b);box-shadow:2px 2px 0 rgba(0,0,0,.35)">${XICON}</button>`:'')}
-  ${gpsOnly()?'':undoTrackHTML()}
+  ${(gpsOnly()||isReview())?'':`<button id="trackbtn" onclick="trackShotTap()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(var(--mapbarH) + 8px);z-index:6;width:120px;height:46px;background:var(--card);border:2px solid ${trackShot&&trackShot.hole===mapHole?'var(--amber-bd)':'var(--green)'};border-radius:12px;color:${trackShot&&trackShot.hole===mapHole?'var(--amber-bd)':'var(--green-mid)'};font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:19px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">${trackShot&&trackShot.hole===mapHole?'Mark It':'Track It'}</button>`}
+  ${(gpsOnly()||isReview())?'':(trackShot&&trackShot.hole===mapHole?`<button id="trackxbtn" onclick="clearTrackStart()" aria-label="Cancel this shot" style="position:fixed;left:max(138px,calc(50vw - 102px));bottom:calc(var(--mapbarH) + 8px);z-index:6;width:46px;height:46px;padding:0;display:flex;align-items:center;justify-content:center;background:var(--card);border:2px solid var(--red,#c0392b);border-radius:12px;color:var(--red,#c0392b);box-shadow:2px 2px 0 rgba(0,0,0,.35)">${XICON}</button>`:'')}
+  ${(gpsOnly()||isReview())?'':undoTrackHTML()}
   ${(()=>{try{
       // Under amnesia the hole is unmapped BY DEFINITION. This runs during
       // render, BEFORE initHoleMap parks the real map — so reading geo here hid
