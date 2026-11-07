@@ -588,7 +588,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-center in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1794068549';
+const BUILD='1794069491';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -6271,7 +6271,9 @@ const MAP_CREDITS='Imagery © Esri, Maxar · Course data © OpenStreetMap contri
 // under the header and above where the 📍 Me chip appears, on every satellite map (hole map, course preview, the shot
 // viewer); the Battlefield's little card map carries it in its own corner (inmap). It never takes a tap.
 const SAT_CREDIT='Imagery © Esri, Maxar';
-function satCreditHTML(inmap){return `<div class="satcredit${inmap?' inmap':''}" aria-hidden="true">${SAT_CREDIT}</div>`;}
+// The hole map (naip=true) also credits the saved offline photo once this course has one (USDA asks for the credit).
+function satCreditText(naip){return SAT_CREDIT+(naip&&typeof S!=='undefined'&&S.course&&naipOn(S.course.id)?' · '+NAIP_CREDIT:'');}
+function satCreditHTML(inmap,naip){return `<div class="satcredit${inmap?' inmap':''}${naip?' naipable':''}" aria-hidden="true">${satCreditText(naip)}</div>`;}
 let mapCreditsT=0;
 function toggleMapCredits(){
   const b=document.getElementById('mapattrib');if(!b)return;
@@ -6279,7 +6281,7 @@ function toggleMapCredits(){
   clearTimeout(mapCreditsT);
   if(open){b.dataset.open='';b.textContent='ⓘ';b.style.padding='0 6px';}
   else{
-    b.dataset.open='1';b.textContent=MAP_CREDITS;b.style.padding='0 10px';
+    b.dataset.open='1';b.textContent=MAP_CREDITS+(S.course&&naipOn(S.course.id)?' · Offline photo: USDA-FSA NAIP':'');b.style.padding='0 10px';
     mapCreditsT=setTimeout(()=>{try{if(b.dataset.open==='1')toggleMapCredits();}catch(e){}},5000);
   }
 }
@@ -6966,7 +6968,7 @@ function vMap(){
       codeShown?`<div onclick="inviteFromMap()" style="text-align:center;flex:none;margin-right:4px;color:var(--gold,#e8c552);font-family:Rajdhani,Inter,sans-serif;font-weight:700;line-height:1.05;cursor:pointer">
         <div style="font-size:10px;font-weight:600;opacity:.85;letter-spacing:.5px">${S.share.bf?'TAP TO INVITE':'JOIN CODE'}</div>
         <div class="num" style="font-size:22px;letter-spacing:3px">${esc(S.share.code)}</div></div>`:''}${codeShown?'':gameBadgeHTML()}</div>`)+`
-  <div id="holemap"></div>${satCreditHTML()}
+  <div id="holemap"></div>${satCreditHTML(false,true)}
   <div id="windrose" onclick="toggleWindMode()" onpointerdown="windRosePD(event)" onpointerup="windRosePU()" onpointercancel="windRosePU()" oncontextmenu="return false" style="display:none${manualShown?';bottom:calc(var(--mapbarH) + 210px)':''}"></div>
   ${mapStatChipsHTML(hole)}${mapBetChipHTML(manualShown)}
   ${greadBtnHTML()}
@@ -7023,7 +7025,7 @@ function vMap(){
 function vMapPreview(hole){
   return topbar(`Hole ${mapHole+1} · Par ${hole.par}`,`Handicap ${hole.si} · ${S.course.name||''}`,'','hero maphero',
     `<div style="display:flex;align-items:center;margin-left:auto;gap:10px"><span class="pill gray" style="flex:none;letter-spacing:.6px">PREVIEW</span></div>`)+`
-  <div id="holemap"></div>${satCreditHTML()}
+  <div id="holemap"></div>${satCreditHTML(false,true)}
   <button onclick="closeCoursePreview()" style="position:fixed;right:max(10px,calc(50vw - 230px));top:calc(100px + env(safe-area-inset-top));z-index:6;background:rgba(15,21,34,.82);border:1.5px solid var(--line);border-radius:12px;color:#fff;padding:10px 17px;font-size:17px;font-weight:600;font-family:inherit">Back</button>
   <div class="mapbar">${mapCreditsChipHTML()}
     <div class="row" style="border:none;padding:2px 0">
@@ -7226,6 +7228,123 @@ function updateTileBtn(){
   el.textContent=tilePre.busy?`⬇ Downloading maps… ${tilePre.done}/${tilePre.total}`
     :tilePackFresh()?'✓ Offline maps ready — tap to refresh':'⬇ Download offline hole maps';
 }
+// ---------- offline photo: USDA NAIP (11/6/2026) ----------
+// Esri's photo may not be stored for offline use (D3). USDA NAIP aerial photos may: they are public domain (the 2022
+// California NAIP record: Use Constraints "None", and USDA-FSA asks to be credited). For every mapped course,
+// ~/battletees-national/drawn/offline-art/bake_all.py cuts the photo around each hole's line and green into z16-18
+// tiles, and pack_build.py joins one course's tiles into ONE file, <course id>.btnp (about 1 MB). The phone fetches a
+// course's pack once while it has signal (the same moments the old tile pack downloaded) and keeps the tiles in
+// IndexedDB 'bt-naip' -- never in S or localStorage (a few MB there would slow every save), and IndexedDB survives app
+// updates and works in the iOS and Android shells. Every hole map lays the saved photo UNDER the Esri layer, so any
+// Esri tile that doesn't arrive (no signal, a dead spot, a failed tile) shows the saved photo, not the dark ground.
+// The packs live in R2 bucket battletees-naip (hvacbreeding account), public at https://naip.vexcomllc.com/<id>.btnp
+// (CORS *, cached a day); a localhost preview reads /naip-packs/, and a test walk pins its own base (localStorage btNaipBase).
+const NAIP_BASE=(()=>{try{const v=localStorage.getItem('btNaipBase');if(v)return v;}catch(e){}   // a test walk pins it (naipwalk.py)
+  return (typeof location!=='undefined'&&/^(localhost|127\.0\.0\.1)$/.test(location.hostname||''))?'/naip-packs/':'https://naip.vexcomllc.com/';})();   // R2 battletees-naip (11/6), public, CORS *
+const NAIP_CREDIT='USDA-FSA NAIP';
+const NAIP_BLANK='data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';   // a failed Esri tile goes see-through
+const naipHave={};   // course id -> {n,bytes,naip,at} (pack saved) or {none:true,at} (no pack for it); read from IndexedDB at boot
+const naipBusy={};let naipDBp=null,NAIPL=null;
+function naipOn(id){return !!(id&&naipHave[id]&&naipHave[id].n);}
+function naipDB(){
+  if(!naipDBp)naipDBp=new Promise((res,rej)=>{
+    if(typeof indexedDB==='undefined')return rej(new Error('no indexedDB'));
+    const r=indexedDB.open('bt-naip',1);
+    r.onupgradeneeded=()=>{const d=r.result;['tiles','packs'].forEach(n=>{if(!d.objectStoreNames.contains(n))d.createObjectStore(n);});};
+    r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);
+  }).catch(e=>{naipDBp=null;throw e;});
+  return naipDBp;
+}
+function naipReq(store,mode,fn){
+  return naipDB().then(d=>new Promise((res,rej)=>{
+    const t=d.transaction(store,mode),q=fn(t.objectStore(store));
+    t.oncomplete=()=>res(q&&q.result);t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error);
+  }));
+}
+async function naipBoot(){
+  try{
+    const d=await naipDB();
+    await new Promise(res=>{const t=d.transaction('packs','readonly'),s=t.objectStore('packs'),k=s.getAllKeys(),v=s.getAll();
+      t.oncomplete=()=>{(k.result||[]).forEach((id,i)=>{naipHave[id]=v.result[i];});res();};t.onerror=t.onabort=()=>res();});
+  }catch(e){}
+}
+// 'BTN1' + uint32 LE header length + header JSON {v:1,id,naip,credit,tiles:[[z,x,y,offset,length],...]} + the JPEGs
+function naipParse(buf){
+  const u=new Uint8Array(buf);
+  if(u.length<8||String.fromCharCode(u[0],u[1],u[2],u[3])!=='BTN1')throw new Error('not a photo pack');
+  const h=new DataView(buf).getUint32(4,true),base=8+h;
+  if(base>u.length)throw new Error('short photo pack');
+  const hd=JSON.parse(new TextDecoder().decode(u.subarray(8,base)));
+  if(hd.v!==1||!Array.isArray(hd.tiles))throw new Error('photo pack version');
+  hd.tiles.forEach(t=>{if(base+t[3]+t[4]>u.length)throw new Error('short photo pack');});
+  return {hd,base};
+}
+async function naipEnsure(c,manual){
+  const id=c&&c.id;
+  try{
+    if(!NAIP_BASE||!id||naipBusy[id])return;
+    if(typeof navigator!=='undefined'&&navigator.onLine===false)return;
+    const g=c.geo;   // only a mapped course has a pack
+    if(!g||g.none||g.amn||!((g.holes&&Object.keys(g.holes).length)||(g.greens&&g.greens.length)))return;
+    const have=naipHave[id];
+    if(have&&!manual&&Date.now()-(have.at||0)<(have.n?60:7)*864e5)return;   // saved (re-check after 60 days), or none 7 days ago
+    naipBusy[id]=true;updateNaipNote();
+    const r=await fetch(NAIP_BASE+encodeURIComponent(id)+'.btnp',{cache:'no-store'});
+    if(r.status===404){const rec={none:true,at:Date.now()};await naipReq('packs','readwrite',s=>s.put(rec,id));naipHave[id]=rec;return;}
+    if(!r.ok)return;
+    const buf=await r.arrayBuffer(),{hd,base}=naipParse(buf);
+    await naipReq('tiles','readwrite',s=>{hd.tiles.forEach(t=>s.put(new Blob([new Uint8Array(buf,base+t[3],t[4])],{type:'image/jpeg'}),t[0]+'/'+t[1]+'/'+t[2]));return null;});
+    const rec={n:hd.tiles.length,bytes:buf.byteLength,naip:hd.naip||null,at:Date.now()};
+    await naipReq('packs','readwrite',s=>s.put(rec,id));naipHave[id]=rec;
+    naipAttach();
+  }catch(e){}
+  finally{if(id&&naipBusy[id]){delete naipBusy[id];updateNaipNote();}}
+}
+// the saved photo as a map layer: tiles straight out of IndexedDB (z16-18; closer zooms stretch z18, like Esri past 19).
+// A pack keeps sharp z18 only along the holes; where a z18 tile wasn't kept, the tile is cut from its z17 or z16
+// parent (the whole course is kept at z16), so the edges of the view are softer, never black. Each tile is drawn 1 px
+// oversize: on a turned, fractional-zoom map neighbouring tiles otherwise leave hairline seams.
+function naipBlob(z,x,y){return naipReq('tiles','readonly',s=>s.get(z+'/'+x+'/'+y));}
+function naipLayer(){
+  const NL=L.GridLayer.extend({
+    _initTile(t){L.GridLayer.prototype._initTile.call(this,t);const s=this.getTileSize();t.style.width=(s.x+1)+'px';t.style.height=(s.y+1)+'px';},
+    createTile(t,done){
+      const cv=document.createElement('canvas');cv.width=cv.height=256;cv.setAttribute('role','presentation');
+      (async()=>{
+        for(let up=0;up<=t.z-16;up++){
+          const b=await naipBlob(t.z-up,t.x>>up,t.y>>up);if(!b)continue;
+          const u=URL.createObjectURL(b);
+          try{
+            const im=await new Promise((ok,no)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=no;i.src=u;});
+            const k=256>>up,sx=(t.x-((t.x>>up)<<up))*k,sy=(t.y-((t.y>>up)<<up))*k,g=cv.getContext('2d');
+            g.imageSmoothingEnabled=true;g.drawImage(im,sx,sy,k,k,0,0,256,256);
+          }finally{URL.revokeObjectURL(u);}
+          break;
+        }
+      })().catch(()=>{}).then(()=>done(null,cv));
+      return cv;
+    }});
+  return new NL({minNativeZoom:16,maxNativeZoom:18,minZoom:15,maxZoom:20,zIndex:1});
+}
+// a pack that lands while its course's map is open joins the map at once
+function naipAttach(){
+  try{
+    if(!LMAP||!S.course||!naipOn(S.course.id))return;
+    if(!(NAIPL&&LMAP.hasLayer(NAIPL)))NAIPL=naipLayer().addTo(LMAP);
+    document.querySelectorAll('.satcredit.naipable').forEach(el=>{el.textContent=satCreditText(true);});
+  }catch(e){}
+}
+function naipNoteText(c){
+  if(!NAIP_BASE||!c||!c.id)return '';
+  if(naipBusy[c.id])return '⬇ Saving the offline photo…';
+  const h=naipHave[c.id];
+  if(h&&h.n){
+    const d=h.naip&&h.naip.date?new Date(h.naip.date+'T12:00:00'):null;
+    return '📷 Offline photo saved'+(d&&!isNaN(d)?` (${d.toLocaleString('en-US',{month:'short',year:'numeric'})})`:'')+'. No-signal holes show it.';
+  }
+  return h&&h.none?'':'📷 The offline photo saves the next time you have signal.';
+}
+function updateNaipNote(){const el=document.getElementById('naipnote');if(el)el.textContent=naipNoteText(S.course);}
 const GEO_RETRY_MS=3*60000;   // don't re-ask OSM more than once every 3 min
 // One-time heal: drop empty map caches saved before the /app/ path fix, so a
 // course added at home isn't permanently stuck on the ring view.
@@ -7345,12 +7464,12 @@ async function ensureCourseGeo(){
           // holes use the normal map and the rest fall back to the pool (greensIsMode(h)).
           const g=Object.assign({ts:Date.now(),holes:js.holes},js.greens&&js.greens.length?{greens:js.greens}:{});
           let mine=false;set(()=>{mine=geoFor(cid,g,fixLoop9);});
-          if(mine)preloadCourseTiles(false);   // fire-and-forget: grab the tile pack while we have signal
+          if(mine){preloadCourseTiles(false);naipEnsure(S.course);}   // fire-and-forget: grab the tile pack + offline photo while we have signal
           return;
         }
         if(js&&js.greens&&js.greens.length){
           let mine=false;set(()=>{mine=geoFor(cid,{ts:Date.now(),holes:{},greens:js.greens});});
-          if(mine)preloadCourseTiles(false);
+          if(mine){preloadCourseTiles(false);naipEnsure(S.course);}
           return;
         }
       }
@@ -8063,8 +8182,9 @@ function initGreensMap(el){
   const pts=greensPts();
   LMAP=L.map(el,{zoomControl:false,attributionControl:false,doubleClickZoom:false});   // no double-tap zoom in a round (Nathan 10/2); a pinch zooms
   camBegin();
+  NAIPL=S.course&&naipOn(S.course.id)?naipLayer().addTo(LMAP):null;   // the saved offline photo under Esri (see initHoleMap)
   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    {maxZoom:20,maxNativeZoom:19}).addTo(LMAP);
+    {maxZoom:20,maxNativeZoom:19,zIndex:2,errorTileUrl:NAIP_BLANK}).addTo(LMAP);
   LMAP.fitBounds(L.latLngBounds(pts).pad(0.12));
   const dots={};let meDot=null;
   const paint=()=>{
@@ -8336,8 +8456,11 @@ async function initHoleMap(){
   // and made the view yours. A pinch still zooms.
   LMAP=L.map(el,canRotate?{zoomControl:false,attributionControl:false,doubleClickZoom:false,rotate:true,rotateControl:false,touchRotate:false,zoomSnap:0}:{zoomControl:false,attributionControl:false,doubleClickZoom:false});
   camBegin();   // everything this builder frames is OURS, not the user's
+  // OFFLINE PHOTO (11/6/2026): this course's saved NAIP photo sits under Esri (zIndex 1 < 2). Any Esri tile that fails --
+  // no signal, a dead spot -- turns see-through (errorTileUrl) and the saved photo shows in its place.
+  NAIPL=S.course&&naipOn(S.course.id)?naipLayer().addTo(LMAP):null;
   const sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    {maxZoom:20,maxNativeZoom:19}).addTo(LMAP);   // credits live on the ⓘ chip
+    {maxZoom:20,maxNativeZoom:19,zIndex:2,errorTileUrl:NAIP_BLANK}).addTo(LMAP);   // credits live on the ⓘ chip
   // ROTATED CORNERS. The rotation code (installMapRotation) widens the tile bounds for the current
   // bearing correctly (814x840 px for a 375x684 viewport at 42°), but nothing
   // re-runs the tile pass when the bearing CHANGES — so a twisted map kept the
@@ -8374,7 +8497,7 @@ async function initHoleMap(){
         }
       }
       if(rotT)return;
-      rotT=setTimeout(()=>{rotT=0;try{sat._update();}catch(e){}},120);
+      rotT=setTimeout(()=>{rotT=0;try{sat._update();}catch(e){}try{NAIPL&&LMAP.hasLayer(NAIPL)&&NAIPL._update();}catch(e){}},120);
     });
   }
   let greenC=null,greenPoly=null;
@@ -15476,7 +15599,7 @@ function pickCourse(i){set(()=>{
   syncLib();
   S.course=clone(S.courses[i]);
   applyTeePrefs();
-});}
+});setTimeout(()=>naipEnsure(S.course),800);}   // a library course already mapped: its offline photo if this phone lacks it
 let armDelCourse=-1;
 function delCourse(i){
   if(armDelCourse!==i){
@@ -15696,8 +15819,9 @@ function vCourse(){
   ${c._note?`<div class="banner ${c._noteOk?'ok':'wolf'}">${c._noteOk?'✓ ':''}${esc(c._note)} <button class="ghost" style="margin-left:6px" onclick="set(()=>{delete S.course._note;delete S.course._noteOk;})">Got it</button></div>`:''}
   <div class="card"><h2>Name</h2><input id="cname" type="text" value="${esc(c.name)}" onchange="set(()=>{S.course.name=this.value;S.course.nameEdit=true;})" oninput="S.course.name=this.value;S.course.nameEdit=true;save()">
     ${courseMapStatusHTML(c)}
-    ${c.geo?`<button class="ghost mt" id="tilebtn" onclick="preloadCourseTiles(true)">${tilePackFresh()?'✓ Offline maps ready — tap to refresh':'⬇ Download offline hole maps'}</button>
+    ${c.geo?`<button class="ghost mt" id="tilebtn" onclick="preloadCourseTiles(true);naipEnsure(S.course,true)">${tilePackFresh()?'✓ Offline maps ready — tap to refresh':'⬇ Download offline hole maps'}</button>
     <div class="tiny mt">Grab the satellite tiles on wifi and every hole opens instantly, even with no signal on the course.</div>
+    <div class="tiny mt" id="naipnote">${naipNoteText(c)}</div>
     <button class="ghost mt" onclick="set(()=>{delete S.course.geo;delete S.course.geoReal;})">Clear downloaded hole-map data</button>
     <div class="tiny mt">Use this if the satellite map shows the wrong course — it re-downloads at the course next time.</div>`:''}</div>
   <div class="card"><h2>Tee sets — name · rating · slope</h2>${tees}
@@ -15732,7 +15856,7 @@ async function fetchMapNow(){
   if(!fresh){if(note)note.textContent=' could not download — try again with signal.';return;}
   let mine=false;
   set(()=>{mine=geoFor(cid,fresh);const k=(S.courses||[]).find(x=>x&&x.id===cid);if(k)k.geo=clone(fresh);});
-  if(mine)try{preloadCourseTiles(false);}catch(e){}
+  if(mine)try{preloadCourseTiles(false);naipEnsure(S.course);}catch(e){}
 }
 function chPar(i,d){set(()=>{const hd=S.course.holes[i];hd.par=Math.min(6,Math.max(3,hd.par+d));hd.parOk=true;
   if((cardN()?cardHoles(S.course):(S.course.holes||[])).every(x=>x&&x.parOk))delete S.course._cardGuess;});}
@@ -17193,7 +17317,7 @@ function startRound(){
   stView=null;
   saveGroupFromRoster();  // a named group is remembered for next time
   libSaveRoster();  // starting a round remembers everyone in it
-  setTimeout(()=>preloadCourseTiles(false),1500);  // quiet tile-pack top-up while signal is good
+  setTimeout(()=>{preloadCourseTiles(false);naipEnsure(S.course);},1500);  // quiet tile-pack + offline-photo top-up while signal is good
   // The Battlefield used to hear about a round 2.5s after you tapped start, so
   // tapping into setup and backing out left a permanent room, notified people,
   // and counted as a round played. Justin did exactly that twice on 8/12: two
@@ -20132,6 +20256,7 @@ healUnfinishedRound();   // rescue a round stranded between _finished and archiv
 try{if(S.round&&S.round.started&&!isReview())shellRound('started',shellRoundInfo());}catch(e){}   // relaunch mid-round: the shell's round service comes back
 autoEndStaleRound();
 setTimeout(refreshStaleGeo,4000);
+naipBoot().then(()=>{try{if(S.course)naipEnsure(S.course);}catch(e){}});   // offline photos saved on this phone (IndexedDB)
 setTimeout(refreshStaleCards,7000);   // corrected pars and stroke indexes reach a library that already holds the course
 setTimeout(()=>{try{autoBackupCheck();}catch(e){}},6000);   // a change that never got backed up (missed window, closed app) goes on the next launch
 if(loadFailure){try{stat('js_error',{msg:'load: '+loadFailure,line:0,screen:'boot',hole:0});}catch(e){}}   // corrected map files reach phones that cached the old ones
