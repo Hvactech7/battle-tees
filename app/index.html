@@ -587,7 +587,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-center in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1794013901';
+const BUILD='1794026717';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -7056,7 +7056,7 @@ function splinePath(path){
 // kept forever, so at load (online only, never mid-round) any hosted map fetched
 // before this stamp is re-fetched in the background and swapped in on success —
 // the old one stays if the fetch fails, so a no-signal round never loses its map.
-const GEO_STAMP=1794013900149;   // ring 8 part 13 (11/6 new listings): 6 courses added, 0 listings mapped hole by hole, 0 live maps filled from their sister combos, card/name fixes on 1 more, 0 off search; N-hole cards []; held maps stay off.
+const GEO_STAMP=1794026707504;   // 11/6 green-list fix: 9 partly mapped courses get back the green list their unmapped holes' green rangefinder uses (ring-8 applies had dropped it; ring8/greenlist_fix.py). WAS: 1794013900149;   // ring 8 part 13 (11/6 new listings): 6 courses added, 0 listings mapped hole by hole, 0 live maps filled from their sister combos, card/name fixes on 1 more, 0 off search; N-hole ca
 // A COURSE RECORD ON A PHONE WAS NEVER REFRESHED. natUse() is the only thing that reads
 // /courses/<id>.json and it only runs when ADDING a course that is not already saved —
 // preCourseApply deliberately keeps the saved record when the id matches. So a par we
