@@ -593,7 +593,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-center in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1794095798';
+const BUILD='1794099460';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1760,7 +1760,7 @@ function applyOp(k,v,defer){
   // an incoming meta can carry a players array stamped before our slot claim —
   // re-claim so a simultaneous join can't erase row ownership
   if(!defer){if(k==='meta'){claimMySlot(false);if(joinCarry)applyJoinCarry();}try{bankFreeze();stampChanges();}catch(e){}save();syncPush();render();
-    if(k!=='meta')try{askPuttsOwed();}catch(e){}}   // my row carded from another phone: ask ME my putts
+    if(k!=='meta'){try{askPuttsOwed();}catch(e){}try{snakeAskSync();}catch(e){}}}   // my row carded from another phone: ask ME my putts; a Snake tie that formed (or was answered) there
 }
 function onStateDoc(doc){
   // a joiner and a doc with no meta: nobody opened this code. Keep awaitDoc so
@@ -6870,7 +6870,8 @@ function typedDone(){
     mapAfterScore(a.h);
   });
   maybeBroadcastRound();
-  if(a.then)a.then(closed);
+  const go=()=>{if(a.then)a.then(closed);};
+  if(!snakeAskGate(go))go();   // their putts finished a Snake tie: asked first (11/7)
 }
 function myPlayerIdx(){const i=mySeatIdx();return i<0?0:i;}
 // ...or -1: this phone has no row (a 5th phone watching a full round)
@@ -9762,7 +9763,7 @@ function closePuttAsk(){
   const el=document.getElementById('puttask');if(el)el.remove();
   if(S.screen!=='map')render();
   try{bfNotePaint();}catch(e){}   // notices held while the picker was up come in now (the map does not re-render)
-  if(then)then();
+  if(!snakeAskGate(then)&&then)then();   // a Snake tie these putts finished: asked first (11/7)
 }
 // Persist a putts answer WITHOUT set(): set() ends in render(), and on the map
 // screen every render tears Leaflet down and rebuilds it — a full map rebuild
@@ -9968,6 +9969,69 @@ function bankerCardHTML(rec,h){
   </div>`;
 }
 function setSnakeLast(h,i){set(()=>{const r=S.round.holes[h];if(r)r.snakeLast=i;});}
+// THE SNAKE TIE, ASKED WHERE YOU ARE (Nathan 11/7/2026 after Blue Rock: five ties sat unanswered in Standings all
+// round -- "consider the flow of play, as a player who is mainly using the gps screen"). The moment a hole's putts
+// are all in and two or more golfers 3-putted it, every phone in the group gets one box, on whatever screen it is on
+// (the map too): the 3-putters' names, "who holed out last?" (or the shortest-first-putt house rule). One tap on any
+// phone answers it for everyone and the box closes on the others. One 3-putt: nothing to ask. "Not now" leaves the
+// fallback (more putts, then the higher score) and the Score card / Standings question as before.
+let snakeAsk=null;   // {h,three,then}
+const snakeAskSkip={};
+function snakeSkipKey(h){return (S.round.startedAt||'')+':'+h;}
+function snakeTieDueAt(h){
+  try{
+    if(!S.round.started||isReview()||!stackHas('snake')||sinceSkip('snake',h))return null;
+    const rec=S.round.holes[h];if(!rec)return null;
+    const seats=actIdx(),asked=rec.puttSkip||[];
+    if(!seats.every(s=>puttsEntered(rec,s)||asked[s]))return null;   // every golfer's putts are in (or declined): the 3-putts are final
+    const r=snakeHole(rec,seats);
+    return r.tie?r.three:null;
+  }catch(e){return null;}
+}
+function snakeAskNext(){
+  for(const h of playOrder()){if(snakeAskSkip[snakeSkipKey(h)])continue;const t=snakeTieDueAt(h);if(t)return {h,three:t};}
+  return null;
+}
+function snakeAskBusy(){try{return !!(puttAsk||typedAsk||bbbAsk||wolfAsk);}catch(e){return false;}}
+// open the box for the oldest unanswered tie; then() runs once it is answered or put off (or right away: false)
+function snakeAskGate(then){
+  if(snakeAsk||snakeAskBusy())return false;
+  const n=snakeAskNext();if(!n)return false;
+  snakeAsk={h:n.h,three:n.three,then:then||null};paintSnakeAsk();
+  try{stat('snake_ask',{h:n.h+1,n:n.three.length});}catch(e){}
+  return true;
+}
+function snakeAskHTML(){
+  const a=snakeAsk;if(!a)return '';
+  const nm=i=>esc((S.players[i]||{}).name||'');
+  return `<div class="vfWrap" role="dialog" aria-modal="true"><div class="vfCard" style="max-width:430px">
+    <h2 class="vfTitle">🐍 Snake · hole ${a.h+1}</h2>
+    <div class="tiny mb">${a.three.length} three-putts: ${snakeTieQ()}</div>
+    ${a.three.map(i=>`<button class="ghost" style="width:100%;margin-top:8px;padding:12px;font-size:18px" onclick="snakeAskPick(${i})">${nm(i)}</button>`).join('')}
+    <div class="tiny mt">Not sure? The one with more putts keeps it.</div>
+    <button class="ghost mt" style="width:100%" onclick="snakeAskLater()">Not now</button>
+  </div></div>`;
+}
+function paintSnakeAsk(){
+  let el=document.getElementById('snakeask');
+  if(!snakeAsk){if(el)el.remove();return;}
+  if(!el){el=document.createElement('div');el.id='snakeask';document.body.appendChild(el);}
+  el.innerHTML=snakeAskHTML();
+}
+function snakeAskDone(){   // close this box; another tie still open asks next, else carry on
+  const a=snakeAsk;snakeAsk=null;paintSnakeAsk();
+  const then=a&&a.then;
+  if(!snakeAskGate(then)&&then)then();
+}
+function snakeAskPick(i){const a=snakeAsk;if(!a)return;setSnakeLast(a.h,i);snakeAskDone();}
+function snakeAskLater(){const a=snakeAsk;if(!a)return;snakeAskSkip[snakeSkipKey(a.h)]=1;snakeAskDone();}
+// another phone answered (or its putts made the tie): close a box that is no longer needed, open one that now is
+function snakeAskSync(){
+  try{
+    if(snakeAsk&&!snakeTieDueAt(snakeAsk.h))snakeAskDone();
+    else if(!snakeAsk)snakeAskGate(null);
+  }catch(e){}
+}
 function snakeTiePickHTML(h,three){
   const r=S.round.holes[h]||{};
   return `<div class="flexwrap" style="margin-top:5px">${three.map(i=>`<button class="ghost ${r.snakeLast===i?'sel':''}" onclick="setSnakeLast(${h},${i})">${esc((S.players[i]||{}).name||'')}</button>`).join('')}</div>`;
@@ -20339,6 +20403,7 @@ try{setTimeout(()=>hcpSync(true),3500);}catch(e){}   // then reconcile with the 
 try{if(S.round&&S.round.started)setTimeout(maybeAskPar,2200);}catch(e){}   // resumed on an unconfirmed hole
 render();
 try{setTimeout(askPuttsOwed,400);}catch(e){}   // a hole carded while the prompt was killed
+try{setTimeout(()=>snakeAskGate(null),900);}catch(e){}   // a Snake tie left open when the app was closed
 tryMagicLink();
 if(S.share&&S.share.on){primeCaches(false);syncConnect();}
 else lobbyConnect();
