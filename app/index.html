@@ -593,7 +593,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-center in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1794099460';
+const BUILD='1794101351';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -6302,7 +6302,25 @@ function openMap(){
   try{const k='btMapStat'+(S.round.startedAt||0);
     if(S.round.started&&!sessionStorage.getItem(k)){sessionStorage.setItem(k,'1');
       stat('map_open',{course:S.course.name,hole:(S.round.cur||0)+1});}}catch(e){}
-  mapHole=S.round.cur||0;S.screen='map';render();
+  mapHole=mapLastHole();S.screen='map';render();
+}
+// WHERE THE MAP WAS (11/7): the GPS button and a relaunch land on the hole the map last showed -- unless the round's
+// hole was changed since (a hole picked on the Score screen, a hole scored there): then on that hole, as before.
+let mapLast=null;
+function mapLastNote(){
+  try{
+    if(!S.round.started||isReview()||coursePreview)return;
+    const v={k:S.round.startedAt||0,cur:S.round.cur,h:mapHole};
+    if(mapLast&&mapLast.k===v.k&&mapLast.cur===v.cur&&mapLast.h===v.h)return;
+    mapLast=v;try{localStorage.setItem('btMapLast',JSON.stringify(v));}catch(e){}
+  }catch(e){}
+}
+function mapLastHole(){
+  try{
+    let m=mapLast;if(!m){try{m=JSON.parse(localStorage.getItem('btMapLast')||'null');}catch(e){m=null;}}
+    if(m&&S.round.started&&!isReview()&&m.k===(S.round.startedAt||0)&&m.cur===S.round.cur&&playOrder().includes(m.h))return m.h;
+  }catch(e){}
+  return S.round.cur||0;
 }
 function closeMap(){S.screen='hole';render();}
 function mapPrev(){clearScoreNag(false);
@@ -6806,6 +6824,12 @@ function mapConfirm(){
 // after a hole is scored from the map: the hole screen moves on and the map walks to the next open hole
 function mapAfterScore(h){
   const rec=S.round.holes[h];if(!rec)return;
+  // SCORING A HOLE ON THE MAP IS PLAYING IT (Nathan 11/7/2026, Blue Rock: on hole 8, to the Score screen and back to
+  // GPS -- "it had me on h4 ... I had to manually go to h8. this happened twice"). The round's current hole moved
+  // only when that same hole was scored, so a hole walked past with ▶ or closed by another phone left it behind for
+  // the rest of the round -- and the Score screen, the GPS button and a relaunch all land on it. Browsing with the
+  // arrows still leaves it alone (the "Score this hole first" reminder guards the hole being played).
+  if(!isReview()&&h!==S.round.cur&&playOrder().includes(h))S.round.cur=h;
   if(h===S.round.cur&&!isReview()&&(rec.confirmed||groupShare()))advanceToNext();
   const o=playOrder();
   const at=Math.max(0,o.indexOf(h));
@@ -6935,6 +6959,7 @@ function mapChScore(d){reviewTouch();
 function vMap(){
   const hole=S.course.holes[mapHole]||{par:4,si:0};
   if(coursePreview)return vMapPreview(hole);
+  mapLastNote();
   // my running score, top-right where Back used to live: to-par big, strokes small
   let myTot=0,myPar=0;
   if(S.round.started){
@@ -20394,7 +20419,7 @@ if(loadFailure){try{stat('js_error',{msg:'load: '+loadFailure,line:0,screen:'boo
 // before anything had set it. Land on the hole the round is on, exactly where
 // the GPS button would have put you.
 function landOnBoot(){
-  try{if(S.screen==='map'&&S.round&&S.round.started)mapHole=S.round.cur||0;}catch(e){}
+  try{if(S.screen==='map'&&S.round&&S.round.started)mapHole=mapLastHole();}catch(e){}   // where the map was (11/7)
 }
 landOnBoot();
 if(!S.hcpLog)hcpBackfill();   // one-time: the rounds already played set the handicaps
