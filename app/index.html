@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'sha256-pb2ANzLyJr6vgVI3/irg2aft0BSF5N+OuIAELnfZFkw=' 'sha256-R0kKCNhXargIX1v3Thj/FOhk/EzB2QDuy96RVNCpVNw=' 'sha256-79uSLRUH3SESf+LkHGPxuR5ePnvAiW5Wl+C02STXxXY=' https://unpkg.com https://static.cloudflareinsights.com; object-src 'none'; base-uri 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#0f1522">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -530,11 +531,1438 @@
 </head>
 <body>
 <div id="app"></div>
+<script>(function(){var __btF=[function(event,__bth){toggleMyTrack((''+__bth[0]+''))
+},
+function(event,__bth){chStat((''+__bth[0]+''),__bth[1],-1)
+},
+function(event,__bth){chStat((''+__bth[0]+''),__bth[1],1)
+},
+function(event,__bth){openVerify('nagCard')
+},
+function(event,__bth){vfNagLater()
+},
+function(event,__bth){joinCancelWait()
+},
+function(event,__bth){lobbyRetry()
+},
+function(event,__bth){nearJoin((''+__bth[0]+''))
+},
+function(event,__bth){nearKeep()
+},
+function(event,__bth){btDoInstall()
+},
+function(event,__bth){magRequestNew()
+},
+function(event,__bth){magUI=null;render()
+},
+function(event,__bth){closeReview()
+},
+function(event,__bth){reviewCommit()
+},
+function(event,__bth){setTopLens('gross')
+},
+function(event,__bth){setTopLens('net')
+},
+function(event,__bth){jumpHole(__bth[0])
+},
+function(event,__bth){setSegPairing('sixes',__bth[0],__bth[1])
+},
+function(event,__bth){setSegPairing('vegas',__bth[0],__bth[1])
+},
+function(event,__bth){pinAnswer(__bth[0])
+},
+function(event,__bth){closePinAsk()
+},
+function(event,__bth){event.stopPropagation()
+},
+function(event,__bth){pinAnswer('c')
+},
+function(event,__bth){geoRetry()
+},
+function(event,__bth){toggleMapCredits()
+},
+function(event,__bth){clearScoreNag(true)
+},
+function(event,__bth){bagPD(event,__bth[0])
+},
+function(event,__bth){bagRemove(__bth[0])
+},
+function(event,__bth){bagAdd((''+__bth[0]+''));render()
+},
+function(event,__bth){bagAddCustom()
+},
+function(event,__bth){bagToggleCustom()
+},
+function(event,__bth){bagTogglePick()
+},
+function(event,__bth){bagReset()
+},
+function(event,__bth){clearTrackStart()
+},
+function(event,__bth){cancelMark()
+},
+function(event,__bth){saveShot(null)
+},
+function(event,__bth){saveShot((''+__bth[0]+''))
+},
+function(event,__bth){undoTrackShot()
+},
+function(event,__bth){typedDone()
+},
+function(event,__bth){typedLater()
+},
+function(event,__bth){typedStep(__bth[0],-1)
+},
+function(event,__bth){typedStep(__bth[0],1)
+},
+function(event,__bth){typedPutt(__bth[0],__bth[1])
+},
+function(event,__bth){mapStatToggle('fw')
+},
+function(event,__bth){mapStatToggle('gir')
+},
+function(event,__bth){inviteFromMap()
+},
+function(event,__bth){toggleWindMode()
+},
+function(event,__bth){windRosePD(event)
+},
+function(event,__bth){windRosePU()
+},
+function(event,__bth){return false
+},
+function(event,__bth){go(gpsOnly()?'setup':'hole')
+},
+function(event,__bth){mapPrev()
+},
+function(event,__bth){mapNext()
+},
+function(event,__bth){trackShotTap()
+},
+function(event,__bth){manualModeTap()
+},
+function(event,__bth){mapConfirm()
+},
+function(event,__bth){mapChScore(-1)
+},
+function(event,__bth){showMapConfirm()
+},
+function(event,__bth){mapChScore(1)
+},
+function(event,__bth){toggleElevMode()
+},
+function(event,__bth){closeCoursePreview()
+},
+function(event,__bth){teeBtnTap()
+},
+function(event,__bth){greenBtnTap()
+},
+function(event,__bth){greenClashClear()
+},
+function(event,__bth){greenClashKeep()
+},
+function(event,__bth){declineMapInvite()
+},
+function(event,__bth){acceptMapInvite()
+},
+function(event,__bth){meRecenter()
+},
+function(event,__bth){openGreenRead()
+},
+function(event,__bth){closeGreenRead()
+},
+function(event,__bth){windDialDir(__bth[0])
+},
+function(event,__bth){if(event.target===this)windDialClose()
+},
+function(event,__bth){windDialMph(-1)
+},
+function(event,__bth){windDialMph(1)
+},
+function(event,__bth){windDialForecast()
+},
+function(event,__bth){windDialDone()
+},
+function(event,__bth){skipParAsk()
+},
+function(event,__bth){setParPick(__bth[0])
+},
+function(event,__bth){puttPD(event)
+},
+function(event,__bth){junkPU(event,__bth[0],__bth[1],(''+__bth[2]+''))
+},
+function(event,__bth){junkTap(__bth[0],__bth[1],(''+__bth[2]+''),'click')
+},
+function(event,__bth){junkSet(__bth[0],__bth[1],(''+__bth[2]+''))
+},
+function(event,__bth){bkBet(__bth[0],__bth[1],-1)
+},
+function(event,__bth){bkBet(__bth[0],__bth[1],1)
+},
+function(event,__bth){bkDbl(__bth[0],__bth[1])
+},
+function(event,__bth){bkWho(__bth[0],__bth[1])
+},
+function(event,__bth){snakeAskLater()
+},
+function(event,__bth){snakeAskPick(__bth[0])
+},
+function(event,__bth){setSnakeLast(__bth[0],__bth[1])
+},
+function(event,__bth){puttPU(event,__bth[0],__bth[1])
+},
+function(event,__bth){setPutts(__bth[0],__bth[1],'click')
+},
+function(event,__bth){puttPUskip(event)
+},
+function(event,__bth){skipPutts('click')
+},
+function(event,__bth){dismissSplash()
+},
+function(event,__bth){closeVerify()
+},
+function(event,__bth){confirmVerifyCode()
+},
+function(event,__bth){sendVerifyCode()
+},
+function(event,__bth){sendVerifyLink()
+},
+function(event,__bth){verifyUI.stage=0,render()
+},
+function(event,__bth){go('')
+},
+function(event,__bth){go('gate')
+},
+function(event,__bth){go('home')
+},
+function(event,__bth){go('bfield')
+},
+function(event,__bth){go('setup')
+},
+function(event,__bth){go('courses')
+},
+function(event,__bth){go('players')
+},
+function(event,__bth){this.style.display='none'
+},
+function(event,__bth){newGamesDone()
+},
+function(event,__bth){confirmGamePick()
+},
+function(event,__bth){closeGamePick()
+},
+function(event,__bth){openGamePick()
+},
+function(event,__bth){installGateSkip()
+},
+function(event,__bth){go('hole')
+},
+function(event,__bth){openMap()
+},
+function(event,__bth){go('standings')
+},
+function(event,__bth){backToGamePick()
+},
+function(event,__bth){
+},
+function(event,__bth){pickToggleGame('stroke')
+},
+function(event,__bth){pickToggleGame('wolf')
+},
+function(event,__bth){pickToggleGame('vegas')
+},
+function(event,__bth){pickToggleGame('skins')
+},
+function(event,__bth){pickToggleGame('matchplay')
+},
+function(event,__bth){pickToggleGame('nines')
+},
+function(event,__bth){pickToggleGame('bestball')
+},
+function(event,__bth){pickToggleGame('scramble')
+},
+function(event,__bth){pickToggleGame('sixes')
+},
+function(event,__bth){pickToggleGame('umbrella')
+},
+function(event,__bth){pickToggleGame('quota')
+},
+function(event,__bth){pickToggleGame('stableford')
+},
+function(event,__bth){pickToggleGame('bbb')
+},
+function(event,__bth){pickToggleGame('nassau')
+},
+function(event,__bth){pickToggleGame('rabbit')
+},
+function(event,__bth){pickToggleGame('banker')
+},
+function(event,__bth){pickToggleGame('junk')
+},
+function(event,__bth){pickToggleGame('snake')
+},
+function(event,__bth){chooseGame('stroke')
+},
+function(event,__bth){chooseGame('wolf')
+},
+function(event,__bth){chooseGame('vegas')
+},
+function(event,__bth){chooseGame('skins')
+},
+function(event,__bth){chooseGame('matchplay')
+},
+function(event,__bth){chooseGame('nines')
+},
+function(event,__bth){chooseGame('bestball')
+},
+function(event,__bth){chooseGame('scramble')
+},
+function(event,__bth){chooseGame('sixes')
+},
+function(event,__bth){chooseGame('umbrella')
+},
+function(event,__bth){chooseGame('quota')
+},
+function(event,__bth){chooseGame('stableford')
+},
+function(event,__bth){chooseGame('bbb')
+},
+function(event,__bth){chooseGame('nassau')
+},
+function(event,__bth){chooseGame('rabbit')
+},
+function(event,__bth){chooseGame('banker')
+},
+function(event,__bth){chooseGame('junk')
+},
+function(event,__bth){chooseGame('snake')
+},
+function(event,__bth){showRules('stroke')
+},
+function(event,__bth){showRules('wolf')
+},
+function(event,__bth){showRules('vegas')
+},
+function(event,__bth){showRules('skins')
+},
+function(event,__bth){showRules('matchplay')
+},
+function(event,__bth){showRules('nines')
+},
+function(event,__bth){showRules('bestball')
+},
+function(event,__bth){showRules('scramble')
+},
+function(event,__bth){showRules('sixes')
+},
+function(event,__bth){showRules('umbrella')
+},
+function(event,__bth){showRules('quota')
+},
+function(event,__bth){showRules('stableford')
+},
+function(event,__bth){showRules('bbb')
+},
+function(event,__bth){showRules('nassau')
+},
+function(event,__bth){showRules('rabbit')
+},
+function(event,__bth){showRules('banker')
+},
+function(event,__bth){showRules('junk')
+},
+function(event,__bth){showRules('snake')
+},
+function(event,__bth){wizChooseGame('stroke')
+},
+function(event,__bth){wizChooseGame('wolf')
+},
+function(event,__bth){wizChooseGame('vegas')
+},
+function(event,__bth){wizChooseGame('skins')
+},
+function(event,__bth){wizChooseGame('matchplay')
+},
+function(event,__bth){wizChooseGame('nines')
+},
+function(event,__bth){wizChooseGame('bestball')
+},
+function(event,__bth){wizChooseGame('scramble')
+},
+function(event,__bth){wizChooseGame('sixes')
+},
+function(event,__bth){wizChooseGame('umbrella')
+},
+function(event,__bth){wizChooseGame('quota')
+},
+function(event,__bth){wizChooseGame('stableford')
+},
+function(event,__bth){wizChooseGame('bbb')
+},
+function(event,__bth){wizChooseGame('nassau')
+},
+function(event,__bth){wizChooseGame('rabbit')
+},
+function(event,__bth){wizChooseGame('banker')
+},
+function(event,__bth){wizChooseGame('junk')
+},
+function(event,__bth){wizChooseGame('snake')
+},
+function(event,__bth){this.outerHTML='<span class="stroke-ph">⛳</span>'
+},
+function(event,__bth){this.outerHTML='<span class="vegas-ph">🎲</span>'
+},
+function(event,__bth){this.outerHTML='<span class="skin-ph">🪙</span>'
+},
+function(event,__bth){this.outerHTML='<span class="mp-ph">⚔️</span>'
+},
+function(event,__bth){this.outerHTML='<span class="nine-ph">9</span>'
+},
+function(event,__bth){this.outerHTML='<span class="bb-ph">🏆</span>'
+},
+function(event,__bth){this.outerHTML='<span class="scr-ph">🤝</span>'
+},
+function(event,__bth){this.outerHTML='<span class="six-ph">6</span>'
+},
+function(event,__bth){this.outerHTML='<span class="umb-ph">☂</span>'
+},
+function(event,__bth){this.outerHTML='<span class="quota-ph">36</span>'
+},
+function(event,__bth){this.outerHTML='<span class="stbl-ph">🎯</span>'
+},
+function(event,__bth){this.outerHTML='<span class="bbb-ph">🥁</span>'
+},
+function(event,__bth){this.outerHTML='<span class="nas-ph">🏅</span>'
+},
+function(event,__bth){this.outerHTML='<span class="rabbit-ph">🐇</span>'
+},
+function(event,__bth){this.outerHTML='<span class="banker-ph">🏦</span>'
+},
+function(event,__bth){this.outerHTML='<span class="junk-ph">🪙</span>'
+},
+function(event,__bth){this.outerHTML='<span class="snake-ph">🐍</span>'
+},
+function(event,__bth){this.outerHTML='<h1 style="color:var(--green-ink);font-size:26px">Battle Tees</h1>'
+},
+function(event,__bth){tapClear(this)
+},
+function(event,__bth){saveMe()
+},
+function(event,__bth){welcomeRestore();return false
+},
+function(event,__bth){joinFromInvite((''+__bth[0]+''))
+},
+function(event,__bth){this.outerHTML='<h1 style="color:var(--green-ink);font-size:20px">Battle Tees</h1>'
+},
+function(event,__bth){setTheme('light')
+},
+function(event,__bth){setTheme('dark')
+},
+function(event,__bth){go('settings')
+},
+function(event,__bth){resumeOpenRoom()
+},
+function(event,__bth){leaveShare();render()
+},
+function(event,__bth){startWizard()
+},
+function(event,__bth){go('stats')
+},
+function(event,__bth){go('history')
+},
+function(event,__bth){startRangefinder()
+},
+function(event,__bth){go('map')
+},
+function(event,__bth){endRangefinder()
+},
+function(event,__bth){openRoundOpts()
+},
+function(event,__bth){askEndRound()
+},
+function(event,__bth){mergeIntoRound()
+},
+function(event,__bth){cancelRound()
+},
+function(event,__bth){leaveShare()
+},
+function(event,__bth){inviteFromMap();render()
+},
+function(event,__bth){goGroup()
+},
+function(event,__bth){daArm()
+},
+function(event,__bth){daStart()
+},
+function(event,__bth){daCancel()
+},
+function(event,__bth){daCode()
+},
+function(event,__bth){emLockConfirm()
+},
+function(event,__bth){emLockSend()
+},
+function(event,__bth){pkConfirm()
+},
+function(event,__bth){pkSendCode()
+},
+function(event,__bth){closeDoc()
+},
+function(event,__bth){bfToggle((''+__bth[0]+''))
+},
+function(event,__bth){this.parentNode.style.display='none'
+},
+function(event,__bth){shareAppLink()
+},
+function(event,__bth){contactMail()
+},
+function(event,__bth){if(distUnit()!=='yd')toggleUnits()
+},
+function(event,__bth){if(distUnit()!=='m')toggleUnits()
+},
+function(event,__bth){windSettingToggle()
+},
+function(event,__bth){lastLinesToggle()
+},
+function(event,__bth){wakeSettingToggle()
+},
+function(event,__bth){amnesiaToggle()
+},
+function(event,__bth){openDoc('privacy')
+},
+function(event,__bth){openLicenses()
+},
+function(event,__bth){soArm()
+},
+function(event,__bth){soGo()
+},
+function(event,__bth){soCancel()
+},
+function(event,__bth){openDoc('terms')
+},
+function(event,__bth){dismissMarkNotes()
+},
+function(event,__bth){openBattlefield()
+},
+function(event,__bth){event.stopPropagation();bfPillTap((''+__bth[0]+''),(''+__bth[1]+''),(''+__bth[2]+''))
+},
+function(event,__bth){event.stopPropagation();bfReact((''+__bth[0]+''),(''+__bth[1]+''),(''+__bth[2]+''))
+},
+function(event,__bth){event.stopPropagation();bfPickToggle((''+__bth[0]+''),(''+__bth[1]+''))
+},
+function(event,__bth){event.stopPropagation();openBfComments((''+__bth[0]+''),(''+__bth[1]+''))
+},
+function(event,__bth){bfCmMenu(__bth[0])
+},
+function(event,__bth){bfCmReplyTo((''+__bth[0]+''),(''+__bth[1]+''))
+},
+function(event,__bth){bfCmDel(__bth[0])
+},
+function(event,__bth){bfCmReport(__bth[0])
+},
+function(event,__bth){bfCmBlock((''+__bth[0]+''))
+},
+function(event,__bth){bfCmUnblock((''+__bth[0]+''))
+},
+function(event,__bth){bfCmReplyClear()
+},
+function(event,__bth){bfCmRulesOk()
+},
+function(event,__bth){bfCmRules(false)
+},
+function(event,__bth){bfCmInput()
+},
+function(event,__bth){closeBfComments()
+},
+function(event,__bth){bfCmSend()
+},
+function(event,__bth){if(window.event)window.event.stopPropagation();openPlayerMenu((''+__bth[0]+''),(''+__bth[1]+''),__bth[2],'nearby',(''+__bth[3]+''),__bth[4],(''+__bth[5]+''))
+},
+function(event,__bth){if(window.event)window.event.stopPropagation();openPlayerMenu((''+__bth[0]+''),(''+__bth[1]+''),__bth[2],'nearby',(''+__bth[3]+''),__bth[4])
+},
+function(event,__bth){if(window.event)window.event.stopPropagation();openPlayerMenu((''+__bth[0]+''),(''+__bth[1]+''),__bth[2],'battlefield',(''+__bth[3]+''),__bth[4],(''+__bth[5]+''))
+},
+function(event,__bth){if(window.event)window.event.stopPropagation();openPlayerMenu((''+__bth[0]+''),(''+__bth[1]+''),__bth[2],'battlefield',(''+__bth[3]+''),__bth[4])
+},
+function(event,__bth){if(window.event)window.event.stopPropagation();openPlayerMenu((''+__bth[0]+''),(''+__bth[1]+''),__bth[2],'round',(''+__bth[3]+''),__bth[4],(''+__bth[5]+''))
+},
+function(event,__bth){if(window.event)window.event.stopPropagation();openPlayerMenu((''+__bth[0]+''),(''+__bth[1]+''),__bth[2],'round',(''+__bth[3]+''),__bth[4])
+},
+function(event,__bth){if(window.event)window.event.stopPropagation();openPlayerMenu((''+__bth[0]+''),(''+__bth[1]+''),__bth[2],'online',(''+__bth[3]+''),__bth[4],(''+__bth[5]+''))
+},
+function(event,__bth){if(window.event)window.event.stopPropagation();openPlayerMenu((''+__bth[0]+''),(''+__bth[1]+''),__bth[2],'online',(''+__bth[3]+''),__bth[4])
+},
+function(event,__bth){if(window.event)window.event.stopPropagation();openPlayerMenu((''+__bth[0]+''),(''+__bth[1]+''),__bth[2],'saved',(''+__bth[3]+''),__bth[4],(''+__bth[5]+''))
+},
+function(event,__bth){if(window.event)window.event.stopPropagation();openPlayerMenu((''+__bth[0]+''),(''+__bth[1]+''),__bth[2],'saved',(''+__bth[3]+''),__bth[4])
+},
+function(event,__bth){pmReport('name')
+},
+function(event,__bth){closePlayerMenu()
+},
+function(event,__bth){pmReport('photo')
+},
+function(event,__bth){pmUnblock()
+},
+function(event,__bth){pmBlock()
+},
+function(event,__bth){unblockFromSettings((''+__bth[0]+''))
+},
+function(event,__bth){bfReply((''+__bth[0]+''))
+},
+function(event,__bth){bfAck((''+__bth[0]+''))
+},
+function(event,__bth){bfAck('*')
+},
+function(event,__bth){bfChipTap()
+},
+function(event,__bth){if(!bfPickClose())openBfWatch((''+__bth[0]+''))
+},
+function(event,__bth){event.stopPropagation();bfForget((''+__bth[0]+''))
+},
+function(event,__bth){bfLens='gross';render()
+},
+function(event,__bth){bfLens='net';render()
+},
+function(event,__bth){bfHole=__bth[0];render()
+},
+function(event,__bth){closeShotView()
+},
+function(event,__bth){pickingCourse=true;finder={status:'idle',choices:[],error:''};go('pickcourse')
+},
+function(event,__bth){set(()=>{S.round=blankRound();});wiz={step:'join',n:4};S.screen='start';render()
+},
+function(event,__bth){wizBack()
+},
+function(event,__bth){joinRound()
+},
+function(event,__bth){setSpan(18,__bth[0]);render()
+},
+function(event,__bth){wizSpanNext()
+},
+function(event,__bth){wizKind('join')
+},
+function(event,__bth){setSpan(18,0);render()
+},
+function(event,__bth){setSpan(9,0);render()
+},
+function(event,__bth){setSpan(9,9);render()
+},
+function(event,__bth){setSpan(__bth[0],+this.value)
+},
+function(event,__bth){wizKind('solo')
+},
+function(event,__bth){wizKind('multi')
+},
+function(event,__bth){wizCount(__bth[0])
+},
+function(event,__bth){removeGolfer(__bth[0])
+},
+function(event,__bth){gateAddOne((''+__bth[0]+''))
+},
+function(event,__bth){addFromLib((''+__bth[0]+''))
+},
+function(event,__bth){wizPickGroup((''+__bth[0]+''))
+},
+function(event,__bth){wizEditGroup((''+__bth[0]+''))
+},
+function(event,__bth){wizToGame()
+},
+function(event,__bth){setAddMode('lib')
+},
+function(event,__bth){setAddMode('type')
+},
+function(event,__bth){setAddMode('nearby')
+},
+function(event,__bth){addTypedGolfer()
+},
+function(event,__bth){wizOptsDone()
+},
+function(event,__bth){startRound()
+},
+function(event,__bth){S.config.groupName=this.value;save()
+},
+function(event,__bth){groupNameCommit(this.value)
+},
+function(event,__bth){dismissInvite((''+__bth[0]+''))
+},
+function(event,__bth){openGroupCreate()
+},
+function(event,__bth){toggleGrpEdit()
+},
+function(event,__bth){openGroupEditor((''+__bth[0]+''))
+},
+function(event,__bth){delGroup((''+__bth[0]+''))
+},
+function(event,__bth){loadGroup((''+__bth[0]+''))
+},
+function(event,__bth){pairGroups()
+},
+function(event,__bth){startGroupFromGate()
+},
+function(event,__bth){go('pickgame')
+},
+function(event,__bth){if(this.open)ruleOpened(this)
+},
+function(event,__bth){startWithGame((''+__bth[0]+''))
+},
+function(event,__bth){set(()=>S.screen='season')
+},
+function(event,__bth){delHist((''+__bth[0]+''))
+},
+function(event,__bth){reopenRound((''+__bth[0]+''))
+},
+function(event,__bth){exOpen('pick',(''+__bth[0]+''))
+},
+function(event,__bth){setSeason(__bth[0])
+},
+function(event,__bth){exportSave('xlsx')
+},
+function(event,__bth){exportEmail('xlsx')
+},
+function(event,__bth){exOpen('download',exScope,true)
+},
+function(event,__bth){exOpen('email',exScope,true)
+},
+function(event,__bth){exClose()
+},
+function(event,__bth){exOpen('pick',exScope)
+},
+function(event,__bth){exportSave('csv')
+},
+function(event,__bth){exportEmail('csv')
+},
+function(event,__bth){toggleAutoBackup()
+},
+function(event,__bth){openVerify('backupRow')
+},
+function(event,__bth){doBackup()
+},
+function(event,__bth){closeBackup()
+},
+function(event,__bth){requestRestoreCode()
+},
+function(event,__bth){doRestore()
+},
+function(event,__bth){openBackup()
+},
+function(event,__bth){openRestore()
+},
+function(event,__bth){addCourse()
+},
+function(event,__bth){natBrowse()
+},
+function(event,__bth){addBlankCourse()
+},
+function(event,__bth){natFilter(this.value)
+},
+function(event,__bth){cancelFind()
+},
+function(event,__bth){natUse((''+__bth[0]+''))
+},
+function(event,__bth){useFoundCourse(__bth[0])
+},
+function(event,__bth){pickCourse(__bth[0])
+},
+function(event,__bth){openCoursePreview(__bth[0])
+},
+function(event,__bth){go('course')
+},
+function(event,__bth){delCourse(__bth[0])
+},
+function(event,__bth){openGroupBuild()
+},
+function(event,__bth){openMyBag()
+},
+function(event,__bth){saveEditMe()
+},
+function(event,__bth){cancelEditMe()
+},
+function(event,__bth){openPhotoPick()
+},
+function(event,__bth){photoFilePicked(this)
+},
+function(event,__bth){removeMyPhoto()
+},
+function(event,__bth){editMe()
+},
+function(event,__bth){toggleScan()
+},
+function(event,__bth){savePresencePlayer(__bth[0])
+},
+function(event,__bth){addManualPlayer()
+},
+function(event,__bth){toggleAddPlayer()
+},
+function(event,__bth){saveEditPlayer()
+},
+function(event,__bth){cancelEditPlayer()
+},
+function(event,__bth){setFriend((''+__bth[0]+''),false)
+},
+function(event,__bth){setFriend((''+__bth[0]+''),true)
+},
+function(event,__bth){confirmFriend((''+__bth[0]+''),(''+__bth[1]+''))
+},
+function(event,__bth){inviteToBattle(decodeURIComponent((''+__bth[0]+'')))
+},
+function(event,__bth){delPlayerCancel()
+},
+function(event,__bth){delPlayer((''+__bth[0]+''))
+},
+function(event,__bth){startEditPlayer((''+__bth[0]+''))
+},
+function(event,__bth){dismissRoundSplash()
+},
+function(event,__bth){idleKeep()
+},
+function(event,__bth){idleEnd()
+},
+function(event,__bth){chPar(__bth[0],-1)
+},
+function(event,__bth){chPar(__bth[0],1)
+},
+function(event,__bth){chSI(__bth[0],this.value)
+},
+function(event,__bth){chTee(__bth[0],'name',this.value)
+},
+function(event,__bth){chTee(__bth[0],'rating',this.value)
+},
+function(event,__bth){chTee(__bth[0],'slope',this.value)
+},
+function(event,__bth){delTee(__bth[0])
+},
+function(event,__bth){set(()=>{S.course.name=this.value;S.course.nameEdit=true;})
+},
+function(event,__bth){S.course.name=this.value;S.course.nameEdit=true;save()
+},
+function(event,__bth){addTee()
+},
+function(event,__bth){set(()=>{delete S.course._note;delete S.course._noteOk;})
+},
+function(event,__bth){preloadCourseTiles(true);naipEnsure(S.course,true)
+},
+function(event,__bth){set(()=>{delete S.course.geo;delete S.course.geoReal;})
+},
+function(event,__bth){fetchMapNow()
+},
+function(event,__bth){go(roundOptsBack)
+},
+function(event,__bth){chAllow(-5)
+},
+function(event,__bth){chAllow(5)
+},
+function(event,__bth){setRecLens('net')
+},
+function(event,__bth){setRecLens('gross')
+},
+function(event,__bth){set(()=>S.config.carryTies=!S.config.carryTies)
+},
+function(event,__bth){set(()=>S.config.last2LastPlace=!S.config.last2LastPlace)
+},
+function(event,__bth){propDraft=null;go(roundOptsBack)
+},
+function(event,__bth){chPt('partnerWin',-1)
+},
+function(event,__bth){chPt('fieldBeatsPartners',-1)
+},
+function(event,__bth){chPt('loneWin',-1)
+},
+function(event,__bth){chPt('fieldBeatsLone',-1)
+},
+function(event,__bth){chPt('blindWin',-1)
+},
+function(event,__bth){chPt('fieldBeatsBlind',-1)
+},
+function(event,__bth){chPt('ctp',-1)
+},
+function(event,__bth){chPt('partnerWin',1)
+},
+function(event,__bth){chPt('fieldBeatsPartners',1)
+},
+function(event,__bth){chPt('loneWin',1)
+},
+function(event,__bth){chPt('fieldBeatsLone',1)
+},
+function(event,__bth){chPt('blindWin',1)
+},
+function(event,__bth){chPt('fieldBeatsBlind',1)
+},
+function(event,__bth){chPt('ctp',1)
+},
+function(event,__bth){set(()=>S.config.scramble.teams='duo')
+},
+function(event,__bth){set(()=>S.config.scramble.teams='2v2')
+},
+function(event,__bth){set(()=>S.config.scramble.teams='solo')
+},
+function(event,__bth){set(()=>S.config.sixes.pairing=__bth[0])
+},
+function(event,__bth){set(()=>S.config.hammer.on=true)
+},
+function(event,__bth){set(()=>S.config.hammer.on=false)
+},
+function(event,__bth){set(()=>{S.config.skins.amt=Math.max(0,+this.value||0);if(S.config.skins.per)S.config.skins.per=null;})
+},
+function(event,__bth){set(()=>S.config.skins.carry=S.config.skins.carry===false?true:false)
+},
+function(event,__bth){set(()=>S.config.skins.per=S.config.skins.per?null:skinsHoleVals())
+},
+function(event,__bth){set(()=>S.config.skins.n=__bth[0])
+},
+function(event,__bth){set(()=>{S.config.skins.per[__bth[0]]=Math.max(0,+this.value||0);})
+},
+function(event,__bth){set(()=>S.config.nassau.n=4)
+},
+function(event,__bth){set(()=>S.config.nassau.n=2)
+},
+function(event,__bth){set(()=>S.config.nassau.press=(''+__bth[0]+''))
+},
+function(event,__bth){setTeamPairing('bestball',__bth[0])
+},
+function(event,__bth){setTeamPairing('scramble',__bth[0])
+},
+function(event,__bth){setTeamPairing('umbrella',__bth[0])
+},
+function(event,__bth){setTeamPairing('nassau',__bth[0])
+},
+function(event,__bth){toggleMystery('bestball')
+},
+function(event,__bth){toggleMystery('umbrella')
+},
+function(event,__bth){toggleMystery('nassau')
+},
+function(event,__bth){set(()=>S.config.vegas.rotate=S.config.vegas.rotate==='six'?'none':'six')
+},
+function(event,__bth){set(()=>S.config.vegas.flip=!S.config.vegas.flip)
+},
+function(event,__bth){set(()=>S.config.vegas.ctp=!S.config.vegas.ctp)
+},
+function(event,__bth){toggleMystery('vegas')
+},
+function(event,__bth){setTeamPairing('vegas',__bth[0])
+},
+function(event,__bth){set(()=>S.config.quota.n=__bth[0])
+},
+function(event,__bth){chQuotaPt((''+__bth[0]+''),-1)
+},
+function(event,__bth){chQuotaPt((''+__bth[0]+''),1)
+},
+function(event,__bth){set(()=>S.config.bbb.n=__bth[0])
+},
+function(event,__bth){set(()=>S.config.stbl.n=__bth[0])
+},
+function(event,__bth){chStblPt((''+__bth[0]+''),-1)
+},
+function(event,__bth){chStblPt((''+__bth[0]+''),1)
+},
+function(event,__bth){set(()=>S.config.stroke.n=__bth[0])
+},
+function(event,__bth){set(()=>S.config.nines.blitz=!S.config.nines.blitz)
+},
+function(event,__bth){set(()=>S.config.nines.ctp=!S.config.nines.ctp)
+},
+function(event,__bth){setSpan(18,0)
+},
+function(event,__bth){setSpan(9,0)
+},
+function(event,__bth){setSpan(9,9)
+},
+function(event,__bth){set(()=>S.config.span.start=+this.value)
+},
+function(event,__bth){pickPlayerOpt(__bth[0],this.value)
+},
+function(event,__bth){setPl(__bth[0],'tee',this.value)
+},
+function(event,__bth){movePl(__bth[0])
+},
+function(event,__bth){commitPl(this,__bth[0],'index')
+},
+function(event,__bth){toggleCtpAll()
+},
+function(event,__bth){startPick()
+},
+function(event,__bth){setStdTee((''+__bth[0]+''),(''+__bth[1]+''))
+},
+function(event,__bth){pairsAskDone()
+},
+function(event,__bth){joinSpanPick(__bth[0],__bth[1])
+},
+function(event,__bth){joinSpanPick(__bth[0],+this.value)
+},
+function(event,__bth){joinSpanDone()
+},
+function(event,__bth){joinSpanPick(18,0)
+},
+function(event,__bth){joinSpanPick(9,0)
+},
+function(event,__bth){joinSpanPick(9,9)
+},
+function(event,__bth){teeAskDone()
+},
+function(event,__bth){teeAskPick((''+__bth[0]+''))
+},
+function(event,__bth){cropPD(event)
+},
+function(event,__bth){cropPM(event)
+},
+function(event,__bth){cropPU()
+},
+function(event,__bth){cropSize(+this.value)
+},
+function(event,__bth){cropUse()
+},
+function(event,__bth){photoCrop=null;render()
+},
+function(event,__bth){wolfOrderDone()
+},
+function(event,__bth){listPD(event,__bth[0],'orderList',movePlRoundTo)
+},
+function(event,__bth){bankAskDone()
+},
+function(event,__bth){bankAskPick(__bth[0])
+},
+function(event,__bth){bankAskToss()
+},
+function(event,__bth){mapBetOpen()
+},
+function(event,__bth){mapBetPick(__bth[0])
+},
+function(event,__bth){mapBetClose()
+},
+function(event,__bth){toggleReorder()
+},
+function(event,__bth){setSpan(18,+this.value)
+},
+function(event,__bth){if(event.key==='Enter')grpEdAddNew()
+},
+function(event,__bth){grpEdAddNew()
+},
+function(event,__bth){saveGroupEdit()
+},
+function(event,__bth){closeGroupEditor()
+},
+function(event,__bth){grpEdToggle((''+__bth[0]+''))
+},
+function(event,__bth){fixTake(true)
+},
+function(event,__bth){fixAsk=null;render()
+},
+function(event,__bth){unlockRow(__bth[0],__bth[1])
+},
+function(event,__bth){chScore(__bth[0],-1)
+},
+function(event,__bth){chScore(__bth[0],1)
+},
+function(event,__bth){unconfirm()
+},
+function(event,__bth){nextHole()
+},
+function(event,__bth){redoPick()
+},
+function(event,__bth){redoPickArm(__bth[0])
+},
+function(event,__bth){wolfPickAnswer((''+__bth[0]+''),__bth[1])
+},
+function(event,__bth){pickBlind()
+},
+function(event,__bth){pickLone()
+},
+function(event,__bth){pickTake(__bth[0])
+},
+function(event,__bth){wolfAskClose()
+},
+function(event,__bth){wolfTakeOver(__bth[0])
+},
+function(event,__bth){setCtp(-1)
+},
+function(event,__bth){setCtp(__bth[0])
+},
+function(event,__bth){chCtpAmt(-1)
+},
+function(event,__bth){chCtpAmt(1)
+},
+function(event,__bth){toggleCtpCarry()
+},
+function(event,__bth){chJunkPt((''+__bth[0]+''),-1)
+},
+function(event,__bth){chJunkPt((''+__bth[0]+''),1)
+},
+function(event,__bth){set(()=>{S.config.snake.grow=!snakeGrow();})
+},
+function(event,__bth){set(()=>{S.config.snake.tie='last';})
+},
+function(event,__bth){set(()=>{S.config.snake.tie='short';})
+},
+function(event,__bth){set(()=>S.config.rabbit.n=__bth[0])
+},
+function(event,__bth){set(()=>S.config.banker.n=__bth[0])
+},
+function(event,__bth){set(()=>{S.config.rabbit.steal=!rabbitCfg().steal;})
+},
+function(event,__bth){set(()=>S.config.rabbit.split='nines')
+},
+function(event,__bth){set(()=>S.config.rabbit.split='all')
+},
+function(event,__bth){chBanker('min',-1)
+},
+function(event,__bth){chBanker('min',1)
+},
+function(event,__bth){chBanker('max',-1)
+},
+function(event,__bth){chBanker('max',1)
+},
+function(event,__bth){chBankerRotate(false)
+},
+function(event,__bth){chBankerRotate(true)
+},
+function(event,__bth){bbbOpen(mapHole)
+},
+function(event,__bth){bbbAskClose()
+},
+function(event,__bth){bbbAskPick((''+__bth[0]+''),-1)
+},
+function(event,__bth){setBBB((''+__bth[0]+''),-1)
+},
+function(event,__bth){bbbAskPick((''+__bth[0]+''),__bth[1])
+},
+function(event,__bth){setBBB((''+__bth[0]+''),__bth[1])
+},
+function(event,__bth){nassauPress(-1)
+},
+function(event,__bth){nassauPress(__bth[0])
+},
+function(event,__bth){hamUndo()
+},
+function(event,__bth){hamAccept()
+},
+function(event,__bth){hamFold()
+},
+function(event,__bth){hamThrow(__bth[0])
+},
+function(event,__bth){endAskScore()
+},
+function(event,__bth){endAskAnyway()
+},
+function(event,__bth){endAskYes()
+},
+function(event,__bth){endAskNo()
+},
+function(event,__bth){catchSave()
+},
+function(event,__bth){catchCancel()
+},
+function(event,__bth){catchStep(__bth[0],-1)
+},
+function(event,__bth){catchStep(__bth[0],1)
+},
+function(event,__bth){catchOpen(__bth[0])
+},
+function(event,__bth){catchLater[__bth[0]]=true;render()
+},
+function(event,__bth){catchSkip(__bth[0])
+},
+function(event,__bth){joinPlay('team')
+},
+function(event,__bth){joinPlay('score')
+},
+function(event,__bth){joinPlay('match')
+},
+function(event,__bth){appUpdateNow()
+},
+function(event,__bth){rulesLater()
+},
+function(event,__bth){propVote('yes')
+},
+function(event,__bth){propVote('no')
+},
+function(event,__bth){propWithdraw()
+},
+function(event,__bth){propSend()
+},
+function(event,__bth){propUndo()
+},
+function(event,__bth){propSetScope('next')
+},
+function(event,__bth){propSetScope('all')
+},
+function(event,__bth){roomFullWatch()
+},
+function(event,__bth){roomFullLeave()
+},
+function(event,__bth){holeStatToggle('fw')
+},
+function(event,__bth){holeStatToggle('gir')
+},
+function(event,__bth){confirmHole()
+},
+function(event,__bth){confirmMine()
+},
+function(event,__bth){set(()=>prefillNines(__bth[0]))
+},
+function(event,__bth){this.outerHTML='<span style="font-size:34px">🎲</span>'
+},
+function(event,__bth){closeFullCard()
+},
+function(event,__bth){openChal()
+},
+function(event,__bth){chalDecline()
+},
+function(event,__bth){cheerDismiss()
+},
+function(event,__bth){chalToggle((''+__bth[0]+''))
+},
+function(event,__bth){chalBump((''+__bth[0]+''),-1)
+},
+function(event,__bth){chalBump((''+__bth[0]+''),1)
+},
+function(event,__bth){chalSave()
+},
+function(event,__bth){toggleMystery((''+__bth[0]+''))
+},
+function(event,__bth){revealPartners((''+__bth[0]+''))
+},
+function(event,__bth){saveTeamNameUI('bestball',__bth[0],this.value)
+},
+function(event,__bth){saveTeamNameUI('scramble',__bth[0],this.value)
+},
+function(event,__bth){saveTeamNameUI('umbrella',__bth[0],this.value)
+},
+function(event,__bth){saveTeamNameUI('nassau',__bth[0],this.value)
+},
+function(event,__bth){saveTeamNameUI('vegas',__bth[0],this.value)
+},
+function(event,__bth){setTeamPairing((''+__bth[0]+''),__bth[1])
+},
+function(event,__bth){jumpAndGo(__bth[0])
+},
+function(event,__bth){makeMainGame((''+__bth[0]+''))
+},
+function(event,__bth){openFullCard()
+},
+function(event,__bth){setPayLens('net')
+},
+function(event,__bth){setPayLens('gross')
+},
+function(event,__bth){set(()=>S.round.dollarPerPt=+this.value||0)
+},
+function(event,__bth){setRate((''+__bth[0]+''),this.value)
+},
+function(event,__bth){propRun(()=>{return __btRun(__bth[0],this,event);})
+}];
+var __btST={"click":{"openVerify('nagCard')":3,"vfNagLater()":4,"joinCancelWait()":5,"lobbyRetry()":6,"nearKeep()":8,"btDoInstall()":9,"magRequestNew()":10,"magUI=null;render()":11,"closeReview()":12,"reviewCommit()":13,"setTopLens('gross')":14,"setTopLens('net')":15,"closePinAsk()":20,"event.stopPropagation()":21,"pinAnswer('c')":22,"geoRetry()":23,"toggleMapCredits()":24,"clearScoreNag(true)":25,"bagAddCustom()":29,"bagToggleCustom()":30,"bagTogglePick()":31,"bagReset()":32,"clearTrackStart()":33,"cancelMark()":34,"saveShot(null)":35,"undoTrackShot()":37,"typedDone()":38,"typedLater()":39,"mapStatToggle('fw')":43,"mapStatToggle('gir')":44,"inviteFromMap()":45,"toggleWindMode()":46,"go(gpsOnly()?'setup':'hole')":50,"mapPrev()":51,"mapNext()":52,"trackShotTap()":53,"manualModeTap()":54,"mapConfirm()":55,"mapChScore(-1)":56,"showMapConfirm()":57,"mapChScore(1)":58,"toggleElevMode()":59,"closeCoursePreview()":60,"teeBtnTap()":61,"greenBtnTap()":62,"greenClashClear()":63,"greenClashKeep()":64,"declineMapInvite()":65,"acceptMapInvite()":66,"meRecenter()":67,"openGreenRead()":68,"closeGreenRead()":69,"if(event.target===this)windDialClose()":71,"windDialMph(-1)":72,"windDialMph(1)":73,"windDialForecast()":74,"windDialDone()":75,"skipParAsk()":76,"snakeAskLater()":86,"skipPutts('click')":92,"dismissSplash()":93,"closeVerify()":94,"confirmVerifyCode()":95,"sendVerifyCode()":96,"sendVerifyLink()":97,"verifyUI.stage=0,render()":98,"go('')":99,"go('gate')":100,"go('home')":101,"go('bfield')":102,"go('setup')":103,"go('courses')":104,"go('players')":105,"newGamesDone()":107,"confirmGamePick()":108,"closeGamePick()":109,"openGamePick()":110,"installGateSkip()":111,"go('hole')":112,"openMap()":113,"go('standings')":114,"backToGamePick()":115,"":116,"pickToggleGame('stroke')":117,"pickToggleGame('wolf')":118,"pickToggleGame('vegas')":119,"pickToggleGame('skins')":120,"pickToggleGame('matchplay')":121,"pickToggleGame('nines')":122,"pickToggleGame('bestball')":123,"pickToggleGame('scramble')":124,"pickToggleGame('sixes')":125,"pickToggleGame('umbrella')":126,"pickToggleGame('quota')":127,"pickToggleGame('stableford')":128,"pickToggleGame('bbb')":129,"pickToggleGame('nassau')":130,"pickToggleGame('rabbit')":131,"pickToggleGame('banker')":132,"pickToggleGame('junk')":133,"pickToggleGame('snake')":134,"chooseGame('stroke')":135,"chooseGame('wolf')":136,"chooseGame('vegas')":137,"chooseGame('skins')":138,"chooseGame('matchplay')":139,"chooseGame('nines')":140,"chooseGame('bestball')":141,"chooseGame('scramble')":142,"chooseGame('sixes')":143,"chooseGame('umbrella')":144,"chooseGame('quota')":145,"chooseGame('stableford')":146,"chooseGame('bbb')":147,"chooseGame('nassau')":148,"chooseGame('rabbit')":149,"chooseGame('banker')":150,"chooseGame('junk')":151,"chooseGame('snake')":152,"showRules('stroke')":153,"showRules('wolf')":154,"showRules('vegas')":155,"showRules('skins')":156,"showRules('matchplay')":157,"showRules('nines')":158,"showRules('bestball')":159,"showRules('scramble')":160,"showRules('sixes')":161,"showRules('umbrella')":162,"showRules('quota')":163,"showRules('stableford')":164,"showRules('bbb')":165,"showRules('nassau')":166,"showRules('rabbit')":167,"showRules('banker')":168,"showRules('junk')":169,"showRules('snake')":170,"wizChooseGame('stroke')":171,"wizChooseGame('wolf')":172,"wizChooseGame('vegas')":173,"wizChooseGame('skins')":174,"wizChooseGame('matchplay')":175,"wizChooseGame('nines')":176,"wizChooseGame('bestball')":177,"wizChooseGame('scramble')":178,"wizChooseGame('sixes')":179,"wizChooseGame('umbrella')":180,"wizChooseGame('quota')":181,"wizChooseGame('stableford')":182,"wizChooseGame('bbb')":183,"wizChooseGame('nassau')":184,"wizChooseGame('rabbit')":185,"wizChooseGame('banker')":186,"wizChooseGame('junk')":187,"wizChooseGame('snake')":188,"saveMe()":208,"welcomeRestore();return false":209,"setTheme('light')":212,"setTheme('dark')":213,"go('settings')":214,"resumeOpenRoom()":215,"leaveShare();render()":216,"startWizard()":217,"go('stats')":218,"go('history')":219,"startRangefinder()":220,"go('map')":221,"endRangefinder()":222,"openRoundOpts()":223,"askEndRound()":224,"mergeIntoRound()":225,"cancelRound()":226,"leaveShare()":227,"inviteFromMap();render()":228,"goGroup()":229,"daArm()":230,"daStart()":231,"daCancel()":232,"daCode()":233,"emLockConfirm()":234,"emLockSend()":235,"pkConfirm()":236,"pkSendCode()":237,"closeDoc()":238,"shareAppLink()":241,"contactMail()":242,"if(distUnit()!=='yd')toggleUnits()":243,"if(distUnit()!=='m')toggleUnits()":244,"windSettingToggle()":245,"lastLinesToggle()":246,"wakeSettingToggle()":247,"amnesiaToggle()":248,"openDoc('privacy')":249,"openLicenses()":250,"soArm()":251,"soGo()":252,"soCancel()":253,"openDoc('terms')":254,"dismissMarkNotes()":255,"openBattlefield()":256,"bfCmReplyClear()":267,"bfCmRulesOk()":268,"bfCmRules(false)":269,"closeBfComments()":271,"bfCmSend()":272,"pmReport('name')":283,"closePlayerMenu()":284,"pmReport('photo')":285,"pmUnblock()":286,"pmBlock()":287,"bfAck('*')":291,"bfChipTap()":292,"bfLens='gross';render()":295,"bfLens='net';render()":296,"closeShotView()":298,"pickingCourse=true;finder={status:'idle',choices:[],error:''};go('pickcourse')":299,"set(()=>{S.round=blankRound();});wiz={step:'join',n:4};S.screen='start';render()":300,"wizBack()":301,"joinRound()":302,"wizSpanNext()":304,"wizKind('join')":305,"setSpan(18,0);render()":306,"setSpan(9,0);render()":307,"setSpan(9,9);render()":308,"wizKind('solo')":310,"wizKind('multi')":311,"wizToGame()":318,"setAddMode('lib')":319,"setAddMode('type')":320,"setAddMode('nearby')":321,"addTypedGolfer()":322,"wizOptsDone()":323,"startRound()":324,"openGroupCreate()":328,"toggleGrpEdit()":329,"pairGroups()":333,"startGroupFromGate()":334,"go('pickgame')":335,"set(()=>S.screen='season')":338,"exportSave('xlsx')":343,"exportEmail('xlsx')":344,"exOpen('download',exScope,true)":345,"exOpen('email',exScope,true)":346,"exClose()":347,"exOpen('pick',exScope)":348,"exportSave('csv')":349,"exportEmail('csv')":350,"toggleAutoBackup()":351,"openVerify('backupRow')":352,"doBackup()":353,"closeBackup()":354,"requestRestoreCode()":355,"doRestore()":356,"openBackup()":357,"openRestore()":358,"addCourse()":359,"natBrowse()":360,"addBlankCourse()":361,"cancelFind()":363,"go('course')":368,"openGroupBuild()":370,"openMyBag()":371,"saveEditMe()":372,"cancelEditMe()":373,"openPhotoPick()":374,"removeMyPhoto()":376,"editMe()":377,"toggleScan()":378,"addManualPlayer()":380,"toggleAddPlayer()":381,"saveEditPlayer()":382,"cancelEditPlayer()":383,"delPlayerCancel()":388,"dismissRoundSplash()":391,"idleKeep()":392,"idleEnd()":393,"addTee()":403,"set(()=>{delete S.course._note;delete S.course._noteOk;})":404,"preloadCourseTiles(true);naipEnsure(S.course,true)":405,"set(()=>{delete S.course.geo;delete S.course.geoReal;})":406,"fetchMapNow()":407,"go(roundOptsBack)":408,"chAllow(-5)":409,"chAllow(5)":410,"setRecLens('net')":411,"setRecLens('gross')":412,"set(()=>S.config.carryTies=!S.config.carryTies)":413,"set(()=>S.config.last2LastPlace=!S.config.last2LastPlace)":414,"propDraft=null;go(roundOptsBack)":415,"chPt('partnerWin',-1)":416,"chPt('fieldBeatsPartners',-1)":417,"chPt('loneWin',-1)":418,"chPt('fieldBeatsLone',-1)":419,"chPt('blindWin',-1)":420,"chPt('fieldBeatsBlind',-1)":421,"chPt('ctp',-1)":422,"chPt('partnerWin',1)":423,"chPt('fieldBeatsPartners',1)":424,"chPt('loneWin',1)":425,"chPt('fieldBeatsLone',1)":426,"chPt('blindWin',1)":427,"chPt('fieldBeatsBlind',1)":428,"chPt('ctp',1)":429,"set(()=>S.config.scramble.teams='duo')":430,"set(()=>S.config.scramble.teams='2v2')":431,"set(()=>S.config.scramble.teams='solo')":432,"set(()=>S.config.hammer.on=true)":434,"set(()=>S.config.hammer.on=false)":435,"set(()=>S.config.skins.carry=S.config.skins.carry===false?true:false)":437,"set(()=>S.config.skins.per=S.config.skins.per?null:skinsHoleVals())":438,"set(()=>S.config.nassau.n=4)":441,"set(()=>S.config.nassau.n=2)":442,"toggleMystery('bestball')":448,"toggleMystery('umbrella')":449,"toggleMystery('nassau')":450,"set(()=>S.config.vegas.rotate=S.config.vegas.rotate==='six'?'none':'six')":451,"set(()=>S.config.vegas.flip=!S.config.vegas.flip)":452,"set(()=>S.config.vegas.ctp=!S.config.vegas.ctp)":453,"toggleMystery('vegas')":454,"set(()=>S.config.nines.blitz=!S.config.nines.blitz)":464,"set(()=>S.config.nines.ctp=!S.config.nines.ctp)":465,"setSpan(18,0)":466,"setSpan(9,0)":467,"setSpan(9,9)":468,"toggleCtpAll()":474,"startPick()":475,"pairsAskDone()":477,"joinSpanDone()":480,"joinSpanPick(18,0)":481,"joinSpanPick(9,0)":482,"joinSpanPick(9,9)":483,"teeAskDone()":484,"cropUse()":490,"photoCrop=null;render()":491,"wolfOrderDone()":492,"bankAskDone()":494,"bankAskToss()":496,"mapBetOpen()":497,"mapBetClose()":499,"toggleReorder()":500,"grpEdAddNew()":503,"saveGroupEdit()":504,"closeGroupEditor()":505,"fixTake(true)":507,"fixAsk=null;render()":508,"unconfirm()":512,"nextHole()":513,"redoPick()":514,"pickBlind()":517,"pickLone()":518,"wolfAskClose()":520,"setCtp(-1)":522,"chCtpAmt(-1)":524,"chCtpAmt(1)":525,"toggleCtpCarry()":526,"set(()=>{S.config.snake.grow=!snakeGrow();})":529,"set(()=>{S.config.snake.tie='last';})":530,"set(()=>{S.config.snake.tie='short';})":531,"set(()=>{S.config.rabbit.steal=!rabbitCfg().steal;})":534,"set(()=>S.config.rabbit.split='nines')":535,"set(()=>S.config.rabbit.split='all')":536,"chBanker('min',-1)":537,"chBanker('min',1)":538,"chBanker('max',-1)":539,"chBanker('max',1)":540,"chBankerRotate(false)":541,"chBankerRotate(true)":542,"bbbOpen(mapHole)":543,"bbbAskClose()":544,"nassauPress(-1)":549,"hamUndo()":551,"hamAccept()":552,"hamFold()":553,"endAskScore()":555,"endAskAnyway()":556,"endAskYes()":557,"endAskNo()":558,"catchSave()":559,"catchCancel()":560,"joinPlay('team')":566,"joinPlay('score')":567,"joinPlay('match')":568,"appUpdateNow()":569,"rulesLater()":570,"propVote('yes')":571,"propVote('no')":572,"propWithdraw()":573,"propSend()":574,"propUndo()":575,"propSetScope('next')":576,"propSetScope('all')":577,"roomFullWatch()":578,"roomFullLeave()":579,"holeStatToggle('fw')":580,"holeStatToggle('gir')":581,"confirmHole()":582,"confirmMine()":583,"closeFullCard()":586,"openChal()":587,"chalDecline()":588,"cheerDismiss()":589,"chalSave()":593,"openFullCard()":604,"setPayLens('net')":605,"setPayLens('gross')":606},"pointerdown":{"windRosePD(event)":47,"puttPD(event)":78,"cropPD(event)":486},"pointerup":{"windRosePU()":48,"puttPUskip(event)":91,"cropPU()":488},"pointercancel":{"windRosePU()":48,"cropPU()":488},"contextmenu":{"return false":49},"error":{"this.style.display='none'":106,"this.outerHTML='<span class=\"stroke-ph\">⛳</span>'":189,"this.outerHTML='<span class=\"vegas-ph\">🎲</span>'":190,"this.outerHTML='<span class=\"skin-ph\">🪙</span>'":191,"this.outerHTML='<span class=\"mp-ph\">⚔️</span>'":192,"this.outerHTML='<span class=\"nine-ph\">9</span>'":193,"this.outerHTML='<span class=\"bb-ph\">🏆</span>'":194,"this.outerHTML='<span class=\"scr-ph\">🤝</span>'":195,"this.outerHTML='<span class=\"six-ph\">6</span>'":196,"this.outerHTML='<span class=\"umb-ph\">☂</span>'":197,"this.outerHTML='<span class=\"quota-ph\">36</span>'":198,"this.outerHTML='<span class=\"stbl-ph\">🎯</span>'":199,"this.outerHTML='<span class=\"bbb-ph\">🥁</span>'":200,"this.outerHTML='<span class=\"nas-ph\">🏅</span>'":201,"this.outerHTML='<span class=\"rabbit-ph\">🐇</span>'":202,"this.outerHTML='<span class=\"banker-ph\">🏦</span>'":203,"this.outerHTML='<span class=\"junk-ph\">🪙</span>'":204,"this.outerHTML='<span class=\"snake-ph\">🐍</span>'":205,"this.outerHTML='<h1 style=\"color:var(--green-ink);font-size:26px\">Battle Tees</h1>'":206,"this.outerHTML='<h1 style=\"color:var(--green-ink);font-size:20px\">Battle Tees</h1>'":211,"this.parentNode.style.display='none'":240,"this.outerHTML='<span style=\"font-size:34px\">🎲</span>'":585},"focus":{"tapClear(this)":207},"input":{"bfCmInput()":270,"S.config.groupName=this.value;save()":325,"natFilter(this.value)":362,"S.course.name=this.value;S.course.nameEdit=true;save()":402,"cropSize(+this.value)":489},"change":{"groupNameCommit(this.value)":326,"photoFilePicked(this)":375,"set(()=>{S.course.name=this.value;S.course.nameEdit=true;})":401,"set(()=>{S.config.skins.amt=Math.max(0,+this.value||0);if(S.config.skins.per)S.config.skins.per=null;})":436,"set(()=>S.config.span.start=+this.value)":469,"setSpan(18,+this.value)":501,"set(()=>S.round.dollarPerPt=+this.value||0)":607},"toggle":{"if(this.open)ruleOpened(this)":336},"pointermove":{"cropPM(event)":487},"keydown":{"if(event.key==='Enter')grpEdAddNew()":502}};
+var __btPT={"click":[[0,["toggleMyTrack('","sq","')"]],[1,["chStat('","sq","',","lit",",-1)"]],[2,["chStat('","sq","',","lit",",1)"]],[7,["nearJoin('","sq","')"]],[16,["jumpHole(","lit",")"]],[17,["setSegPairing('sixes',","lit",",","lit",")"]],[18,["setSegPairing('vegas',","lit",",","lit",")"]],[19,["pinAnswer(","lit",")"]],[27,["bagRemove(","lit",")"]],[28,["bagAdd('","sq","');render()"]],[36,["saveShot('","sq","')"]],[40,["typedStep(","lit",",-1)"]],[41,["typedStep(","lit",",1)"]],[42,["typedPutt(","lit",",","lit",")"]],[70,["windDialDir(","lit",")"]],[77,["setParPick(","lit",")"]],[80,["junkTap(","lit",",","lit",",'","sq","','click')"]],[81,["junkSet(","lit",",","lit",",'","sq","')"]],[82,["bkBet(","lit",",","lit",",-1)"]],[83,["bkBet(","lit",",","lit",",1)"]],[84,["bkDbl(","lit",",","lit",")"]],[85,["bkWho(","lit",",","lit",")"]],[87,["snakeAskPick(","lit",")"]],[88,["setSnakeLast(","lit",",","lit",")"]],[90,["setPutts(","lit",",","lit",",'click')"]],[210,["joinFromInvite('","sq","')"]],[239,["bfToggle('","sq","')"]],[257,["event.stopPropagation();bfPillTap('","sq","','","sq","','","sq","')"]],[258,["event.stopPropagation();bfReact('","sq","','","sq","','","sq","')"]],[259,["event.stopPropagation();bfPickToggle('","sq","','","sq","')"]],[260,["event.stopPropagation();openBfComments('","sq","','","sq","')"]],[261,["bfCmMenu(","lit",")"]],[262,["bfCmReplyTo('","sq","','","sq","')"]],[263,["bfCmDel(","lit",")"]],[264,["bfCmReport(","lit",")"]],[265,["bfCmBlock('","sq","')"]],[266,["bfCmUnblock('","sq","')"]],[273,["if(window.event)window.event.stopPropagation();openPlayerMenu('","sq","','","sq","',","lit",",'nearby','","sq","',","lit",",'","sq","')"]],[274,["if(window.event)window.event.stopPropagation();openPlayerMenu('","sq","','","sq","',","lit",",'nearby','","sq","',","lit",")"]],[275,["if(window.event)window.event.stopPropagation();openPlayerMenu('","sq","','","sq","',","lit",",'battlefield','","sq","',","lit",",'","sq","')"]],[276,["if(window.event)window.event.stopPropagation();openPlayerMenu('","sq","','","sq","',","lit",",'battlefield','","sq","',","lit",")"]],[277,["if(window.event)window.event.stopPropagation();openPlayerMenu('","sq","','","sq","',","lit",",'round','","sq","',","lit",",'","sq","')"]],[278,["if(window.event)window.event.stopPropagation();openPlayerMenu('","sq","','","sq","',","lit",",'round','","sq","',","lit",")"]],[279,["if(window.event)window.event.stopPropagation();openPlayerMenu('","sq","','","sq","',","lit",",'online','","sq","',","lit",",'","sq","')"]],[280,["if(window.event)window.event.stopPropagation();openPlayerMenu('","sq","','","sq","',","lit",",'online','","sq","',","lit",")"]],[281,["if(window.event)window.event.stopPropagation();openPlayerMenu('","sq","','","sq","',","lit",",'saved','","sq","',","lit",",'","sq","')"]],[282,["if(window.event)window.event.stopPropagation();openPlayerMenu('","sq","','","sq","',","lit",",'saved','","sq","',","lit",")"]],[288,["unblockFromSettings('","sq","')"]],[289,["bfReply('","sq","')"]],[290,["bfAck('","sq","')"]],[293,["if(!bfPickClose())openBfWatch('","sq","')"]],[294,["event.stopPropagation();bfForget('","sq","')"]],[297,["bfHole=","lit",";render()"]],[303,["setSpan(18,","lit",");render()"]],[312,["wizCount(","lit",")"]],[313,["removeGolfer(","lit",")"]],[314,["gateAddOne('","sq","')"]],[315,["addFromLib('","sq","')"]],[316,["wizPickGroup('","sq","')"]],[317,["wizEditGroup('","sq","')"]],[327,["dismissInvite('","sq","')"]],[330,["openGroupEditor('","sq","')"]],[331,["delGroup('","sq","')"]],[332,["loadGroup('","sq","')"]],[337,["startWithGame('","sq","')"]],[339,["delHist('","sq","')"]],[340,["reopenRound('","sq","')"]],[341,["exOpen('pick','","sq","')"]],[342,["setSeason(","lit",")"]],[364,["natUse('","sq","')"]],[365,["useFoundCourse(","lit",")"]],[366,["pickCourse(","lit",")"]],[367,["openCoursePreview(","lit",")"]],[369,["delCourse(","lit",")"]],[379,["savePresencePlayer(","lit",")"]],[384,["setFriend('","sq","',false)"]],[385,["setFriend('","sq","',true)"]],[386,["confirmFriend('","sq","','","sq","')"]],[387,["inviteToBattle(decodeURIComponent('","sq","'))"]],[389,["delPlayer('","sq","')"]],[390,["startEditPlayer('","sq","')"]],[394,["chPar(","lit",",-1)"]],[395,["chPar(","lit",",1)"]],[400,["delTee(","lit",")"]],[433,["set(()=>S.config.sixes.pairing=","lit",")"]],[439,["set(()=>S.config.skins.n=","lit",")"]],[443,["set(()=>S.config.nassau.press='","sq","')"]],[444,["setTeamPairing('bestball',","lit",")"]],[445,["setTeamPairing('scramble',","lit",")"]],[446,["setTeamPairing('umbrella',","lit",")"]],[447,["setTeamPairing('nassau',","lit",")"]],[455,["setTeamPairing('vegas',","lit",")"]],[456,["set(()=>S.config.quota.n=","lit",")"]],[457,["chQuotaPt('","sq","',-1)"]],[458,["chQuotaPt('","sq","',1)"]],[459,["set(()=>S.config.bbb.n=","lit",")"]],[460,["set(()=>S.config.stbl.n=","lit",")"]],[461,["chStblPt('","sq","',-1)"]],[462,["chStblPt('","sq","',1)"]],[463,["set(()=>S.config.stroke.n=","lit",")"]],[472,["movePl(","lit",")"]],[476,["setStdTee('","sq","','","sq","')"]],[478,["joinSpanPick(","lit",",","lit",")"]],[485,["teeAskPick('","sq","')"]],[495,["bankAskPick(","lit",")"]],[498,["mapBetPick(","lit",")"]],[506,["grpEdToggle('","sq","')"]],[509,["unlockRow(","lit",",","lit",")"]],[510,["chScore(","lit",",-1)"]],[511,["chScore(","lit",",1)"]],[515,["redoPickArm(","lit",")"]],[516,["wolfPickAnswer('","sq","',","lit",")"]],[519,["pickTake(","lit",")"]],[521,["wolfTakeOver(","lit",")"]],[523,["setCtp(","lit",")"]],[527,["chJunkPt('","sq","',-1)"]],[528,["chJunkPt('","sq","',1)"]],[532,["set(()=>S.config.rabbit.n=","lit",")"]],[533,["set(()=>S.config.banker.n=","lit",")"]],[545,["bbbAskPick('","sq","',-1)"]],[546,["setBBB('","sq","',-1)"]],[547,["bbbAskPick('","sq","',","lit",")"]],[548,["setBBB('","sq","',","lit",")"]],[550,["nassauPress(","lit",")"]],[554,["hamThrow(","lit",")"]],[561,["catchStep(","lit",",-1)"]],[562,["catchStep(","lit",",1)"]],[563,["catchOpen(","lit",")"]],[564,["catchLater[","lit","]=true;render()"]],[565,["catchSkip(","lit",")"]],[584,["set(()=>prefillNines(","lit","))"]],[590,["chalToggle('","sq","')"]],[591,["chalBump('","sq","',-1)"]],[592,["chalBump('","sq","',1)"]],[594,["toggleMystery('","sq","')"]],[595,["revealPartners('","sq","')"]],[601,["setTeamPairing('","sq","',","lit",")"]],[602,["jumpAndGo(","lit",")"]],[603,["makeMainGame('","sq","')"]],[609,["propRun(()=>{","code","})"]]],"pointerdown":[[26,["bagPD(event,","lit",")"]],[493,["listPD(event,","lit",",'orderList',movePlRoundTo)"]]],"pointerup":[[79,["junkPU(event,","lit",",","lit",",'","sq","')"]],[89,["puttPU(event,","lit",",","lit",")"]]],"change":[[309,["setSpan(","lit",",+this.value)"]],[396,["chSI(","lit",",this.value)"]],[397,["chTee(","lit",",'name',this.value)"]],[398,["chTee(","lit",",'rating',this.value)"]],[399,["chTee(","lit",",'slope',this.value)"]],[440,["set(()=>{S.config.skins.per[","lit","]=Math.max(0,+this.value||0);})"]],[470,["pickPlayerOpt(","lit",",this.value)"]],[471,["setPl(","lit",",'tee',this.value)"]],[479,["joinSpanPick(","lit",",+this.value)"]],[596,["saveTeamNameUI('bestball',","lit",",this.value)"]],[597,["saveTeamNameUI('scramble',","lit",",this.value)"]],[598,["saveTeamNameUI('umbrella',","lit",",this.value)"]],[599,["saveTeamNameUI('nassau',","lit",",this.value)"]],[600,["saveTeamNameUI('vegas',","lit",",this.value)"]],[608,["setRate('","sq","',this.value)"]],[609,["propRun(()=>{","code","})"]]],"blur":[[473,["commitPl(this,","lit",",'index')"]]],"input":[[609,["propRun(()=>{","code","})"]]]};
+var __btTYPES=["blur","change","click","contextmenu","error","focus","input","keydown","pointercancel","pointerdown","pointermove","pointerup","toggle"];
+if (typeof Element === 'undefined' || !Element.prototype || typeof document === 'undefined') return;
+var __btMissList = window.__btCspMiss = [];
+var __btMissSeen = Object.create(null);
+var __btCache = Object.create(null), __btCacheN = 0;
+var __btHas = Object.prototype.hasOwnProperty;
+
+function __btStr(s, q) {
+  var out = '', i = 0, c, d, hx, e;
+  while (i < s.length) {
+    c = s.charAt(i);
+    if (c === q || c === '\n' || c === '\r') return;
+    if (c !== '\\') { out += c; i++; continue; }
+    d = s.charAt(i + 1);
+    if (d === '') return;
+    if (d === 'n') out += '\n'; else if (d === 't') out += '\t'; else if (d === 'r') out += '\r';
+    else if (d === 'b') out += '\b'; else if (d === 'f') out += '\f'; else if (d === 'v') out += '\v';
+    else if (d === '0' && !/[0-9]/.test(s.charAt(i + 2))) out += '\0';
+    else if (/[1-9]/.test(d)) return;                                         // legacy octal: not ours
+    else if (d === 'x') { hx = s.substr(i + 2, 2); if (!/^[0-9a-fA-F]{2}$/.test(hx)) return; out += String.fromCharCode(parseInt(hx, 16)); i += 4; continue; }
+    else if (d === 'u') {
+      if (s.charAt(i + 2) === '{') { e = s.indexOf('}', i + 3); hx = s.slice(i + 3, e); if (e < 0 || !/^[0-9a-fA-F]{1,6}$/.test(hx) || parseInt(hx, 16) > 0x10FFFF) return; out += String.fromCodePoint(parseInt(hx, 16)); i = e + 1; continue; }
+      hx = s.substr(i + 2, 4); if (!/^[0-9a-fA-F]{4}$/.test(hx)) return; out += String.fromCharCode(parseInt(hx, 16)); i += 6; continue;
+    }
+    else if (d === '\r') { i += s.charAt(i + 2) === '\n' ? 3 : 2; continue; }   // line continuation
+    else if (d === '\n' || d === ' ' || d === ' ') { i += 2; continue; }
+    else out += d;                                                            // \' \" \\ and identity escapes
+    i += 2;
+  }
+  return out;
+}
+function __btLit(s) {
+  if (/^-?(0|[1-9][0-9]*)(\.[0-9]+)?(e[+-]?[0-9]+)?$/.test(s)) return { v: +s };
+  if (s === 'true') return { v: true }; if (s === 'false') return { v: false }; if (s === 'null') return { v: null };
+  if (s === 'undefined') return { v: undefined }; if (s === 'NaN') return { v: NaN };
+  if (s === 'Infinity') return { v: Infinity }; if (s === '-Infinity') return { v: -Infinity };
+  var q = s.charAt(0), b;
+  if ((q === "'" || q === '"') && s.length >= 2 && s.charAt(s.length - 1) === q) { b = __btStr(s.slice(1, -1), q); if (b !== undefined) return { v: b }; }
+  if (q === '[' || q === '{') { try { return { v: JSON.parse(s) }; } catch (x) {} }
+}
+function __btHole(kind, s, type, depth) {
+  var v;
+  if (kind === 'code') { v = depth < 4 ? __btResolve(type, s, depth + 1) : null; return v ? { v: v } : undefined; }   // a wrapped handler (propRun(()=>{...}))
+  if (kind === 'sq') { v = __btStr(s, "'"); return v === undefined ? undefined : { v: v }; }
+  if (kind === 'dq') { v = __btStr(s, '"'); return v === undefined ? undefined : { v: v }; }
+  if (kind === 'lit') return __btLit(s);
+  if (kind === 'id') return /^[A-Za-z_$][\w$]*$/.test(s) ? { v: s } : undefined;
+}
+function __btMatch(pat, text, type, depth) {
+  var n = (pat.length - 1) / 2, vals = new Array(n), f0 = pat[0], fl = pat[pat.length - 1];
+  if (text.lastIndexOf(f0, 0) !== 0) return;
+  if (text.length < f0.length + fl.length || text.slice(text.length - fl.length) !== fl) return;
+  function rec(pos, k) {
+    var F = pat[2 * k + 2], kind = pat[2 * k + 1], h, e;
+    if (k === n - 1) {
+      e = text.length - F.length;
+      if (e < pos) return false;
+      h = __btHole(kind, text.slice(pos, e), type, depth); if (!h) return false;
+      vals[k] = h.v; return true;
+    }
+    for (e = text.indexOf(F, pos); e >= 0; e = text.indexOf(F, e + 1)) {
+      h = __btHole(kind, text.slice(pos, e), type, depth);
+      if (h) { vals[k] = h.v; if (rec(e + F.length, k + 1)) return true; }
+      if (F === '') break;
+    }
+    return false;
+  }
+  return rec(f0.length, 0) ? vals : undefined;
+}
+function __btRun(r, self, ev) { return r.f.call(self, ev, r.v); }
+function __btResolve(type, text, depth) {
+  depth = depth || 0;
+  var c = __btCache[type] || (__btCache[type] = Object.create(null));
+  if (__btHas.call(c, text)) return c[text];
+  var r = null, st = __btST[type], pt = __btPT[type], i, v;
+  if (st && __btHas.call(st, text)) r = { f: __btF[st[text]], v: [] };
+  else if (pt) for (i = 0; i < pt.length; i++) { v = __btMatch(pt[i][1], text, type, depth); if (v) { r = { f: __btF[pt[i][0]], v: v }; break; } }
+  if (++__btCacheN > 20000) { __btCache = Object.create(null); __btCacheN = 0; c = __btCache[type] = Object.create(null); }
+  if (r || !depth) c[text] = r;   // a miss deep inside a wrapper is not a miss at the top
+  return r;
+}
+function __btMiss(type, text) {
+  var k = type + ':' + text;
+  if (__btMissSeen[k]) return;
+  __btMissSeen[k] = 1;
+  if (__btMissList.length < 200) __btMissList.push({ type: type, text: String(text).slice(0, 200) });
+  try { console.warn('[csp] a handler that is not in the build was not bound: on' + type + '="' + String(text).slice(0, 120) + '"'); } catch (x) {}
+}
+
+var __btBound = typeof WeakMap === 'function' ? new WeakMap() : null;
+var __btSel = __btTYPES.map(function (t) { return '[data-bton-' + t + ']'; }).join(',');
+var __btTypeOk = Object.create(null); __btTYPES.forEach(function (t) { __btTypeOk[t] = 1; });
+function __btListener(el, r) {
+  return function (ev) { var x = r.f.call(el, ev, r.v); if (x === false && ev && ev.preventDefault) ev.preventDefault(); return x; };
+}
+function __btBindEl(el) {
+  var at = el && el.attributes;
+  if (!at || !__btBound) return;
+  var b = __btBound.get(el), seen = null, i, nm, type, text, r, l, k;
+  for (i = 0; i < at.length; i++) {
+    nm = at[i].name;
+    if (nm.lastIndexOf('data-bton-', 0) !== 0) continue;
+    type = nm.slice(10);
+    if (!__btTypeOk[type]) continue;   // an event no handler in the build uses: never bound
+    text = at[i].value;
+    (seen || (seen = {}))[type] = 1;
+    if (b && b[type] && b[type].t === text) continue;
+    if (b && b[type]) { el.removeEventListener(type, b[type].l); delete b[type]; }
+    r = __btResolve(type, text);
+    if (!r) { __btMiss(type, text); continue; }
+    l = __btListener(el, r);
+    el.addEventListener(type, l);
+    if (!b) { b = {}; __btBound.set(el, b); }
+    b[type] = { t: text, l: l };
+  }
+  if (b) for (k in b) if (!seen || !seen[k]) { el.removeEventListener(k, b[k].l); delete b[k]; }
+}
+function __btBindTree(root) {
+  if (!root) return;
+  if (root.nodeType === 1) __btBindEl(root);
+  if (root.querySelectorAll && __btSel) { var l = root.querySelectorAll(__btSel); for (var i = 0; i < l.length; i++) __btBindEl(l[i]); }
+}
+
+var __btRAW = { script: 1, style: 1, textarea: 1, title: 1, xmp: 1, iframe: 1, noembed: 1, noframes: 1, noscript: 1 };
+var __btTAG = /<([A-Za-z][^\s\/>]*)/y, __btNAME = /[^\s"'>\/=][^\s"'>\/=]*/y, __btEQ = /\s*=\s*/y, __btUQ = /[^\s>]*/y, __btONQ = /\son[a-z]/i;
+function __btRw(s) {
+  if (typeof s !== 'string' || !__btONQ.test(s)) return s;
+  var out = '', i = 0, n = s.length, lt, m, tag, c, a, nm, e, q, qe, u, ce, re;
+  while (i < n) {
+    lt = s.indexOf('<', i);
+    if (lt < 0) { out += s.slice(i); break; }
+    out += s.slice(i, lt); i = lt;
+    if (s.charCodeAt(i + 1) === 33 && s.substr(i, 4) === '<!--') { ce = s.indexOf('-->', i + 4); ce = ce < 0 ? n : ce + 3; out += s.slice(i, ce); i = ce; continue; }
+    __btTAG.lastIndex = i; m = __btTAG.exec(s);
+    if (!m) { out += '<'; i++; continue; }
+    out += m[0]; i += m[0].length; tag = m[1].toLowerCase();
+    while (i < n) {
+      c = s.charAt(i);
+      if (c === '>') { out += '>'; i++; break; }
+      if (c === '/' || c === ' ' || c === '\t' || c === '\n' || c === '\r' || c === '\f') { out += c; i++; continue; }
+      __btNAME.lastIndex = i; a = __btNAME.exec(s);
+      if (!a) { out += c; i++; continue; }
+      nm = a[0]; i += nm.length;
+      out += /^on[a-z]+$/i.test(nm) ? 'data-bton-' + nm.slice(2).toLowerCase() : nm;
+      __btEQ.lastIndex = i; e = __btEQ.exec(s);
+      if (e && e[0].indexOf('=') >= 0) {
+        out += e[0]; i += e[0].length; q = s.charAt(i);
+        if (q === '"' || q === "'") { qe = s.indexOf(q, i + 1); qe = qe < 0 ? n : qe + 1; out += s.slice(i, qe); i = qe; }
+        else { __btUQ.lastIndex = i; u = __btUQ.exec(s); if (u) { out += u[0]; i += u[0].length; } }
+      }
+    }
+    if (__btRAW[tag]) {   // raw text: no tags inside until </tag
+      re = new RegExp('</' + tag + '[\\s/>]', 'ig'); re.lastIndex = i; ce = re.exec(s);
+      ce = ce ? ce.index : n; out += s.slice(i, ce); i = ce;
+    }
+  }
+  return out;
+}
+
+(function () {
+  var EP = Element.prototype, NP = Node.prototype;
+  // innerHTML/outerHTML live on Element.prototype in every current engine; older WebKit kept them on HTMLElement
+  var own = function (k) { var d = Object.getOwnPropertyDescriptor(EP, k), P = EP;
+    if ((!d || !d.set) && typeof HTMLElement !== 'undefined') { d = Object.getOwnPropertyDescriptor(HTMLElement.prototype, k); P = HTMLElement.prototype; }
+    return d && d.set ? { d: d, P: P } : null; };
+  var oIn = own('innerHTML'), oOut = own('outerHTML');
+  if (!oIn) try { console.error('[csp] innerHTML cannot be patched here: the app\'s buttons will not bind'); } catch (x) {}
+  var dIn = oIn && oIn.d, dOut = oOut && oOut.d;
+  if (dIn) Object.defineProperty(oIn.P, 'innerHTML', { configurable: true, enumerable: dIn.enumerable, get: dIn.get,
+    set: function (v) { dIn.set.call(this, v == null ? v : __btRw(String(v))); __btBindTree(this); } });
+  if (dOut) Object.defineProperty(oOut.P, 'outerHTML', { configurable: true, enumerable: dOut.enumerable, get: dOut.get,
+    set: function (v) {
+      var p = this.parentNode, prev = this.previousSibling, next = this.nextSibling;
+      dOut.set.call(this, v == null ? v : __btRw(String(v)));
+      if (p) for (var x = prev ? prev.nextSibling : p.firstChild; x && x !== next; x = x.nextSibling) if (x.nodeType === 1) __btBindTree(x);
+    } });
+  var iah = EP.insertAdjacentHTML;
+  if (iah) EP.insertAdjacentHTML = function (pos, v) {
+    var r = iah.call(this, pos, __btRw(String(v)));
+    __btBindTree(/^(beforebegin|afterend)$/i.test(String(pos)) ? this.parentNode : this);
+    return r;
+  };
+  var clone = NP.cloneNode;
+  NP.cloneNode = function () { var c = clone.apply(this, arguments); if (c && (c.nodeType === 1 || c.nodeType === 11)) __btBindTree(c); return c; };
+  var isBton = function (n) { return typeof n === 'string' && n.charCodeAt(0) === 100 && n.lastIndexOf('data-bton-', 0) === 0; };
+  ['setAttribute', 'removeAttribute', 'toggleAttribute'].forEach(function (k) {
+    var o = EP[k]; if (!o) return;
+    EP[k] = function (n) { var r = o.apply(this, arguments); if (isBton(n)) __btBindEl(this); return r; };
+  });
+  // anything else (the parser, attribute nodes, adopted fragments): the observer binds it before the next event
+  try {
+    new MutationObserver(function (list) {
+      for (var i = 0; i < list.length; i++) {
+        var m = list[i];
+        if (m.type === 'attributes') __btBindEl(m.target);
+        else for (var j = 0; j < m.addedNodes.length; j++) if (m.addedNodes[j].nodeType === 1) __btBindTree(m.addedNodes[j]);
+      }
+    }).observe(document.documentElement, { subtree: true, childList: true, attributes: true,
+      attributeFilter: __btTYPES.map(function (t) { return 'data-bton-' + t; }) });
+  } catch (x) {}
+  __btBindTree(document.documentElement);
+  document.addEventListener('DOMContentLoaded', function () { __btBindTree(document.documentElement); });
+})();
+
+})();</script>
 <script>
 'use strict';
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1794170834';
+const BUILD='1794180227';
 const HOLES=18;
 
 function courseTealBend(){return {id:'teal-bend',name:'Teal Bend GC',loc:[38.6972,-121.6173],
@@ -6312,7 +7740,7 @@ function nearMapButton(ev){
     const x=ev&&ev.clientX,y=ev&&ev.clientY;
     if(!isFinite(x)||!isFinite(y))return false;
     const m=document.getElementById('holemap');
-    for(const el of document.querySelectorAll('#app button,#app [onclick]')){
+    for(const el of document.querySelectorAll('#app button,#app [onclick],#app [data-bton-click]')){
       if(m&&(m.contains(el)||el.contains(m)))continue;
       const b=el.getBoundingClientRect();if(!b.width||!b.height)continue;
       const dx=Math.max(b.left-x,0,x-b.right),dy=Math.max(b.top-y,0,y-b.bottom);
