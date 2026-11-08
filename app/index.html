@@ -598,7 +598,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-center in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1794112601';
+const BUILD='1794123521';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -1382,9 +1382,13 @@ function setTheme(t){set(()=>{S.theme=t;});applyTheme();}
 // phone in the wild needing an update. Order: manual override > last discovered >
 // bundled default. The default is only the seed for a brand-new install.
 const RELAY_DEFAULT='wss://relay.vexcomllc.com/battletees';   // the Pi relay was retired 9/12
-let RELAY=localStorage.getItem('wolfRelay')||localStorage.getItem('btRelayCfg')||RELAY_DEFAULT;
+// (11/7/2026, security) only OUR relay -- or one on this computer / the test rigs' relay.test. Any wss:// in storage or in
+// the public relay.json used to be dialled: one injected script, or a push to the site repo, sent every phone's player
+// key, backup token and e-mail to someone else's server.
+const RELAY_OK=u=>typeof u==='string'&&(/^wss:\/\/relay\.vexcomllc\.com\/battletees$/.test(u)||/^wss?:\/\/(127\.0\.0\.1|localhost|relay\.test)(:\d+)?\/battletees$/.test(u));
+let RELAY=[localStorage.getItem('wolfRelay'),localStorage.getItem('btRelayCfg')].find(RELAY_OK)||RELAY_DEFAULT;
 async function discoverRelay(){
-  if(localStorage.getItem('wolfRelay'))return;            // manual override wins, always
+  if(RELAY_OK(localStorage.getItem('wolfRelay')))return;   // a manual override wins -- when it names one of our relays (11/7)
   try{
     // ABSOLUTE url on purpose: inside the future iOS shell index.html is
     // bundled, so a relative fetch would read the frozen bundled copy and
@@ -1399,7 +1403,7 @@ async function discoverRelay(){
     let url=j.url;
     try{const b=j.beta;const me=(typeof S!=='undefined'&&S&&S.me&&S.me.pid)||localStorage.getItem('btPid')||'';
       if(b&&typeof b.url==='string'&&/^wss:\/\//.test(b.url)&&Array.isArray(b.pids)&&me&&b.pids.includes(me))url=b.url;}catch(e){}
-    if(url===RELAY)return;
+    if(url===RELAY||!RELAY_OK(url))return;   // (11/7) never a host that is not ours
     localStorage.setItem('btRelayCfg',url);
     RELAY=url;
     // drop existing sockets so the next tick reconnects to the new endpoint
@@ -1421,7 +1425,9 @@ let sock=null,sockOpen=false,retryMs=1000,applyingRemote=false;
 // go out merged; a relay that never answers releases them after 5 s.
 let sockAwaitState=false;
 const sentCache={},localContent={};
-function makeCode(){const A='ABCDEFGHJKMNPQRSTUVWXYZ23456789';let s='';for(let i=0;i<5;i++)s+=A[Math.floor(Math.random()*A.length)];return s;}
+// (11/7/2026, security) 6 characters from crypto.getRandomValues (was 5 from Math.random: ~28.6M codes, and Math.random
+// is predictable) -- ~887M codes; the relay also limits how fast one network can open rooms
+function makeCode(){const A='ABCDEFGHJKMNPQRSTUVWXYZ23456789';const r=new Uint32Array(6);crypto.getRandomValues(r);let s='';for(let i=0;i<6;i++)s+=A[r[i]%A.length];return s;}
 // Shot lines for SPECTATORS only — a player's own map always draws from his
 // local log, so nobody's screen fills up with three other guys' lines.
 // Keyed BY PLAYER: meta syncs whole-object last-write-wins, so a flat array
@@ -1549,7 +1555,61 @@ function syncPush(){
     try{sock.send(JSON.stringify({t:'op',room:S.share.code,k,v}));}catch(e){delete sentCache[k];}
   });
 }
+// ---- (11/7/2026, security) another phone's data is cleaned before this phone keeps or draws it ---------------------
+// Names were escaped, but numbers from a room (a score, par, rating, slope, handicap index, points, stakes), ids and the
+// profile photo went into the page raw -- anyone holding a round's code could run code on every phone in it, and the
+// poison was saved into the course, the players list, Past Rounds and backups. Everything from a room, the Battlefield
+// or a restore goes through btScrub: no < or > in any string, no __proto__ keys; the numbers the screens draw are
+// numbers; ids are plain; a photo is a real base64 image or nothing.
+const BT_BAD_KEY={'__proto__':1,'constructor':1,'prototype':1};
+function btScrub(x,d){d=d||0;if(d>18||x==null)return x;
+  if(typeof x==='string')return x.replace(/[<>]/g,'');
+  if(typeof x==='number')return isFinite(x)?x:0;
+  if(typeof x!=='object')return x;
+  if(Array.isArray(x))return x.map(v=>btScrub(v,d+1));
+  const o={};for(const k of Object.keys(x)){if(BT_BAD_KEY[k])continue;o[k.replace(/[<>]/g,'')]=btScrub(x[k],d+1);}return o;}
+const btN=v=>v==null||v===''?(v==null?null:''):(isFinite(+v)?+v:null);   // a number, or nothing
+const btNA=a=>Array.isArray(a)?a.map(x=>x==null?null:(typeof x==='string'&&!isFinite(+x)?x.replace(/["'`]/g,''):btN(x))):a;
+const btNS=a=>Array.isArray(a)?a.map(x=>x==null||x===''?null:(isFinite(+x)?+x:null)):a;   // strictly numbers (scores)
+const btId=v=>v==null?v:String(v).replace(/[^A-Za-z0-9_.:-]/g,'').slice(0,64);
+const BT_PHOTO_RE=/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+\/=]+$/;
+function btCleanPlayer(p){if(!p||typeof p!=='object')return p;
+  ['pid','ownerDev','scorer','tee','id'].forEach(k=>{if(p[k]!=null)p[k]=btId(p[k]);});
+  ['index','hcp','courseHcp','strokes'].forEach(k=>{if(p[k]!=null)p[k]=btN(p[k]);});
+  if(p.photo!=null&&!(typeof p.photo==='string'&&p.photo.length<80000&&BT_PHOTO_RE.test(p.photo)))delete p.photo;
+  return p;}
+function btCleanCourse(c){if(!c||typeof c!=='object')return c;
+  if(c.id!=null)c.id=btId(c.id);
+  if(Array.isArray(c.holes))c.holes=c.holes.map(h=>{if(!h||typeof h!=='object')return h;['par','si','hcp'].forEach(k=>{if(h[k]!=null)h[k]=btN(h[k]);});if(Array.isArray(h.yards))h.yards=btNA(h.yards);return h;});
+  if(Array.isArray(c.teeSets))c.teeSets=c.teeSets.map(t=>{if(!t||typeof t!=='object')return t;if(t.id!=null)t.id=btId(t.id);['rating','slope','par','yards'].forEach(k=>{if(t[k]!=null&&!Array.isArray(t[k]))t[k]=btN(t[k]);});return t;});
+  return c;}
+function btNumObj(o){if(!o||typeof o!=='object'||Array.isArray(o))return o;Object.keys(o).forEach(k=>{const x=o[k];if(x!=null&&typeof x!=='object'&&typeof x!=='boolean')o[k]=btN(x);else if(x&&typeof x==='object')btNumObj(x);});return o;}
+function btScrubOp(k,v){
+  if(!v||typeof v!=='object')return v;
+  v=btScrub(v);
+  if(k==='meta'){
+    if(Array.isArray(v.players))v.players=v.players.map(btCleanPlayer);
+    if(v.course)v.course=btCleanCourse(v.course);
+    if(v.dollarPerPt!=null)v.dollarPerPt=btN(v.dollarPerPt);
+    if(v.rates)btNumObj(v.rates);
+    if(v.config&&typeof v.config==='object'){if(v.config.pts)btNumObj(v.config.pts);if(v.config.allowance!=null)v.config.allowance=btN(v.config.allowance);if(v.config.banker)btNumObj(v.config.banker);}
+  }else if(/^h\d+$/.test(k)){
+    ['gross','gts','sts','net','putts'].forEach(f=>{if(Array.isArray(v[f]))v[f]=btNS(v[f]);});
+    ['ctp','partner','wolfAt'].forEach(f=>{if(v[f]!=null&&typeof v[f]!=='object')v[f]=btN(v[f]);});
+    if(v.stats&&typeof v.stats==='object')Object.keys(v.stats).forEach(f=>{if(Array.isArray(v.stats[f]))v.stats[f]=btNA(v.stats[f]);});
+  }
+  return v;}
+// a Battlefield card (the relay's list / a peeked round's entry): the numbers it draws are numbers, the code is plain
+function btCleanBfEntry(e){if(!e||typeof e!=='object')return e;e=btScrub(e);if(e.code!=null)e.code=btId(e.code).toUpperCase();
+  ['at','endedAt'].forEach(k=>{if(e[k]!=null&&typeof e[k]!=='boolean')e[k]=btN(e[k]);});
+  if(Array.isArray(e.sum))e.sum=e.sum.map(r=>{if(!r||typeof r!=='object')return r;['gross','toPar','thru','eagles','birdies','pars','bogeys','putts','at'].forEach(k=>{if(r[k]!=null)r[k]=btN(r[k]);});
+    if(r.pid!=null)r.pid=btId(r.pid);if(Array.isArray(r.ctp))r.ctp=btNS(r.ctp);if(r.longShot&&typeof r.longShot==='object')r.longShot.yds=btN(r.longShot.yds);return r;});
+  return e;}
+function btScrubDoc(doc){if(!doc||typeof doc!=='object')return doc;const o={};Object.keys(doc).forEach(k=>{if(!BT_BAD_KEY[k])o[k]=btScrubOp(k,doc[k]);});return o;}
+// the room join says who this phone is (its player and key): the relay lets only the round's owner cancel it (11/7)
+function joinMsg(code){const m={t:'join',room:code};try{const pid=myPid(),k=pid?myKey():'';if(pid&&k){m.pid=pid;m.pkey=k;}}catch(e){}return m;}
 function applyOp(k,v,defer){
+  v=btScrubOp(k,v);   // (11/7) another phone's data, cleaned first
   applyingRemote=true;
   try{
     if(k==='meta'){
@@ -1578,6 +1638,9 @@ function applyOp(k,v,defer){
         let optKeep=[],nc=v.config;   // an option set here since this meta's writer last looked stays
         try{optKeep=optKeepMine(v);nc=optMergeCfg(v.config,optKeep);}catch(e){optKeep=[];nc=v.config;}
         try{freezeForIncoming(nc);}catch(e){}   // before the new options land (stress run 10/26, N2)
+        // (11/7, security) this phone's own Battlefield privacy (broadcast my rounds, pop-ups) is never the host's to set:
+        // joining a group used to turn "Broadcast my rounds" back on, and it stayed on for later solo rounds
+        try{const myBf=S.config&&S.config.bf;if(nc&&typeof nc==='object'){nc=Object.assign({},nc);if(myBf)nc.bf=myBf;else delete nc.bf;}}catch(e){}
         if(typeof coursePreview!=='undefined'&&coursePreview){coursePreview.keep=v.course;S.players=v.players;S.config=nc;}
         else{
           S.course=v.course;S.players=v.players;S.config=nc;
@@ -1809,7 +1872,7 @@ function syncConnect(){
     sockOpen=true;retryMs=1000;
     try{setTimeout(()=>bfInboxPoll(true),0);}catch(e){}   // a nudge sent while it was down is lost: ask now
     sockAwaitState=true;
-    ws.send(JSON.stringify({t:'join',room:S.share.code}));
+    ws.send(JSON.stringify(joinMsg(S.share.code)));
     postRoomInvite();
     // catch-up: anything edited while offline goes out as soon as the room's doc has been merged in
     setTimeout(()=>{if(sock===ws&&sockAwaitState){sockAwaitState=false;syncPush();}},5000);
@@ -1937,7 +2000,7 @@ function endOutboxFlush(){
     endOutboxSock=ws;
     const done=()=>{if(endOutboxSock===ws)endOutboxSock=null;try{ws.onclose=null;ws.close();}catch(e){}};
     const kill=setTimeout(done,15000);
-    ws.onopen=()=>{try{ws.send(JSON.stringify({t:'join',room:job.code}));}catch(e){}};
+    ws.onopen=()=>{try{ws.send(JSON.stringify(joinMsg(job.code)));}catch(e){}};
     ws.onmessage=ev=>{
       let m;try{m=JSON.parse(ev.data);}catch(e){return;}
       if(m.t!=='state')return;
@@ -2634,7 +2697,7 @@ function pkHeard(r){try{
   if(r.pk==='ok'||r.pk==='open'){const was=pkState;pkState=r.pk;if(was==='bad')render();}
 }catch(e){}}
 // what goes on a relay op: this phone's player id where the op names nobody, and the key wherever it acts as this player
-var PK_NOPID=new Set(['marks','vlink','export','unsublnk']);
+var PK_NOPID=new Set(['marks','vlink','unsublnk']);   // (11/7) export left this list: it now proves the player
 function pkAttach(p){
   const pid=(S&&S.me&&S.me.pid)||'';if(!pid||!p)return p;
   const o=Object.assign({},p);
@@ -3568,7 +3631,15 @@ function tokenFrom(v){
 async function redeemToken(tok){
   const r = await relayBackup({op:'redeem', code:tok, email:''});
   if(!(r && r.ok && r.email))
-    return {ok:false, msg:(r && r.error) || 'That link could not be used. Ask for a new one.'};
+    return {ok:false, msg:esc((r && r.error) || 'That link could not be used. Ask for a new one.')};   // (11/7) the banner is HTML
+  // (11/7, security) a link SOMEONE ELSE requested for their own address used to switch this phone to it silently --
+  // its library then backed up into their account. A different address than this phone's (or a first one over a
+  // library already here) asks first.
+  try{
+    const cur=(localStorage.getItem('wolfBackupEmail')||'').trim().toLowerCase(), have=((S.playerLib||[]).length||0)+((S.courses||[]).length||0);
+    if(cur!==String(r.email).toLowerCase()&&(cur||have)&&!confirm('Sign in as '+r.email+' on this phone?'+(cur?' It replaces '+cur+'.':'')+' Only say yes if you asked for this link.'))
+      return {ok:false, msg:'Not signed in — this phone stays as it was.'};
+  }catch(e){}
   try{
     localStorage.setItem('wolfBackupEmail', r.email);
     localStorage.setItem('btEmailOk', r.email);   // the link proved the address
@@ -3582,7 +3653,7 @@ async function redeemToken(tok){
       + (c.hAdded?`, ${c.hAdded} round${c.hAdded===1?'':'s'}`:'') + '.';
   }else{
     S.autoBackup = true;
-    msg = '✓ Signed in as ' + r.email + ' — your library will back up automatically.';
+    msg = '✓ Signed in as ' + esc(r.email) + ' — your library will back up automatically.';
   }
   abFp = null;
   save();
@@ -3668,7 +3739,8 @@ async function tryMagicLink(){
 // emailed-code restore and the magic-link sign-in behave identically — one
 // merge rule, not two that can drift apart.
 function applyLibrary(d){
-  d = d || {};
+  d = btScrub(d || {});   // (11/7) a restored library is cleaned like any other phone's data
+  try{(d.players||[]).forEach(btCleanPlayer);(d.courses||[]).forEach(btCleanCourse);}catch(e){}
   let cAdded=0, hAdded=0, lAdded=0;
     let added=0,updated=0;
     set(()=>{
@@ -9715,6 +9787,8 @@ function updateFMB(pos,label){
 // ---------- rendering ----------
 const $=s=>document.querySelector(s);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+// a value inside an onclick's JS string: entities are decoded before the JS runs, so esc() is not enough there (11/7)
+const jsArg=s=>"decodeURIComponent('"+encodeURIComponent(String(s==null?'':s)).replace(/'/g,'%27')+"')";
 // ---- hole splash: fires on every phone when a hole's scores are complete ----
 let splash=null,splashTimer=null;
 // ---- unconfirmed par prompt -------------------------------------------------
@@ -11963,6 +12037,7 @@ let bfList=null,bfWatch=null,bfTimer=null,bfLens='gross',bfHole=null,bfCardFull=
 // deliberately outside the backup payload: never backed up, never restored.
 function bfStore(){try{return JSON.parse(localStorage.getItem('btBattles'))||{};}catch(e){return {};}}
 function bfStorePut(code,entry,doc){
+  try{doc=btScrubDoc(doc);entry=btCleanBfEntry(entry);}catch(e){}   // (11/7) another phone's round, cleaned
   try{
     const st=bfStore();
     const prev=st[code]||{};
@@ -12929,7 +13004,7 @@ function openBattlefield(){
   bfList=null;S.screen='bfield';render();
   // the feed is friend-scoped now — the relay needs to know who is asking
   relayBattle({op:'list',pid:myPid()}).then(r=>{
-    const live=(r&&r.list)||[];
+    const live=((r&&r.list)||[]).map(btCleanBfEntry);   // (11/7) cleaned before anything draws them
     live.forEach(e=>{bfStorePut(e.code,e,null);
       // pull the doc for anything new or still moving so it survives the relay's sweep
       const st=bfStore();
@@ -12985,21 +13060,21 @@ function vBattlefield(){
         if((x.ctp||[]).length)b.push(`🎯 <b>${x.ctp.length}</b> CTP`);
         if(x.longShot&&x.longShot.yds>0)b.push(`💥 <b>${ydDisp(x.longShot.yds)}${uLbl()}</b>${x.longShot.club?' '+esc(x.longShot.club):''}`);
         return b.join(' · ');};
-      const tp=n=>n===0?'E':(n>0?'+':'')+n;
+      const tp=n=>esc(n===0?'E':(n>0?'+':'')+n);   // (11/7) escaped
       const cards=ppl.length?ppl.map(x=>`
         <div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-top:1px solid var(--line)">
           <div style="flex:1;min-width:0"><b style="font-size:16px">${esc(x.name)}</b>
             <div class="tiny">${hl(x)||'<span class="muted">no highlights yet</span>'}</div></div>
           <div style="text-align:right;flex:none">
             <div class="num" style="font-size:28px;line-height:1;color:${x.toPar<0?'var(--good)':x.toPar>0?'var(--amber-bd)':'var(--ink)'}">${tp(x.toPar)}</div>
-            <div class="tiny">${x.gross} · thru ${x.thru}</div></div>
+            <div class="tiny">${esc(x.gross)} · thru ${esc(x.thru)}</div></div>
           ${x.pid&&myPids().has(x.pid)?'':pMoreBtn(x.pid,x.name,false,'battlefield',e.code)}
         </div>${bfRxHTML(e.code,bfTarget(x),bfFitIcon(x,ppl))}`).join('')
         :`<div class="tiny" style="padding-top:6px;color:var(--ink3)">${e.live?'No holes carded yet.':'No scores were recorded.'}</div>`;
       // Every card leads with the course; the players are listed below it (Nathan 9/14 for
       // groups, 9/16 for solo rounds too: "Brian Smith" twice on one card). With nobody carded
       // yet there is no player row, so the starter's name rides in the line under the course.
-      return `<div class="card" id="bfc-${esc(e.code)}" style="padding:12px 14px;cursor:pointer" onclick="if(!bfPickClose())openBfWatch('${esc(e.code)}')">
+      return `<div class="card" id="bfc-${esc(e.code)}" style="padding:12px 14px;cursor:pointer" onclick="if(!bfPickClose())openBfWatch('${btId(e.code)}')">
       <div class="row" style="border-top:none">
         <div style="flex:1;min-width:0">
           <b style="font-family:Rajdhani,sans-serif;font-size:22px;line-height:1.1">${esc(e.course||'Battle')}</b>
@@ -13032,7 +13107,7 @@ function bfPoll(){
   relayBattle({op:'peek',code:bfWatch.code}).then(r=>{
     if(!bfWatch)return;
     if(r&&r.doc&&r.doc.meta){
-      bfWatch.doc=r.doc;bfWatch.entry=r.entry||bfWatch.entry;bfWatch._miss=0;bfWatch.docAt=Date.now();
+      bfWatch.doc=btScrubDoc(r.doc);bfWatch.entry=r.entry?btCleanBfEntry(r.entry):bfWatch.entry;bfWatch._miss=0;bfWatch.docAt=Date.now();   // (11/7) cleaned
       bfStorePut(bfWatch.code,bfWatch.entry,r.doc);   // keep the local copy current
     }else if(bfWatch.doc){
       // the relay has moved on — this battle now lives only on this phone
@@ -13080,7 +13155,7 @@ function idxLbl(p){try{const v=p&&p.index;if(v==null||v==='')return '';const x=+
   return `<span class="tiny" style="color:var(--ink3);font-weight:400;margin-left:6px">${x%1?x.toFixed(1):x} hcp</span>`;}catch(e){return '';}}
 function vBfWatch(){
   const W=bfWatch||{};
-  const doc=W.doc,e=W.entry||{};
+  const doc=W.doc?btScrubDoc(W.doc):W.doc,e=btCleanBfEntry(Object.assign({},W.entry||{}));   // (11/7) cleaned again where it is drawn
   if(!doc)return topbar('Battlefield','','bfield')+`<main><div class="card center muted">${W.err?'Could not reach the Battlefield.':'Loading the battle…'}</div></main>`;
   const meta=doc.meta||{};
   if(!meta.course)return topbar('Battlefield','','bfield')+`<main><div class="card center muted">Nothing here yet — the round may just be teeing off.</div></main>`;
@@ -13205,7 +13280,7 @@ function roundStatsCardHTML(act,holes,course,shotMap,players,title){
   const blocks=act.map(i=>{
     const p=(players||[])[i];if(!p)return '';
     const x=playerRoundStats(i,holes,course,shotMap,players);if(!x)return '';
-    const tp=x.toPar===0?'E':(x.toPar>0?'+':'')+x.toPar;
+    const tp=esc(x.toPar===0?'E':(x.toPar>0?'+':'')+x.toPar);   // (11/7) escaped
     const cell=(l,v,sub)=>`<div class="rsc"><div class="rsl">${l}</div><div class="rsv num">${v}</div>${sub?`<div class="rss">${sub}</div>`:''}</div>`;
     const cells=[];
     if(x.putts){
@@ -13230,7 +13305,7 @@ function roundStatsCardHTML(act,holes,course,shotMap,players,title){
         <div style="flex:1;min-width:0"><b style="font-family:Rajdhani,sans-serif;font-size:19px">${esc(p.name)}</b>${idxLbl(p)}
           <div class="tiny">${mix.join(' · ')||'—'}</div></div>
         ${rowIsMine(p)||(p.scorer&&p.scorer===devId())?'':pMoreBtn(p.pid||'',p.name,!!(p.photo&&!photoHidden(p.pid)),'round',(S.screen==='bfwatch'&&bfWatch&&bfWatch.code)||(S.share&&S.share.code)||'')}
-        <div style="text-align:right"><b class="num" style="font-size:26px">${x.gross}</b> <span class="num" style="font-size:16px;color:${x.toPar<0?'var(--good)':x.toPar>0?'var(--amber)':'var(--ink3)'}">${tp}</span>
+        <div style="text-align:right"><b class="num" style="font-size:26px">${esc(x.gross)}</b> <span class="num" style="font-size:16px;color:${x.toPar<0?'var(--good)':x.toPar>0?'var(--amber)':'var(--ink3)'}">${tp}</span>
           <div class="tiny">${cardN(course)?(x.holes<cardN(course)?`thru ${x.holes}`:`${cardN(course)} holes`):x.holes<((course&&course.holes)||[]).length?`thru ${x.holes}`:'18 holes'}</div></div></div>
       ${cells.length?`<div class="rsg">${cells.join('')}</div>`:''}
     </div>`;}).filter(Boolean).join('');
@@ -13783,7 +13858,7 @@ function vStart(){
         <div style="flex:1;min-width:0"><b>${n.near?'📍':'🌐'} ${esc(n.name)}</b><div class="tiny">${onlineSub(n)}</div></div>
         ${pMoreBtn(n.pid||'',n.name,false,'online','',0,n.pid?'':n.id)}<span class="pill wolf">+ add</span></div>`).join('');
     const libRows=(S.playerLib||[]).filter(e=>e.name&&!inRoster(e.name)&&low(e.name)!==meNm).map(e=>`
-      <div class="row" style="cursor:pointer" onclick="addFromLib('${e.id}')">
+      <div class="row" style="cursor:pointer" onclick="addFromLib('${btId(e.id)}')">
         <div><b>${esc(e.name)}</b><div class="tiny">Index ${fmtIdx(e.index)}${e.teeName?` · ${esc(e.teeName)}`:''}</div></div>
         <span class="pill wolf">+ add</span></div>`).join('');
     // SAVED GROUPS BELONG HERE TOO (Apple Mountain 9/6): Nathan walked 18 → multiplayer →
@@ -13930,7 +14005,7 @@ function vGate(){
       ${pMoreBtn(n.pid||'',n.name,false,'online','',0,n.pid?'':n.id)}<span class="pill wolf">+ add</span>
     </div>`).join('');
   const libRows=(S.playerLib||[]).filter(e=>e.name&&!inRoster(e.name)&&low(e.name)!==meNm).map(e=>`
-    <div class="row" style="cursor:pointer" onclick="addFromLib('${e.id}')">
+    <div class="row" style="cursor:pointer" onclick="addFromLib('${btId(e.id)}')">
       <div><b>${esc(e.name)}</b><div class="tiny">Index ${fmtIdx(e.index)}${e.teeName?` · ${esc(e.teeName)}`:''}</div></div>
       <span class="pill wolf">+ add</span>
     </div>`).join('');
@@ -14094,13 +14169,13 @@ function vHistory(){
     return `<div class="card" style="padding:12px 14px">
       <div style="display:flex;align-items:flex-start;gap:10px">
         <b style="flex:1;min-width:0;font-family:Rajdhani,sans-serif;font-size:20px">${gameName(e.game)} · ${esc(e.courseName)}</b>
-        <button class="ghost danger xbtn" aria-label="Delete this round" onclick="delHist('${e.id}')">${armDelHist===e.id?'Del?':XICON}</button>
+        <button class="ghost danger xbtn" aria-label="Delete this round" onclick="delHist('${btId(e.id)}')">${armDelHist===e.id?'Del?':XICON}</button>
       </div>
       <div class="tiny">${when} · thru ${e.thru} · ${e.mins!=null?e.mins+' min':''}${e.code?' · shared '+esc(e.code):''}</div>
       <div class="tiny">${(e.players||[]).map(esc).join(' · ')}</div>
       <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
-        <button class="ghost sel" style="flex:1 1 40%;margin:0;white-space:nowrap" onclick="reopenRound('${e.id}')">Review</button>
-        <button class="ghost" style="flex:1 1 40%;margin:0;white-space:nowrap" onclick="exOpen('pick','${e.id}')">💾 Save Data</button>
+        <button class="ghost sel" style="flex:1 1 40%;margin:0;white-space:nowrap" onclick="reopenRound('${btId(e.id)}')">Review</button>
+        <button class="ghost" style="flex:1 1 40%;margin:0;white-space:nowrap" onclick="exOpen('pick','${btId(e.id)}')">💾 Save Data</button>
       </div>
     </div>`;}).join('')
   :`<div class="card center muted">No finished rounds yet — they land here when you tap “End round”.</div>`}
@@ -14518,7 +14593,7 @@ async function exportEmail(fmt){
     for(const f of files)out.push({filename:f.name,content:b64FromBuf(await f.arrayBuffer())});
     let counts={rounds:0,holes:0,shots:0};
     try{const t=exportTables(exScope);counts={rounds:t.rounds.length-1,holes:t.holes.length-1,shots:t.shots.length-1};}catch(e){}
-    const r=await relayBattle({op:'export',to,files:out,counts,fmt:fmt||'csv',who:((S.me&&S.me.name)||'')});
+    const r=await relayBattle({op:'export',to,bt:bkTok(to),files:out,counts,fmt:fmt||'csv',who:((S.me&&S.me.name)||'')});   // bt: this phone proved that address (11/7)
     if(r&&r.ok){
       try{localStorage.setItem('wolfBackupEmail',to);}catch(e){}
       exMsg='Sent to '+to+' — check your inbox.';exSheet='';
@@ -15241,8 +15316,8 @@ function vPlayers(){
       const action=linked
         ? `<button class="ghost sel" style="flex:none" onclick="setFriend('${esc(f.pid)}',false)">On</button>`
         : sug.length
-          ? sug.map(x=>`<button class="ghost" style="flex:none" onclick="confirmFriend('${e.id}','${esc(x.pid)}')">Yes — ${esc((x.name||'').split(' ')[0])}</button>`).join('')
-          : `<button class="ghost" style="flex:none" onclick="inviteToBattle('${esc(e.name)}')">Invite</button>`;
+          ? sug.map(x=>`<button class="ghost" style="flex:none" onclick="confirmFriend('${btId(e.id)}','${btId(x.pid)}')">Yes — ${esc((x.name||'').split(' ')[0])}</button>`).join('')
+          : `<button class="ghost" style="flex:none" onclick="inviteToBattle(${jsArg(e.name)})">Invite</button>`;
       // BUTTONS NEVER CRUSH THE NAME (Nathan 9/29). Keep + Confirm Delete beside Invite squeezed the name and
       // status to one word per line, and even at rest three buttons left the status 4-7 lines tall. The
       // details get at least 200px; when the buttons don't fit beside that (every phone) they take their own
@@ -15255,11 +15330,11 @@ function vPlayers(){
       ${armed
         ?`<div style="flex-basis:100%;display:flex;gap:6px;justify-content:flex-end">
             <button class="ghost" onclick="delPlayerCancel()">Keep</button>
-            <button class="ghost danger" style="font-weight:700" onclick="delPlayer('${e.id}')">Confirm Delete</button></div>`
+            <button class="ghost danger" style="font-weight:700" onclick="delPlayer('${btId(e.id)}')">Confirm Delete</button></div>`
         :`<span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;margin-left:auto">
         ${action}
-            <button class="ghost" onclick="startEditPlayer('${e.id}')">Edit</button>
-            <button class="ghost danger xbtn" aria-label="Delete player" onclick="delPlayer('${e.id}')">${XICON}</button>
+            <button class="ghost" onclick="startEditPlayer('${btId(e.id)}')">Edit</button>
+            <button class="ghost danger xbtn" aria-label="Delete player" onclick="delPlayer('${btId(e.id)}')">${XICON}</button>
             ${e.pid&&!myPids().has(e.pid)?pMoreBtn(e.pid,e.name,!!(e.photo&&!photoHidden(e.pid)),'saved'):''}
       </span>`}</div>`;})()).join('')
     :'<div class="tiny">Golfers you set up in a round are saved here automatically.</div>';})()}
@@ -15318,7 +15393,7 @@ function roundSplashHTML(){
       <h2 class="vfTitle" style="margin:6px 0 2px">${esc(x.courseName||'')}</h2>
       ${res}
       <div style="display:flex;gap:18px;justify-content:center;margin:12px 0 6px">
-        <div><div class="num" style="font-size:44px;line-height:1">${x.gross}</div>
+        <div><div class="num" style="font-size:44px;line-height:1">${esc(x.gross)}</div>
           <div class="tiny">GROSS · ${toPar}</div></div>
         <div><div class="num" style="font-size:44px;line-height:1;color:var(--green-mid)">${x.net}</div>
           <div class="tiny">NET</div></div>
@@ -16361,7 +16436,7 @@ function vSetup(){
         <option value="">Pick a player…</option>
         ${nbShown.some(n=>n.near)?`<optgroup label="Nearby — on the course">${nbShown.map((n,j)=>n.near?`<option value="nb:${j}">📍 ${esc(n.name)}${onlineIdx(n)!=null?` · ${fmtIdx(onlineIdx(n))}`:''}</option>`:'').join('')}</optgroup>`:''}
         ${nbShown.some(n=>!n.near)?`<optgroup label="Online — elsewhere">${nbShown.map((n,j)=>!n.near?`<option value="nb:${j}">🌐 ${esc(n.name)}</option>`:'').join('')}</optgroup>`:''}
-        ${S.playerLib.length?`<optgroup label="Saved players">${S.playerLib.map(e=>`<option value="lib:${e.id}">${esc(e.name)} · ${fmtIdx(e.index)}${e.teeName?` · ${esc(e.teeName)}`:''}</option>`).join('')}</optgroup>`:''}
+        ${S.playerLib.length?`<optgroup label="Saved players">${S.playerLib.map(e=>`<option value="lib:${esc(e.id)}">${esc(e.name)} · ${esc(fmtIdx(e.index))}${e.teeName?` · ${esc(e.teeName)}`:''}</option>`).join('')}</optgroup>`:''}
       </select></span>`:'';
     return `<div class="card">
       <div class="row"><b>Golfer ${i+1}${isMe?' <span class="pill gray">you</span>':''}${(!isMe&&p.scorer===devId()&&(S.share.on||S.players.some(x=>x.nearby)))?' <span class="pill gray">you score them</span>':''}${S.config.game==='wolf'?` — tees off ${['1st','2nd','3rd','4th'][i]}`:''}</b>
@@ -16690,7 +16765,7 @@ function avatarHTML(p,size){
   if(!PHOTOS_ON)return '';
   const s2=size||34;
   const ph=p&&p.photo&&!photoHidden(p.pid)?p.photo:null;   // a blocked or reported player's photo is initials here (11/4)
-  if(ph&&/^data:image\//.test(ph))
+  if(ph&&typeof ph==='string'&&ph.length<80000&&BT_PHOTO_RE.test(ph))   // (11/7) a real base64 image, nothing that can leave the style attribute
     return `<span style="flex:none;width:${s2}px;height:${s2}px;border-radius:50%;background-image:url(${ph});background-size:cover;background-position:center;display:inline-block;border:1.5px solid var(--gold,#e8c552);vertical-align:middle"></span>`;
   const ini=esc(String((p&&p.name)||'?').trim().split(/\s+/).map(w=>w[0]||'').slice(0,2).join('').toUpperCase()||'?');
   return `<span style="flex:none;width:${s2}px;height:${s2}px;border-radius:50%;background:var(--elec-dk,#1c5eb0);color:#eef6ff;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:${Math.round(s2*0.4)}px;border:1.5px solid var(--line);vertical-align:middle">${ini}</span>`;
