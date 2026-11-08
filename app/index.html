@@ -534,7 +534,7 @@
 'use strict';
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1794127929';
+const BUILD='1794170834';
 const HOLES=18;
 
 function courseTealBend(){return {id:'teal-bend',name:'Teal Bend GC',loc:[38.6972,-121.6173],
@@ -4448,20 +4448,21 @@ function loadLeaflet(){
   if(window.L&&L.Map.prototype.setBearing){fixTouchGestures();return Promise.resolve();}
   if(window.L&&!leafletP){installMapRotation(window.L);fixTouchGestures();return Promise.resolve();}
   if(leafletP)return leafletP;
-  const script=src=>new Promise((res,rej)=>{
-    const sc=document.createElement('script');sc.src=src;
+  const script=(src,sri)=>new Promise((res,rej)=>{
+    const sc=document.createElement('script');sc.src=src;if(sri){sc.integrity=sri;sc.crossOrigin='anonymous';}
     sc.onload=res;sc.onerror=()=>rej(new Error('map library failed to load'));
     document.head.appendChild(sc);
   });
   const CDN={css:'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
-             js:'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'};
+             js:'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
+             cssSri:'sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=',jsSri:'sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo='};
   leafletP=(async()=>{
     if(!window.L){
       const c=document.createElement('link');c.rel='stylesheet';
       c.href='vendor/leaflet.css';
-      c.onerror=()=>{const f=document.createElement('link');f.rel='stylesheet';f.href=CDN.css;document.head.appendChild(f);};
+      c.onerror=()=>{const f=document.createElement('link');f.rel='stylesheet';f.integrity=CDN.cssSri;f.crossOrigin='anonymous';f.href=CDN.css;document.head.appendChild(f);};
       document.head.appendChild(c);
-      try{await script('vendor/leaflet.js');}catch(e){await script(CDN.js);}
+      try{await script('vendor/leaflet.js');}catch(e){await script(CDN.js,CDN.jsSri);}
     }
     installMapRotation(window.L);
     fixTouchGestures();
@@ -5899,8 +5900,9 @@ function amnesiaToggle(){
     const m=/[?&]amnesia=([^&]*)/.exec(location.search);
     if(!m)return;
     const v=decodeURIComponent(m[1]||'');
+    try{history.replaceState(null,'',location.pathname+location.search.replace(/([?&])amnesia=[^&]*&?/,'$1').replace(/[?&]$/,'')+location.hash);}catch(e){}
     if(v==='off'||v==='0'){amnesiaSet(null);}
-    else amnesiaSet(v||'1');
+    else if(confirm('Field test: make this phone ignore the saved course map'+(v&&v!=='1'?' for that course':'')+'? The Course Amnesia switch in Settings turns it back off.'))amnesiaSet(v||'1');
   }catch(e){}
 })();
 function geoFor(cid,geo,after){
@@ -7011,7 +7013,7 @@ async function windFetch(force){
     if(windFetch._busy)return;windFetch._busy=true;
     const j=async u=>{const r=await fetch(u,{headers:{'Accept':'application/geo+json'}});if(!r.ok)throw new Error('nws '+r.status);return r.json();};
     let pts=W&&W.pts;
-    if(!pts||!pts.hourly){const p=await j(`https://api.weather.gov/points/${loc[0].toFixed(4)},${loc[1].toFixed(4)}`);const pr=p.properties||{};
+    if(!pts||!pts.hourly){const p=await j(`https://api.weather.gov/points/${loc[0].toFixed(2)},${loc[1].toFixed(2)}`);const pr=p.properties||{};
       pts={hourly:pr.forecastHourly,stations:pr.observationStations};}
     let obs=W&&W.obs||null;
     try{
@@ -9076,7 +9078,7 @@ async function daErase(code){
   const back=daEmail?2:1;
   daUI=3;daMsg='Deleting…';render();
   try{
-    const r=await relayAccount({op:'erase',pid:myPid(),dev:devId(),email:daEmail||undefined,code:code||undefined});
+    const r=await relayAccount({op:'erase',pid:myPid(),dev:devId(),email:daEmail||undefined,code:code||undefined,rooms:daRooms()});
     if(!r||!r.ok||r.testMuted){daUI=back;daMsg=(r&&r.error)||(r&&r.testMuted?'Test build — nothing was deleted.':DA_OFFLINE);render();return;}
     daWipe();
   }catch(e){daUI=back;daMsg=DA_OFFLINE;render();}
@@ -9087,19 +9089,30 @@ function daCode(){
   if(c.length!==6){daMsg='Enter the 6-digit code from the email.';render();return;}
   daErase(c);
 }
+function daRooms(){
+  const out=new Set(),since=Date.now()-5*86400000;
+  try{if(S.share&&S.share.code)out.add(S.share.code);}catch(e){}
+  try{(S.endOutbox||[]).forEach(x=>{if(x&&x.code)out.add(x.code);});}catch(e){}
+  try{(S.history||[]).forEach(e=>{if(e&&e.code&&(e.endedAt||0)>=since)out.add(e.code);});}catch(e){}
+  return [...out].filter(c=>/^[A-Z0-9]{4,8}$/.test(String(c))).slice(0,40);
+}
 function daWipe(){
   let age=null;try{age=localStorage.getItem('btAgeSignal');}catch(e){}
   try{localStorage.clear();}catch(e){}
   try{if(age)localStorage.setItem('btAgeSignal',age);}catch(e){}
   try{sessionStorage.clear();}catch(e){}
-  location.replace(location.pathname);
+  const gone=[];
+  try{if(window.caches)['bt-tiles','bt-elev'].forEach(n=>gone.push(caches.delete(n).catch(()=>{})));}catch(e){}
+  try{if(typeof indexedDB!=='undefined')gone.push((naipDBp?naipDBp.then(d=>{try{d.close();}catch(e){}}).catch(()=>{}):Promise.resolve())
+    .then(()=>{naipDBp=null;return new Promise(res=>{const q=indexedDB.deleteDatabase('bt-naip');q.onsuccess=q.onerror=()=>res();});}));}catch(e){}
+  Promise.race([Promise.all(gone),new Promise(r=>setTimeout(r,2500))]).then(()=>location.replace(location.pathname));
 }
 function daHTML(){
   const red='color:var(--red);border-color:var(--red)';
   const msg=daMsg?`<div class="tiny mt" style="color:var(--red)">${esc(daMsg)}</div>`:'';
   if(daUI===0)return `<div class="tiny">Erase your profile and everything Battle Tees keeps about you.</div>
     <button class="ghost mt" style="width:100%;${red}" onclick="daArm()">Delete account…</button>`;
-  if(daUI===1)return `<div class="tiny"><b style="color:var(--red)">This can’t be undone.</b> Your profile, library, handicap record and cloud backup are erased. Rounds you played with others stay on their phones.</div>${msg}
+  if(daUI===1)return `<div class="tiny"><b style="color:var(--red)">This can’t be undone.</b> Your profile, library, handicap record and cloud backup are erased. Rounds you played with others stay on their phones; where a round is kept online, your seat becomes “A former player” and the scores stay.</div>${msg}
     <button class="big mt" style="background:var(--red);border-color:var(--red)" onclick="daStart()">Delete my account</button>
     <button class="ghost mt" style="width:100%" onclick="daCancel()">Cancel</button>`;
   if(daUI===2)return `<div class="tiny">Enter the code we sent to <b>${esc(daEmail)}</b>.</div>
@@ -9839,16 +9852,23 @@ function makeNameFilter(opts) {
   var HOMO = { 'а': 'a', 'в': 'b', 'е': 'e', 'ё': 'e', 'к': 'k', 'м': 'm', 'н': 'h', 'о': 'o', 'р': 'p', 'с': 'c', 'т': 't', 'у': 'y', 'х': 'x',
     'і': 'i', 'ї': 'i', 'ј': 'j', 'ѕ': 's', 'ԁ': 'd', 'ɡ': 'g', 'α': 'a', 'β': 'b', 'ε': 'e', 'η': 'n', 'ι': 'i', 'κ': 'k', 'ν': 'v',
     'ο': 'o', 'ρ': 'p', 'τ': 't', 'υ': 'u', 'χ': 'x', 'ı': 'i', 'ſ': 's', 'ƒ': 'f', 'ս': 'u', 'օ': 'o', 'հ': 'h', 'ց': 'g', 'ք': 'p',
-    'ɑ': 'a', 'ʀ': 'r', 'ʜ': 'h', 'ɪ': 'i', 'ᴄ': 'c', 'ᴋ': 'k', 'ᴜ': 'u', 'ꜰ': 'f', 'ß': 'ss', 'æ': 'ae', 'œ': 'oe', 'ø': 'o', 'đ': 'd', 'ł': 'l' };
+    'ɑ': 'a', 'ʀ': 'r', 'ʜ': 'h', 'ɪ': 'i', 'ᴄ': 'c', 'ᴋ': 'k', 'ᴜ': 'u', 'ꜰ': 'f', 'ß': 'ss', 'æ': 'ae', 'œ': 'oe', 'ø': 'o', 'đ': 'd', 'ł': 'l',
+    'ᴀ': 'a', 'ʙ': 'b', 'ᴅ': 'd', 'ᴇ': 'e', 'ɢ': 'g', 'ᴊ': 'j', 'ʟ': 'l', 'ᴍ': 'm', 'ɴ': 'n', 'ᴏ': 'o', 'ᴘ': 'p', 'ǫ': 'q', 'ꜱ': 's', 'ᴛ': 't',
+    'ᴠ': 'v', 'ᴡ': 'w', 'ʏ': 'y', 'ᴢ': 'z', 'һ': 'h', 'ԛ': 'q', 'ԝ': 'w', 'ӏ': 'l', 'ϲ': 'c', 'ϳ': 'j', 'ɩ': 'i' };
+  var CHER = { 0x13A0: 'd', 0x13A1: 'r', 0x13A2: 't', 0x13A4: 'o', 0x13A5: 'i', 0x13A6: 's', 0x13A9: 'y', 0x13AA: 'a', 0x13AB: 'j', 0x13AC: 'e',
+    0x13B3: 'w', 0x13B7: 'm', 0x13BB: 'h', 0x13BD: 'y', 0x13BE: 'o', 0x13C0: 'g', 0x13C2: 'h', 0x13C3: 'z', 0x13CF: 'b', 0x13D2: 'r', 0x13D4: 'w',
+    0x13D5: 's', 0x13D9: 'v', 0x13DA: 's', 0x13DE: 'l', 0x13DF: 'c', 0x13E2: 'p', 0x13E6: 'k', 0x13E7: 'd', 0x13F3: 'g', 0x13F4: 'b' };
+  for (var cp in CHER) { var ch = String.fromCharCode(+cp); HOMO[ch.toLowerCase()] = CHER[cp]; }
+  var HOMO2 = { 'у': 'u', 'п': 'n', 'г': 'r', 'ш': 'w', 'ь': 'b', 'и': 'u' };
   var LEET = { '0': 'o', '1': 'i', '!': 'i', '|': 'i', '3': 'e', '4': 'a', '@': 'a', '$': 's', '5': 's', '7': 't', '+': 't', '9': 'g', '6': 'g', '8': 'b' };
   var esc = function (s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); };
-  function fold(t) {
+  function fold(t, alt) {
     t = String(t == null ? '' : t);
     try { t = t.normalize('NFKC'); } catch (e) {}
     t = t.replace(/[\u00ad\u200b-\u200d\u2060\ufeff\u034f\u180e]/g, '');
     t = t.replace(/[\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]/g, ' ');
     t = t.replace(/[\u2018\u2019\u02bc`\u00b4]/g, "'");
-    var o = ''; for (var i = 0; i < t.length; i++) { var c = t[i], l = c.toLowerCase(); o += HOMO[l] ? (c === l ? HOMO[l] : HOMO[l].toUpperCase()) : c; }
+    var o = ''; for (var i = 0; i < t.length; i++) { var c = t[i], l = c.toLowerCase(), h = (alt && HOMO2[l]) || HOMO[l]; o += h ? (c === l ? h : h.toUpperCase()) : c; }
     try { o = o.normalize('NFD').replace(/[\u0300-\u036f]/g, ''); } catch (e) {}
     return o;
   }
@@ -9861,6 +9881,7 @@ function makeNameFilter(opts) {
       if (!s) return;
       out[s] = 1; out[s.replace(/([a-z])\1{2,}/g, '$1')] = 1; out[s.replace(/([a-z])\1{2,}/g, '$1$1')] = 1;
     });
+    Object.keys(out).forEach(function (s) { if (s.indexOf('l') >= 0) out[s.replace(/l/g, 'i')] = 1; });
     return Object.keys(out);
   }
   function badWord(v) {
@@ -9886,7 +9907,10 @@ function makeNameFilter(opts) {
     return false;
   }
   return function nameOk(text) {
-    var t = fold(text);
+    var t1 = fold(text), t2 = fold(text, true);
+    return judge(t1) && (t2 === t1 || judge(t2));
+  };
+  function judge(t) {
     if (/(^|[^0-9])14\W{0,2}88([^0-9]|$)/.test(t)) return false;
     var low = t.toLowerCase();
     SAFE.forEach(function (re) { low = low.replace(re, ' '); });
@@ -9913,7 +9937,7 @@ function makeNameFilter(opts) {
     }
     for (var n = 0; n < words.length; n++) { var sp = spellings(words[n]); for (var m = 0; m < sp.length; m++) if (badWord(sp[m])) return false; }
     return true;
-  };
+  }
 }
 var _btCmOk=null,_btNmOk=null;
 function bfCmClean(t){if(!_btCmOk)_btCmOk=makeNameFilter();return _btCmOk(String(t==null?'':t));}
@@ -14277,7 +14301,7 @@ function startRound(){
   S.round._sharedAtStart=!!S.share.on;
   try{S.round._optSnap=optSnap();}catch(e){}
   if(gpsOnlyRound)stat('gps_start',{course:S.course.name});
-  else stat('round_start',{game:S.round.game,course:S.course.name,holes:S.round.span.count,firstTee:S.round.span.start+1,
+  else stat('round_start',{...(S.me&&S.me.pid?{pid:S.me.pid,pkey:myKey()}:{}),game:S.round.game,course:S.course.name,holes:S.round.span.count,firstTee:S.round.span.start+1,
     lens:S.config.lens,players:NP(),shared:!!S.share.on,stack:(S.round.games||[]).join('+'),
     opts:S.round.game==='nines'?{n:S.config.nines.n,blitz:S.config.nines.blitz,ctp:S.config.nines.ctp}
       :S.round.game==='vegas'?{rotate:S.config.vegas.rotate,flip:S.config.vegas.flip,ctp:S.config.vegas.ctp}
@@ -14922,7 +14946,7 @@ function landOnSettle(){
     S.screen='settle';
     askEndRound();
     if(!S.round._statFin){S.round._statFin=true;
-      stat('round_finish',{wake:wakeState,game:S.round.game,thru:S.round.holes.filter(r=>r.confirmed).length,
+      stat('round_finish',{...(S.me&&S.me.pid?{pid:S.me.pid,pkey:myKey()}:{}),wake:wakeState,game:S.round.game,thru:S.round.holes.filter(r=>r.confirmed).length,
         mins:S.round.startedAt?Math.round((Date.now()-S.round.startedAt)/60000):null,
         shared:!!(S.share.on&&!S.share.bf), broadcastOnly:!!(S.share.on&&S.share.bf),
         role:S.share.on?(S.share.bf?'solo-broadcast':(S.share.creator?'host':'joiner')):'solo',
