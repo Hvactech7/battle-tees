@@ -593,7 +593,7 @@
 // the drawn X for red delete buttons: a text ✕ sits off-center in an iPhone's font
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1794101351';
+const BUILD='1794103264';
 const HOLES=18;
 
 // Built-in courses — data from USGA/GHIN, current ratings and stroke allocations.
@@ -2277,6 +2277,7 @@ function joinRound(){
   const el=document.getElementById('joincode');
   const code=(el&&el.value||'').trim().toUpperCase();
   if(!/^[A-Z0-9]{4,8}$/.test(code)){if(el)el.placeholder='enter the 5-letter code';return;}
+  primeGeo();   // the location prompt inside this tap (11/7)
   if(!guardedJoin(code))return;
   joinRoundCode(code);
 }
@@ -2401,7 +2402,7 @@ function guardedJoin(code){
   armJoinSwap=null;clearTimeout(armJoinTimer);
   return true;
 }
-function joinFromInvite(code){if(!guardedJoin(code))return;joinRoundCode(code);}
+function joinFromInvite(code){primeGeo();if(!guardedJoin(code))return;joinRoundCode(code);}   // primeGeo: iOS asks for location inside THIS tap (Justin, Blue Rock 11/7: a joiner's map said location was off until he reopened the app)
 function joinRoundCode(code){
   if(gpsOnly())gpsQuietEnd(S.screen);          // nothing of a GPS round travels into a room (its flag would hide the new card)
   wiz=null;                                   // the wizard is done with, whichever door we came in by
@@ -6234,9 +6235,29 @@ function mapGeoNote(){
   if(mapMarks&&mapMarks._preview)return;            // previewing an unmapped hole: its own note stands
   // the map bar is short; a long sentence here wraps and shoves the fixed buttons
   // two short lines at most: the long versions ran 3-4 lines in a 2-line box, cutting off how to fix it (click walk 9/13)
-  if(geoState==='denied')s2.innerHTML='Location off — turn it on in Settings.';
-  else if(geoState==='waiting')s2.textContent='Waiting for GPS…';
+  // A TAP TO ASK AGAIN (Nathan 11/7, Justin at Blue Rock: "is there anyway to manually push the location services
+  // notification to make it connect?"). iOS only shows its location prompt inside a tap, so the note IS the tap: it asks
+  // again and restarts the map's GPS. Still off after that = iPhone Settings, said plainly.
+  const tap=t=>`<span role="button" onclick="geoRetry()" style="cursor:pointer;text-decoration:underline;text-underline-offset:2px">${t}</span>`;
+  if(geoState==='denied')s2.innerHTML=tap(geoRetried?'Still off: turn it on in Settings › Location Services, then tap':'📍 Location off · tap to turn on');
+  else if(geoState==='waiting')s2.innerHTML=tap('Waiting for GPS… · tap to retry');
 }
+let geoRetried=false;
+function geoRetry(){
+  geoRetried=true;
+  primeGeo(()=>{
+    if(geoState==='ok'){   // the old watch died with the refusal: start a new one
+      geoRetried=false;
+      try{if(mapWatch!=null&&navigator.geolocation)navigator.geolocation.clearWatch(mapWatch);}catch(e){}
+      mapWatch=null;
+      if(S.screen==='map')try{startMapGps();}catch(e){}
+    }
+    try{stat('geo_retry',{state:geoState});}catch(e){}
+  });
+  mapGeoNote();
+}
+// back from Settings (or any other app) with the map up and no location: ask again, quietly
+try{document.addEventListener('visibilitychange',()=>{try{if(document.visibilityState==='visible'&&S.screen==='map'&&geoPrimed&&geoState!=='ok')setTimeout(geoRetry,600);}catch(e){}});}catch(e){}
 // ---- COURSE PREVIEW: the GPS screen for any course in the library, no round ----
 // "View" on a Courses row opens hole 1 exactly as the GPS screen would show it
 // and the arrows walk every hole. The map machinery reads S.course, so the
@@ -9637,6 +9658,9 @@ function updateFMB(pos,label){
     ?`<span style="color:var(--ink2);font-size:16px">F</span> ${yd(r.f)} <span style="color:var(--ink2);font-size:16px">M</span> ${yd(r.m)} <span style="color:var(--ink2);font-size:16px">B</span> ${yd(r.b)}`
     :`${yd(r.m)}${uLbl()} to green`;
   if(s2)s2.textContent='';  // label dropped by design — F/M/B speaks for itself
+  // ...except with NO location: yards from the tee showed with a blank line under them, so a phone whose location was
+  // off looked normal, just without a dot (geowalk 11/7). Then the line says so, and is the tap that asks again.
+  if(!mapMarks.mePos&&geoState!=='ok'&&geoState!=='unknown')mapGeoNote();
   fmbFit(el);
   try{paintWindRose();}catch(e){}
   try{elevEnsure();elevBtnPaint();elevStripPaint(pos);}catch(e){}
