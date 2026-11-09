@@ -1,10 +1,17 @@
 // Wolf service worker — offline cache + auto-update (stale-while-revalidate).
 // The app loads instantly from cache and refreshes in the background; a new
 // version appears the next time it's opened while online.
-const CACHE = 'battletees-1794197906';
+const CACHE = 'battletees-1794207027';
 // Offline course-map pack: satellite tiles cached cache-first, SURVIVES app
 // updates (excluded from the activate cleanup below).
 const TILES = 'bt-tiles';
+// COURSE DATA KEPT ACROSS UPDATES (Nathan 11/8/2026: his airplane-mode test opened a course his phone had never loaded
+// with signal -- no hole map, no photo). The nearby-course index, each course's record and each hole map live in their
+// own cache that a deploy does NOT wipe, like TILES, so the app can save the courses around you ahead of time
+// (nearbySave in index.html) and a no-signal round still finds them. Records and maps are NETWORK-FIRST: the app's
+// CARD_STAMP / GEO_STAMP refreshes re-fetch the same file names and must get the new file whenever there is signal;
+// the saved copy answers only when the network can't. The 846 KB index is cache-first, refreshed behind.
+const COURSES = 'bt-courses';
 const CORE = ['./', 'index.html', 'manifest.json', '/icon-180.png', '/icon-512.png', '/banner.jpg', '/wolf.png', '/wolfwin.png', '/wolfcage.png', '/nine.png', '/vegas.png', '/quota.png', '/sixes.png', '/umbrella.png', '/hammer.png', '/bbb.png', '/stroke.png', '/stableford.png', '/bestball.png', '/scramble.png', '/nassau.png', '/skins.png'];
 // The map library, vendored. These used to come from unpkg at runtime, so the
 // hole map was a live network dependency ON A GOLF COURSE — and being
@@ -47,7 +54,7 @@ self.addEventListener('install', (e) => {
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE && k !== TILES).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE && k !== TILES && k !== COURSES).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
@@ -86,6 +93,31 @@ self.addEventListener('fetch', (e) => {
         return r;
       }).catch(() => caches.match(req))
     );
+    return;
+  }
+  // ---- course data: kept across updates (COURSES above) ---------------------
+  const isIndex = path === '/courses-index.json';
+  if (isIndex || /^\/courses\/[^/]+\.json$/.test(path) || path.startsWith('/geo/')) {
+    e.respondWith((async () => {
+      const cache = await caches.open(COURSES);
+      const fresh = fetch(req).then(clean).then((resp) => {
+        if (resp && resp.status === 200) cache.put(req, resp.clone());
+        return resp;
+      });
+      fresh.catch(() => {});
+      if (isIndex) {                       // cache-first; the fetch above refreshes it for next time
+        const hit = await cache.match(req);
+        if (hit) return hit;
+        return fresh;
+      }
+      // a record waits for the network (a stale card would be booked as refreshed); a map gives up after 4 s
+      const wait = path.startsWith('/geo/') ? new Promise((res) => setTimeout(() => res(null), 4000)) : null;
+      const won = await (wait ? Promise.race([fresh.catch(() => null), wait]) : fresh.catch(() => null));
+      if (won) return won;                 // the network answered (whatever it said)
+      const hit = await cache.match(req);
+      if (hit) return hit;                 // no signal: the saved copy
+      return fresh;                        // nothing saved either: the network's own error
+    })());
     return;
   }
   const isApp = path === '/app/' || path === '/app/index.html';

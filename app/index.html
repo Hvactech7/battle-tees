@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'sha256-pb2ANzLyJr6vgVI3/irg2aft0BSF5N+OuIAELnfZFkw=' 'sha256-/+9+HVMksvVArYH8+JPxyQEgFLQWgP/Hyo8RFWdBbWg=' 'sha256-79uSLRUH3SESf+LkHGPxuR5ePnvAiW5Wl+C02STXxXY=' https://unpkg.com https://static.cloudflareinsights.com; object-src 'none'; base-uri 'none'">
+<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'sha256-pb2ANzLyJr6vgVI3/irg2aft0BSF5N+OuIAELnfZFkw=' 'sha256-9brfDCZJNU4CxzysWN5MSrA4lWWEcRcEcVzNdp3E+eY=' 'sha256-79uSLRUH3SESf+LkHGPxuR5ePnvAiW5Wl+C02STXxXY=' https://unpkg.com https://static.cloudflareinsights.com; object-src 'none'; base-uri 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#0f1522">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -1962,7 +1962,7 @@ function __btRw(s) {
 'use strict';
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1794197905';
+const BUILD='1794207026';
 const HOLES=18;
 
 function courseTealBend(){return {id:'teal-bend',name:'Teal Bend GC',loc:[38.6972,-121.6173],
@@ -3051,6 +3051,11 @@ function endOutboxFlush(){
 }
 window.addEventListener('online',kickSync);
 window.addEventListener('online',()=>{try{if(S.round&&S.round.started)windFetch();}catch(e){}});
+window.addEventListener('online',()=>{
+  try{if(S.course&&geoNoSignal[S.course.id]){delete geoNoSignal[S.course.id];if(S.screen==='map')render();}}catch(e){}
+  try{setTimeout(nearbySave,4000);}catch(e){}
+});
+setTimeout(()=>{try{nearbySave();}catch(e){}},9000);
 let wakeLock=null,wakeState='idle',wakeTold=false;
 function wakeSet(st){
   if(wakeState===st)return;
@@ -3452,7 +3457,7 @@ function relayStatusHTML(scanning){
 function lobbyRetry(){lobbyDownSince=Date.now()-1;lobbyClose();lobbyConnect();render();}
 let myCoords=(()=>{try{const v=JSON.parse(localStorage.getItem('wolfLastCoords'));return (v&&v.c)||null;}catch(e){return null;}})();
 let myCoordsAt=0;
-function cacheCoords(c){myCoords=c;myCoordsAt=Date.now();try{localStorage.setItem('wolfLastCoords',JSON.stringify({c,ts:Date.now()}));}catch(e){}
+function cacheCoords(c){myCoords=c;myCoordsAt=Date.now();try{localStorage.setItem('wolfLastCoords',JSON.stringify({c,ts:Date.now()}));}catch(e){}try{if(nearbySaveDue())setTimeout(nearbySave,4000);}catch(e){}
   try{if(!helloFixAt||Date.now()-helloFixAt>15*60000)sendHello();}catch(e){}}
 function btMode(){
   try{
@@ -6999,7 +7004,7 @@ function vMap(){
       const g=amnesiaOn(S.course.id)?null
         :(S.course.geo&&S.course.geo.holes&&S.course.geo.holes[physHole(mapHole)+1]);
       const mapped=!!(g&&g.green&&g.green.length>2);
-      if(mapped)return '';
+      if(mapped||mapWaitsForSignal())return '';
       const started=!!(S.teeFix&&(S.teeFix[(amnesiaOn(S.course.id)?'amn:':'')+S.course.id]||{})[physHole(mapHole)])
         ||!!((S.round.manualGreens||{})[physHole(mapHole)]);
       const lbl=(manualOn||started)?'🔄 Manual':'📍 Map this hole';
@@ -7345,6 +7350,68 @@ function geoFor(cid,geo,after){
   if(lib){lib.geo=clone(geo);if(after)after(lib);}
   return false;
 }
+const NO_SIGNAL_MAP='No signal \u2014 this course\u2019s map loads once you have signal.';
+var geoNoSignal={};
+function isNetFail(e){return !!e&&(e.name==='TypeError'||/load failed|failed to fetch|networkerror|network connection|no connection|offline/i.test(String(e.message||e)));}
+function mapWaitsForSignal(){
+  try{
+    const c=S.course;if(!c||amnesiaOn(c.id))return false;
+    const g=c.geo;if(g&&g.holes&&Object.keys(g.holes).length)return false;
+    return !!((c.geoUrl||HOSTED_GEO[c.id])&&(geoNoSignal[c.id]||(typeof navigator!=='undefined'&&navigator.onLine===false)));
+  }catch(e){return false;}
+}
+const NEARBY_SAVE_N=6,NEARBY_SAVE_KM=40;
+var nearbySaveBusy=false;
+function nearbySaveDue(){
+  try{
+    if(nearbySaveBusy||!myCoords||!isFinite(myCoords[0])||!isFinite(myCoords[1]))return false;
+    if(typeof navigator==='undefined'||navigator.onLine===false)return false;
+    if(!(navigator.serviceWorker&&navigator.serviceWorker.controller))return false;
+    const last=JSON.parse(localStorage.getItem('btNearbySave')||'null');
+    if(!last||!last.c)return true;
+    return Date.now()-(last.at||0)>6*3600e3||kmBetween(last.c[0],last.c[1],myCoords[0],myCoords[1])>10;
+  }catch(e){return false;}
+}
+async function nearbySave(){
+  if(!nearbySaveDue())return;
+  nearbySaveBusy=true;
+  const here=myCoords.slice();let done=0,pick=[];
+  try{
+    const cand=[],ids=new Set();
+    (S.courses||[]).forEach(c=>{
+      if(!c||!c.id||!Array.isArray(c.loc)||!(c.geoUrl||HOSTED_GEO[c.id]))return;
+      ids.add(c.id);cand.push({id:c.id,lib:c,km:kmBetween(here[0],here[1],c.loc[0],c.loc[1])});
+    });
+    let idx=window.__natIdx;
+    if(!idx){const r=await fetch('/courses-index.json');if(r.ok){idx=await r.json();window.__natIdx=idx;}}
+    (idx||[]).forEach(r=>{
+      if(!r||ids.has(r[0])||!isFinite(r[3])||!(r[5]==='gps'||r[5]==='greens'))return;
+      if(savedTwin(r))return;
+      cand.push({id:r[0],km:kmBetween(here[0],here[1],r[3],r[4])});
+    });
+    pick=cand.filter(x=>x.km<=NEARBY_SAVE_KM).sort((a,b)=>a.km-b.km).slice(0,NEARBY_SAVE_N);
+    for(const x of pick){
+      if(navigator.onLine===false)break;
+      try{
+        let geo=x.lib&&x.lib.geo&&x.lib.geo.holes&&Object.keys(x.lib.geo.holes).length?x.lib.geo:null;
+        if(!geo){
+          let url=x.lib?(x.lib.geoUrl||HOSTED_GEO[x.id]):null;
+          if(!x.lib){const r=await fetch('/courses/'+x.id+'.json');if(!r.ok)continue;url=(await r.json()).geoUrl||null;}
+          if(!url)continue;
+          if(!/^(https?:)?\/\//i.test(url)&&url[0]!=='/')url='/'+url;
+          const g=await fetch(url);if(!g.ok)continue;
+          const js=await g.json();
+          if(!js||js.none)continue;
+          geo={holes:js.holes||{},greens:js.greens||[]};
+        }
+        await naipEnsure({id:x.id,geo});
+        done++;
+      }catch(e){}
+    }
+    if(done||!pick.length)localStorage.setItem('btNearbySave',JSON.stringify({at:Date.now(),c:here,n:done}));
+  }catch(e){}
+  finally{nearbySaveBusy=false;}
+}
 async function ensureCourseGeo(){
   const cid=S.course.id;
   if(amnesiaOn(S.course.id)){
@@ -7354,8 +7421,9 @@ async function ensureCourseGeo(){
   let hostedUrl=S.course.geoUrl||HOSTED_GEO[S.course.id];
   if(hostedUrl&&!/^(https?:)?\/\//i.test(hostedUrl)&&hostedUrl[0]!=='/')hostedUrl='/'+hostedUrl;
   if(hostedUrl){
-    try{
-      const r=await fetch(hostedUrl);
+    let r=null;
+    try{r=await fetch(hostedUrl);}catch(e){geoNoSignal[cid]=true;throw new Error(NO_SIGNAL_MAP);}
+    if(r)try{
       if(r.ok){
         const js=await r.json();
         if(js&&js.none){
@@ -7364,6 +7432,7 @@ async function ensureCourseGeo(){
         }
         if(js&&js.holes&&Object.keys(js.holes).length){
           const g=Object.assign({ts:Date.now(),holes:js.holes},js.greens&&js.greens.length?{greens:js.greens}:{});
+          delete geoNoSignal[cid];
           let mine=false;set(()=>{mine=geoFor(cid,g,fixLoop9);});
           if(mine){preloadCourseTiles(false);naipEnsure(S.course);}
           return;
@@ -7376,6 +7445,7 @@ async function ensureCourseGeo(){
       }
     }catch(e){}
   }
+  if(typeof navigator!=='undefined'&&navigator.onLine===false){if(hostedUrl)geoNoSignal[cid]=true;throw new Error(NO_SIGNAL_MAP);}
   const pos=await new Promise(res=>{
     if(!navigator.geolocation)return res(null);
     navigator.geolocation.getCurrentPosition(
@@ -7385,7 +7455,8 @@ async function ensureCourseGeo(){
   const c=pos||myCoords;
   if(!c)throw new Error('Turn on location to download the course map.');
   const q=`[out:json][timeout:25];(way["golf"="hole"](around:2500,${c[0]},${c[1]});way["golf"="green"](around:2500,${c[0]},${c[1]}););out geom;`;
-  const js=await overpassQuery(q);
+  let js;
+  try{js=await overpassQuery(q);}catch(e){if(isNetFail(e)){if(hostedUrl)geoNoSignal[cid]=true;throw new Error(NO_SIGNAL_MAP);}throw e;}
   const els=js.elements||[];
   const holes={},greens=[];
   els.forEach(e=>{
@@ -8055,6 +8126,7 @@ function refreshHoleMap(){
     else if(mapMarks.ref)updateFMB(mapMarks.ref,'yards from the tee');
   }catch(e){}
   try{mapGeoNote();}catch(e){}
+  try{if(!mapMarks.greenC&&mapMarks._noMapSub){const sb=document.getElementById('fmbsub');if(sb&&sb.textContent==='loading…')sb.textContent=mapMarks._noMapSub;}}catch(e){}
   try{LMAP.invalidateSize(false);}catch(e){}
 }
 let mapBarRO=null,mapBarMO=null,mapBarEl=null;
@@ -8085,7 +8157,7 @@ async function initHoleMap(){
   if(amnesiaOn(S.course.id)){if(!(S.course.geo&&S.course.geo.amn))amnesiaPark();}
   else if(S.course.geo&&S.course.geo.amn)amnesiaRestore();
   if(!S.course.geo||(S.course.geo.empty&&!S.course.geo.none&&Date.now()-(S.course.geo.ts||0)>GEO_RETRY_MS)){
-    const s2=sub();if(s2)s2.textContent='Downloading course map…';
+    const s2=sub();if(s2)s2.textContent=(typeof navigator!=='undefined'&&navigator.onLine===false)?'Loading course map…':'Downloading course map…';
     try{
       await ensureCourseGeo();
       if(S.course.geo&&!S.course.geo.empty)return;
@@ -8251,11 +8323,12 @@ async function initHoleMap(){
         try{LMAP.fitBounds(mapMarks._ring.getBounds().pad(0.12),{animate:false});}catch(e){}
       }
       mapMarks._ringMode=true;mapMarks._cardY=cardY;
-      const s2=sub();if(s2)s2.textContent=`no map here — card says ${ydDisp(cardY)}${uLbl()} (${esc(tset.name)}). The green sits ON the gold ring: two-finger rotate to look${(amnFrame&&cardY>FRAME_YDS/2)?', pinch out to reach the ring':''}, tap it when you spot it.`;
+      const s2=sub();if(s2)s2.textContent=mapMarks._noMapSub=geoErr===NO_SIGNAL_MAP?`${NO_SIGNAL_MAP} The card says ${ydDisp(cardY)}${uLbl()}.`:`no map here — card says ${ydDisp(cardY)}${uLbl()} (${esc(tset.name)}). The green sits ON the gold ring: two-finger rotate to look${(amnFrame&&cardY>FRAME_YDS/2)?', pinch out to reach the ring':''}, tap it when you spot it.`;
     }else{
-      const s2=sub();if(s2)s2.textContent=geoErr||'Hole lines not mapped here — rangefinder still works.';
+      const s2=sub();if(s2)s2.textContent=mapMarks._noMapSub=geoErr||'Hole lines not mapped here — rangefinder still works.';
     }
-    maybeInviteMapping();
+    if(!mapWaitsForSignal())maybeInviteMapping();
+    else{try{const mb=document.getElementById('manualbtn');if(mb)mb.remove();}catch(e){}}
     {
       const ph=physHole(mapHole);
       const mg=(S.round.manualGreens||{})[ph];
