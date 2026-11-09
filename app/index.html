@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'sha256-pb2ANzLyJr6vgVI3/irg2aft0BSF5N+OuIAELnfZFkw=' 'sha256-9brfDCZJNU4CxzysWN5MSrA4lWWEcRcEcVzNdp3E+eY=' 'sha256-79uSLRUH3SESf+LkHGPxuR5ePnvAiW5Wl+C02STXxXY=' https://unpkg.com https://static.cloudflareinsights.com; object-src 'none'; base-uri 'none'">
+<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'sha256-pb2ANzLyJr6vgVI3/irg2aft0BSF5N+OuIAELnfZFkw=' 'sha256-KbqglX9RHWms8fvgga4uBJYnmc/qvqI+gqkvZl+KK/Q=' 'sha256-79uSLRUH3SESf+LkHGPxuR5ePnvAiW5Wl+C02STXxXY=' https://unpkg.com https://static.cloudflareinsights.com; object-src 'none'; base-uri 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#0f1522">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -1962,7 +1962,7 @@ function __btRw(s) {
 'use strict';
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1794207026';
+const BUILD='1794208055';
 const HOLES=18;
 
 function courseTealBend(){return {id:'teal-bend',name:'Teal Bend GC',loc:[38.6972,-121.6173],
@@ -7412,6 +7412,28 @@ async function nearbySave(){
   }catch(e){}
   finally{nearbySaveBusy=false;}
 }
+const GEO_WAIT_MS=10000;
+function geoApplyHosted(cid,js){
+  if(js&&js.none){
+    delete geoNoSignal[cid];
+    set(()=>{geoFor(cid,{ts:Date.now(),holes:{},empty:true,none:true});});
+    return true;
+  }
+  if(js&&js.holes&&Object.keys(js.holes).length){
+    const g=Object.assign({ts:Date.now(),holes:js.holes},js.greens&&js.greens.length?{greens:js.greens}:{});
+    delete geoNoSignal[cid];
+    let mine=false;set(()=>{mine=geoFor(cid,g,fixLoop9);});
+    if(mine){preloadCourseTiles(false);naipEnsure(S.course);}
+    return true;
+  }
+  if(js&&js.greens&&js.greens.length){
+    delete geoNoSignal[cid];
+    let mine=false;set(()=>{mine=geoFor(cid,{ts:Date.now(),holes:{},greens:js.greens});});
+    if(mine){preloadCourseTiles(false);naipEnsure(S.course);}
+    return true;
+  }
+  return false;
+}
 async function ensureCourseGeo(){
   const cid=S.course.id;
   if(amnesiaOn(S.course.id)){
@@ -7422,26 +7444,21 @@ async function ensureCourseGeo(){
   if(hostedUrl&&!/^(https?:)?\/\//i.test(hostedUrl)&&hostedUrl[0]!=='/')hostedUrl='/'+hostedUrl;
   if(hostedUrl){
     let r=null;
-    try{r=await fetch(hostedUrl);}catch(e){geoNoSignal[cid]=true;throw new Error(NO_SIGNAL_MAP);}
+    const f=fetch(hostedUrl);
+    let late=false;
+    try{r=await Promise.race([f,new Promise(res=>setTimeout(()=>{late=true;res(null);},GEO_WAIT_MS))]);if(late)throw new Error('no answer');}
+    catch(e){
+      geoNoSignal[cid]=true;
+      f.then(rr=>rr&&rr.ok?rr.json():null).then(js=>{
+        if(js&&!geoNoSignal[cid])return;
+        if(js&&geoApplyHosted(cid,js)){try{if(S.screen==='map'&&S.course&&S.course.id===cid)render();}catch(e2){}}
+      }).catch(()=>{});
+      throw new Error(NO_SIGNAL_MAP);
+    }
     if(r)try{
       if(r.ok){
         const js=await r.json();
-        if(js&&js.none){
-          set(()=>{geoFor(cid,{ts:Date.now(),holes:{},empty:true,none:true});});
-          return;
-        }
-        if(js&&js.holes&&Object.keys(js.holes).length){
-          const g=Object.assign({ts:Date.now(),holes:js.holes},js.greens&&js.greens.length?{greens:js.greens}:{});
-          delete geoNoSignal[cid];
-          let mine=false;set(()=>{mine=geoFor(cid,g,fixLoop9);});
-          if(mine){preloadCourseTiles(false);naipEnsure(S.course);}
-          return;
-        }
-        if(js&&js.greens&&js.greens.length){
-          let mine=false;set(()=>{mine=geoFor(cid,{ts:Date.now(),holes:{},greens:js.greens});});
-          if(mine){preloadCourseTiles(false);naipEnsure(S.course);}
-          return;
-        }
+        if(geoApplyHosted(cid,js))return;
       }
     }catch(e){}
   }

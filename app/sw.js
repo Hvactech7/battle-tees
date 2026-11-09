@@ -1,7 +1,7 @@
 // Wolf service worker — offline cache + auto-update (stale-while-revalidate).
 // The app loads instantly from cache and refreshes in the background; a new
 // version appears the next time it's opened while online.
-const CACHE = 'battletees-1794207027';
+const CACHE = 'battletees-1794208056';
 // Offline course-map pack: satellite tiles cached cache-first, SURVIVES app
 // updates (excluded from the activate cleanup below).
 const TILES = 'bt-tiles';
@@ -110,13 +110,18 @@ self.addEventListener('fetch', (e) => {
         if (hit) return hit;
         return fresh;
       }
-      // a record waits for the network (a stale card would be booked as refreshed); a map gives up after 4 s
-      const wait = path.startsWith('/geo/') ? new Promise((res) => setTimeout(() => res(null), 4000)) : null;
-      const won = await (wait ? Promise.race([fresh.catch(() => null), wait]) : fresh.catch(() => null));
+      // a record waits longer for the network (a stale card would be booked as refreshed); a map gives up after 4 s
+      const after = (ms) => new Promise((res) => setTimeout(() => res(null), ms));
+      const isMap = path.startsWith('/geo/');
+      const won = await Promise.race([fresh.catch(() => null), after(isMap ? 4000 : 15000)]);
       if (won) return won;                 // the network answered (whatever it said)
       const hit = await cache.match(req);
       if (hit) return hit;                 // no signal: the saved copy
-      return fresh;                        // nothing saved either: the network's own error
+      // Nothing saved either. On the iPhone a request with no network HANGS rather than failing (Nathan 11/8, airplane
+      // mode: "Downloading course map..." on a black map), so give it a few more seconds, then answer "no network" --
+      // the app says no signal instead of waiting for ever. The fetch above carries on and saves the file if it lands.
+      const late = await Promise.race([fresh.catch(() => null), after(isMap ? 6000 : 0)]);
+      return late || Response.error();
     })());
     return;
   }
