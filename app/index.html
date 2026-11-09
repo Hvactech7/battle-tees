@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'sha256-pb2ANzLyJr6vgVI3/irg2aft0BSF5N+OuIAELnfZFkw=' 'sha256-R0kKCNhXargIX1v3Thj/FOhk/EzB2QDuy96RVNCpVNw=' 'sha256-79uSLRUH3SESf+LkHGPxuR5ePnvAiW5Wl+C02STXxXY=' https://unpkg.com https://static.cloudflareinsights.com; object-src 'none'; base-uri 'none'">
+<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'sha256-pb2ANzLyJr6vgVI3/irg2aft0BSF5N+OuIAELnfZFkw=' 'sha256-gAgxpRdJN/8V6d7NLlUPToOPqVOG15D0MVVYCaFpUJw=' 'sha256-79uSLRUH3SESf+LkHGPxuR5ePnvAiW5Wl+C02STXxXY=' https://unpkg.com https://static.cloudflareinsights.com; object-src 'none'; base-uri 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#0f1522">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -1962,7 +1962,7 @@ function __btRw(s) {
 'use strict';
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1794180227';
+const BUILD='1794190846';
 const HOLES=18;
 
 function courseTealBend(){return {id:'teal-bend',name:'Teal Bend GC',loc:[38.6972,-121.6173],
@@ -6636,10 +6636,16 @@ function drawTrackPin(){
   if(trackShot&&trackShot.hole===mapHole&&LMAP)
     trackPin=L.circleMarker(trackShot.a,{radius:8,color:'#fff',weight:2.5,fillColor:'#e8604f',fillOpacity:1}).addTo(LMAP);
 }
+function trackLabelHTML(){
+  if(!(trackShot&&trackShot.hole===mapHole))return 'Track It';
+  const p=shotPos();if(!p)return 'Mark It';
+  return `Mark It<span style="display:block;font-size:14px;line-height:1;margin-top:1px">${ydDisp(Math.round(mDist(trackShot.a,p)*1.09361))}${uLbl()}</span>`;
+}
 function updateTrackBtn(){
   const b=document.getElementById('trackbtn');if(!b)return;
   const armed=trackShot&&trackShot.hole===mapHole;
-  b.textContent=armed?'Mark It':'Track It';
+  const lab=trackLabelHTML();
+  if(lab.indexOf('<')<0)b.textContent=lab;else b.innerHTML=lab;
   let x=document.getElementById('trackxbtn');
   if(armed&&!x){
     b.insertAdjacentHTML('afterend','<button id="trackxbtn" onclick="clearTrackStart()" aria-label="Cancel this shot" style="position:fixed;left:max(138px,calc(50vw - 102px));bottom:calc(var(--mapbarH) + 8px);z-index:6;width:46px;height:46px;padding:0;display:flex;align-items:center;justify-content:center;background:var(--card);border:2px solid var(--red,#c0392b);border-radius:12px;color:var(--red,#c0392b);box-shadow:2px 2px 0 rgba(0,0,0,.35)">'+XICON+'</button>');
@@ -6986,7 +6992,7 @@ function vMap(){
   <div id="windrose" onclick="toggleWindMode()" onpointerdown="windRosePD(event)" onpointerup="windRosePU()" onpointercancel="windRosePU()" oncontextmenu="return false" style="display:none${manualShown?';bottom:calc(var(--mapbarH) + 210px)':''}"></div>
   ${mapStatChipsHTML(hole)}${mapBetChipHTML(manualShown)}
   ${greadH}${mapBbbBtnHTML(manualShown)}
-  ${(gpsOnly()||isReview())?'':`<button id="trackbtn" onclick="trackShotTap()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(var(--mapbarH) + 8px);z-index:6;width:120px;height:46px;background:var(--card);border:2px solid ${trackShot&&trackShot.hole===mapHole?'var(--amber-bd)':'var(--green)'};border-radius:12px;color:${trackShot&&trackShot.hole===mapHole?'var(--amber-bd)':'var(--green-mid)'};font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:19px;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">${trackShot&&trackShot.hole===mapHole?'Mark It':'Track It'}</button>`}
+  ${(gpsOnly()||isReview())?'':`<button id="trackbtn" onclick="trackShotTap()" style="position:fixed;left:max(10px,calc(50vw - 230px));bottom:calc(var(--mapbarH) + 8px);z-index:6;width:120px;height:46px;background:var(--card);border:2px solid ${trackShot&&trackShot.hole===mapHole?'var(--amber-bd)':'var(--green)'};border-radius:12px;color:${trackShot&&trackShot.hole===mapHole?'var(--amber-bd)':'var(--green-mid)'};font-family:Rajdhani,Inter,sans-serif;font-weight:700;font-size:19px;line-height:1.1;letter-spacing:.5px;box-shadow:2px 2px 0 rgba(0,0,0,.35)">${trackLabelHTML()}</button>`}
   ${(gpsOnly()||isReview())?'':(trackShot&&trackShot.hole===mapHole?`<button id="trackxbtn" onclick="clearTrackStart()" aria-label="Cancel this shot" style="position:fixed;left:max(138px,calc(50vw - 102px));bottom:calc(var(--mapbarH) + 8px);z-index:6;width:46px;height:46px;padding:0;display:flex;align-items:center;justify-content:center;background:var(--card);border:2px solid var(--red,#c0392b);border-radius:12px;color:var(--red,#c0392b);box-shadow:2px 2px 0 rgba(0,0,0,.35)">${XICON}</button>`:'')}
   ${(gpsOnly()||isReview())?'':undoTrackHTML()}
   ${(()=>{try{
@@ -7850,6 +7856,7 @@ function startMapGps(){
     if(mapMarks.setMe)mapMarks.setMe(pos);
     if(mapMarks.orientFromMe)mapMarks.orientFromMe(pos);
     updateFMB(pos,'yards from you');
+    if(trackShot&&trackShot.hole===mapHole)updateTrackBtn();
   },e=>{
     if(e&&e.code===1){geoState='denied';mapGeoNote();}
     else if(!mapMarks.mePos){geoState='waiting';mapGeoNote();}
