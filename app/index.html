@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'sha256-RUnTHztXnYZbhunfalsXP5vCTuD3x9bAMYQabS1UTRo=' 'sha256-+HH+EKFYRJXdQadQNPAvYvGIdmqzxWtE4OUUDSG+1x0=' 'sha256-79uSLRUH3SESf+LkHGPxuR5ePnvAiW5Wl+C02STXxXY=' https://unpkg.com https://static.cloudflareinsights.com; object-src 'none'; base-uri 'none'">
+<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'sha256-RUnTHztXnYZbhunfalsXP5vCTuD3x9bAMYQabS1UTRo=' 'sha256-0PiL2BSZnE8plyJyO8dppAGdXXf1BWRsyAUTeiGeqvs=' 'sha256-79uSLRUH3SESf+LkHGPxuR5ePnvAiW5Wl+C02STXxXY=' https://unpkg.com https://static.cloudflareinsights.com; object-src 'none'; base-uri 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#0f1522">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -1966,7 +1966,7 @@ function __btRw(s) {
 'use strict';
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1794431435';
+const BUILD='1794454233';
 const HOLES=18;
 
 function courseTealBend(){return {id:'teal-bend',name:'Teal Bend GC',loc:[38.6972,-121.6173],
@@ -2481,7 +2481,8 @@ function bkHeard(p,r){
   else if(r.bkProof&&p.op==='save'&&em&&bkNeed()!==em){try{localStorage.setItem('btBkNeed',em);localStorage.removeItem('btVerifyLater');}catch(e){}try{stat('backup_proof',{});}catch(e){}render();}
 }
 let abFirstPending=0,abRetryTimer=null,abRetryMs=30000,abSkipSaid='',abBusy=false;
-function abFingerprint(){const d=abPayload();return JSON.stringify([d.me,d.playerLib,d.courses,d.history.map(h=>h.id),d.groups,d.teams,shotFp(),teeFixFp(),d.pk?d.pk.key:'']);}
+function abFingerprint(){const d=abPayload();return JSON.stringify([d.me,d.playerLib,d.courses,d.history.map(h=>h.id),d.groups,d.teams,shotFp(),teeFixFp(),d.pk?d.pk.key:'',chalFp()]);}
+function chalFp(){const c=S.chal||{};return Object.keys(c).filter(k=>c[k]&&c[k].on).sort().map(k=>k+':'+c[k].val).join(',');}
 function vfNagDue(){
   try{
     const paused=bkPaused();
@@ -4113,13 +4114,10 @@ async function doBackup(){
   backupUI.msg='Backing up…';render();
   try{
     syncLib();
-    const courses=S.courses.map(c=>{const {geo,...rest}=c;return rest;});
-    const data={me:S.me,pk:(S.me&&S.me.pid)?{pid:S.me.pid,key:myKey()}:null,playerLib:S.playerLib,courses,history:[],ledger:S.ledger||[],groups:S.groupLib||[],teams:S.teamLib||[],
-      shotLog:trimShotLog(S.shotLog),shotLast:S.shotLast||{},bag:S.bag||null,retention:retentionRead()};
-    data.history=histForBackup(data);
+    const data=abPayload();
     const r=await relayBackup({op:'save',email:em,data});
     if(r&&!r.ok&&r.needVerify){backupUI.msg='';render();openVerify('backupRow');return;}
-    if(r&&r.ok){const d=abPayload();abStamp(JSON.stringify([d.me,d.playerLib,d.courses,d.history.map(h=>h.id)]));}
+    if(r&&r.ok)abStamp(abFingerprint());
     const nh=(S.history||[]).length;
     backupUI.msg=r.ok?`✓ ${S.playerLib.length} player${S.playerLib.length===1?'':'s'} + ${S.courses.length} course${S.courses.length===1?'':'s'}${nh?` + ${nh} round${nh===1?'':'s'}`:''} safely backed up${r.emailed?' — confirmation emailed':''}.`:(r.error||'Backup failed.');
   }catch(e){backupUI.msg='Could not connect — check your signal and try again.';}
