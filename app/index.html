@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'sha256-AU8c9eEe6BzFDo6Y0em9aM1+y0SSid4ykz4SIhF9UJc=' 'sha256-skuq8461Ro/EI1buIH8/bNPtlvB7pqMGHalfYYxL2UU=' 'sha256-79uSLRUH3SESf+LkHGPxuR5ePnvAiW5Wl+C02STXxXY=' https://unpkg.com https://static.cloudflareinsights.com; object-src 'none'; base-uri 'none'">
+<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'sha256-AU8c9eEe6BzFDo6Y0em9aM1+y0SSid4ykz4SIhF9UJc=' 'sha256-IwMMmBi6mV0Wc3hhqwoj2ZehcVdnx3Sgs6T2xhsxkt0=' 'sha256-79uSLRUH3SESf+LkHGPxuR5ePnvAiW5Wl+C02STXxXY=' https://unpkg.com https://static.cloudflareinsights.com; object-src 'none'; base-uri 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#0f1522">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -1968,7 +1968,7 @@ function __btRw(s) {
 'use strict';
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1794462905';
+const BUILD='1794517611';
 const HOLES=18;
 
 function courseTealBend(){return {id:'teal-bend',name:'Teal Bend GC',loc:[38.6972,-121.6173],
@@ -12397,15 +12397,15 @@ function preCourseApply(){
   if(!p||!wiz||wiz.courseTouched)return;
   if(S.round&&S.round.started)return;
   if(S.course&&S.course.id===p.id){render();return;}
-  if(p.kind==='saved')pickCourse(p.i);
+  if(p.kind==='saved')pickCourse(p.i,true);
   else natUse(p.id,true);
 }
 function preCourseHTML(){
   if(!preCourse||(wiz&&wiz.courseTouched))return '';
-  if(preCourse.status==='looking')return `<div class="tiny mb">📍 Finding the nearest course…</div>`;
+  if(preCourse.status==='looking')return `<div class="tiny mt">📍 Finding the nearest course…</div>`;
   const p=preCourse.pick;
   if(!p||!S.course||S.course.id!==p.id)return '';
-  return `<div class="tiny mb" style="color:var(--green-ink);font-weight:700">📍 Nearest — ${esc(p.name)}, ${preMi(p.mi)}. Pick another below to change it.</div>`;
+  return `<div class="tiny mt" style="color:var(--green-ink);font-weight:700">📍 Nearest — ${esc(p.name)}, ${preMi(p.mi)}. Tap another course to change it.</div>`;
 }
 function gpsOnly(){try{return !!(S.round&&S.round.gpsOnly);}catch(e){return false;}}
 function gpsQuietEnd(to){
@@ -12655,9 +12655,9 @@ function vStart(){
     (wiz&&wiz.gpsOnly)?'Rangefinder \u2014 no game, no card'
     :`${gameName(S.config.game)} · ${actIdx().filter(i=>isRealPl(S.players[i])).map(i=>esc((S.players[i].name||'').split(' ')[0])).join(', ')}`)+`<main>
     <div class="card"><h2>Pick the course</h2>
-      ${preCourseHTML()}
       ${finder.status==='idle'?courseListHTML(true):''}
-      ${courseFinderHTML(true)}</div>
+      ${courseFinderHTML(true)}
+      ${preCourseHTML()}</div>
     <button class="big mt" style="width:100%" onclick="startRound()">${wiz&&wiz.gpsOnly?'\ud83d\udccd Start GPS':'Start Round'} \u2014 ${esc(S.course.name)}</button>
     <div class="tiny mt center">${cardN()?`${cardN()}-hole course — you play all ${cardN()}. `:''}The round opens on the GPS map of hole ${cardN()?roundSpan().start+1:1}.</div>
     </main>`;
@@ -12865,9 +12865,9 @@ function startWithGame(g){
 function vPickCourse(){
   return topbar(`Where are you playing?`,`${gameName(S.config.game)} · ${actIdx().map(i=>esc((S.players[i].name||'').split(' ')[0])).join(', ')}`,'setup')+`<main>
   <div class="card"><h2>Pick the course</h2>
-    ${preCourseHTML()}
     ${finder.status==='idle'?courseListHTML(true):''}
     ${courseFinderHTML(true)}
+    ${preCourseHTML()}
   </div>
   <div style="height:8px"></div>
   <div style="position:fixed;left:0;right:0;bottom:0;z-index:20;padding:10px 14px calc(12px + env(safe-area-inset-bottom));background:linear-gradient(to top,var(--bg) 65%,transparent)">
@@ -13674,6 +13674,7 @@ async function natUse(id,auto){
     const r=await fetch('/courses/'+id+'.json');
     if(!r.ok)throw new Error('record '+r.status);
     const rec=await r.json();
+    if(auto&&((wiz&&wiz.courseTouched)||(S.round&&S.round.started)))return;
     const course={id:rec.id,name:rec.name,loc:rec.loc,
       teeSets:recTees(rec),
       holes:rec.holes,geoUrl:rec.geoUrl||null,tier:rec.tier};
@@ -14342,8 +14343,8 @@ function delHist(id){
   if(e&&e.code&&myPid())relayBattle({op:'forget',code:e.code,pid:myPid()}).catch(()=>{});
   set(()=>{tombAdd('rounds',id);S.history=S.history.filter(x=>x.id!==id);});
 }
-function pickCourse(i){set(()=>{
-  if(wiz&&preCourse&&!(preCourse.pick&&S.courses[i]&&S.courses[i].id===preCourse.pick.id))wiz.courseTouched=true;
+function pickCourse(i,auto){set(()=>{
+  if(wiz&&!auto)wiz.courseTouched=true;
   syncLib();
   S.course=clone(S.courses[i]);
   applyTeePrefs();
