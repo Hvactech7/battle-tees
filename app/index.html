@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'sha256-rP8RTs4YLf6egg/JvrOiLnxl4ZJMC6T3YkyMKnB8o2U=' 'sha256-C0njYV/O+k5KUV1ZCUideoAb8KIReEAnzaS50CmFGo4=' 'sha256-79uSLRUH3SESf+LkHGPxuR5ePnvAiW5Wl+C02STXxXY=' https://unpkg.com https://static.cloudflareinsights.com; object-src 'none'; base-uri 'none'">
+<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'sha256-rP8RTs4YLf6egg/JvrOiLnxl4ZJMC6T3YkyMKnB8o2U=' 'sha256-MMAR5UL71uIKxuv36IcbzHTXgdU0VRfV5OdHB6GoEYE=' 'sha256-79uSLRUH3SESf+LkHGPxuR5ePnvAiW5Wl+C02STXxXY=' https://unpkg.com https://static.cloudflareinsights.com; object-src 'none'; base-uri 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#0f1522">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -1968,7 +1968,7 @@ function __btRw(s) {
 'use strict';
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1794558078';
+const BUILD='1794601053';
 const HOLES=18;
 
 function courseTealBend(){return {id:'teal-bend',name:'Teal Bend GC',loc:[38.6972,-121.6173],
@@ -4792,6 +4792,25 @@ function hcpTypedMine(ix){
   if(ix==null||!isFinite(+ix))return;
   const m=hcpMine();m.typed={ix:Math.round(+ix*10)/10,at:Date.now()};m.hold=true;m.push=true;
 }
+function hcpResetFrom(pid){const r=pid&&S.hcpReset&&S.hcpReset[pid];return (r&&+r.from)||0;}
+function hcpReset(pid,v){
+  const from=Math.floor(+v.from);
+  if(!pid||!isFinite(from)||from<=0||hcpResetFrom(pid)===from)return false;
+  if(S.round&&S.round.started)return false;
+  if(!S.hcpReset||typeof S.hcpReset!=='object')S.hcpReset={};
+  S.hcpReset[pid]={from};
+  const keys=new Set([pid]);
+  (S.playerLib||[]).forEach(e=>{if(e&&e.pid===pid&&e.name)keys.add('nm:'+e.name.trim().toLowerCase());});
+  if(S.me&&S.me.pid===pid&&S.me.name)keys.add('nm:'+S.me.name.trim().toLowerCase());
+  keys.forEach(k=>{if(S.hcpLog&&Array.isArray(S.hcpLog[k]))S.hcpLog[k]=S.hcpLog[k].filter(x=>x&&(x.at||0)>=from);});
+  if(Array.isArray(S.hcpPending))S.hcpPending=S.hcpPending.filter(x=>!(x&&x.pid===pid&&(x.at||0)<from));
+  const t=(v.typed&&isFinite(+v.typed.ix)&&v.typed.ix!==null)?{ix:Math.round(+v.typed.ix*10)/10,at:Math.floor(+v.typed.at)||from}:null;
+  if(t){
+    if(S.me&&S.me.pid===pid){const hm=hcpMine();if(!hm.typed||(hm.typed.at||0)<t.at){hm.typed=t;hm.hold=true;hm.push=false;S.me.index=t.ix;}}
+    (S.playerLib||[]).forEach(e=>{if(e&&e.pid===pid)e.index=t.ix;});
+  }
+  return true;
+}
 function hcpIndexFromLog(list,fill){
   const real=(list||[]).map(x=>x.d).filter(d=>isFinite(d));
   if(!real.length)return null;
@@ -4816,6 +4835,7 @@ function hcpAfterArchive(entry){
       const rk=hcpRoundKey(entry);
       const log=(S.hcpLog[key]=S.hcpLog[key]||[]);
       const at=entry.endedAt||Date.now();
+      if(snap.pid&&at<hcpResetFrom(snap.pid)){if(!log.length)delete S.hcpLog[key];return;}
       const hit=log.find(x=>x.id===rk||x.id===entry.id||hcpSameRound(x.id,rk));
       const hn=(((entry.round||{}).span||{}).count===9)?9:18;
       if(hit){if(!/^d/.test(rk)||/^d/.test(hit.id))hit.id=rk;hit.d=d;hit.at=at;hit.n=hn;}else log.push({id:rk,at,d,n:hn});
@@ -4863,7 +4883,8 @@ async function hcpSync(force){
       const idx=r.idx||{};
       let changed=false;
       Object.entries(idx).forEach(([pid,v])=>{
-        if(!v||!isFinite(+v.ix))return;
+        if(v&&v.from&&hcpReset(pid,v))changed=true;
+        if(!v||v.ix==null||!isFinite(+v.ix))return;
         if(!(+v.n18>=HCP_MIN_ROUNDS))return;
         if(S.me&&S.me.pid===pid&&hm.hold)return;
         (S.playerLib||[]).forEach(e=>{if(e&&e.pid===pid&&e.index!==v.ix){e.index=v.ix;changed=true;}});
