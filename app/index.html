@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'sha256-rP8RTs4YLf6egg/JvrOiLnxl4ZJMC6T3YkyMKnB8o2U=' 'sha256-MMAR5UL71uIKxuv36IcbzHTXgdU0VRfV5OdHB6GoEYE=' 'sha256-79uSLRUH3SESf+LkHGPxuR5ePnvAiW5Wl+C02STXxXY=' https://unpkg.com https://static.cloudflareinsights.com; object-src 'none'; base-uri 'none'">
+<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'sha256-rP8RTs4YLf6egg/JvrOiLnxl4ZJMC6T3YkyMKnB8o2U=' 'sha256-O570kHoVw5LceOgL06SkP7rZhsfkOphNYKWsgfSgMeE=' 'sha256-79uSLRUH3SESf+LkHGPxuR5ePnvAiW5Wl+C02STXxXY=' https://unpkg.com https://static.cloudflareinsights.com; object-src 'none'; base-uri 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#0f1522">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -1968,7 +1968,7 @@ function __btRw(s) {
 'use strict';
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1794601053';
+const BUILD='1794602624';
 const HOLES=18;
 
 function courseTealBend(){return {id:'teal-bend',name:'Teal Bend GC',loc:[38.6972,-121.6173],
@@ -2526,6 +2526,7 @@ function autoBackupCheck(){
   else if(!em)why='no-email';
   else if(!S.playerLib.length)why='empty-library';
   else if(profAskOn())why='profile-ask';
+  else if(bkRestoring)why='restoring';
   else if(!emailVerified())why=bkPaused()?'bkproof':'unverified';
   if(why){
     if(abSkipSaid!==why){abSkipSaid=why;try{stat('backup_skip',{why});}catch(e){}}
@@ -2543,6 +2544,7 @@ function autoBackupCheck(){
 async function abSend(em){
   if(abBusy)return;
   if(profAskOn())return;
+  if(bkRestoring)return;
   clearTimeout(abRetryTimer);abRetryTimer=null;
   abBusy=true;
   let sent=false;
@@ -4080,16 +4082,41 @@ async function sendVerifyCode(){
   catch(e){if(verifyUI)verifyUI.msg='Could not connect — check your signal and try again.';}
   render();
 }
+let bkRestoring=false;
 async function confirmVerifyCode(){
   const el=document.getElementById('vfCode');const c=String(el&&el.value||'').replace(/\D/g,'');
   if(c.length!==6){verifyUI.msg='Enter the 6-digit code from the email.';render();return;}
   verifyUI.msg='Checking…';render();
-  try{const r=await relayBackup({op:'confirm',email:verifyUI.email,code:c});
+  let r=null;
+  try{
+    bkRestoring=true;
+    r=await relayBackup({op:'confirm',email:verifyUI.email,code:c});
     if(!verifyUI)return;
-    if(r&&r.ok){try{localStorage.setItem('btEmailOk',verifyUI.email);}catch(e){}verifyUI.stage=2;verifyUI.msg=verifyUI.useCode?'✓ Email confirmed. Backups are on.':'✓ Backups are on again.';
-      try{stat('verify_ok',{from:'code'});}catch(e){}abFp=null;abKick();}
+    if(r&&r.ok){
+      const em=verifyUI.email;
+      try{localStorage.setItem('btEmailOk',em);}catch(e){}
+      let note='',other=null;
+      if(r.hasBackup&&r.rcode){
+        verifyUI.msg='✓ Email confirmed. Bringing back your saved library…';render();
+        try{
+          const g=await relayBackup({op:'get',email:em,code:r.rcode});
+          if(g&&g.ok&&g.data){
+            const was=S.me&&S.me.pid;
+            const x=applyLibrary(g.data);other=x.other||null;
+            note=` Restored ${x.added} player${x.added===1?'':'s'}`+(x.hAdded?`, ${x.hAdded} round${x.hAdded===1?'':'s'}`:'')+(x.cAdded?`, ${x.cAdded} course${x.cAdded===1?'':'s'}`:'')+'.';
+            try{stat('restore_after_confirm',{added:x.added,rounds:x.hAdded,courses:x.cAdded,adopted:!!(was&&S.me&&S.me.pid!==was),other:!!other});}catch(e){}
+          }
+        }catch(e){}
+      }
+      if(verifyUI){verifyUI.stage=2;verifyUI.msg=(verifyUI.useCode?'✓ Email confirmed. Backups are on.':'✓ Backups are on again.')+note;}
+      try{stat('verify_ok',{from:'code'});}catch(e){}
+      bkRestoring=false;
+      if(other)profAskOpen(other,em);
+      abFp=null;abKick();
+    }
     else verifyUI.msg=(r&&r.error)||'Wrong code — check the email and try again.';}
   catch(e){if(verifyUI)verifyUI.msg='Could not connect — check your signal and try again.';}
+  finally{bkRestoring=false;}
   render();
 }
 async function backupNow(){
@@ -4380,7 +4407,7 @@ function applyLibrary(d){
       else if(d.me&&d.me.pid&&d.me.name&&S.me&&S.me.name&&S.me.pid&&S.me.pid!==d.me.pid){
         other={me:Object.assign({},d.me),pk:(d.pk&&typeof d.pk==='object'&&d.pk.pid===d.me.pid&&PK_RE.test(String(d.pk.key||'')))?{pid:d.pk.pid,key:d.pk.key}:null};
       }
-      let cAdded=0;
+      cAdded=0;
       (d.courses||[]).forEach(c=>{
         if(!c||!c.id||!c.holes)return;
         const i=S.courses.findIndex(x=>x.id===c.id);
@@ -4390,7 +4417,7 @@ function applyLibrary(d){
         else{S.courses.push(c);cAdded++;}
       });
       
-      let hAdded=0;
+      hAdded=0;
       (d.history||[]).forEach(e=>{
         if(!e||!e.id)return;
         if(tombHas('rounds',e.id))return;
