@@ -242,6 +242,22 @@ th{color:var(--muted);font-size:11px;letter-spacing:1.5px;text-transform:upperca
     margin-left:-24px;margin-right:-24px;padding:0 24px 12px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
   .windstrip::-webkit-scrollbar{display:none}
   .windstrip .phone{flex:0 0 74vw;max-width:none;scroll-snap-align:center;transform:none}}
+
+.windstrip.two{grid-template-columns:repeat(2,minmax(0,1fr));max-width:640px;margin-left:auto;margin-right:auto}
+.windstrip.two .phone{max-width:280px}
+.wlabel{margin:44px auto 0;text-align:center;font-family:var(--disp);font-weight:700;letter-spacing:3px;font-size:15px;color:var(--gold);text-transform:uppercase}
+.windstrip.watches{margin-top:18px}
+.windstrip.round .watch img{border-radius:50%;border-width:8px}
+.watch .pcap{margin-top:14px;text-align:center;font-family:var(--disp);font-size:13px;letter-spacing:1.2px;line-height:1.5;color:var(--muted)}
+.watch .pcap i{font-style:normal;color:var(--gold)}
+/* Apple Watch screens (11/14 draft): a rounded watch face instead of a phone frame */
+.windstrip.watches{grid-template-columns:repeat(4,minmax(0,1fr));max-width:980px;margin-left:auto;margin-right:auto}
+.watch{width:100%;max-width:210px;justify-self:center}
+.watch img{display:block;width:100%;height:auto;border-radius:44px;border:10px solid #0a0d14;
+  box-shadow:0 0 0 1.5px #2a3550,0 24px 60px rgba(0,0,0,.7),0 0 50px rgba(74,168,255,.12);background:#000}
+.watch:nth-child(odd){transform:rotate(-1.2deg)} .watch:nth-child(even){transform:rotate(1.2deg)}
+@media(max-width:880px){.windstrip.watches{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:560px){.windstrip.watches .watch{flex:0 0 56vw;max-width:none;scroll-snap-align:center;transform:none}}
 </style><script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","name":"Battle Tees Golf App","alternateName":["Battle Tees","BattleTees"],"url":"https://battletees.app/","description":"18 golf betting games plus the Hammer modifier, scored live across every phone in the group."}</script>
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"Battle Tees Golf App","alternateName":["Battle Tees","BattleTees"],"url":"https://battletees.app/","logo":"https://battletees.app/icon-512.png"}</script>
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"ItemList","name":"Golf betting games","itemListElement":[{"@type":"ListItem","position":1,"name":"Wolf","url":"https://battletees.app/rules/wolf/"},{"@type":"ListItem","position":2,"name":"9's","url":"https://battletees.app/rules/nines/"},{"@type":"ListItem","position":3,"name":"Vegas","url":"https://battletees.app/rules/vegas/"},{"@type":"ListItem","position":4,"name":"Stroke","url":"https://battletees.app/rules/stroke/"},{"@type":"ListItem","position":5,"name":"Best Ball","url":"https://battletees.app/rules/best-ball/"},{"@type":"ListItem","position":6,"name":"Scramble","url":"https://battletees.app/rules/scramble/"},{"@type":"ListItem","position":7,"name":"Sixes","url":"https://battletees.app/rules/sixes/"},{"@type":"ListItem","position":8,"name":"Umbrella","url":"https://battletees.app/rules/umbrella/"},{"@type":"ListItem","position":9,"name":"Quota","url":"https://battletees.app/rules/quota/"},{"@type":"ListItem","position":10,"name":"Stableford","url":"https://battletees.app/rules/stableford/"},{"@type":"ListItem","position":11,"name":"Bingo Bango Bongo","url":"https://battletees.app/rules/bingo-bango-bongo/"},{"@type":"ListItem","position":12,"name":"Nassau","url":"https://battletees.app/rules/nassau/"},{"@type":"ListItem","position":13,"name":"Skins","url":"https://battletees.app/rules/skins/"},{"@type":"ListItem","position":14,"name":"Match Play","url":"https://battletees.app/rules/match-play/"},{"@type":"ListItem","position":15,"name":"Banker","url":"https://battletees.app/rules/banker/"},{"@type":"ListItem","position":16,"name":"Rabbit","url":"https://battletees.app/rules/rabbit/"},{"@type":"ListItem","position":17,"name":"Junk","url":"https://battletees.app/rules/junk/"},{"@type":"ListItem","position":18,"name":"Snake","url":"https://battletees.app/rules/snake/"},{"@type":"ListItem","position":19,"name":"Hammer","url":"https://battletees.app/rules/hammer/"}]}</script>
@@ -418,6 +434,73 @@ th{color:var(--muted);font-size:11px;letter-spacing:1.5px;text-transform:upperca
         <div class=pcap><i>HOLE 5</i> · same wind, quartering in · 191 plays ~213</div></div>
     </div>
     <div class="windkick rv">Set it once on the 3rd tee. <em>The holes turn under it.</em></div>
+  </div>
+</div>
+
+<!-- NEW 11/14 (draft): Flag Color, green reads, Apple Watch, Community Battlefield -- real screens, real taps -->
+<div class=stage style="padding:100px 0 90px">
+  <div class=wrap>
+    <div class="windhead rv"><div class=eye>Flag color</div>
+      <h2>Red flag? <em>The pin's up front.</em></h2>
+      <div class=windsub>One tap sets every pin for the round.</div>
+      <p>When you can see the flag, tap the <b>Flag Color?</b> box by the crosshair and pick red, white or blue. The pin yardage moves to the front, middle or back of the green, and the colors carry on through the holes after it, so you answer once. Front, middle and back at the bottom never move. Tap the crosshair to change it on any hole.</p></div>
+    <div class="windstrip three rv">
+      <div class=phone><img src="/assets/flag-tee-v3.jpg" alt="Battle Tees map of Rancho Solano hole 15, par 3: the crosshair on the green reads 149y, a Flag Color? box sits beside it, and the bottom bar reads F 125 · M 149 · B 172"><div class=pcap><i>HOLE 15</i> · Flag Color? by the crosshair</div></div>
+      <div class=phone><img src="/assets/flag-ask-v3.jpg" alt="The Flag color · hole 15 sheet: every hole follows on, red, white, blue, then red again — Red Front, White Middle, Blue Back, Leave centered, and hold the crosshair to move it anywhere"><div class=pcap><i>ONE ANSWER</i> · red, white, blue, then red again</div></div>
+      <div class=phone><img src="/assets/flag-red-v3.jpg" alt="After tapping Red: a red flag on the crosshair at the front of the green, the yardage now 133y, while the bottom bar still reads F 125 · M 149 · B 172"><div class=pcap><i>RED FLAG</i> · 149 plays 133 · F/M/B don't move</div></div>
+    </div>
+    <div class="windkick rv">Tell it the flag color. <em>It sets all the pins for the round.</em></div>
+  </div>
+</div>
+
+<div class=stage style="padding:90px 0 90px">
+  <div class=wrap>
+    <div class="windhead rv"><div class=eye>Green reads</div>
+      <h2>See the break <em>before you putt</em></h2>
+      <p>Tap the green button on the map and the green opens up: colors for how steep it is, white arrows down the fall line, and how much it drops from the high side to the low side. The ground comes from U.S. Geological Survey lidar, laser-mapped from the air, on every course we have it for.</p></div>
+    <div class="windstrip two rv">
+      <div class=phone><img src="/assets/gread-map-v3.jpg" alt="Rancho Solano hole 1, par 5, on the Battle Tees map: 495 yards to the crosshair, the green button above Score It, and F 479 · M 496 · B 513 at the bottom"><div class=pcap><i>HOLE 1</i> · the green button, above Score It</div></div>
+      <div class=phone><img src="/assets/gread-slope-v3.jpg" alt="Hole 1 green read: falls back-right to front-left, 33 inch drop; the green shaded from flat green through yellow, orange and red to purple at 6.5 percent and up, with white arrows showing the way it rolls, seen from the fairway"><div class=pcap><i>THE READ</i> · back-right to front-left · 33″ drop</div></div>
+    </div>
+    <div class="windkick rv">Know which way it breaks <em>before you mark your ball.</em></div>
+  </div>
+</div>
+
+<div class=stage style="padding:90px 0 90px">
+  <div class=wrap>
+    <div class="windhead rv"><div class=eye>On your wrist</div>
+      <h2>Leave the phone <em>in the cart</em></h2>
+      <div class=windsub>On Apple Watch <em>and</em> Android watches.</div>
+      <p>The hole on your wrist: the yardage to the middle, and to any spot you tap. Track It, the wind and the green read. Score the hole with a tap, and step back with the arrows if you score the wrong one. Your friends' reactions pop up as they land. The Apple Watch app comes with the iPhone app, and Wear OS watches pair with the Android app.</p></div>
+    <div class="wlabel rv">Apple Watch</div>
+    <div class="windstrip watches rv">
+      <div class=watch><img src="/assets/watch-map-v3.jpg" alt="Battle Tees on an Apple Watch: Rancho Solano hole 1, par 5, drawn map with a dashed line to an aim dot — 153 yards to the dot, 118 more to the green — 271 to the middle, a 7 mph wind chip, Track It and a flag button"><div class=pcap><i>HOLE 1</i> · 153 to the dot · 118 to go</div></div>
+      <div class=watch><img src="/assets/watch-score-v3.jpg" alt="Apple Watch Score page for hole 1, par 5: arrows to change holes, Wolf Nate and Greg, minus and plus around a score of 5, and Confirm"><div class=pcap><i>SCORE IT</i> · tap, confirm, next hole</div></div>
+      <div class=watch><img src="/assets/watch-green-v3.jpg" alt="Apple Watch green read for hole 1: falls back-right to front-left, 33 inch drop, a heat map of the slope with white arrows down the fall line"><div class=pcap><i>THE GREEN</i> · falls back-right · 33″ drop</div></div>
+      <div class=watch><img src="/assets/watch-react-v3.jpg" alt="A reaction pops up on the Apple Watch over the map: a flame, Greg · On Fire, Reacted to your round, Got it"><div class=pcap><i>ON FIRE</i> · Greg reacted to your round</div></div>
+    </div>
+    <div class="wlabel rv">Android · Wear OS</div>
+    <div class="windstrip watches round rv">
+      <div class=watch><img src="/assets/wear-map-v3.jpg" alt="Battle Tees on a round Wear OS watch: Rancho Solano hole 1, par 5, with hole arrows, a dashed line to a tapped aim dot — 159 yards to the dot, 112 more to the green — 271 to the middle, a 7 mph wind chip, Track It, elevation and flag buttons"><div class=pcap><i>HOLE 1</i> · 159 to the dot · 112 to go</div></div>
+      <div class=watch><img src="/assets/wear-score-v3.jpg" alt="Wear OS Score page: Hole 1, par 5 with arrows, Wolf Nate and Greg, minus and plus around a score of 5, Confirm, FW and GIR chips and a Games menu"><div class=pcap><i>SCORE IT</i> · FW, GIR and your games</div></div>
+      <div class=watch><img src="/assets/wear-green-v3.jpg" alt="Wear OS green read for hole 1: falls back-right to front-left, 33 inch drop, the slope heat map with white arrows, seen from the fairway"><div class=pcap><i>THE GREEN</i> · falls back-right · 33″ drop</div></div>
+      <div class=watch><img src="/assets/wear-react-v3.jpg" alt="A reaction fills the Wear OS watch face: a flame, Greg, On Fire, Reacted to your round, Got it, plus one more"><div class=pcap><i>ON FIRE</i> · Greg reacted to your round</div></div>
+    </div>
+  </div>
+</div>
+
+<div class=stage style="padding:90px 0 100px">
+  <div class=wrap>
+    <div class="windhead rv"><div class=eye>Community Battlefield</div>
+      <h2>Can't make the round? <em>Give 'em a hard time anyway.</em></h2>
+      <p>Announce your round and your friends on Battle Tees can follow it hole by hole from anywhere: the scores, and where each player is on the course. They fire back reactions and comments while you play. They hear a round has started by email, and the coming iPhone and Android apps tap them on the shoulder with a notification.</p></div>
+    <div class="windstrip rv">
+      <div class=phone><img src="/assets/bf-notify-v3.jpg" alt="An iPhone notification over the Battle Tees home screen: Greg has taken the Battlefield, at Rancho Solano Golf Course — tap to watch it live"><div class=pcap><i>THE CALL</i> · Greg has taken the Battlefield</div></div>
+      <div class=phone><img src="/assets/bf-live-v3.jpg" alt="Community Battlefield: a live round at Rancho Solano GC — Mike −2 with 2 birdies and a par thru 3, Luis +2 thru 3 — each with React and Comment buttons"><div class=pcap><i>LIVE</i> · Mike −2 thru 3</div></div>
+      <div class=phone><img src="/assets/bf-react-v3.jpg" alt="The reaction picker open on Mike's row: a trophy, a flaming ball, a splash, cheers, a battle axe, a shield, a skull and crossbones, a bluebird and a shocked golf ball"><div class=pcap><i>REACT</i> · nine ways to razz him</div></div>
+      <div class=phone><img src="/assets/bf-comment-v3.jpg" alt="The Comments sheet on Mike's round: Dave, now — Two birdies in three holes? Save some for Saturday! — with a box to say something to Mike, 140 characters"><div class=pcap><i>COMMENT</i> · “Save some for Saturday!”</div></div>
+    </div>
+    <div class="windkick rv">He's not even here. <em>He's still talking trash.</em></div>
   </div>
 </div>
 
