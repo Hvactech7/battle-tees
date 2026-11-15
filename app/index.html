@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'sha256-kFIJl9qG0iMJKULHSBNwJjYm2yiYWSGq7Xhz61pwnps=' 'sha256-63j4Y+nRb/YglIMp/rMDuOhbGDDwIzTMX7KArTOIQuM=' 'sha256-79uSLRUH3SESf+LkHGPxuR5ePnvAiW5Wl+C02STXxXY=' https://unpkg.com https://static.cloudflareinsights.com; object-src 'none'; base-uri 'none'">
+<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'sha256-kFIJl9qG0iMJKULHSBNwJjYm2yiYWSGq7Xhz61pwnps=' 'sha256-CUN2V6ru2A+Rrnrqq4wgDwVmvAb1kU4qaxMWRtiCmTU=' 'sha256-79uSLRUH3SESf+LkHGPxuR5ePnvAiW5Wl+C02STXxXY=' https://unpkg.com https://static.cloudflareinsights.com; object-src 'none'; base-uri 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#0f1522">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -1988,7 +1988,7 @@ function __btRw(s) {
 'use strict';
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1794715428';
+const BUILD='1794716606';
 const HOLES=18;
 
 function courseTealBend(){return {id:'teal-bend',name:'Teal Bend GC',loc:[38.6972,-121.6173],
@@ -11011,7 +11011,7 @@ const FAQ=[
   ['Watch friends play',
    'Home › <b>Community Battlefield</b> lists your friends’ rounds. When one is on the course right now, the button lights up with LIVE on both sides; tap a round to watch it hole by hole, scores, stats and tracked shots included. Rounds you’ve watched stay on this phone.'],
   ['Announcements and emails',
-   'Settings › <b>⚔️ Battlefield</b>. <b>Announce my rounds</b>: two holes into a round, your Battle friends get a watch link and the round goes on the Community Battlefield. <b>Email me when friends play</b>: you get the “Battlefield is set” email when someone who has you on their players list tees off. One email per round, from Battle Tees, never from a personal address. It goes to the email on your profile; if that address isn’t confirmed yet, the email has a link to confirm it. <b>Notify me when friends play</b> (iPhone app): the same news as a notification on your phone — it starts on, and your iPhone asks to allow notifications the first time you open the app.'],
+   'Settings › <b>⚔️ Battlefield</b>. <b>Announce my rounds</b>: two holes into a round, your Battle friends get a watch link and the round goes on the Community Battlefield. <b>Email me when friends play</b>: you get the “Battlefield is set” email when someone who has you on their players list tees off. One email per round, from Battle Tees, never from a personal address. It goes to the email on your profile; if that address isn’t confirmed yet, the email has a link to confirm it. <b>Notify me when friends play</b> (iPhone and Android apps): the same news as a notification on your phone — it starts on, and your phone asks to allow notifications the first time you open the app.'],
   ['Reactions and comments',
    'On the Battlefield, every golfer’s row and the round as a whole have <b>+ React</b> and <b>Comment</b>. You get one reaction on each — tap another to switch, tap yours to take it back — and tapping a reaction shows who sent it. Comments run up to 140 characters; tap <b>Reply</b> to answer someone. When a friend reacts to or comments on your round it pops up on your screen (during a round, it waits until the hole is scored) and stays until you tap <b>GOT IT</b> or <b>REPLY</b>. Turn them off in Settings › <b>⚔️ Battlefield</b> › <b>Reaction pop-ups</b> and <b>Reaction emails</b>.'],
   ['Report or block someone',
@@ -12442,7 +12442,7 @@ function pushRowHTML(){
   if(!pushShell())return '';
   const st=(window.BTNative.pushState||{}).state, on=pushOn();
   return `<div class="row"><div style="flex:1;min-width:0"><b>Notify me when friends play</b>
-      <div class="tiny">${on&&st==='denied'?'Notifications are off for Battle Tees in your iPhone Settings — turn them on there.':'A notification on this phone when someone who has you in their library tees off.'}</div></div>
+      <div class="tiny">${on&&st==='denied'?'Notifications are off for Battle Tees in your phone’s Settings — turn them on there.':'A notification on this phone when someone who has you in their library tees off.'}</div></div>
     <button class="ghost ${on?'sel':''}" onclick="pushToggle()">${on?'On':'Off'}</button></div>
     ${on&&st!=='denied'?`<div class="tiny" style="margin-top:-4px"><span style="color:var(--elec);text-decoration:underline;cursor:pointer" onclick="pushTest()">Send a test</span>${pushTestSay?' · '+esc(pushTestSay):''}</div>`:''}`;
 }
@@ -12466,7 +12466,8 @@ function pushSend(on){
     if(!tok||!myPid())return;
     const k='btPushSent',day=new Date().toDateString(),was=localStorage.getItem(k)||'';
     if(on&&was===tok+'|'+day)return;
-    relayBattle({op:'push',pid:myPid(),tok,env:(r&&r.env)||'prod',on}).then(x=>{
+    const android=!!(window.BTNative&&window.BTNative.platform==='android');
+    relayBattle({op:'push',pid:myPid(),tok,env:(r&&r.env)||(android?'fcm':'prod'),platform:android?'android':'ios',on}).then(x=>{
       if(x&&x.ok){try{localStorage.setItem(k,on?tok+'|'+day:'');}catch(e){}}}).catch(()=>{});
   }catch(e){}
 }

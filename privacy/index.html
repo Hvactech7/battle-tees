@@ -28,7 +28,7 @@ p,li{color:#cfd6e4}.tiny{font-size:14px;color:#9aa4b8}a{color:#4fd8ff}ul{padding
   </ul>
   A tracked shot's start and end points, and tee and green marks you make on an unmapped hole, are saved with the round or the course.</li>
 <li><b>Comments and reactions</b> you post on Battlefield rounds.</li>
-<li><b>Phone notifications:</b> if you turn on <b>Notify me when friends play</b> in the iPhone app, our server keeps the push address Apple gives your phone for Battle Tees, so it can tell you when a Battle friend's round starts. Turning the switch off, or deleting your account, removes it.</li>
+<li><b>Phone notifications:</b> while <b>Notify me when friends play</b> is on in the iPhone or Android app, our server keeps the push address Apple or Google gives your phone for Battle Tees, so it can tell you when a Battle friend's round starts. Turning the switch off, or deleting your account, removes it.</li>
 <li><b>Reports and blocks:</b> if you report a player's name or photo, we keep who reported it, which player, the name as it was shown, whether it was the name or the photo, the round code, where in the app it was seen, the time and, for a photo, a copy of the photo. If you block a player, our server keeps the block so it works on every phone you use. Your phone also keeps a list of who you've blocked and which photos you've reported.</li>
 <li><b>Device, usage and errors:</b> an anonymous device identifier created by the app, your account's random identifier (not your name), the app version, your phone's operating system version, how you installed the app, which screens and features you use, and error reports (the error message, where in the app it happened and which screen and hole you were on). We use this to see what works and fix what breaks. To limit abuse, our server also keeps, for 7 days, a scrambled fingerprint of the network you connect from and which device identifiers have used it.</li>
 </ul>
@@ -48,7 +48,7 @@ p,li{color:#cfd6e4}.tiny{font-size:14px;color:#9aa4b8}a{color:#4fd8ff}ul{padding
 <h2>Services we use</h2>
 <ul>
 <li><b>Our server</b> syncs shared rounds between phones, runs the Community Battlefield, keeps your backup (tied to your email) so you can restore on a new phone, and keeps a handicap record from your rounds. It's operated by Vexcom LLC and runs on Cloudflare in the United States.</li>
-<li><b>Apple Push Notification service</b> delivers the iPhone app's notifications. Our server sends Apple your phone's push address and the notification's words (who started a round and the course).</li>
+<li><b>Apple Push Notification service</b> and <b>Google Firebase Cloud Messaging</b> deliver the iPhone and Android apps' notifications. Our server sends Apple or Google your phone's push address and the notification's words (who started a round and the course).</li>
 <li><b>Resend</b>, an email delivery service, sends sign-in and backup messages, round announcements, emails telling players about comments and reactions on their rounds (at most one a day), deletion codes, and a one-time "Save your round" reminder that stops once your address is confirmed.</li>
 <li><b>Cloudflare Web Analytics</b> counts visits to our website and web app: the page, the referring site, the country and the kind of browser. It sets no cookies and stores no identifier on your device.</li>
 <li><b>Maps and course data:</b> satellite imagery from Esri; course maps from OpenStreetMap; offline aerial photos from the U.S. Department of Agriculture (NAIP), which the app downloads for a course from our own server (naip.vexcomllc.com, hosted by Cloudflare) and keeps on your phone. That request names the course, not you. While you have signal, the app also saves the courses nearest you ahead of time; your phone picks them, and nothing about you is sent. When you search for courses near you or download a map for a course we haven't mapped, the app asks OpenStreetMap's public servers (Overpass) about the area around you.</li>
@@ -72,7 +72,7 @@ p,li{color:#cfd6e4}.tiny{font-size:14px;color:#9aa4b8}a{color:#4fd8ff}ul{padding
 
 <h2>Your choices</h2>
 <ul>
-<li>Turn phone notifications on or off in <b>Settings › Battlefield</b> (<b>Notify me when friends play</b>), or for Battle Tees in your iPhone's Settings.</li>
+<li>Turn phone notifications on or off in <b>Settings › Battlefield</b> (<b>Notify me when friends play</b>), or for Battle Tees in your phone's Settings.</li>
 <li>Turn off round-announcement and reaction emails in <b>Settings › Battlefield</b> (<b>Email me when friends play</b> and <b>Reaction emails</b>). Each of those emails also has its own <b>Unsubscribe</b> link, and so does your mail app's Unsubscribe button. Unsubscribing turns the matching switch off in the app, and turning it back on subscribes you again. To make the link work, our server keeps a random unsubscribe code for your address, which is deleted with your account.</li>
 <li>To block a player, or report their name or photo, tap <b>⋯</b> beside their name. <b>Settings › Blocked players</b> lists who you've blocked, with <b>Unblock</b>.</li>
 <li>Turn off location for Battle Tees in your phone's settings. Scoring still works; yardages and the map won't.</li>
