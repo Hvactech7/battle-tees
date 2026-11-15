@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'sha256-kFIJl9qG0iMJKULHSBNwJjYm2yiYWSGq7Xhz61pwnps=' 'sha256-CUN2V6ru2A+Rrnrqq4wgDwVmvAb1kU4qaxMWRtiCmTU=' 'sha256-79uSLRUH3SESf+LkHGPxuR5ePnvAiW5Wl+C02STXxXY=' https://unpkg.com https://static.cloudflareinsights.com; object-src 'none'; base-uri 'none'">
+<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'sha256-kFIJl9qG0iMJKULHSBNwJjYm2yiYWSGq7Xhz61pwnps=' 'sha256-bzdQE1nA4GgRG6bvsPovWiXWdmA2q5Vs1kHU3Dcl/Vk=' 'sha256-79uSLRUH3SESf+LkHGPxuR5ePnvAiW5Wl+C02STXxXY=' https://unpkg.com https://static.cloudflareinsights.com; object-src 'none'; base-uri 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#0f1522">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -1988,7 +1988,7 @@ function __btRw(s) {
 'use strict';
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1794716606';
+const BUILD='1794723628';
 const HOLES=18;
 
 function courseTealBend(){return {id:'teal-bend',name:'Teal Bend GC',loc:[38.6972,-121.6173],
@@ -2193,13 +2193,8 @@ function puttsEntered(rec,i){const st=(rec&&rec.stats)||{};return !!((st.putts&&
 function blankRound(){return {started:false,holes:Array.from({length:HOLES},blankHole),cur:0,dollarPerPt:0,span:{count:18,start:0},startedAt:null,myStartedAt:null};}
 
 let S=load();
-try{
-  if(!localStorage.getItem('btDupCourse2')){
-    localStorage.setItem('btDupCourse2','1');
-    const n=dedupeCourses();
-    if(n)try{save();}catch(e){}
-  }
-}catch(e){}
+setTimeout(()=>{try{if(dedupeCourses()){save();render();}}catch(e){}},0);
+setTimeout(()=>{try{natLinkCourses();}catch(e){}},5000);
 try{
   if(!localStorage.getItem('btGhostFix2')){
     localStorage.removeItem('btGhostFix1');
@@ -4444,6 +4439,7 @@ function applyLibrary(d){
         if(!(S.history||[]).some(x=>x.id===e.id)){(S.history=S.history||[]).push(e);hAdded++;}
       });
       if(hAdded){S.history.sort((a,b)=>(b.endedAt||0)-(a.endedAt||0));S.history=S.history.slice(0,histCap());}
+      const cDup=dedupeCourses(); if(cDup)cAdded=Math.max(0,cAdded-cDup);
       if(Array.isArray(d.ledger)){
         const have=new Set((S.ledger||[]).map(r=>r&&r.id));
         d.ledger.forEach(r=>{
@@ -4483,6 +4479,7 @@ function applyLibrary(d){
       if(d.pk&&typeof d.pk==='object'&&S.me&&S.me.pid&&d.pk.pid===S.me.pid&&PK_RE.test(String(d.pk.key||''))){pkSet(S.me.pid,d.pk.key);pkState='';try{pidSent='';setTimeout(()=>{try{registerProfile(true);sendHello();}catch(e){}},0);}catch(e){}}
     });
   retentionMerge(d.retention);
+  setTimeout(()=>{try{natLinkCourses();}catch(e){}},500);
   return {added, updated, cAdded, hAdded, lAdded, other};
 }
 
@@ -13791,15 +13788,22 @@ function natFilter(raw){
 function dedupeCourses(){
   try{
     const drop=[];
+    const bids=new Set(builtinCourses().map(c=>c.id));
+    const live=S.round&&S.round.started&&S.course?S.course.id:null;
+    const n=c=>(S.history||[]).filter(e=>e&&e.courseId===c.id).length;
+    const score=c=>(bids.has(c.id)?1e6:0)+n(c)*10+(Array.isArray(c.loc)?2:0)+(c.geoUrl?1:0);
     for(let i=0;i<(S.courses||[]).length;i++){
-      const a=S.courses[i]; if(!a||!a.loc||drop.includes(i))continue;
+      const a=S.courses[i]; if(!a||!a.id||drop.includes(i))continue;
       for(let j=i+1;j<S.courses.length;j++){
-        const b=S.courses[j]; if(!b||!b.loc||drop.includes(j))continue;
-        if(kmBetween(a.loc[0],a.loc[1],b.loc[0],b.loc[1])*1000>400)continue;
+        const b=S.courses[j]; if(!b||!b.id||drop.includes(j))continue;
+        if(live&&(a.id===live||b.id===live))continue;
+        if(bids.has(a.id)&&bids.has(b.id))continue;
         const ca=courseCore(a.name),cb=courseCore(b.name);
-        if(!ca||ca!==cb)continue;
-        const n=c=>(S.history||[]).filter(e=>e&&e.courseId===c.id).length;
-        const loser=(n(b)>n(a))?i:j, keep=(loser===i)?j:i;
+        if(!ca||!cb)continue;
+        const m=(Array.isArray(a.loc)&&Array.isArray(b.loc))?kmBetween(a.loc[0],a.loc[1],b.loc[0],b.loc[1])*1000:null;
+        const same=(m!=null&&m<=400&&ca===cb)||(coreRel(ca,cb)&&(m==null||m<=3000)&&sameCard(a,b));
+        if(!same)continue;
+        const loser=(score(b)>score(a))?i:j, keep=(loser===i)?j:i;
         const lid=S.courses[loser].id, kc=S.courses[keep];
         (S.history||[]).forEach(e=>{
           if(!e||e.courseId!==lid)return;
@@ -13810,15 +13814,75 @@ function dedupeCourses(){
           }
         });
         drop.push(loser);
+        if(S.course&&S.course.id===lid){S.course=clone(kc);try{applyTeePrefs();}catch(e){}}
         if(loser===i)break;
       }
     }
     if(!drop.length)return 0;
     const gone=drop.map(i=>S.courses[i]&&S.courses[i].name).filter(Boolean);
+    drop.forEach(i=>{try{tombAdd('courses',S.courses[i].id);}catch(e){}});
     S.courses=S.courses.filter((c,i)=>!drop.includes(i));
     try{stat('course_dedupe',{n:drop.length,names:gone.slice(0,6)});}catch(e){}
     return drop.length;
   }catch(e){return 0;}
+}
+function coreRel(a,b){return !!a&&!!b&&(a===b||a.startsWith(b+' ')||b.startsWith(a+' '));}
+function sameCard(a,b){
+  try{
+    const ha=(a&&a.holes)||[],hb=(b&&b.holes)||[];
+    if(ha.length<9||ha.length!==hb.length)return false;
+    if(!ha.every((h,i)=>h&&hb[i]&&+h.par>0&&+h.par===+hb[i].par))return false;
+    if(ha.every((h,i)=>+h.si>0&&+h.si===+hb[i].si))return true;
+    const ok=t=>t&&+t.rating>0&&+t.slope>0, nm=t=>String(t.name||'').trim().toLowerCase();
+    const ta=((a.teeSets)||[]).filter(ok),tb=((b.teeSets)||[]).filter(ok);
+    if(ta.length<3||ta.length!==tb.length)return false;
+    return ta.every(t=>{const u=tb.find(x=>nm(x)===nm(t));return !!u&&Math.abs(u.rating-t.rating)<=1&&Math.abs(u.slope-t.slope)<=6;});
+  }catch(e){return false;}
+}
+let natLinkBusy=false;
+async function natLinkCourses(){
+  if(natLinkBusy)return 0;
+  const bids=new Set(builtinCourses().map(c=>c.id)), now=Date.now();
+  const todo=(S.courses||[]).filter(c=>c&&c.id&&!Array.isArray(c.loc)&&!bids.has(c.id)&&(c.holes||[]).length>=9
+    &&!(c._natTry&&now-c._natTry<7*864e5)).map(c=>c.id);
+  if(!todo.length)return 0;
+  natLinkBusy=true;
+  let linked=0,tried=0;
+  try{
+    if(!window.__natIdx){const r=await fetch('/courses-index.json');if(!r.ok)return 0;window.__natIdx=await r.json();}
+    const idx=window.__natIdx||[];
+    for(const id of todo){
+      const c=(S.courses||[]).find(x=>x&&x.id===id); if(!c)continue;
+      const core=courseCore(c.name); if(!core)continue;
+      const nh=c.holes.length, par=c.holes.reduce((a,h)=>a+(+h.par||0),0);
+      const cands=idx.filter(r=>r&&isFinite(r[3])&&+r[6]===par&&(r[7]===0?nh===18:r[7]===1?nh===9:+r[7]===nh)
+        &&coreRel(core,courseCore(r[1]))).slice(0,6);
+      const hits=[]; let failed=false;
+      for(const r of cands){
+        try{const x=await fetch('/courses/'+r[0]+'.json');if(!x.ok){failed=true;continue;}const rec=await x.json();
+          if(rec&&Array.isArray(rec.loc)&&sameCard(c,{holes:rec.holes,teeSets:recTees(rec)}))hits.push(rec);}catch(e){failed=true;}
+      }
+      if(failed&&hits.length!==1)continue;
+      const cur=(S.courses||[]).find(x=>x&&x.id===id); if(!cur)continue;
+      cur._natTry=Date.now(); tried++;
+      if(hits.length!==1)continue;
+      const rec=hits[0], held=GEO_HELD.has(rec.id);
+      [cur,(S.course&&S.course.id===id)?S.course:null].forEach(t=>{
+        if(!t)return;
+        t.loc=rec.loc; t.natId=rec.id;
+        if(!held&&rec.geoUrl){t.geoUrl=rec.geoUrl;t.tier=rec.tier;}
+      });
+      linked++;
+    }
+  }catch(e){}
+  finally{natLinkBusy=false;}
+  if(tried){
+    if(linked)dedupeCourses();
+    try{save();}catch(e){}
+    try{if(linked)stat('course_natlink',{n:linked});}catch(e){}
+    render();
+  }
+  return linked;
 }
 function courseCore(n){
   return String(n||'').toLowerCase()
