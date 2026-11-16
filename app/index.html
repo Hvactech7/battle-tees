@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'sha256-kFIJl9qG0iMJKULHSBNwJjYm2yiYWSGq7Xhz61pwnps=' 'sha256-agwCs/sY4vXisYpr46KhKIL9o1cRnni5CfDZkCvKB6g=' 'sha256-79uSLRUH3SESf+LkHGPxuR5ePnvAiW5Wl+C02STXxXY=' https://unpkg.com https://static.cloudflareinsights.com; object-src 'none'; base-uri 'none'">
+<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'sha256-kFIJl9qG0iMJKULHSBNwJjYm2yiYWSGq7Xhz61pwnps=' 'sha256-I/5TbUEJ++TWO4WziTOBEqykYXH88FR7RRL/FPWbT2E=' 'sha256-79uSLRUH3SESf+LkHGPxuR5ePnvAiW5Wl+C02STXxXY=' https://unpkg.com https://static.cloudflareinsights.com; object-src 'none'; base-uri 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#0f1522">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -1996,7 +1996,7 @@ function __btRw(s) {
 'use strict';
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1794801657';
+const BUILD='1794803083';
 const HOLES=18;
 
 function courseTealBend(){return {id:'teal-bend',name:'Teal Bend GC',loc:[38.6972,-121.6173],
@@ -7257,7 +7257,7 @@ async function refreshStaleGeo(){
 }
 function geoHeldIds(){return 'nat10050,nat10065,nat10162,nat10174,nat10209,nat10263,nat10292,nat10295,nat10478,nat10485,nat10555,nat10584,nat1060,nat10613,nat10646,nat10684,nat10693,nat10725,nat10815,nat10818,nat10819,nat1085,nat11041,nat11094,nat11137,nat11160,nat11268,nat11379,nat11444,nat11512,nat1157,nat1159,nat11682,nat11720,nat11733,nat11749,nat11765,nat1179,nat11851,nat119,nat11972,nat12086,nat12248,nat12273,nat12292,nat12313,nat12374,nat12426,nat12436,nat12474,nat1266,nat1277,nat1290,nat1295,nat1343,nat1379,nat1420,nat1483,nat1512,nat1701,nat1721,nat1741,nat1973,nat2070,nat210,nat2158,nat2177,nat2215,nat2220,nat2250,nat2315,nat2317,nat2388,nat2393,nat2418,nat2460,nat2545,nat2570,nat2621,nat2661,nat2700,nat2773,nat2835,nat2840,nat288,nat2897,nat2945,nat2968,nat3056,nat3084,nat3104,nat3123,nat3143,nat3154,nat3155,nat3187,nat3311,nat332,nat3340,nat3505,nat3526,nat3547,nat3553,nat3589,nat3607,nat3644,nat3645,nat3720,nat3772,nat3832,nat3847,nat3898,nat392,nat3990,nat4069,nat4186,nat4215,nat4361,nat4367,nat4369,nat450,nat4511,nat4637,nat4788,nat482,nat4949,nat4953,nat4982,nat5069,nat5109,nat530,nat5487,nat549,nat5562,nat5563,nat5703,nat577,nat5967,nat606,nat6100,nat612,nat6148,nat6149,nat6162,nat6175,nat620,nat6226,nat6262,nat6299,nat6369,nat6389,nat6425,nat6497,nat6500,nat6700,nat6706,nat6725,nat6816,nat6900,nat6910,nat6935,nat7005,nat7007,nat7049,nat707,nat7120,nat7137,nat714,nat7151,nat7168,nat722,nat7235,nat7280,nat7299,nat7356,nat7559,nat7596,nat762,nat7693,nat7738,nat7755,nat7763,nat7774,nat7800,nat784,nat7866,nat7881,nat7883,nat7897,nat7914,nat8103,nat8180,nat8239,nat8280,nat8387,nat8397,nat8428,nat8446,nat8459,nat8485,nat8532,nat8574,nat8584,nat8603,nat8626,nat8669,nat8687,nat8698,nat8699,nat8703,nat8726,nat8746,nat8851,nat8879,nat8912,nat8933,nat8936,nat9215,nat9329,nat9356,nat9360,nat9372,nat9410,nat943,nat9462,nat9467,nat9492,nat9505,nat9564,nat9575,nat959,nat9676,nat9741,nat9756,nat9836,nat984,nat9864,nat9985,oga03527dfbb3c5,oga0439d5b6c546,oga190827e45785,oga222c072fa86f,oga389b2341662a,oga3ff5d64ea3aa,oga42d590befc6f,oga4a8589e095b2,oga52b7d9627339,oga60f8d7b41bda,oga62107b3464ad,oga636b9dd992ab,oga674b773e507a,oga7441d4a0bd5e,oga7ec71ba3a400,oga801fab5de427,oga86ef0e832682,ogaa11d726c4f54,ogaa6a75f33bee3,ogaa83f7d0c5332,ogab8305d45f98b,ogac3d308578718,ogac691020304f1,ogad157b3ac2d21,ogad63e85de6c56,ogad9ae366e53a4,ogae14fb195be76,ogaf27ba3bebe26,ogafa780c678dd8,oga9de5cec3628f,oga251354ffb56a,nat4799';}
 const GEO_HELD=new Set(geoHeldIds().split(','));
-const HOSTED_GEO={'darkhorse':'/geo/nat/ca/10762.json?v=2','rancho-solano':'/geo/rancho-solano.json?v=4','lake-chabot':'/geo/lake-chabot.json?v=1','paradise-valley':'/geo/paradise-valley.json?v=1','teal-bend':'/geo/teal-bend.json?v=1','hiddenbrooke':'/geo/hiddenbrooke.json?v=1','green-valley':'/geo/green-valley.json?v=1','silverado-north':'/geo/silverado-north.json?v=2','davis':'/geo/davis.json?v=1','el-macero':'/geo/el-macero.json?v=1','wildhorse':'/geo/wildhorse.json?v=1','wild-wings':'/geo/wild-wings.json?v=2','diablo-creek':'/geo/diablo-creek.json?v=1','bartley-cavanaugh':'/geo/bartley-cavanaugh.json?v=1','yocha-dehe':'/geo/yocha-dehe.json?v=1','franklin-canyon':'/geo/franklin-canyon.json?v=1','boundary-oak':'/geo/boundary-oak.json?v=1','cypress-lakes':'/geo/cypress-lakes.json?v=1','stonetree':'/geo/stonetree.json?v=2','tilden-park':'/geo/tilden-park.json?v=2','valley-hi':'/geo/valley-hi.json?v=2'};
+const HOSTED_GEO={'darkhorse':'/geo/nat/ca/10762.json?v=2','rancho-solano':'/geo/rancho-solano.json?v=4','lake-chabot':'/geo/lake-chabot.json?v=1','paradise-valley':'/geo/paradise-valley.json?v=2','teal-bend':'/geo/teal-bend.json?v=1','hiddenbrooke':'/geo/hiddenbrooke.json?v=1','green-valley':'/geo/green-valley.json?v=1','silverado-north':'/geo/silverado-north.json?v=2','davis':'/geo/davis.json?v=1','el-macero':'/geo/el-macero.json?v=1','wildhorse':'/geo/wildhorse.json?v=1','wild-wings':'/geo/wild-wings.json?v=2','diablo-creek':'/geo/diablo-creek.json?v=1','bartley-cavanaugh':'/geo/bartley-cavanaugh.json?v=1','yocha-dehe':'/geo/yocha-dehe.json?v=1','franklin-canyon':'/geo/franklin-canyon.json?v=1','boundary-oak':'/geo/boundary-oak.json?v=1','cypress-lakes':'/geo/cypress-lakes.json?v=1','stonetree':'/geo/stonetree.json?v=2','tilden-park':'/geo/tilden-park.json?v=2','valley-hi':'/geo/valley-hi.json?v=2'};
 const TILE_URL=(z,x,y)=>`https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`;
 function tileXY(lat,lon,z){
   const n=Math.pow(2,z),la=lat*Math.PI/180;
@@ -8915,7 +8915,7 @@ function elevStripPaint(pos){
 const HOSTED_GREENS={'darkhorse':'/geo/greens/darkhorse.json',
   'rancho-solano':'/geo/greens/rancho-solano.json',
   'lake-chabot':'/geo/greens/lake-chabot.json',
-  'paradise-valley':'/geo/greens/paradise-valley.json',
+  'paradise-valley':'/geo/greens/paradise-valley.json?v=2',
   'teal-bend':'/geo/greens/teal-bend.json',
   'hiddenbrooke':'/geo/greens/hiddenbrooke.json',
   'green-valley':'/geo/greens/green-valley.json',
