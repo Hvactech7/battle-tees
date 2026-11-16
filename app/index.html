@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'sha256-kFIJl9qG0iMJKULHSBNwJjYm2yiYWSGq7Xhz61pwnps=' 'sha256-7vjV+HiV9wpEyg3gu9whqXN2OPVjnTuKuToFoH33tro=' 'sha256-79uSLRUH3SESf+LkHGPxuR5ePnvAiW5Wl+C02STXxXY=' https://unpkg.com https://static.cloudflareinsights.com; object-src 'none'; base-uri 'none'">
+<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'sha256-kFIJl9qG0iMJKULHSBNwJjYm2yiYWSGq7Xhz61pwnps=' 'sha256-CMWRl9rsEdgjTC2Vwg+W7CYJAplmUJfzENdyeKA06/o=' 'sha256-79uSLRUH3SESf+LkHGPxuR5ePnvAiW5Wl+C02STXxXY=' https://unpkg.com https://static.cloudflareinsights.com; object-src 'none'; base-uri 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#0f1522">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -1988,7 +1988,7 @@ function __btRw(s) {
 'use strict';
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1794783246';
+const BUILD='1794788320';
 const HOLES=18;
 
 function courseTealBend(){return {id:'teal-bend',name:'Teal Bend GC',loc:[38.6972,-121.6173],
@@ -6593,9 +6593,11 @@ function gpsResumeVisible(){
 }
 const GPS_STALL_MS=30000;
 let mapFixAt=0,mapFixAcc=null,mapWatchAt=0,gpsStallSeen={};
+function gpsQuietIsNormal(){try{return !!(window.BTNative&&window.BTNative.platform==='ios');}catch(e){return false;}}
 function gpsWatchdog(){
   try{
     if(document.hidden||S.screen!=='map'||!LMAP||mapWatch==null||!navigator.geolocation)return;
+    if(gpsQuietIsNormal())return;
     if(!(S.round&&S.round.started)||isReview()||geoState==='denied')return;
     const since=Math.max(mapFixAt,mapWatchAt);
     if(!since||Date.now()-since<GPS_STALL_MS)return;
