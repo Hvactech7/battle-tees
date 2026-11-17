@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'sha256-Py+Q1c8cTUHtwQC6TcQHLO1PUzIQb41ufsxLpUwmeeA=' 'sha256-4apyIxcLsLxSHqZMPfm5i+1PS4NOl3BndLLgOli4CNY=' 'sha256-79uSLRUH3SESf+LkHGPxuR5ePnvAiW5Wl+C02STXxXY=' https://unpkg.com https://static.cloudflareinsights.com; object-src 'none'; base-uri 'none'">
+<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'sha256-Py+Q1c8cTUHtwQC6TcQHLO1PUzIQb41ufsxLpUwmeeA=' 'sha256-/sCLUXpi+Hb5/p81YneV0G7NaVJqlJqw8TONZWnUxh8=' 'sha256-79uSLRUH3SESf+LkHGPxuR5ePnvAiW5Wl+C02STXxXY=' https://unpkg.com https://static.cloudflareinsights.com; object-src 'none'; base-uri 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#0f1522">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -2016,7 +2016,7 @@ var BF_DOCS={},
     bfHeld=new Set(),
     bfDBp=null,
     statMem=[];
-const BUILD='1794879505';
+const BUILD='1794881067';
 const HOLES=18;
 
 function courseTealBend(){return {id:'teal-bend',name:'Teal Bend GC',loc:[38.6972,-121.6173],
@@ -13443,7 +13443,7 @@ function vHistory(){
         <b style="flex:1;min-width:0;font-family:Rajdhani,sans-serif;font-size:20px">${gameName(e.game)} · ${esc(e.courseName)}</b>
         <button class="ghost danger xbtn" aria-label="Delete this round" onclick="delHist('${btId(e.id)}')">${armDelHist===e.id?'Del?':XICON}</button>
       </div>
-      <div class="tiny">${when} · thru ${e.thru} · ${e.mins!=null?e.mins+' min':''}${e.code?' · shared '+esc(e.code):''}</div>
+      <div class="tiny">${when} · thru ${e.thru}${e.mins!=null?' · '+e.mins+' min':''}</div>
       <div class="tiny">${(e.players||[]).map(esc).join(' · ')}</div>
       ${histChalHTML(e)}
       <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
