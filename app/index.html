@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'sha256-Py+Q1c8cTUHtwQC6TcQHLO1PUzIQb41ufsxLpUwmeeA=' 'sha256-xw5KB3jQqn/ouNGAXkgkXrP0v3kr5IyOCryyr+Z2yBE=' 'sha256-79uSLRUH3SESf+LkHGPxuR5ePnvAiW5Wl+C02STXxXY=' https://unpkg.com https://static.cloudflareinsights.com; object-src 'none'; base-uri 'none'">
+<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'sha256-Py+Q1c8cTUHtwQC6TcQHLO1PUzIQb41ufsxLpUwmeeA=' 'sha256-4apyIxcLsLxSHqZMPfm5i+1PS4NOl3BndLLgOli4CNY=' 'sha256-79uSLRUH3SESf+LkHGPxuR5ePnvAiW5Wl+C02STXxXY=' https://unpkg.com https://static.cloudflareinsights.com; object-src 'none'; base-uri 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#0f1522">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -2016,7 +2016,7 @@ var BF_DOCS={},
     bfHeld=new Set(),
     bfDBp=null,
     statMem=[];
-const BUILD='1794878292';
+const BUILD='1794879505';
 const HOLES=18;
 
 function courseTealBend(){return {id:'teal-bend',name:'Teal Bend GC',loc:[38.6972,-121.6173],
@@ -4614,7 +4614,33 @@ function applyLibrary(d){
     });
   retentionMerge(d.retention);
   setTimeout(()=>{try{natLinkCourses();}catch(e){}},500);
+  try{leftoverRoundClose('restore');}catch(e){}
   return {added, updated, cAdded, hAdded, lAdded, other};
+}
+function leftoverRoundClose(why){
+  try{
+    if(!S.round||!S.round.started||S.round.reopened||!S.round.startedAt)return false;
+    const cid=(S.course&&S.course.id)||'';
+    const e=(S.history||[]).find(x=>x&&x.endedAt&&x.startedAt===S.round.startedAt&&(x.courseId||'')===cid&&x.round&&Array.isArray(x.round.holes));
+    if(!e)return false;
+    if(S.round.holes.some(r=>r&&(r.gts||[]).some(t=>t>2&&t>e.endedAt)))return false;
+    let n=0;
+    S.round.holes.forEach((r,h)=>{
+      if(!r||!e.round.holes[h])return;
+      const m=outboxMerge(e.round.holes[h],clone(r));
+      if(JSON.stringify(m)!==JSON.stringify(e.round.holes[h])){e.round.holes[h]=m;n++;}
+    });
+    if(n)histRefile(e);
+    const wasShared=S.share&&S.share.on;
+    S.round=blankRound();S.screen='home';stView=null;clearStage();
+    try{resetRoster();}catch(x){}
+    save();
+    if(wasShared){try{leaveShare();}catch(x){}}
+    try{stat('leftover_round',{why,merged:n});}catch(x){}
+    setTimeout(()=>{try{shotToast('That round was already in Past Rounds. Closed the leftover copy.',4500);}catch(x){}},700);
+    render();
+    return true;
+  }catch(x){return false;}
 }
 
 async function doRestore(){
@@ -19263,7 +19289,7 @@ setInterval(()=>{
 })();
 applyTheme();
 gpsHistClean();
-healUnfinishedRound();
+healUnfinishedRound();leftoverRoundClose('boot');
 try{if(S.round&&S.round.started&&!isReview())shellRound('started',shellRoundInfo());}catch(e){}
 autoEndStaleRound();
 setTimeout(refreshStaleGeo,4000);
