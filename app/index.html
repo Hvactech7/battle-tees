@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'sha256-Py+Q1c8cTUHtwQC6TcQHLO1PUzIQb41ufsxLpUwmeeA=' 'sha256-J2qU2UuUHuHgG8K/jKBEyLWjhnqkSlarPHVV11vOV1c=' 'sha256-79uSLRUH3SESf+LkHGPxuR5ePnvAiW5Wl+C02STXxXY=' https://unpkg.com https://static.cloudflareinsights.com; object-src 'none'; base-uri 'none'">
+<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'sha256-Py+Q1c8cTUHtwQC6TcQHLO1PUzIQb41ufsxLpUwmeeA=' 'sha256-xw5KB3jQqn/ouNGAXkgkXrP0v3kr5IyOCryyr+Z2yBE=' 'sha256-79uSLRUH3SESf+LkHGPxuR5ePnvAiW5Wl+C02STXxXY=' https://unpkg.com https://static.cloudflareinsights.com; object-src 'none'; base-uri 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#0f1522">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -2010,7 +2010,13 @@ function __btRw(s) {
 'use strict';
 const XICON='<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const LS_KEY='wolfGolfV1';
-const BUILD='1794846669';
+var BF_DOCS={},
+    bfIdbOk=null,
+    bfLean=false,
+    bfHeld=new Set(),
+    bfDBp=null,
+    statMem=[];
+const BUILD='1794878292';
 const HOLES=18;
 
 function courseTealBend(){return {id:'teal-bend',name:'Teal Bend GC',loc:[38.6972,-121.6173],
@@ -2611,7 +2617,36 @@ function agoTxt(ts){
   if(m<48*60)return Math.round(m/60)+' h ago';
   return new Date(ts).toLocaleDateString();
 }
-function save(){if(propBusy)return;try{syncLib();localStorage.setItem(LS_KEY,JSON.stringify(S));}catch(e){} autoBackupCheck();}
+let saveSaid='';
+function save(){if(propBusy)return;let j=null;try{syncLib();j=JSON.stringify(S);localStorage.setItem(LS_KEY,j);}catch(e){saveRescue(e,j);} autoBackupCheck();}
+function saveRescue(e,j){
+  let ok=false;const freed=[];
+  if(j!=null)for(const room of [storeRoomBf,storeRoomStats]){
+    try{const f=room();if(f)freed.push(f);}catch(x){}
+    try{localStorage.setItem(LS_KEY,j);ok=true;break;}catch(e2){e=e2;}
+  }
+  const k=(ok?'ok:':'fail:')+((e&&e.name)||'');
+  if(saveSaid===k)return;saveSaid=k;
+  try{stat('save_fail',{ok,why:String((e&&e.name)||e||'').slice(0,40),msg:String((e&&e.message)||'').slice(0,120),
+    kb:j!=null?Math.round(j.length/1024):null,used:lsUsedKB(),freed,round:!!(S&&S.round&&S.round.started)});}catch(x){}
+}
+function storeRoomBf(){
+  const raw=JSON.parse(localStorage.getItem('btBattles')||'{}')||{};let n=0;
+  for(const c in raw){const r=raw[c];if(!r||!r.doc)continue;
+    if(bfIdbOk===true)bfDocPut(c,r.doc);else if(bfIdbOk===null){if(!BF_DOCS[c])BF_DOCS[c]=r.doc;bfHeld.add(c);}
+    r.doc=null;n++;}
+  bfLean=true;
+  if(!n)return '';
+  localStorage.setItem('btBattles',JSON.stringify(raw));
+  return 'bf'+n;
+}
+function storeRoomStats(){
+  const q=JSON.parse(localStorage.getItem('btStatQ')||'[]');
+  if(q.length<=200)return '';
+  localStorage.setItem('btStatQ',JSON.stringify(q.slice(-200)));
+  return 'stats'+(q.length-200);
+}
+function lsUsedKB(){try{let n=0;for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);n+=k.length+(localStorage.getItem(k)||'').length;}return Math.round(n*2/1024);}catch(e){return null;}}
 function set(fn){fn();if(propBusy)return;try{bankFreeze();}catch(e){}stampChanges();save();syncPush();render();}
 function applyTheme(){
   document.documentElement.classList.toggle('light',S.theme==='light');
@@ -3619,13 +3654,17 @@ function stat(ev,extra){
   try{
     if(lobbySock&&lobbySock.readyState===1){lobbySock.send(JSON.stringify(e));return;}
     const q=JSON.parse(localStorage.getItem('btStatQ')||'[]');
-    q.push(e);localStorage.setItem('btStatQ',JSON.stringify(q.slice(-2000)));
+    q.push(e);
+    try{localStorage.setItem('btStatQ',JSON.stringify(q.slice(-2000)));}
+    catch(y){statMem.push(e);if(statMem.length>300)statMem.shift();}
   }catch(x){}
 }
 function statFlush(){
   try{
+    if(!lobbySock||lobbySock.readyState!==1)return;
+    if(statMem.length)statMem.splice(0).forEach(e=>lobbySock.send(JSON.stringify(e)));
     const q=JSON.parse(localStorage.getItem('btStatQ')||'[]');
-    if(!q.length||!lobbySock||lobbySock.readyState!==1)return;
+    if(!q.length)return;
     q.forEach(e=>lobbySock.send(JSON.stringify(e)));
     localStorage.removeItem('btStatQ');
   }catch(x){}
@@ -11470,7 +11509,54 @@ function vSettings(){
   </main>`;
 }
 let bfList=null,bfWatch=null,bfTimer=null,bfLens='gross',bfHole=null,bfCardFull=false;
-function bfStore(){try{return JSON.parse(localStorage.getItem('btBattles'))||{};}catch(e){return {};}}
+function bfDB(){
+  if(!bfDBp)bfDBp=new Promise((res,rej)=>{
+    if(typeof indexedDB==='undefined')return rej(new Error('no indexedDB'));
+    const r=indexedDB.open('bt-bf',1);
+    r.onupgradeneeded=()=>{const d=r.result;if(!d.objectStoreNames.contains('docs'))d.createObjectStore('docs');};
+    r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);
+  }).catch(e=>{bfDBp=null;throw e;});
+  return bfDBp;
+}
+function bfDocsTx(fn){
+  return bfDB().then(d=>new Promise((res,rej)=>{
+    const t=d.transaction('docs','readwrite');fn(t.objectStore('docs'));
+    t.oncomplete=()=>res();t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error);
+  }));
+}
+function bfDocPut(code,doc){BF_DOCS[code]=doc;bfDocsTx(s=>s.put(doc,code)).catch(()=>{});}
+function bfDocDel(code){delete BF_DOCS[code];if(bfIdbOk)bfDocsTx(s=>s.delete(code)).catch(()=>{});}
+function bfStore(){
+  let st;try{st=JSON.parse(localStorage.getItem('btBattles'))||{};}catch(e){st={};}
+  for(const c in st){const r=st[c];if(r&&r.doc==null&&BF_DOCS[c])r.doc=BF_DOCS[c];}
+  return st;
+}
+function bfStoreWrite(st){
+  const out={};
+  for(const c in st){const r=st[c]||{};out[c]=((bfIdbOk===true||bfLean)&&r.doc)?Object.assign({},r,{doc:null}):r;}
+  localStorage.setItem('btBattles',JSON.stringify(out));
+}
+async function bfDocsBoot(){
+  try{
+    const d=await bfDB();
+    await new Promise(res=>{const t=d.transaction('docs','readonly'),s=t.objectStore('docs'),k=s.getAllKeys(),v=s.getAll();
+      t.oncomplete=()=>{(k.result||[]).forEach((c,i)=>{if(!BF_DOCS[c])BF_DOCS[c]=v.result[i];});res();};t.onerror=t.onabort=()=>res();});
+    let raw={};try{raw=JSON.parse(localStorage.getItem('btBattles'))||{};}catch(e){}
+    const mv=Object.keys(raw).filter(c=>raw[c]&&raw[c].doc);
+    const held=[...bfHeld].filter(c=>BF_DOCS[c]&&!mv.includes(c));
+    const before=lsUsedKB();
+    if(mv.length||held.length)await bfDocsTx(s=>{mv.forEach(c=>s.put(raw[c].doc,c));held.forEach(c=>s.put(BF_DOCS[c],c));});
+    let cur={};try{cur=JSON.parse(localStorage.getItem('btBattles'))||{};}catch(e){}
+    for(const c in cur){const r=cur[c];if(r&&r.doc){if(mv.includes(c))BF_DOCS[c]=r.doc;else bfDocPut(c,r.doc);}}
+    bfIdbOk=true;bfHeld.clear();
+    if(mv.length){
+      try{bfStoreWrite(cur);}catch(e){}
+      try{stat('bf_docs_moved',{n:mv.length,kbBefore:before,kbAfter:lsUsedKB()});}catch(e){}
+      save();
+    }
+    try{if(S.screen==='bfield'||S.screen==='bfwatch')render();}catch(e){}
+  }catch(e){bfIdbOk=false;}
+}
 function bfStorePut(code,entry,doc){
   try{doc=btScrubDoc(doc);entry=btCleanBfEntry(entry);}catch(e){}
   try{
@@ -11478,7 +11564,8 @@ function bfStorePut(code,entry,doc){
     const prev=st[code]||{};
     st[code]={entry:entry||prev.entry||{code},doc:doc||prev.doc||null,at:Date.now(),
       docAt:doc?Date.now():(prev.docAt||0)};
-    localStorage.setItem('btBattles',JSON.stringify(st));
+    if(doc){if(bfIdbOk===true)bfDocPut(code,doc);else if(bfLean){BF_DOCS[code]=doc;if(bfIdbOk===null)bfHeld.add(code);}}
+    bfStoreWrite(st);
   }catch(e){}
 }
 function bfUnfinished(e,thru){
@@ -11654,15 +11741,15 @@ function bfPrunePhantoms(){
       const row=st[code]||{};
       if(row.doc==null)continue;
       if(bfDocScored(row.doc)>=BF_MIN_HOLES)continue;
-      delete st[code];gone++;
+      delete st[code];bfDocDel(code);gone++;
     }
-    if(gone)localStorage.setItem('btBattles',JSON.stringify(st));
+    if(gone)bfStoreWrite(st);
     return gone;
   }catch(e){return 0;}
 }
 function bfForget(code){
-  const st=bfStore();delete st[code];
-  try{localStorage.setItem('btBattles',JSON.stringify(st));}catch(e){}
+  const st=bfStore();delete st[code];bfDocDel(code);
+  try{bfStoreWrite(st);}catch(e){}
   openBattlefield();
 }
 let bfLiveInfo={n:0,names:[],at:0,pending:false};
@@ -19180,6 +19267,7 @@ healUnfinishedRound();
 try{if(S.round&&S.round.started&&!isReview())shellRound('started',shellRoundInfo());}catch(e){}
 autoEndStaleRound();
 setTimeout(refreshStaleGeo,4000);
+bfDocsBoot();
 naipBoot().then(()=>{try{if(S.course)naipEnsure(S.course);}catch(e){}});
 setTimeout(refreshStaleCards,7000);
 setTimeout(()=>{try{autoBackupCheck();}catch(e){}},6000);
