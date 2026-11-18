@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'sha256-txoN1W3kHcsZxFgUAzNBOWa+8Ly/Jt9FmXfX9QY7SEI=' 'sha256-Tq0YzmvTjIIub4GHc0mDJc/zRAwCz7nkOIoYI0RiSVs=' 'sha256-79uSLRUH3SESf+LkHGPxuR5ePnvAiW5Wl+C02STXxXY=' https://unpkg.com https://static.cloudflareinsights.com; object-src 'none'; base-uri 'none'">
+<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'sha256-txoN1W3kHcsZxFgUAzNBOWa+8Ly/Jt9FmXfX9QY7SEI=' 'sha256-oIpoB1q80fCoTtVdrfcsqfC/RNlXnxYtfDwa66a+Ry0=' 'sha256-79uSLRUH3SESf+LkHGPxuR5ePnvAiW5Wl+C02STXxXY=' https://unpkg.com https://static.cloudflareinsights.com; object-src 'none'; base-uri 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#0f1522">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -2014,7 +2014,7 @@ var BF_DOCS={},
     bfHeld=new Set(),
     bfDBp=null,
     statMem=[];
-const BUILD='1794946936';
+const BUILD='1794972186';
 const HOLES=18;
 
 function courseTealBend(){return {id:'teal-bend',name:'Teal Bend GC',loc:[38.6972,-121.6173],
@@ -3828,7 +3828,7 @@ const seatIdx=p=>idxAsked(p)?'not shared':fmtIdx(p.index);
 let addingPlayer=false,editingPlayer=null,scanOpen=false,scanShown=[],addPrefill=null;
 let backupUI={mode:null,stage:0,msg:''};
 async function relayAccount(payload){
-  if(ageOffline()){if(!/^(delcode|erase)$/.test(String(payload&&payload.op||'')))return {ok:false,age:true,error:'Online features are for players 18 and up.'};
+  if(ageOffline()){if(!/^(delcode|erase)$/.test(String(payload&&payload.op||'')))return {ok:false,age:true,error:'Online features are for players 13 and up.'};
     ageDelLink=true;lobbyConnect();}
   payload=pkAttach(payload);
   const ws=await waitForRelay(6000);
@@ -3842,7 +3842,7 @@ async function relayAccount(payload){
   });
 }
 async function relayBackup(payload){
-  if(ageOffline())return {ok:false,age:true,error:'Online features are for players 18 and up.'};
+  if(ageOffline())return {ok:false,age:true,error:'Online features are for players 13 and up.'};
   const ws=await waitForRelay(6000);
   payload=Object.assign({},payload,{v:2});
   if(payload.email&&!payload.bt){const t=bkTok(payload.email);if(t)payload.bt=t;}
@@ -4119,7 +4119,7 @@ function ageSignalRead(){try{return JSON.parse(localStorage.getItem('btAgeSignal
 var ageGateMemo=null,ageDelLink=false;
 function ageGateCalc(){
   const a=ageSignalRead(),g=a&&a.range;
-  return !!(g&&typeof g.upper==='number'&&g.upper<18&&!/^(declined|unavailable|error)$/.test(String(g.status||'')));
+  return !!(g&&typeof g.upper==='number'&&g.upper<13&&!/^(declined|unavailable|error)$/.test(String(g.status||'')));
 }
 function ageOffline(){try{if(ageGateMemo==null)ageGateMemo=ageGateCalc();return !!ageGateMemo;}catch(e){return false;}}
 function onAgeSignal(r){
@@ -4150,7 +4150,7 @@ function ageCutOff(){
   try{localStorage.removeItem('btStatQ');}catch(e){}
   try{if(S.share&&S.share.on){S.share={on:false};save();}}catch(e){}
 }
-function ageCardHTML(){return `<div class="card" id="agecard"><h2>🔒 Online features are for players 18 and up</h2><div class="tiny">You can still keep score on this phone.</div></div>`;}
+function ageCardHTML(){return `<div class="card" id="agecard"><h2>🔒 Online features are for players 13 and up</h2><div class="tiny">You can still keep score on this phone.</div></div>`;}
 try{const sh=nativeShell();if(sh&&sh.age)onAgeSignal(sh.age);}catch(e){}
 const INTEGRITY_OPS=new Set(['profile','start','hcp']);
 function sha256Hex(str){
@@ -4180,7 +4180,7 @@ async function withIntegrity(p){
   }catch(e){return Object.assign({},p,{plat:'android'});}
 }
 async function relayBattle(payload){
-  if(ageOffline())return {ok:false,age:true,error:'Online features are for players 18 and up.'};
+  if(ageOffline())return {ok:false,age:true,error:'Online features are for players 13 and up.'};
   if(gpsOnly()&&payload&&/^(start|near|nearjoin)$/.test(String(payload.op||'')))return {ok:false,gps:true,error:'A GPS round stays on this phone.'};
   if(gpsOnly()&&payload)payload=Object.assign({},payload,{gps:1});
   payload=await withIntegrity(payload);
@@ -14099,7 +14099,7 @@ function vRules(){
   </main>`;
 }
 function backupBlockHTML(){
-  if(ageOffline())return `<div style="border-top:1px solid var(--line);margin-top:12px;padding-top:10px"><b>🔒 Online features are for players 18 and up</b>
+  if(ageOffline())return `<div style="border-top:1px solid var(--line);margin-top:12px;padding-top:10px"><b>🔒 Online features are for players 13 and up</b>
     <div class="tiny">You can still keep score on this phone.</div></div>`;
   const abEmail=(localStorage.getItem('wolfBackupEmail')||'').trim();
   const abAt=+localStorage.getItem('btAbAt')||0;
