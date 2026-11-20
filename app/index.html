@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'sha256-AXpDzkhPdOalu8iqEDZx03z2C98AIqpDQ0GoksQ+KdQ=' 'sha256-DvstXI/+PXYJUtkTa9i0dPuEnpPQu+Xf7/j+HwggIs8=' 'sha256-79uSLRUH3SESf+LkHGPxuR5ePnvAiW5Wl+C02STXxXY=' https://static.cloudflareinsights.com; object-src 'none'; base-uri 'none'">
+<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'sha256-wqeoBlqXadJf2ijqou3cuEpTeMakql4xLOdGkj/lhLg=' 'sha256-c982mhPj2DTpt9Zbas8ZbUSaYNYan7XlxIhrPBbIpeE=' 'sha256-79uSLRUH3SESf+LkHGPxuR5ePnvAiW5Wl+C02STXxXY=' https://static.cloudflareinsights.com; object-src 'none'; base-uri 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#0f1522">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -251,6 +251,14 @@
   .bfcmBtns{display:flex;gap:8px;margin-top:10px}
   .bfcmBtns .ghost{flex:1}
   .bfcmBtns .big{flex:2;margin:0}
+  .bfph{display:block;margin-top:6px;width:100%;max-width:260px;aspect-ratio:4/3;padding:0;border-radius:9px;border:1px solid #2a3448;background:#0b111c;color:#8d99ad;font:600 13px Inter,sans-serif;overflow:hidden}
+  .bfph img{width:100%;height:100%;object-fit:cover;display:block}
+  .bfcmPriv{font-size:12px;color:var(--gold,#e8c552);margin-left:6px}
+  .bfcmPhRow{display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap}
+  .bfcmPhRow .ghost{margin:0;min-height:40px;padding:0 12px}
+  .bfcmPhPrev{width:64px;height:48px;border-radius:7px;object-fit:cover;border:1px solid var(--line)}
+  .bfcamTo{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+  .bfcamTo button{margin:0;min-height:38px;padding:0 12px;border-radius:999px}
   .bfNote{position:fixed;left:10px;right:10px;margin:0 auto;max-width:440px;top:calc(10px + env(safe-area-inset-top));z-index:8900;display:flex;flex-direction:column;gap:8px}   
   .bfNoteItem{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:10px 12px;background:#141c2a;border:2px solid var(--green);border-radius:14px;box-shadow:4px 4px 0 var(--green-dk),0 10px 28px rgba(0,0,0,.55);color:var(--ink);font:500 15px/1.3 Inter,sans-serif;animation:vfRise .3s cubic-bezier(.2,.8,.25,1) both,bfNoteGlow 2.4s ease-in-out .3s infinite}
   .bfNoteItem .bfi{width:40px;height:40px}
@@ -1087,9 +1095,13 @@ function(event,__bth){event.stopPropagation();bfReact((''+__bth[0]+''),(''+__bth
 },
 function(event,__bth){event.stopPropagation();bfPickToggle((''+__bth[0]+''),(''+__bth[1]+''))
 },
+function(event,__bth){event.stopPropagation();bfPhotoTo((''+__bth[0]+''),(''+__bth[1]+''))
+},
 function(event,__bth){event.stopPropagation();openBfComments((''+__bth[0]+''),(''+__bth[1]+''))
 },
 function(event,__bth){bfCmMenu(__bth[0])
+},
+function(event,__bth){bfPhView(__bth[0])
 },
 function(event,__bth){bfCmReplyTo((''+__bth[0]+''),(''+__bth[1]+''))
 },
@@ -1112,6 +1124,32 @@ function(event,__bth){bfCmInput()
 function(event,__bth){closeBfComments()
 },
 function(event,__bth){bfCmSend()
+},
+function(event,__bth){bfPhPick()
+},
+function(event,__bth){bfPhClear()
+},
+function(event,__bth){bfPhPicked(this)
+},
+function(event,__bth){bfPhClose()
+},
+function(event,__bth){bfPhShare(__bth[0])
+},
+function(event,__bth){bfPhDel(__bth[0])
+},
+function(event,__bth){bfPhRep(__bth[0])
+},
+function(event,__bth){bfCamPick()
+},
+function(event,__bth){bfCamPicked(this)
+},
+function(event,__bth){bfCamTo('round')
+},
+function(event,__bth){bfCamClose()
+},
+function(event,__bth){bfCamSend()
+},
+function(event,__bth){bfCamTo((''+__bth[0]+''))
 },
 function(event,__bth){if(window.event)window.event.stopPropagation();openPlayerMenu((''+__bth[0]+''),(''+__bth[1]+''),__bth[2],'nearby',(''+__bth[3]+''),__bth[4],(''+__bth[5]+''))
 },
@@ -1789,8 +1827,8 @@ function(event,__bth){setRate((''+__bth[0]+''),this.value)
 },
 function(event,__bth){propRun(()=>{return __btRun(__bth[0],this,event);})
 }];
-var __btST={"click":{"openVerify('nagCard')":3,"vfNagLater()":4,"joinCancelWait()":5,"lobbyRetry()":6,"nearKeep()":8,"garminPick()":9,"btDoInstall()":10,"magRequestNew()":11,"magUI=null;render()":12,"closeReview()":13,"reviewCommit()":14,"setTopLens('gross')":15,"setTopLens('net')":16,"closePinAsk()":21,"event.stopPropagation()":22,"pinAnswer('c')":23,"geoRetry()":24,"toggleMapCredits()":25,"clearScoreNag(true)":26,"bagAddCustom()":30,"bagToggleCustom()":31,"bagTogglePick()":32,"bagReset()":33,"clearTrackStart()":34,"cancelMark()":35,"saveShot(null)":36,"undoTrackShot()":38,"typedDone()":39,"typedLater()":40,"mapStatToggle('fw')":44,"mapStatToggle('gir')":45,"inviteFromMap()":46,"toggleWindMode()":47,"go(gpsOnly()?'setup':'hole')":51,"mapPrev()":52,"mapNext()":53,"trackShotTap()":54,"manualModeTap()":55,"mapConfirm()":56,"mapChScore(-1)":57,"showMapConfirm()":58,"mapChScore(1)":59,"toggleElevMode()":60,"closeCoursePreview()":61,"teeBtnTap()":62,"greenBtnTap()":63,"greenClashClear()":64,"greenClashKeep()":65,"declineMapInvite()":66,"acceptMapInvite()":67,"meRecenter()":68,"openGreenRead()":69,"closeGreenRead()":70,"if(event.target===this)windDialClose()":72,"windDialMph(-1)":73,"windDialMph(1)":74,"windDialForecast()":75,"windDialDone()":76,"skipParAsk()":77,"snakeAskLater()":87,"skipPutts('click')":99,"dismissSplash()":100,"profAskUse()":101,"profAskKeep()":102,"closeVerify()":103,"confirmVerifyCode()":104,"sendVerifyCode()":105,"sendVerifyLink()":106,"verifyUI.stage=0,render()":107,"go('')":108,"go('gate')":109,"go('home')":110,"go('bfield')":111,"go('setup')":112,"go('courses')":113,"go('players')":114,"newGamesDone()":116,"confirmGamePick()":117,"closeGamePick()":118,"openGamePick()":119,"installGateSkip()":120,"go('hole')":121,"openMap()":122,"go('standings')":123,"backToGamePick()":124,"":125,"pickToggleGame('stroke')":126,"pickToggleGame('wolf')":127,"pickToggleGame('vegas')":128,"pickToggleGame('skins')":129,"pickToggleGame('matchplay')":130,"pickToggleGame('nines')":131,"pickToggleGame('bestball')":132,"pickToggleGame('scramble')":133,"pickToggleGame('sixes')":134,"pickToggleGame('umbrella')":135,"pickToggleGame('quota')":136,"pickToggleGame('stableford')":137,"pickToggleGame('bbb')":138,"pickToggleGame('nassau')":139,"pickToggleGame('rabbit')":140,"pickToggleGame('banker')":141,"pickToggleGame('junk')":142,"pickToggleGame('snake')":143,"chooseGame('stroke')":144,"chooseGame('wolf')":145,"chooseGame('vegas')":146,"chooseGame('skins')":147,"chooseGame('matchplay')":148,"chooseGame('nines')":149,"chooseGame('bestball')":150,"chooseGame('scramble')":151,"chooseGame('sixes')":152,"chooseGame('umbrella')":153,"chooseGame('quota')":154,"chooseGame('stableford')":155,"chooseGame('bbb')":156,"chooseGame('nassau')":157,"chooseGame('rabbit')":158,"chooseGame('banker')":159,"chooseGame('junk')":160,"chooseGame('snake')":161,"showRules('stroke')":162,"showRules('wolf')":163,"showRules('vegas')":164,"showRules('skins')":165,"showRules('matchplay')":166,"showRules('nines')":167,"showRules('bestball')":168,"showRules('scramble')":169,"showRules('sixes')":170,"showRules('umbrella')":171,"showRules('quota')":172,"showRules('stableford')":173,"showRules('bbb')":174,"showRules('nassau')":175,"showRules('rabbit')":176,"showRules('banker')":177,"showRules('junk')":178,"showRules('snake')":179,"wizChooseGame('stroke')":180,"wizChooseGame('wolf')":181,"wizChooseGame('vegas')":182,"wizChooseGame('skins')":183,"wizChooseGame('matchplay')":184,"wizChooseGame('nines')":185,"wizChooseGame('bestball')":186,"wizChooseGame('scramble')":187,"wizChooseGame('sixes')":188,"wizChooseGame('umbrella')":189,"wizChooseGame('quota')":190,"wizChooseGame('stableford')":191,"wizChooseGame('bbb')":192,"wizChooseGame('nassau')":193,"wizChooseGame('rabbit')":194,"wizChooseGame('banker')":195,"wizChooseGame('junk')":196,"wizChooseGame('snake')":197,"saveMe()":217,"welcomeRestore();return false":218,"setTheme('light')":221,"setTheme('dark')":222,"go('settings')":223,"resumeOpenRoom()":224,"leaveShare();render()":225,"startWizard()":226,"go('stats')":227,"go('history')":228,"startRangefinder()":229,"go('map')":230,"endRangefinder()":231,"openRoundOpts()":232,"askEndRound()":233,"mergeIntoRound()":234,"cancelRound()":235,"leaveShare()":236,"inviteFromMap();render()":237,"goGroup()":238,"daArm()":239,"daStart()":240,"daCancel()":241,"daCode()":242,"emLockConfirm()":243,"emLockSend()":244,"pkConfirm()":245,"pkSendCode()":246,"closeDoc()":248,"shareAppLink()":251,"contactMail()":252,"if(distUnit()!=='yd')toggleUnits()":253,"if(distUnit()!=='m')toggleUnits()":254,"windSettingToggle()":255,"lastLinesToggle()":256,"wakeSettingToggle()":257,"amnesiaToggle()":258,"openDoc('privacy')":259,"openLicenses()":260,"envSettingToggle()":261,"soArm()":262,"soGo()":263,"soCancel()":264,"openDoc('terms')":265,"dismissMarkNotes()":266,"openBattlefield()":267,"bfCmReplyClear()":278,"bfCmRulesOk()":279,"bfCmRules(false)":280,"closeBfComments()":282,"bfCmSend()":283,"pmReport('name')":294,"closePlayerMenu()":295,"pmReport('photo')":296,"pmUnblock()":297,"pmBlock()":298,"bfAck('*')":302,"bfChipTap()":303,"bfLens='gross';render()":306,"bfLens='net';render()":307,"closeShotView()":309,"pushToggle()":310,"pushTest()":311,"pickingCourse=true;finder={status:'idle',choices:[],error:''};go('pickcourse')":312,"set(()=>{S.round=blankRound();});wiz={step:'join',n:4};S.screen='start';render()":313,"wizBack()":314,"joinRound()":315,"setSpan(18,0);render()":318,"setSpan(9,0);render()":319,"setSpan(9,9);render()":320,"wizKind('solo')":322,"wizKind('multi')":323,"wizKind('join')":324,"wizToGame()":331,"setAddMode('lib')":332,"setAddMode('type')":333,"setAddMode('nearby')":334,"addTypedGolfer()":335,"wizOptsDone()":336,"openGroupCreate()":340,"toggleGrpEdit()":341,"pairGroups()":345,"startGroupFromGate()":346,"go('pickgame')":347,"wizCourseNext()":350,"startRound()":351,"set(()=>S.screen='season')":352,"exportSave('xlsx')":357,"exportEmail('xlsx')":358,"exOpen('download',exScope,true)":359,"exOpen('email',exScope,true)":360,"exClose()":361,"exOpen('pick',exScope)":362,"exportSave('csv')":363,"exportEmail('csv')":364,"toggleAutoBackup()":365,"openVerify('backupRow')":366,"doBackup()":367,"closeBackup()":368,"requestRestoreCode()":369,"doRestore()":370,"openBackup()":371,"openRestore()":372,"addCourse()":373,"natBrowse()":374,"addBlankCourse()":375,"cancelFind()":377,"go('course')":382,"openGroupBuild()":384,"openMyBag()":385,"saveEditMe()":386,"cancelEditMe()":387,"openPhotoPick()":388,"removeMyPhoto()":390,"editMe()":391,"toggleScan()":392,"addManualPlayer()":394,"toggleAddPlayer()":395,"saveEditPlayer()":396,"cancelEditPlayer()":397,"delPlayerCancel()":402,"dismissRoundSplash()":405,"idleKeep()":406,"idleEnd()":407,"addTee()":417,"set(()=>{delete S.course._note;delete S.course._noteOk;})":418,"preloadCourseTiles(true);naipEnsure(S.course,true)":419,"set(()=>{delete S.course.geo;delete S.course.geoReal;})":420,"fetchMapNow()":421,"go(roundOptsBack)":422,"chAllow(-5)":423,"chAllow(5)":424,"setRecLens('net')":425,"setRecLens('gross')":426,"set(()=>S.config.carryTies=!S.config.carryTies)":427,"set(()=>S.config.last2LastPlace=!S.config.last2LastPlace)":428,"propDraft=null;go(roundOptsBack)":429,"chPt('partnerWin',-1)":430,"chPt('fieldBeatsPartners',-1)":431,"chPt('loneWin',-1)":432,"chPt('fieldBeatsLone',-1)":433,"chPt('blindWin',-1)":434,"chPt('fieldBeatsBlind',-1)":435,"chPt('ctp',-1)":436,"chPt('partnerWin',1)":437,"chPt('fieldBeatsPartners',1)":438,"chPt('loneWin',1)":439,"chPt('fieldBeatsLone',1)":440,"chPt('blindWin',1)":441,"chPt('fieldBeatsBlind',1)":442,"chPt('ctp',1)":443,"set(()=>S.config.scramble.teams='duo')":444,"set(()=>S.config.scramble.teams='2v2')":445,"set(()=>S.config.scramble.teams='solo')":446,"set(()=>S.config.hammer.on=true)":448,"set(()=>S.config.hammer.on=false)":449,"set(()=>S.config.skins.carry=S.config.skins.carry===false?true:false)":451,"set(()=>S.config.skins.per=S.config.skins.per?null:skinsHoleVals())":452,"set(()=>S.config.nassau.n=4)":455,"set(()=>S.config.nassau.n=2)":456,"toggleMystery('bestball')":462,"toggleMystery('umbrella')":463,"toggleMystery('nassau')":464,"set(()=>S.config.vegas.rotate=S.config.vegas.rotate==='six'?'none':'six')":465,"set(()=>S.config.vegas.flip=!S.config.vegas.flip)":466,"set(()=>S.config.vegas.ctp=!S.config.vegas.ctp)":467,"toggleMystery('vegas')":468,"set(()=>S.config.nines.blitz=!S.config.nines.blitz)":478,"set(()=>S.config.nines.ctp=!S.config.nines.ctp)":479,"setSpan(18,0)":480,"setSpan(9,0)":481,"setSpan(9,9)":482,"toggleCtpAll()":488,"startPick()":489,"pairsAskDone()":491,"joinSpanDone()":494,"joinSpanPick(18,0)":496,"joinSpanPick(9,0)":497,"joinSpanPick(9,9)":498,"teeAskDone()":499,"cropUse()":505,"photoCrop=null;render()":506,"wolfOrderDone()":507,"bankAskDone()":509,"bankAskToss()":511,"mapBetOpen()":512,"mapBetClose()":514,"toggleReorder()":515,"grpEdAddNew()":519,"saveGroupEdit()":520,"closeGroupEditor()":521,"fixTake(true)":523,"fixAsk=null;render()":524,"unconfirm()":528,"nextHole()":529,"redoPick()":530,"pickBlind()":533,"pickLone()":534,"wolfAskClose()":536,"setCtp(-1)":538,"toggleCtpCarry()":541,"set(()=>{S.config.snake.grow=!snakeGrow();})":544,"set(()=>{S.config.snake.tie='last';})":545,"set(()=>{S.config.snake.tie='short';})":546,"set(()=>{S.config.rabbit.steal=!rabbitCfg().steal;})":549,"set(()=>S.config.rabbit.split='nines')":550,"set(()=>S.config.rabbit.split='all')":551,"chBanker('min',-1)":552,"chBanker('min',1)":553,"chBanker('max',-1)":554,"chBanker('max',1)":555,"chBankerRotate(false)":556,"chBankerRotate(true)":557,"bbbOpen(mapHole)":558,"bbbAskClose()":559,"nassauPress(-1)":564,"hamUnfold()":566,"hamAccept()":567,"hamFold()":568,"hamOops()":569,"endAskScore()":571,"endAskAnyway()":572,"endAskYes()":573,"endAskNo()":574,"catchSave()":575,"catchCancel()":576,"joinPlay('team')":582,"joinPlay('score')":583,"joinPlay('match')":584,"appUpdateNow()":585,"rulesLater()":586,"propVote('yes')":587,"propVote('no')":588,"propWithdraw()":589,"propSend()":590,"propUndo()":591,"propSetScope('next')":592,"propSetScope('all')":593,"roomFullWatch()":594,"roomFullLeave()":595,"holeStatToggle('fw')":596,"holeStatToggle('gir')":597,"confirmHole(true)":598,"confirmMine()":599,"closeFullCard()":602,"openChal()":603,"chalDecline()":604,"cheerDismiss()":605,"chalSave()":609,"openFullCard()":616,"setPayLens('net')":617,"setPayLens('gross')":618},"pointerdown":{"windRosePD(event)":48,"puttPD(event)":79,"cropPD(event)":501},"pointerup":{"windRosePU()":49,"puttPUskip(event)":98,"cropPU()":503},"pointercancel":{"windRosePU()":49,"cropPU()":503},"contextmenu":{"return false":50},"error":{"this.style.display='none'":115,"this.outerHTML='<span class=\"stroke-ph\">⛳</span>'":198,"this.outerHTML='<span class=\"vegas-ph\">🎲</span>'":199,"this.outerHTML='<span class=\"skin-ph\">🪙</span>'":200,"this.outerHTML='<span class=\"mp-ph\">⚔️</span>'":201,"this.outerHTML='<span class=\"nine-ph\">9</span>'":202,"this.outerHTML='<span class=\"bb-ph\">🏆</span>'":203,"this.outerHTML='<span class=\"scr-ph\">🤝</span>'":204,"this.outerHTML='<span class=\"six-ph\">6</span>'":205,"this.outerHTML='<span class=\"umb-ph\">☂</span>'":206,"this.outerHTML='<span class=\"quota-ph\">36</span>'":207,"this.outerHTML='<span class=\"stbl-ph\">🎯</span>'":208,"this.outerHTML='<span class=\"bbb-ph\">🥁</span>'":209,"this.outerHTML='<span class=\"nas-ph\">🏅</span>'":210,"this.outerHTML='<span class=\"rabbit-ph\">🐇</span>'":211,"this.outerHTML='<span class=\"banker-ph\">🏦</span>'":212,"this.outerHTML='<span class=\"junk-ph\">🪙</span>'":213,"this.outerHTML='<span class=\"snake-ph\">🐍</span>'":214,"this.outerHTML='<h1 style=\"color:var(--green-ink);font-size:26px\">Battle Tees</h1>'":215,"this.outerHTML='<h1 style=\"color:var(--green-ink);font-size:20px\">Battle Tees</h1>'":220,"this.parentNode.style.display='none'":250,"this.outerHTML='<span style=\"font-size:34px\">🎲</span>'":601},"focus":{"tapClear(this)":216},"toggle":{"if(this.open)faqCatOpened(this)":247,"if(this.open)ruleOpened(this)":348},"input":{"bfCmInput()":281,"S.config.groupName=this.value;save()":337,"natFilter(this.value)":376,"S.course.name=this.value;S.course.nameEdit=true;save()":416,"cropSize(+this.value)":504},"change":{"groupNameCommit(this.value)":338,"photoFilePicked(this)":389,"set(()=>{S.course.name=this.value;S.course.nameEdit=true;})":415,"set(()=>{S.config.skins.amt=Math.max(0,+(+this.value||0).toFixed(2));if(S.config.skins.per)S.config.skins.per=null;})":450,"set(()=>S.config.span.start=+this.value)":483,"setSpan(18,+this.value)":516,"setSpan(9,+this.value)":517,"setCtpAmt(this.value)":540,"set(()=>S.round.dollarPerPt=+this.value||0)":619},"pointermove":{"cropPM(event)":502},"keydown":{"if(event.key==='Enter')grpEdAddNew()":518}};
-var __btPT={"click":[[0,["toggleMyTrack('","sq","')"]],[1,["chStat('","sq","',","lit",",-1)"]],[2,["chStat('","sq","',","lit",",1)"]],[7,["nearJoin('","sq","')"]],[17,["jumpHole(","lit",")"]],[18,["setSegPairing('sixes',","lit",",","lit",")"]],[19,["setSegPairing('vegas',","lit",",","lit",")"]],[20,["pinAnswer(","lit",")"]],[28,["bagRemove(","lit",")"]],[29,["bagAdd('","sq","');render()"]],[37,["saveShot('","sq","')"]],[41,["typedStep(","lit",",-1)"]],[42,["typedStep(","lit",",1)"]],[43,["typedPutt(","lit",",","lit",")"]],[71,["windDialDir(","lit",")"]],[78,["setParPick(","lit",")"]],[81,["junkTap(","lit",",","lit",",'","sq","','click')"]],[82,["junkSet(","lit",",","lit",",'","sq","')"]],[83,["bkBet(","lit",",","lit",",-1)"]],[84,["bkBet(","lit",",","lit",",1)"]],[85,["bkDbl(","lit",",","lit",")"]],[86,["bkWho(","lit",",","lit",")"]],[88,["snakeAskPick(","lit",")"]],[89,["hamAccept(","lit",")"]],[90,["hamFold(","lit",")"]],[91,["hamThrow(","lit",",","lit",")"]],[92,["hamKeep(","lit",")"]],[93,["pressAnswer(","lit",",true)"]],[94,["pressAnswer(","lit",",false)"]],[95,["setSnakeLast(","lit",",","lit",")"]],[97,["setPutts(","lit",",","lit",",'click')"]],[219,["joinFromInvite('","sq","')"]],[249,["bfToggle('","sq","')"]],[268,["event.stopPropagation();bfPillTap('","sq","','","sq","','","sq","')"]],[269,["event.stopPropagation();bfReact('","sq","','","sq","','","sq","')"]],[270,["event.stopPropagation();bfPickToggle('","sq","','","sq","')"]],[271,["event.stopPropagation();openBfComments('","sq","','","sq","')"]],[272,["bfCmMenu(","lit",")"]],[273,["bfCmReplyTo('","sq","','","sq","')"]],[274,["bfCmDel(","lit",")"]],[275,["bfCmReport(","lit",")"]],[276,["bfCmBlock('","sq","')"]],[277,["bfCmUnblock('","sq","')"]],[284,["if(window.event)window.event.stopPropagation();openPlayerMenu('","sq","','","sq","',","lit",",'nearby','","sq","',","lit",",'","sq","')"]],[285,["if(window.event)window.event.stopPropagation();openPlayerMenu('","sq","','","sq","',","lit",",'nearby','","sq","',","lit",")"]],[286,["if(window.event)window.event.stopPropagation();openPlayerMenu('","sq","','","sq","',","lit",",'battlefield','","sq","',","lit",",'","sq","')"]],[287,["if(window.event)window.event.stopPropagation();openPlayerMenu('","sq","','","sq","',","lit",",'battlefield','","sq","',","lit",")"]],[288,["if(window.event)window.event.stopPropagation();openPlayerMenu('","sq","','","sq","',","lit",",'round','","sq","',","lit",",'","sq","')"]],[289,["if(window.event)window.event.stopPropagation();openPlayerMenu('","sq","','","sq","',","lit",",'round','","sq","',","lit",")"]],[290,["if(window.event)window.event.stopPropagation();openPlayerMenu('","sq","','","sq","',","lit",",'online','","sq","',","lit",",'","sq","')"]],[291,["if(window.event)window.event.stopPropagation();openPlayerMenu('","sq","','","sq","',","lit",",'online','","sq","',","lit",")"]],[292,["if(window.event)window.event.stopPropagation();openPlayerMenu('","sq","','","sq","',","lit",",'saved','","sq","',","lit",",'","sq","')"]],[293,["if(window.event)window.event.stopPropagation();openPlayerMenu('","sq","','","sq","',","lit",",'saved','","sq","',","lit",")"]],[299,["unblockFromSettings('","sq","')"]],[300,["bfReply('","sq","')"]],[301,["bfAck('","sq","')"]],[304,["if(!bfPickClose())openBfWatch('","sq","')"]],[305,["event.stopPropagation();bfForget('","sq","')"]],[308,["bfHole=","lit",";render()"]],[316,["setSpan(9,","lit",");render()"]],[317,["setSpan(18,","lit",");render()"]],[325,["wizCount(","lit",")"]],[326,["removeGolfer(","lit",")"]],[327,["gateAddOne('","sq","')"]],[328,["addFromLib('","sq","')"]],[329,["wizPickGroup('","sq","')"]],[330,["wizEditGroup('","sq","')"]],[339,["dismissInvite('","sq","')"]],[342,["openGroupEditor('","sq","')"]],[343,["delGroup('","sq","')"]],[344,["loadGroup('","sq","')"]],[349,["startWithGame('","sq","')"]],[353,["delHist('","sq","')"]],[354,["reopenRound('","sq","')"]],[355,["exOpen('pick','","sq","')"]],[356,["setSeason(","lit",")"]],[378,["natUse('","sq","')"]],[379,["useFoundCourse(","lit",")"]],[380,["pickCourse(","lit",")"]],[381,["openCoursePreview(","lit",")"]],[383,["delCourse(","lit",")"]],[393,["savePresencePlayer(","lit",")"]],[398,["setFriend('","sq","',false)"]],[399,["setFriend('","sq","',true)"]],[400,["confirmFriend('","sq","','","sq","')"]],[401,["inviteToBattle(decodeURIComponent('","sq","'))"]],[403,["delPlayer('","sq","')"]],[404,["startEditPlayer('","sq","')"]],[408,["chPar(","lit",",-1)"]],[409,["chPar(","lit",",1)"]],[414,["delTee(","lit",")"]],[447,["set(()=>S.config.sixes.pairing=","lit",")"]],[453,["set(()=>S.config.skins.n=","lit",")"]],[457,["set(()=>S.config.nassau.press='","sq","')"]],[458,["setTeamPairing('bestball',","lit",")"]],[459,["setTeamPairing('scramble',","lit",")"]],[460,["setTeamPairing('umbrella',","lit",")"]],[461,["setTeamPairing('nassau',","lit",")"]],[469,["setTeamPairing('vegas',","lit",")"]],[470,["set(()=>S.config.quota.n=","lit",")"]],[471,["chQuotaPt('","sq","',-1)"]],[472,["chQuotaPt('","sq","',1)"]],[473,["set(()=>S.config.bbb.n=","lit",")"]],[474,["set(()=>S.config.stbl.n=","lit",")"]],[475,["chStblPt('","sq","',-1)"]],[476,["chStblPt('","sq","',1)"]],[477,["set(()=>S.config.stroke.n=","lit",")"]],[486,["movePl(","lit",")"]],[490,["setStdTee('","sq","','","sq","')"]],[492,["joinSpanPick(","lit",",","lit",")"]],[495,["joinSpanPick(9,","lit",")"]],[500,["teeAskPick('","sq","')"]],[510,["bankAskPick(","lit",")"]],[513,["mapBetPick(","lit",")"]],[522,["grpEdToggle('","sq","')"]],[525,["unlockRow(","lit",",","lit",")"]],[526,["chScore(","lit",",-1)"]],[527,["chScore(","lit",",1)"]],[531,["redoPickArm(","lit",")"]],[532,["wolfPickAnswer('","sq","',","lit",")"]],[535,["pickTake(","lit",")"]],[537,["wolfTakeOver(","lit",")"]],[539,["setCtp(","lit",")"]],[542,["chJunkPt('","sq","',-1)"]],[543,["chJunkPt('","sq","',1)"]],[547,["set(()=>S.config.rabbit.n=","lit",")"]],[548,["set(()=>S.config.banker.n=","lit",")"]],[560,["bbbAskPick('","sq","',-1)"]],[561,["setBBB('","sq","',-1)"]],[562,["bbbAskPick('","sq","',","lit",")"]],[563,["setBBB('","sq","',","lit",")"]],[565,["nassauPress(","lit",")"]],[570,["hamThrow(","lit",")"]],[577,["catchStep(","lit",",-1)"]],[578,["catchStep(","lit",",1)"]],[579,["catchOpen(","lit",")"]],[580,["catchLater[","lit","]=true;render()"]],[581,["catchSkip(","lit",")"]],[600,["set(()=>prefillNines(","lit","))"]],[606,["chalToggle('","sq","')"]],[607,["chalBump('","sq","',-1)"]],[608,["chalBump('","sq","',1)"]],[610,["toggleMystery('","sq","')"]],[611,["revealPartners('","sq","')"]],[613,["setTeamPairing('","sq","',","lit",")"]],[614,["jumpAndGo(","lit",")"]],[615,["makeMainGame('","sq","')"]],[621,["propRun(()=>{","code","})"]]],"pointerdown":[[27,["bagPD(event,","lit",")"]],[508,["listPD(event,","lit",",'orderList',movePlRoundTo)"]]],"pointerup":[[80,["junkPU(event,","lit",",","lit",",'","sq","')"]],[96,["puttPU(event,","lit",",","lit",")"]]],"change":[[321,["setSpan(","lit",",+this.value)"]],[410,["chSI(","lit",",this.value)"]],[411,["chTee(","lit",",'name',this.value)"]],[412,["chTee(","lit",",'rating',this.value)"]],[413,["chTee(","lit",",'slope',this.value)"]],[454,["set(()=>{S.config.skins.per[","lit","]=Math.max(0,+this.value||0);})"]],[484,["pickPlayerOpt(","lit",",this.value)"]],[485,["setPl(","lit",",'tee',this.value)"]],[493,["joinSpanPick(","lit",",+this.value)"]],[612,["saveTeamNameUI('","sq","',","lit",",this.value)"]],[620,["setRate('","sq","',this.value)"]],[621,["propRun(()=>{","code","})"]]],"blur":[[487,["commitPl(this,","lit",",'index')"]]],"input":[[621,["propRun(()=>{","code","})"]]]};
+var __btST={"click":{"openVerify('nagCard')":3,"vfNagLater()":4,"joinCancelWait()":5,"lobbyRetry()":6,"nearKeep()":8,"garminPick()":9,"btDoInstall()":10,"magRequestNew()":11,"magUI=null;render()":12,"closeReview()":13,"reviewCommit()":14,"setTopLens('gross')":15,"setTopLens('net')":16,"closePinAsk()":21,"event.stopPropagation()":22,"pinAnswer('c')":23,"geoRetry()":24,"toggleMapCredits()":25,"clearScoreNag(true)":26,"bagAddCustom()":30,"bagToggleCustom()":31,"bagTogglePick()":32,"bagReset()":33,"clearTrackStart()":34,"cancelMark()":35,"saveShot(null)":36,"undoTrackShot()":38,"typedDone()":39,"typedLater()":40,"mapStatToggle('fw')":44,"mapStatToggle('gir')":45,"inviteFromMap()":46,"toggleWindMode()":47,"go(gpsOnly()?'setup':'hole')":51,"mapPrev()":52,"mapNext()":53,"trackShotTap()":54,"manualModeTap()":55,"mapConfirm()":56,"mapChScore(-1)":57,"showMapConfirm()":58,"mapChScore(1)":59,"toggleElevMode()":60,"closeCoursePreview()":61,"teeBtnTap()":62,"greenBtnTap()":63,"greenClashClear()":64,"greenClashKeep()":65,"declineMapInvite()":66,"acceptMapInvite()":67,"meRecenter()":68,"openGreenRead()":69,"closeGreenRead()":70,"if(event.target===this)windDialClose()":72,"windDialMph(-1)":73,"windDialMph(1)":74,"windDialForecast()":75,"windDialDone()":76,"skipParAsk()":77,"snakeAskLater()":87,"skipPutts('click')":99,"dismissSplash()":100,"profAskUse()":101,"profAskKeep()":102,"closeVerify()":103,"confirmVerifyCode()":104,"sendVerifyCode()":105,"sendVerifyLink()":106,"verifyUI.stage=0,render()":107,"go('')":108,"go('gate')":109,"go('home')":110,"go('bfield')":111,"go('setup')":112,"go('courses')":113,"go('players')":114,"newGamesDone()":116,"confirmGamePick()":117,"closeGamePick()":118,"openGamePick()":119,"installGateSkip()":120,"go('hole')":121,"openMap()":122,"go('standings')":123,"backToGamePick()":124,"":125,"pickToggleGame('stroke')":126,"pickToggleGame('wolf')":127,"pickToggleGame('vegas')":128,"pickToggleGame('skins')":129,"pickToggleGame('matchplay')":130,"pickToggleGame('nines')":131,"pickToggleGame('bestball')":132,"pickToggleGame('scramble')":133,"pickToggleGame('sixes')":134,"pickToggleGame('umbrella')":135,"pickToggleGame('quota')":136,"pickToggleGame('stableford')":137,"pickToggleGame('bbb')":138,"pickToggleGame('nassau')":139,"pickToggleGame('rabbit')":140,"pickToggleGame('banker')":141,"pickToggleGame('junk')":142,"pickToggleGame('snake')":143,"chooseGame('stroke')":144,"chooseGame('wolf')":145,"chooseGame('vegas')":146,"chooseGame('skins')":147,"chooseGame('matchplay')":148,"chooseGame('nines')":149,"chooseGame('bestball')":150,"chooseGame('scramble')":151,"chooseGame('sixes')":152,"chooseGame('umbrella')":153,"chooseGame('quota')":154,"chooseGame('stableford')":155,"chooseGame('bbb')":156,"chooseGame('nassau')":157,"chooseGame('rabbit')":158,"chooseGame('banker')":159,"chooseGame('junk')":160,"chooseGame('snake')":161,"showRules('stroke')":162,"showRules('wolf')":163,"showRules('vegas')":164,"showRules('skins')":165,"showRules('matchplay')":166,"showRules('nines')":167,"showRules('bestball')":168,"showRules('scramble')":169,"showRules('sixes')":170,"showRules('umbrella')":171,"showRules('quota')":172,"showRules('stableford')":173,"showRules('bbb')":174,"showRules('nassau')":175,"showRules('rabbit')":176,"showRules('banker')":177,"showRules('junk')":178,"showRules('snake')":179,"wizChooseGame('stroke')":180,"wizChooseGame('wolf')":181,"wizChooseGame('vegas')":182,"wizChooseGame('skins')":183,"wizChooseGame('matchplay')":184,"wizChooseGame('nines')":185,"wizChooseGame('bestball')":186,"wizChooseGame('scramble')":187,"wizChooseGame('sixes')":188,"wizChooseGame('umbrella')":189,"wizChooseGame('quota')":190,"wizChooseGame('stableford')":191,"wizChooseGame('bbb')":192,"wizChooseGame('nassau')":193,"wizChooseGame('rabbit')":194,"wizChooseGame('banker')":195,"wizChooseGame('junk')":196,"wizChooseGame('snake')":197,"saveMe()":217,"welcomeRestore();return false":218,"setTheme('light')":221,"setTheme('dark')":222,"go('settings')":223,"resumeOpenRoom()":224,"leaveShare();render()":225,"startWizard()":226,"go('stats')":227,"go('history')":228,"startRangefinder()":229,"go('map')":230,"endRangefinder()":231,"openRoundOpts()":232,"askEndRound()":233,"mergeIntoRound()":234,"cancelRound()":235,"leaveShare()":236,"inviteFromMap();render()":237,"goGroup()":238,"daArm()":239,"daStart()":240,"daCancel()":241,"daCode()":242,"emLockConfirm()":243,"emLockSend()":244,"pkConfirm()":245,"pkSendCode()":246,"closeDoc()":248,"shareAppLink()":251,"contactMail()":252,"if(distUnit()!=='yd')toggleUnits()":253,"if(distUnit()!=='m')toggleUnits()":254,"windSettingToggle()":255,"lastLinesToggle()":256,"wakeSettingToggle()":257,"amnesiaToggle()":258,"openDoc('privacy')":259,"openLicenses()":260,"envSettingToggle()":261,"soArm()":262,"soGo()":263,"soCancel()":264,"openDoc('terms')":265,"dismissMarkNotes()":266,"openBattlefield()":267,"bfCmReplyClear()":280,"bfCmRulesOk()":281,"bfCmRules(false)":282,"closeBfComments()":284,"bfCmSend()":285,"bfPhPick()":286,"bfPhClear()":287,"bfPhClose()":289,"bfCamPick()":293,"bfCamTo('round')":295,"bfCamClose()":296,"bfCamSend()":297,"pmReport('name')":309,"closePlayerMenu()":310,"pmReport('photo')":311,"pmUnblock()":312,"pmBlock()":313,"bfAck('*')":317,"bfChipTap()":318,"bfLens='gross';render()":321,"bfLens='net';render()":322,"closeShotView()":324,"pushToggle()":325,"pushTest()":326,"pickingCourse=true;finder={status:'idle',choices:[],error:''};go('pickcourse')":327,"set(()=>{S.round=blankRound();});wiz={step:'join',n:4};S.screen='start';render()":328,"wizBack()":329,"joinRound()":330,"setSpan(18,0);render()":333,"setSpan(9,0);render()":334,"setSpan(9,9);render()":335,"wizKind('solo')":337,"wizKind('multi')":338,"wizKind('join')":339,"wizToGame()":346,"setAddMode('lib')":347,"setAddMode('type')":348,"setAddMode('nearby')":349,"addTypedGolfer()":350,"wizOptsDone()":351,"openGroupCreate()":355,"toggleGrpEdit()":356,"pairGroups()":360,"startGroupFromGate()":361,"go('pickgame')":362,"wizCourseNext()":365,"startRound()":366,"set(()=>S.screen='season')":367,"exportSave('xlsx')":372,"exportEmail('xlsx')":373,"exOpen('download',exScope,true)":374,"exOpen('email',exScope,true)":375,"exClose()":376,"exOpen('pick',exScope)":377,"exportSave('csv')":378,"exportEmail('csv')":379,"toggleAutoBackup()":380,"openVerify('backupRow')":381,"doBackup()":382,"closeBackup()":383,"requestRestoreCode()":384,"doRestore()":385,"openBackup()":386,"openRestore()":387,"addCourse()":388,"natBrowse()":389,"addBlankCourse()":390,"cancelFind()":392,"go('course')":397,"openGroupBuild()":399,"openMyBag()":400,"saveEditMe()":401,"cancelEditMe()":402,"openPhotoPick()":403,"removeMyPhoto()":405,"editMe()":406,"toggleScan()":407,"addManualPlayer()":409,"toggleAddPlayer()":410,"saveEditPlayer()":411,"cancelEditPlayer()":412,"delPlayerCancel()":417,"dismissRoundSplash()":420,"idleKeep()":421,"idleEnd()":422,"addTee()":432,"set(()=>{delete S.course._note;delete S.course._noteOk;})":433,"preloadCourseTiles(true);naipEnsure(S.course,true)":434,"set(()=>{delete S.course.geo;delete S.course.geoReal;})":435,"fetchMapNow()":436,"go(roundOptsBack)":437,"chAllow(-5)":438,"chAllow(5)":439,"setRecLens('net')":440,"setRecLens('gross')":441,"set(()=>S.config.carryTies=!S.config.carryTies)":442,"set(()=>S.config.last2LastPlace=!S.config.last2LastPlace)":443,"propDraft=null;go(roundOptsBack)":444,"chPt('partnerWin',-1)":445,"chPt('fieldBeatsPartners',-1)":446,"chPt('loneWin',-1)":447,"chPt('fieldBeatsLone',-1)":448,"chPt('blindWin',-1)":449,"chPt('fieldBeatsBlind',-1)":450,"chPt('ctp',-1)":451,"chPt('partnerWin',1)":452,"chPt('fieldBeatsPartners',1)":453,"chPt('loneWin',1)":454,"chPt('fieldBeatsLone',1)":455,"chPt('blindWin',1)":456,"chPt('fieldBeatsBlind',1)":457,"chPt('ctp',1)":458,"set(()=>S.config.scramble.teams='duo')":459,"set(()=>S.config.scramble.teams='2v2')":460,"set(()=>S.config.scramble.teams='solo')":461,"set(()=>S.config.hammer.on=true)":463,"set(()=>S.config.hammer.on=false)":464,"set(()=>S.config.skins.carry=S.config.skins.carry===false?true:false)":466,"set(()=>S.config.skins.per=S.config.skins.per?null:skinsHoleVals())":467,"set(()=>S.config.nassau.n=4)":470,"set(()=>S.config.nassau.n=2)":471,"toggleMystery('bestball')":477,"toggleMystery('umbrella')":478,"toggleMystery('nassau')":479,"set(()=>S.config.vegas.rotate=S.config.vegas.rotate==='six'?'none':'six')":480,"set(()=>S.config.vegas.flip=!S.config.vegas.flip)":481,"set(()=>S.config.vegas.ctp=!S.config.vegas.ctp)":482,"toggleMystery('vegas')":483,"set(()=>S.config.nines.blitz=!S.config.nines.blitz)":493,"set(()=>S.config.nines.ctp=!S.config.nines.ctp)":494,"setSpan(18,0)":495,"setSpan(9,0)":496,"setSpan(9,9)":497,"toggleCtpAll()":503,"startPick()":504,"pairsAskDone()":506,"joinSpanDone()":509,"joinSpanPick(18,0)":511,"joinSpanPick(9,0)":512,"joinSpanPick(9,9)":513,"teeAskDone()":514,"cropUse()":520,"photoCrop=null;render()":521,"wolfOrderDone()":522,"bankAskDone()":524,"bankAskToss()":526,"mapBetOpen()":527,"mapBetClose()":529,"toggleReorder()":530,"grpEdAddNew()":534,"saveGroupEdit()":535,"closeGroupEditor()":536,"fixTake(true)":538,"fixAsk=null;render()":539,"unconfirm()":543,"nextHole()":544,"redoPick()":545,"pickBlind()":548,"pickLone()":549,"wolfAskClose()":551,"setCtp(-1)":553,"toggleCtpCarry()":556,"set(()=>{S.config.snake.grow=!snakeGrow();})":559,"set(()=>{S.config.snake.tie='last';})":560,"set(()=>{S.config.snake.tie='short';})":561,"set(()=>{S.config.rabbit.steal=!rabbitCfg().steal;})":564,"set(()=>S.config.rabbit.split='nines')":565,"set(()=>S.config.rabbit.split='all')":566,"chBanker('min',-1)":567,"chBanker('min',1)":568,"chBanker('max',-1)":569,"chBanker('max',1)":570,"chBankerRotate(false)":571,"chBankerRotate(true)":572,"bbbOpen(mapHole)":573,"bbbAskClose()":574,"nassauPress(-1)":579,"hamUnfold()":581,"hamAccept()":582,"hamFold()":583,"hamOops()":584,"endAskScore()":586,"endAskAnyway()":587,"endAskYes()":588,"endAskNo()":589,"catchSave()":590,"catchCancel()":591,"joinPlay('team')":597,"joinPlay('score')":598,"joinPlay('match')":599,"appUpdateNow()":600,"rulesLater()":601,"propVote('yes')":602,"propVote('no')":603,"propWithdraw()":604,"propSend()":605,"propUndo()":606,"propSetScope('next')":607,"propSetScope('all')":608,"roomFullWatch()":609,"roomFullLeave()":610,"holeStatToggle('fw')":611,"holeStatToggle('gir')":612,"confirmHole(true)":613,"confirmMine()":614,"closeFullCard()":617,"openChal()":618,"chalDecline()":619,"cheerDismiss()":620,"chalSave()":624,"openFullCard()":631,"setPayLens('net')":632,"setPayLens('gross')":633},"pointerdown":{"windRosePD(event)":48,"puttPD(event)":79,"cropPD(event)":516},"pointerup":{"windRosePU()":49,"puttPUskip(event)":98,"cropPU()":518},"pointercancel":{"windRosePU()":49,"cropPU()":518},"contextmenu":{"return false":50},"error":{"this.style.display='none'":115,"this.outerHTML='<span class=\"stroke-ph\">⛳</span>'":198,"this.outerHTML='<span class=\"vegas-ph\">🎲</span>'":199,"this.outerHTML='<span class=\"skin-ph\">🪙</span>'":200,"this.outerHTML='<span class=\"mp-ph\">⚔️</span>'":201,"this.outerHTML='<span class=\"nine-ph\">9</span>'":202,"this.outerHTML='<span class=\"bb-ph\">🏆</span>'":203,"this.outerHTML='<span class=\"scr-ph\">🤝</span>'":204,"this.outerHTML='<span class=\"six-ph\">6</span>'":205,"this.outerHTML='<span class=\"umb-ph\">☂</span>'":206,"this.outerHTML='<span class=\"quota-ph\">36</span>'":207,"this.outerHTML='<span class=\"stbl-ph\">🎯</span>'":208,"this.outerHTML='<span class=\"bbb-ph\">🥁</span>'":209,"this.outerHTML='<span class=\"nas-ph\">🏅</span>'":210,"this.outerHTML='<span class=\"rabbit-ph\">🐇</span>'":211,"this.outerHTML='<span class=\"banker-ph\">🏦</span>'":212,"this.outerHTML='<span class=\"junk-ph\">🪙</span>'":213,"this.outerHTML='<span class=\"snake-ph\">🐍</span>'":214,"this.outerHTML='<h1 style=\"color:var(--green-ink);font-size:26px\">Battle Tees</h1>'":215,"this.outerHTML='<h1 style=\"color:var(--green-ink);font-size:20px\">Battle Tees</h1>'":220,"this.parentNode.style.display='none'":250,"this.outerHTML='<span style=\"font-size:34px\">🎲</span>'":616},"focus":{"tapClear(this)":216},"toggle":{"if(this.open)faqCatOpened(this)":247,"if(this.open)ruleOpened(this)":363},"input":{"bfCmInput()":283,"S.config.groupName=this.value;save()":352,"natFilter(this.value)":391,"S.course.name=this.value;S.course.nameEdit=true;save()":431,"cropSize(+this.value)":519},"change":{"bfPhPicked(this)":288,"bfCamPicked(this)":294,"groupNameCommit(this.value)":353,"photoFilePicked(this)":404,"set(()=>{S.course.name=this.value;S.course.nameEdit=true;})":430,"set(()=>{S.config.skins.amt=Math.max(0,+(+this.value||0).toFixed(2));if(S.config.skins.per)S.config.skins.per=null;})":465,"set(()=>S.config.span.start=+this.value)":498,"setSpan(18,+this.value)":531,"setSpan(9,+this.value)":532,"setCtpAmt(this.value)":555,"set(()=>S.round.dollarPerPt=+this.value||0)":634},"pointermove":{"cropPM(event)":517},"keydown":{"if(event.key==='Enter')grpEdAddNew()":533}};
+var __btPT={"click":[[0,["toggleMyTrack('","sq","')"]],[1,["chStat('","sq","',","lit",",-1)"]],[2,["chStat('","sq","',","lit",",1)"]],[7,["nearJoin('","sq","')"]],[17,["jumpHole(","lit",")"]],[18,["setSegPairing('sixes',","lit",",","lit",")"]],[19,["setSegPairing('vegas',","lit",",","lit",")"]],[20,["pinAnswer(","lit",")"]],[28,["bagRemove(","lit",")"]],[29,["bagAdd('","sq","');render()"]],[37,["saveShot('","sq","')"]],[41,["typedStep(","lit",",-1)"]],[42,["typedStep(","lit",",1)"]],[43,["typedPutt(","lit",",","lit",")"]],[71,["windDialDir(","lit",")"]],[78,["setParPick(","lit",")"]],[81,["junkTap(","lit",",","lit",",'","sq","','click')"]],[82,["junkSet(","lit",",","lit",",'","sq","')"]],[83,["bkBet(","lit",",","lit",",-1)"]],[84,["bkBet(","lit",",","lit",",1)"]],[85,["bkDbl(","lit",",","lit",")"]],[86,["bkWho(","lit",",","lit",")"]],[88,["snakeAskPick(","lit",")"]],[89,["hamAccept(","lit",")"]],[90,["hamFold(","lit",")"]],[91,["hamThrow(","lit",",","lit",")"]],[92,["hamKeep(","lit",")"]],[93,["pressAnswer(","lit",",true)"]],[94,["pressAnswer(","lit",",false)"]],[95,["setSnakeLast(","lit",",","lit",")"]],[97,["setPutts(","lit",",","lit",",'click')"]],[219,["joinFromInvite('","sq","')"]],[249,["bfToggle('","sq","')"]],[268,["event.stopPropagation();bfPillTap('","sq","','","sq","','","sq","')"]],[269,["event.stopPropagation();bfReact('","sq","','","sq","','","sq","')"]],[270,["event.stopPropagation();bfPickToggle('","sq","','","sq","')"]],[271,["event.stopPropagation();bfPhotoTo('","sq","','","sq","')"]],[272,["event.stopPropagation();openBfComments('","sq","','","sq","')"]],[273,["bfCmMenu(","lit",")"]],[274,["bfPhView(","lit",")"]],[275,["bfCmReplyTo('","sq","','","sq","')"]],[276,["bfCmDel(","lit",")"]],[277,["bfCmReport(","lit",")"]],[278,["bfCmBlock('","sq","')"]],[279,["bfCmUnblock('","sq","')"]],[290,["bfPhShare(","lit",")"]],[291,["bfPhDel(","lit",")"]],[292,["bfPhRep(","lit",")"]],[298,["bfCamTo('","sq","')"]],[299,["if(window.event)window.event.stopPropagation();openPlayerMenu('","sq","','","sq","',","lit",",'nearby','","sq","',","lit",",'","sq","')"]],[300,["if(window.event)window.event.stopPropagation();openPlayerMenu('","sq","','","sq","',","lit",",'nearby','","sq","',","lit",")"]],[301,["if(window.event)window.event.stopPropagation();openPlayerMenu('","sq","','","sq","',","lit",",'battlefield','","sq","',","lit",",'","sq","')"]],[302,["if(window.event)window.event.stopPropagation();openPlayerMenu('","sq","','","sq","',","lit",",'battlefield','","sq","',","lit",")"]],[303,["if(window.event)window.event.stopPropagation();openPlayerMenu('","sq","','","sq","',","lit",",'round','","sq","',","lit",",'","sq","')"]],[304,["if(window.event)window.event.stopPropagation();openPlayerMenu('","sq","','","sq","',","lit",",'round','","sq","',","lit",")"]],[305,["if(window.event)window.event.stopPropagation();openPlayerMenu('","sq","','","sq","',","lit",",'online','","sq","',","lit",",'","sq","')"]],[306,["if(window.event)window.event.stopPropagation();openPlayerMenu('","sq","','","sq","',","lit",",'online','","sq","',","lit",")"]],[307,["if(window.event)window.event.stopPropagation();openPlayerMenu('","sq","','","sq","',","lit",",'saved','","sq","',","lit",",'","sq","')"]],[308,["if(window.event)window.event.stopPropagation();openPlayerMenu('","sq","','","sq","',","lit",",'saved','","sq","',","lit",")"]],[314,["unblockFromSettings('","sq","')"]],[315,["bfReply('","sq","')"]],[316,["bfAck('","sq","')"]],[319,["if(!bfPickClose())openBfWatch('","sq","')"]],[320,["event.stopPropagation();bfForget('","sq","')"]],[323,["bfHole=","lit",";render()"]],[331,["setSpan(9,","lit",");render()"]],[332,["setSpan(18,","lit",");render()"]],[340,["wizCount(","lit",")"]],[341,["removeGolfer(","lit",")"]],[342,["gateAddOne('","sq","')"]],[343,["addFromLib('","sq","')"]],[344,["wizPickGroup('","sq","')"]],[345,["wizEditGroup('","sq","')"]],[354,["dismissInvite('","sq","')"]],[357,["openGroupEditor('","sq","')"]],[358,["delGroup('","sq","')"]],[359,["loadGroup('","sq","')"]],[364,["startWithGame('","sq","')"]],[368,["delHist('","sq","')"]],[369,["reopenRound('","sq","')"]],[370,["exOpen('pick','","sq","')"]],[371,["setSeason(","lit",")"]],[393,["natUse('","sq","')"]],[394,["useFoundCourse(","lit",")"]],[395,["pickCourse(","lit",")"]],[396,["openCoursePreview(","lit",")"]],[398,["delCourse(","lit",")"]],[408,["savePresencePlayer(","lit",")"]],[413,["setFriend('","sq","',false)"]],[414,["setFriend('","sq","',true)"]],[415,["confirmFriend('","sq","','","sq","')"]],[416,["inviteToBattle(decodeURIComponent('","sq","'))"]],[418,["delPlayer('","sq","')"]],[419,["startEditPlayer('","sq","')"]],[423,["chPar(","lit",",-1)"]],[424,["chPar(","lit",",1)"]],[429,["delTee(","lit",")"]],[462,["set(()=>S.config.sixes.pairing=","lit",")"]],[468,["set(()=>S.config.skins.n=","lit",")"]],[472,["set(()=>S.config.nassau.press='","sq","')"]],[473,["setTeamPairing('bestball',","lit",")"]],[474,["setTeamPairing('scramble',","lit",")"]],[475,["setTeamPairing('umbrella',","lit",")"]],[476,["setTeamPairing('nassau',","lit",")"]],[484,["setTeamPairing('vegas',","lit",")"]],[485,["set(()=>S.config.quota.n=","lit",")"]],[486,["chQuotaPt('","sq","',-1)"]],[487,["chQuotaPt('","sq","',1)"]],[488,["set(()=>S.config.bbb.n=","lit",")"]],[489,["set(()=>S.config.stbl.n=","lit",")"]],[490,["chStblPt('","sq","',-1)"]],[491,["chStblPt('","sq","',1)"]],[492,["set(()=>S.config.stroke.n=","lit",")"]],[501,["movePl(","lit",")"]],[505,["setStdTee('","sq","','","sq","')"]],[507,["joinSpanPick(","lit",",","lit",")"]],[510,["joinSpanPick(9,","lit",")"]],[515,["teeAskPick('","sq","')"]],[525,["bankAskPick(","lit",")"]],[528,["mapBetPick(","lit",")"]],[537,["grpEdToggle('","sq","')"]],[540,["unlockRow(","lit",",","lit",")"]],[541,["chScore(","lit",",-1)"]],[542,["chScore(","lit",",1)"]],[546,["redoPickArm(","lit",")"]],[547,["wolfPickAnswer('","sq","',","lit",")"]],[550,["pickTake(","lit",")"]],[552,["wolfTakeOver(","lit",")"]],[554,["setCtp(","lit",")"]],[557,["chJunkPt('","sq","',-1)"]],[558,["chJunkPt('","sq","',1)"]],[562,["set(()=>S.config.rabbit.n=","lit",")"]],[563,["set(()=>S.config.banker.n=","lit",")"]],[575,["bbbAskPick('","sq","',-1)"]],[576,["setBBB('","sq","',-1)"]],[577,["bbbAskPick('","sq","',","lit",")"]],[578,["setBBB('","sq","',","lit",")"]],[580,["nassauPress(","lit",")"]],[585,["hamThrow(","lit",")"]],[592,["catchStep(","lit",",-1)"]],[593,["catchStep(","lit",",1)"]],[594,["catchOpen(","lit",")"]],[595,["catchLater[","lit","]=true;render()"]],[596,["catchSkip(","lit",")"]],[615,["set(()=>prefillNines(","lit","))"]],[621,["chalToggle('","sq","')"]],[622,["chalBump('","sq","',-1)"]],[623,["chalBump('","sq","',1)"]],[625,["toggleMystery('","sq","')"]],[626,["revealPartners('","sq","')"]],[628,["setTeamPairing('","sq","',","lit",")"]],[629,["jumpAndGo(","lit",")"]],[630,["makeMainGame('","sq","')"]],[636,["propRun(()=>{","code","})"]]],"pointerdown":[[27,["bagPD(event,","lit",")"]],[523,["listPD(event,","lit",",'orderList',movePlRoundTo)"]]],"pointerup":[[80,["junkPU(event,","lit",",","lit",",'","sq","')"]],[96,["puttPU(event,","lit",",","lit",")"]]],"change":[[336,["setSpan(","lit",",+this.value)"]],[425,["chSI(","lit",",this.value)"]],[426,["chTee(","lit",",'name',this.value)"]],[427,["chTee(","lit",",'rating',this.value)"]],[428,["chTee(","lit",",'slope',this.value)"]],[469,["set(()=>{S.config.skins.per[","lit","]=Math.max(0,+this.value||0);})"]],[499,["pickPlayerOpt(","lit",",this.value)"]],[500,["setPl(","lit",",'tee',this.value)"]],[508,["joinSpanPick(","lit",",+this.value)"]],[627,["saveTeamNameUI('","sq","',","lit",",this.value)"]],[635,["setRate('","sq","',this.value)"]],[636,["propRun(()=>{","code","})"]]],"blur":[[502,["commitPl(this,","lit",",'index')"]]],"input":[[636,["propRun(()=>{","code","})"]]]};
 var __btTYPES=["blur","change","click","contextmenu","error","focus","input","keydown","pointercancel","pointerdown","pointermove","pointerup","toggle"];
 if (typeof Element === 'undefined' || !Element.prototype || typeof document === 'undefined') return;
 var __btMissList = window.__btCspMiss = [];
@@ -2006,7 +2044,7 @@ var BF_DOCS={},
     bfHeld=new Set(),
     bfDBp=null,
     statMem=[];
-const BUILD='1795157392';
+const BUILD='1795163294';
 const HOLES=18;
 
 function courseTealBend(){return {id:'teal-bend',name:'Teal Bend GC',loc:[38.6972,-121.6173],
@@ -3194,8 +3232,15 @@ function histTakeFixes(id,doc){
   if(notes.length){try{
     const by=[...new Set(notes.map(x=>x.by||'Someone'))];
     shotToast((e.courseName?e.courseName+' — ':'')+notes.map(x=>'Hole '+x.h+': '+(x.by||'Someone')+' changed your score '+x.a+'→'+(x.b==null?'–':x.b)).join(' · '),9000);
-    e.fixNotes=(e.fixNotes||[]).concat(notes.map(x=>Object.assign({at:Date.now()},x))).slice(-20);save();}catch(x){}}
+    const cur=(S.history||[]).find(x=>x&&x.id===id)||e;
+    cur.fixNotes=(cur.fixNotes||[]).concat(notes.map(x=>Object.assign({at:Date.now()},x))).slice(-20);save();
+    if(S.screen==='history')render();}catch(x){}}
   return true;
+}
+function histFixHTML(e){
+  const n=(e&&Array.isArray(e.fixNotes))?e.fixNotes.slice(-3):[];
+  if(!n.length)return '';
+  return n.map(x=>`<div class="tiny" style="color:var(--amber-bd,#c9922e)">✎ Hole ${btN(x.h)}: ${esc(String(x.by||'Someone'))} changed your score ${btN(x.a)}→${x.b==null?'–':btN(x.b)}</div>`).join('');
 }
 function histMySeat(e){const pl=e.playersSnap||[];let i=pl.findIndex(p=>p&&p.ownerDev===devId());if(i<0&&S.me&&S.me.pid)i=pl.findIndex(p=>p&&p.pid===S.me.pid);return i;}
 function histRefile(e){
@@ -11136,6 +11181,8 @@ function daWipe(){
   try{if(window.caches)['bt-tiles','bt-elev','bt-courses'].forEach(n=>gone.push(caches.delete(n).catch(()=>{})));}catch(e){}
   try{if(typeof indexedDB!=='undefined')gone.push((naipDBp?naipDBp.then(d=>{try{d.close();}catch(e){}}).catch(()=>{}):Promise.resolve())
     .then(()=>{naipDBp=null;return new Promise(res=>{const q=indexedDB.deleteDatabase('bt-naip');q.onsuccess=q.onerror=()=>res();});}));}catch(e){}
+  try{if(typeof indexedDB!=='undefined')gone.push((bfPqDB?bfPqDB.then(d=>{try{d.close();}catch(e){}}).catch(()=>{}):Promise.resolve())
+    .then(()=>{bfPqDB=null;return new Promise(res=>{const q=indexedDB.deleteDatabase('bt-pq');q.onsuccess=q.onerror=()=>res();});}));}catch(e){}
   try{if(typeof indexedDB!=='undefined')gone.push((bfDBp?bfDBp.then(d=>{try{d.close();}catch(e){}}).catch(()=>{}):Promise.resolve())
     .then(()=>{bfDBp=null;try{BF_DOCS={};}catch(e){}return new Promise(res=>{const q=indexedDB.deleteDatabase('bt-bf');q.onsuccess=q.onerror=()=>res();});}));}catch(e){}
   Promise.race([Promise.all(gone),new Promise(r=>setTimeout(r,2500))]).then(()=>location.replace(location.pathname));
@@ -11846,7 +11893,9 @@ function bfRxHTML(code,t,fit){
   const pop=open?`<div class="bfpop" role="menu" onclick="event.stopPropagation()">${order.map(([id,nm])=>
     `<button class="bfpick${id===fit?' fit':''}${mine===id?' mine':''}" role="menuitem" aria-label="${nm}" onclick="event.stopPropagation();bfReact('${C}','${T}','${btId(id)}')">${bfIcon(id)}<small>${nm}</small></button>`).join('')}</div>`:'';
   return `<div class="bfrx">${pop}${pills}<button class="bfadd" aria-haspopup="true" aria-expanded="${!!open}" onclick="event.stopPropagation();bfPickToggle('${C}','${T}')">+ React</button>`
-    +`<button class="bfcbtn" onclick="event.stopPropagation();openBfComments('${C}','${T}')">${BF_BUBBLE}${n?n+(n===1?' comment':' comments'):'Comment'}</button></div>`;
+    +(t==='round'||(bfPrivT(t)&&t!==myPid())?`<button class="bfcbtn" aria-label="Send a photo" onclick="event.stopPropagation();bfPhotoTo('${C}','${T}')">📷</button>`:'')
+    +`<button class="bfcbtn" onclick="event.stopPropagation();openBfComments('${C}','${T}')">${BF_BUBBLE}${!bfPrivT(t)?(n?n+(n===1?' comment':' comments'):'Comment')
+      :t===myPid()?(n?'🔒 '+n+(n===1?' message':' messages'):'🔒 Messages'):(n?'🔒 '+n+(n===1?' message':' messages'):'🔒 Message')}</button></div>`;
 }
 function bfRoundHTML(code){
   if(!bfSoc[code])return '';
@@ -12047,13 +12096,13 @@ function bfCmListHTML(){
   const c=bfCm;if(!c)return '';
   if(c.list===null)return '<div class="tiny" style="padding:10px 0">Loading comments…</div>';
   if(c.list==='offline')return '<div class="tiny" style="padding:10px 0">Could not load comments. Check your signal.</div>';
-  let h=c.list.length?c.list.map(x=>`<div class="bfcm${x.mine?' mine':''}"><span class="bfcmBy">${esc(x.name)}</span><span class="bfcmAt">${bfAgo(x.at)}</span>
-    <div>${esc(x.text)}</div>
+  let h=c.list.length?c.list.map(x=>`<div class="bfcm${x.mine?' mine':''}"><span class="bfcmBy">${esc(x.name)}</span>${x.mine&&x.toName?`<span class="bfcmAt">to ${esc(x.toName)}</span>`:''}<span class="bfcmAt">${bfAgo(x.at)}</span>${x.private?'<span class="bfcmPriv">🔒</span>':''}
+    ${x.text?`<div>${esc(x.text)}</div>`:''}${x.photo?`<button class="bfph" id="bfph${+x.id}" aria-label="Photo from ${esc(x.name)}" onclick="bfPhView(${+x.id})">${bfPhImg(+x.id)}</button>`:''}
     ${x.mine?'':`<button class="bfcmReply" onclick="bfCmReplyTo('${bfArg(x.pid)}','${bfArg(x.name)}')">Reply</button>`}
     <button class="bfmore" aria-label="Comment options" aria-expanded="${c.menu===x.id}" onclick="bfCmMenu(${+x.id})">⋯</button>
     ${c.menu===x.id?`<div class="bfmenu">${x.mine?`<button class="danger" onclick="bfCmDel(${+x.id})">Delete</button>`
       :`<button onclick="bfCmReport(${+x.id})">Report</button><button class="danger" onclick="bfCmBlock('${bfArg(x.pid)}')">Block ${esc(x.name)}</button>${c.t===myPid()?`<button class="danger" onclick="bfCmDel(${+x.id})">Delete</button>`:''}`}</div>`:''}</div>`).join('')
-    :'<div class="tiny" style="padding:10px 0">No comments yet. Start it off.</div>';
+    :`<div class="tiny" style="padding:10px 0">${bfPrivT(c.t)?'No messages yet.':'No comments yet. Start it off.'}</div>`;
   if((c.blocked||[]).length)h+=`<div class="tiny">Hidden: you blocked ${c.blocked.map(b=>esc(b.name||'someone')).join(', ')}. ${c.blocked.map(b=>`<button class="linkish" onclick="bfCmUnblock('${bfArg(b.pid)}')">Unblock${b.name?' '+esc(b.name):''}</button>`).join(' ')}</div>`;
   if(c.note)h+=`<div class="tiny" style="color:var(--green-mid)">${esc(c.note)}</div>`;
   return h;
@@ -12081,18 +12130,23 @@ function openBfComments(code,t,rp){
   bfAckThread(code,t);
   bfNotePaint();
   const who=rp?esc(rp.replyName||'them'):t==='round'?'the whole group':bfWhoFor(code,t);
+  const priv=bfPrivT(t),own=t===myPid();
+  const title=priv?(rp?'🔒 Reply':own?'🔒 Messages to you':'🔒 You and '+who):(rp?'Reply':'Comments');
+  const sub=priv?(rp?'to '+who+' · only you two see it':own?'only you and each sender see these':'only you two see these'):(rp?'to '+who:who);
   const d=document.createElement('div');
   d.className='vfWrap';d.id='bfcm';d.setAttribute('role','dialog');d.setAttribute('aria-modal','true');d.setAttribute('aria-labelledby','bfcmT');
   d.onclick=ev=>{if(ev.target===d)closeBfComments();};
-  d.innerHTML=`<div class="vfCard bfcmCard"><h2 class="vfTitle" id="bfcmT">${rp?'Reply':'Comments'}<small>${rp?'to '+who:who}</small></h2>
+  d.innerHTML=`<div class="vfCard bfcmCard"><h2 class="vfTitle" id="bfcmT">${title}<small>${sub}</small></h2>
     <div class="bfcmList" id="bfcmList">${bfCmListHTML()}</div>
     <div id="bfcmRules" hidden><div class="vfTitle" style="font-size:20px;margin-top:4px">Keep it friendly</div>
       <div class="tiny mb">No abuse, hate or explicit stuff. Comments can be reported, and players can block you.</div>
       <button class="big" onclick="bfCmRulesOk()">OK, post it</button><button class="ghost mt" style="width:100%" onclick="bfCmRules(false)">Cancel</button></div>
     <div id="bfcmCompose">
       <div id="bfcmTo" class="bfcmTo" hidden></div>
+      ${/^n:/.test(t)?'':`<div class="bfcmPhRow"><button class="ghost" onclick="bfPhPick()">📷 Photo</button><img id="bfcmPhPrev" class="bfcmPhPrev" alt="Photo to send" hidden><button id="bfcmPhX" class="linkish" hidden onclick="bfPhClear()">Remove</button><span id="bfcmPhMsg" class="tiny"></span></div>
+      <input type="file" id="bfcmPhFile" accept="image/*" hidden onchange="bfPhPicked(this)">`}
       <label for="bfcmText" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Comment</label>
-      <textarea id="bfcmText" class="bfcmText" maxlength="140" rows="2" placeholder="${rp?'Reply to '+who:'Say something to '+(t==='round'?'everyone':who)}" oninput="bfCmInput()"></textarea>
+      <textarea id="bfcmText" class="bfcmText" maxlength="140" rows="2" placeholder="${rp?'Reply to '+who:own?'Tap Reply on a message to answer it':priv?'Message '+who:'Say something to '+(t==='round'?'everyone':who)}" oninput="bfCmInput()"></textarea>
       <div class="bfcmMeta"><span id="bfcmErr" class="bfcmErr"></span><span id="bfcmCount">0/140</span></div>
       <div class="bfcmBtns"><button class="ghost" onclick="closeBfComments()">Close</button><button class="big" onclick="bfCmSend()">Send</button></div>
     </div></div>`;
@@ -12100,27 +12154,178 @@ function openBfComments(code,t,rp){
   if(rp)try{document.getElementById('bfcmText').focus();}catch(e){}
   relayBattle({op:'comments',pid:myPid(),code,target:t}).then(r=>{
     if(!bfCm||bfCm.code!==code||bfCm.t!==t)return;
-    if(r&&r.ok){bfCm.list=r.list||[];bfCm.blocked=r.blocked||[];}else bfCm.list='offline';
+    if(r&&r.ok){bfCm.list=r.list||[];bfCm.blocked=r.blocked||[];
+      if(r.friend===false){const cp=document.getElementById('bfcmCompose');if(cp)cp.hidden=true;bfCm.note=`Messages are for Battle friends only. You and ${bfWhoFor(code,t)} both need each other switched on as Battle friends.`;}
+      if(/^n:/.test(t)){const cp=document.getElementById('bfcmCompose');if(cp)cp.hidden=true;bfCm.note=`${bfWhoFor(code,t)} doesn't have Battle Tees set up, so a message can't reach them.`;}
+      bfPhLoad(bfCm.list.filter(x=>x&&x.photo).map(x=>+x.id));
+    }else bfCm.list='offline';
     bfCmPaint(true);
   }).catch(()=>{if(bfCm&&bfCm.code===code){bfCm.list='offline';bfCmPaint();}});
 }
 function closeBfComments(keep){try{document.querySelectorAll('#bfcm').forEach(x=>x.remove());}catch(e){}if(!keep){bfCm=null;bfNotePaint();}}
+function bfPrivT(t){return !!t&&t!=='round'&&!/^n:/.test(String(t));}
+const bfPhCache={};
+function bfPhImg(id){const u=bfPhCache[id];return u&&u!=='err'&&u!=='…'?`<img alt="" src="${u}">`:u==='err'?'Photo unavailable':'Loading photo…';}
+function bfPhPaintOne(id){const el=document.getElementById('bfph'+id);if(el)el.innerHTML=bfPhImg(id);}
+function bfPhLoad(ids){
+  (ids||[]).filter(id=>id&&!bfPhCache[id]).forEach(id=>{
+    bfPhCache[id]='…';
+    relayBattle({op:'photo',pid:myPid(),id}).then(r=>{
+      if(r&&r.ok&&r.b64){const bin=atob(r.b64),u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);
+        bfPhCache[id]=URL.createObjectURL(new Blob([u],{type:r.type||'image/jpeg'}));}
+      else bfPhCache[id]='err';
+      bfPhPaintOne(id);
+    }).catch(()=>{delete bfPhCache[id];bfPhPaintOne(id);});
+  });
+}
+function bfPhClose(){try{document.querySelectorAll('#bfphv').forEach(x=>x.remove());}catch(e){}}
+function bfPhDel(id){bfPhClose();bfCmDel(id);}
+function bfPhRep(id){bfPhClose();bfCmReport(id);}
+function bfPhView(id){
+  const u=bfPhCache[id];if(!u||u==='err'||u==='…')return;
+  const x=((bfCm&&Array.isArray(bfCm.list))?bfCm.list:[]).find(y=>+y.id===+id)||{};
+  bfPhClose();
+  const d=document.createElement('div');d.id='bfphv';d.className='vfWrap';d.setAttribute('role','dialog');d.setAttribute('aria-modal','true');d.setAttribute('aria-label','Photo');
+  d.style.zIndex='9600';d.onclick=ev=>{if(ev.target===d)bfPhClose();};
+  d.innerHTML=`<div class="vfCard" style="padding:10px"><img alt="" src="${u}" style="width:100%;max-height:68dvh;object-fit:contain;border-radius:10px;background:#000">
+    <div class="tiny mt">${esc(x.name||'')}${x.text?' · '+esc(x.text):''}</div>
+    <div class="bfcmBtns">${navigator.share?`<button class="ghost" onclick="bfPhShare(${+id})">Share</button>`:''}${x.mine?`<button class="ghost" onclick="bfPhDel(${+id})">Delete</button>`:`<button class="ghost" onclick="bfPhRep(${+id})">Report</button>`}<button class="big" onclick="bfPhClose()">Close</button></div></div>`;
+  document.body.appendChild(d);
+}
+async function bfPhShare(id){
+  try{const b=await (await fetch(bfPhCache[id])).blob();const f=new File([b],'battle-tees-photo.jpg',{type:b.type||'image/jpeg'});
+    if(navigator.canShare&&navigator.canShare({files:[f]}))await navigator.share({files:[f]});}catch(e){}
+}
+async function bfPhPrep(file){
+  const img=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=URL.createObjectURL(file);});
+  try{
+    for(const [max,q] of [[1600,.82],[1280,.72],[1024,.62]]){
+      const w0=img.naturalWidth,h0=img.naturalHeight,k=Math.min(1,max/Math.max(w0,h0));
+      const cv=document.createElement('canvas');cv.width=Math.max(1,Math.round(w0*k));cv.height=Math.max(1,Math.round(h0*k));
+      cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);
+      const url=cv.toDataURL('image/jpeg',q),b64=url.split(',')[1]||'';
+      if(b64&&b64.length<=880000)return {b64,url};
+    }
+  }finally{try{URL.revokeObjectURL(img.src);}catch(e){}}
+  throw new Error('too big');
+}
+function bfPhPick(){const f=document.getElementById('bfcmPhFile');if(f)f.click();}
+function bfPhotoTo(code,t){openBfComments(code,t);bfPhPick();}
+async function bfPhPicked(inp){
+  const c=bfCm,f=inp&&inp.files&&inp.files[0];if(!c||!f)return;
+  const msg=document.getElementById('bfcmPhMsg');if(msg)msg.textContent='Getting it ready…';
+  try{const p=await bfPhPrep(f);c.photo=p.b64;
+    const pv=document.getElementById('bfcmPhPrev'),x=document.getElementById('bfcmPhX');if(pv){pv.src=p.url;pv.hidden=false;}if(x)x.hidden=false;if(msg)msg.textContent='';}
+  catch(e){c.photo=null;if(msg)msg.textContent="That photo couldn't be used. Try another.";}
+  try{inp.value='';}catch(e){}
+}
+function bfPhClear(){const c=bfCm;if(c)c.photo=null;const pv=document.getElementById('bfcmPhPrev'),x=document.getElementById('bfcmPhX');if(pv){pv.hidden=true;pv.removeAttribute('src');}if(x)x.hidden=true;}
+function bfCamOk(){try{const ok=!!(S.round&&S.round.started&&!isReview()&&!gpsOnly()&&S.share&&S.share.code&&(S.round._bfSent||bfScoredHoles()>=2)&&myPid()&&!ageOffline());if(ok)bfLinkRound();return ok;}catch(e){return false;}}
+const bfLinked={};
+function bfLinkRound(){
+  try{const code=S.share&&S.share.code,me=myPid();if(!code||!me)return;
+    const was=bfLinked[code];if(was==='done'||(was&&Date.now()-was<15000))return;
+    const pids=[...new Set(actIdx().map(i=>S.players[i]).filter(p=>p&&p.pid&&p.pid!==me).map(p=>p.pid))];if(!pids.length)return;
+    bfLinked[code]=Date.now();
+    relayBattle({op:'friends',pid:me,link:pids}).then(r=>{
+      const f=(r&&r.friends)||{};
+      if(r&&r.ok&&pids.every(p=>f[p]&&(f[p].friend||f[p].off)))bfLinked[code]='done';
+      else if((bfLinked._n=(bfLinked._n||0)+1)<=8)setTimeout(bfLinkRound,16000);
+      if(r&&r.ok){friendMap=f;}
+    }).catch(()=>{});
+  }catch(e){}
+}
+let bfCam=null;
+function bfCamOpen(){
+  if(!bfCamOk())return;
+  bfCam={photo:null,to:'round',sending:false};
+  const me=myPid(),pl=actIdx().map(i=>S.players[i]).filter(p=>p&&p.pid&&p.pid!==me);
+  const d=document.createElement('div');d.className='vfWrap';d.id='bfcam';d.setAttribute('role','dialog');d.setAttribute('aria-modal','true');d.setAttribute('aria-labelledby','bfcamT');
+  d.onclick=ev=>{if(ev.target===d)bfCamClose();};
+  d.innerHTML=`<div class="vfCard bfcmCard"><h2 class="vfTitle" id="bfcamT">Send a photo<small>Hole ${(S.round.cur||0)+1}</small></h2>
+    <div class="bfcmPhRow"><button class="ghost" onclick="bfCamPick()">📷 Take or pick a photo</button><span id="bfcamMsg" class="tiny"></span></div>
+    <img id="bfcamPrev" alt="Photo to send" hidden style="width:100%;max-height:34dvh;object-fit:contain;border-radius:10px;background:#000">
+    <input type="file" id="bfcamFile" accept="image/*" hidden onchange="bfCamPicked(this)">
+    <label for="bfcamText" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Caption</label>
+    <textarea id="bfcamText" class="bfcmText mt" maxlength="140" rows="2" placeholder="Add a caption (optional)"></textarea>
+    <div class="tiny mt">Send to</div>
+    <div class="bfcamTo" id="bfcamTo"><button class="ghost sel" data-to="round" onclick="bfCamTo('round')">The whole group</button>${pl.map(p=>`<button class="ghost" data-to="${bfArg(p.pid)}" onclick="bfCamTo('${bfArg(p.pid)}')">🔒 ${esc(p.name)}</button>`).join('')}</div>
+    <div class="tiny">Only Battle friends see it. The photo's location data is removed before it leaves your phone.</div>
+    <div class="bfcmMeta"><span id="bfcamErr" class="bfcmErr"></span></div>
+    <div class="bfcmBtns"><button class="ghost" onclick="bfCamClose()">Cancel</button><button class="big" onclick="bfCamSend()">Send</button></div></div>`;
+  document.body.appendChild(d);
+  bfCamPick();
+}
+function bfCamClose(){bfCam=null;try{document.querySelectorAll('#bfcam').forEach(x=>x.remove());}catch(e){}}
+function bfCamPick(){const f=document.getElementById('bfcamFile');if(f)f.click();}
+async function bfCamPicked(inp){
+  const c=bfCam,f=inp&&inp.files&&inp.files[0];if(!c||!f)return;
+  const msg=document.getElementById('bfcamMsg');if(msg)msg.textContent='Getting it ready…';
+  try{const p=await bfPhPrep(f);c.photo=p.b64;const pv=document.getElementById('bfcamPrev');if(pv){pv.src=p.url;pv.hidden=false;}if(msg)msg.textContent='';}
+  catch(e){c.photo=null;if(msg)msg.textContent="That photo couldn't be used. Try another.";}
+  try{inp.value='';}catch(e){}
+}
+function bfCamTo(to){const c=bfCam;if(!c)return;c.to=decodeURIComponent(to);
+  document.querySelectorAll('#bfcamTo button').forEach(b=>b.classList.toggle('sel',decodeURIComponent(b.getAttribute('data-to')||'')===c.to));}
+function bfCamErr(m,neutral){const e=document.getElementById('bfcamErr');if(e){e.textContent=m||'';e.className='bfcmErr'+(m&&!neutral?' err':'');}}
+function bfCamSend(){
+  const c=bfCam;if(!c||c.sending)return;
+  if(!c.photo){bfCamErr('Take or pick a photo first.');return;}
+  const ta=document.getElementById('bfcamText'),text=(ta?ta.value:'').replace(/\s+/g,' ').trim();
+  if(text){const bad=bfCmCheck(text);if(bad){bfCamErr(bad);return;}}
+  const job={op:'comment',pid:myPid(),name:(S.me&&S.me.name)||'',code:S.share.code,target:c.to,text,photo:c.photo,hole:(S.round.cur||0)+1};
+  c.sending=true;bfCamErr('Sending…',true);
+  relayBattle(job).then(r=>{
+    c.sending=false;if(bfCam!==c)return;
+    if(r&&r.ok){bfCamClose();try{shotToast(c.to==='round'?'Photo sent to the group.':'Photo sent. Only the two of you see it.');}catch(e){}}
+    else bfCamErr((r&&r.error)||'Could not send. Try again.');
+  }).catch(()=>{
+    c.sending=false;bfPqAdd(job).then(()=>{bfCamClose();try{shotToast("No signal. The photo sends when you're back in signal.",3600);}catch(e){}}).catch(()=>bfCamErr('Could not send. Check your signal.'));
+  });
+}
+let bfPqDB=null;
+function bfPqOpen(){
+  if(!bfPqDB)bfPqDB=new Promise((res,rej)=>{const r=indexedDB.open('bt-pq',1);r.onupgradeneeded=()=>{const d=r.result;if(!d.objectStoreNames.contains('q'))d.createObjectStore('q',{autoIncrement:true});};
+    r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);}).catch(e=>{bfPqDB=null;throw e;});
+  return bfPqDB;
+}
+function bfPqAdd(job){return bfPqOpen().then(d=>new Promise((res,rej)=>{const t=d.transaction('q','readwrite');t.objectStore('q').add(Object.assign({at:Date.now()},job));t.oncomplete=()=>res();t.onerror=()=>rej(t.error);}));}
+let bfPqBusy=false;
+async function bfPqFlush(){
+  if(bfPqBusy||(typeof navigator!=='undefined'&&navigator.onLine===false))return;
+  bfPqBusy=true;
+  try{
+    const d=await bfPqOpen();
+    const all=await new Promise((res,rej)=>{const out=[],t=d.transaction('q');const cur=t.objectStore('q').openCursor();cur.onsuccess=()=>{const k=cur.result;if(k){out.push([k.key,k.value]);k.continue();}else res(out);};cur.onerror=()=>rej(cur.error);});
+    for(const [key,job] of all){
+      let r;try{r=await relayBattle(job);}catch(e){break;}
+      await new Promise(res=>{const t=d.transaction('q','readwrite');t.objectStore('q').delete(key);t.oncomplete=t.onerror=()=>res();});
+      if(r&&r.ok){try{shotToast('Your photo from hole '+(job.hole||'')+' was sent.');}catch(e){}}
+    }
+  }catch(e){}
+  bfPqBusy=false;
+}
+window.addEventListener('online',()=>{try{setTimeout(bfPqFlush,3000);}catch(e){}});
+setTimeout(()=>{try{if(typeof indexedDB!=='undefined'&&!previewSandboxed())bfPqFlush();}catch(e){}},12000);
+
 function bfCmInput(){const ta=document.getElementById('bfcmText'),n=document.getElementById('bfcmCount');if(ta&&n)n.textContent=`${ta.value.length}/140`;bfCmErr('');}
 function bfCmErr(msg,neutral){const e=document.getElementById('bfcmErr');if(!e)return;e.textContent=msg||'';e.className='bfcmErr'+(msg&&!neutral?' err':'');}
 function bfCmRules(on){const r=document.getElementById('bfcmRules'),c=document.getElementById('bfcmCompose');if(r)r.hidden=!on;if(c)c.hidden=!!on;}
 function bfCmRulesOk(){try{localStorage.setItem('btCmRules','1');}catch(e){}bfCmRules(false);bfCmSend();}
 function bfCmSend(){
   const c=bfCm,ta=document.getElementById('bfcmText');if(!c||!ta||c.sending)return;
-  const bad=bfCmCheck(ta.value);if(bad){bfCmErr(bad);return;}
+  const bad=(c.photo&&!ta.value.trim())?'':bfCmCheck(ta.value);if(bad){bfCmErr(bad);return;}
+  if(c.t===myPid()&&!c.replyTo){bfCmErr('Tap Reply on a message to answer it.');return;}
   let agreed=false;try{agreed=!!localStorage.getItem('btCmRules');}catch(e){}
   if(!agreed){bfCmRules(true);return;}
   const text=ta.value.replace(/\s+/g,' ').trim();
   c.sending=true;bfCmErr('Sending…',true);
-  relayBattle(Object.assign({op:'comment',pid:myPid(),name:(S.me&&S.me.name)||'',code:c.code,target:c.t,text},c.replyTo?{replyTo:c.replyTo}:{})).then(r=>{
+  relayBattle(Object.assign({op:'comment',pid:myPid(),name:(S.me&&S.me.name)||'',code:c.code,target:c.t,text},c.replyTo?{replyTo:c.replyTo}:{},c.photo?{photo:c.photo}:{})).then(r=>{
     c.sending=false;if(bfCm!==c)return;
     if(r&&r.ok&&r.comment){
       if(c.noteK){const k=c.noteK;bfAck(encodeURIComponent(k));closeBfComments();return;}
-      bfSay[c.code]=c.replyTo&&c.replyName?`Reply sent to ${esc(c.replyName)}.`:`Comment posted on ${c.t==='round'?'the group':bfWhoFor(c.code,c.t)}.`;
+      bfSay[c.code]=bfPrivT(c.t)?`${c.photo?'Photo':'Message'} sent to ${c.replyTo&&c.replyName?esc(c.replyName):bfWhoFor(c.code,c.t)}. Only the two of you see it.`
+        :c.replyTo&&c.replyName?`Reply sent to ${esc(c.replyName)}.`:`${c.photo?'Photo':'Comment'} posted on ${c.t==='round'?'the group':bfWhoFor(c.code,c.t)}.`;
       closeBfComments();bfSocBump(c.code,c.t,1);
     }else bfCmErr((r&&r.error)||'Could not post. Try again.');
   }).catch(()=>{c.sending=false;bfCmErr('Could not post. Check your signal.');});
@@ -13451,7 +13656,7 @@ function vHistory(){
       </div>
       <div class="tiny">${when} · thru ${e.thru}${e.mins!=null?' · '+e.mins+' min':''}</div>
       <div class="tiny">${(e.players||[]).map(esc).join(' · ')}</div>
-      ${histChalHTML(e)}
+      ${histChalHTML(e)}${histFixHTML(e)}
       <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
         <button class="ghost sel" style="flex:1 1 40%;margin:0;white-space:nowrap" onclick="reopenRound('${btId(e.id)}')">Review</button>
         <button class="ghost" style="flex:1 1 40%;margin:0;white-space:nowrap" onclick="exOpen('pick','${btId(e.id)}')">💾 Save Data</button>
@@ -14774,6 +14979,8 @@ function reviewCommit(){
   });
   const e=(S.history||[]).find(x=>x.id===S.round._histId);
   if(e){
+    try{const me=String((S.me&&S.me.name)||'').slice(0,24);S.round.holes.forEach((r,h)=>{const o=((e.round&&e.round.holes)||[])[h];
+      if(r&&o&&r.rvBy!==me&&JSON.stringify(r.gross||[])!==JSON.stringify(o.gross||[])){r.rvBy=me;r.rv=Date.now();}});}catch(x){}
     reviewOutboxStash(e);
     e.round=clone(S.round);
     e.playersSnap=clone(S.players);
@@ -16775,7 +16982,7 @@ function commitStage(h,rows){const rec=S.round.holes[h],m=stageMap();
     if(k in m){rec.gross[i]=m[k];if(!rec.gts)rec.gts=[0,0,0,0];rec.gts[i]=stampAfter(rec.gts[i]);delete m[k];}});}
 function clearStage(){S.stage={at:0,v:{}};}
 function chScore(i,d){reviewTouch();
-  if(isReview()){set(()=>{const r=S.round.holes[S.round.cur];const v=(r.gross[i]??S.course.holes[S.round.cur].par)+d;r.gross[i]=Math.min(15,Math.max(1,v));if(!r.gts)r.gts=[0,0,0,0];r.gts[i]=stampAfter(r.gts[i]);});return;}
+  if(isReview()){set(()=>{const r=S.round.holes[S.round.cur];const v=(r.gross[i]??S.course.holes[S.round.cur].par)+d;r.gross[i]=Math.min(15,Math.max(1,v));if(!r.gts)r.gts=[0,0,0,0];r.gts[i]=stampAfter(r.gts[i]);r.rv=Date.now();r.rvBy=String((S.me&&S.me.name)||'').slice(0,24);});return;}
   if(closedHoleNote(S.round.cur))return;
   stageScore(S.round.cur,i,d);render();}
 function ctpScored(){
@@ -17241,6 +17448,7 @@ function bfScoredHoles(){
 }
 function maybeBroadcastRound(){
   try{if(nearTimer!=null)setTimeout(()=>{try{nearTick();}catch(e){}},300);}catch(e){}
+  try{if(S.round.started&&!isReview()&&!gpsOnly()&&S.share&&S.share.on&&bfScoredHoles()>=2)setTimeout(bfLinkRound,2500);}catch(e){}
   try{
     if(!S.round.started||S.round._bfSent||isReview()||gpsOnly())return;
     const fb=S.share&&S.share.on&&!S.share.creator;
