@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'sha256-wqeoBlqXadJf2ijqou3cuEpTeMakql4xLOdGkj/lhLg=' 'sha256-1a0e+tzJa99jkIQzt0Xd29YEfUFYQIYpmE2GYuxNpV4=' 'sha256-79uSLRUH3SESf+LkHGPxuR5ePnvAiW5Wl+C02STXxXY=' https://static.cloudflareinsights.com; object-src 'none'; base-uri 'none'">
+<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'sha256-wqeoBlqXadJf2ijqou3cuEpTeMakql4xLOdGkj/lhLg=' 'sha256-A4fD/Z8VGig2ofNVCAausX+IcCRXSouZ+18WCLCu65o=' 'sha256-79uSLRUH3SESf+LkHGPxuR5ePnvAiW5Wl+C02STXxXY=' https://static.cloudflareinsights.com; object-src 'none'; base-uri 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#0f1522">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -2044,7 +2044,7 @@ var BF_DOCS={},
     bfHeld=new Set(),
     bfDBp=null,
     statMem=[];
-const BUILD='1795191204';
+const BUILD='1795217829';
 const HOLES=18;
 
 function courseTealBend(){return {id:'teal-bend',name:'Teal Bend GC',loc:[38.6972,-121.6173],
@@ -17442,17 +17442,26 @@ function othersStillInHTML(){
   }catch(e){return '';}
 }
 const BF_MIN_HOLES=2;
-const BF_MIN_HOLES_FB=4;
+const BF_FB_WAIT_MS=120000;
 function bfScoredHoles(){
   try{return (S.round.holes||[]).filter(r=>r&&r.confirmed).length;}catch(e){return 0;}
 }
 function maybeBroadcastRound(){
   try{if(nearTimer!=null)setTimeout(()=>{try{nearTick();}catch(e){}},300);}catch(e){}
   try{if(S.round.started&&!isReview()&&!gpsOnly()&&S.share&&S.share.on&&bfScoredHoles()>=2)setTimeout(bfLinkRound,2500);}catch(e){}
+  bfAnnounceCheck();
+}
+function bfAnnounceCheck(){
   try{
     if(!S.round.started||S.round._bfSent||isReview()||gpsOnly())return;
     const fb=S.share&&S.share.on&&!S.share.creator;
-    if(bfScoredHoles()<(fb?BF_MIN_HOLES_FB:BF_MIN_HOLES))return;
+    if(bfScoredHoles()<BF_MIN_HOLES)return;
+    if(fb){
+      const r=S.round,st=r.startedAt;
+      if(!r._bfFbAt){r._bfFbAt=Date.now()+BF_FB_WAIT_MS;try{save();}catch(e){}
+        setTimeout(()=>{try{if(S.round&&S.round.startedAt===st)bfAnnounceCheck();}catch(e){}},BF_FB_WAIT_MS+500);return;}
+      if(Date.now()<r._bfFbAt)return;
+    }
     if(!S.round._bfLive){
       S.round._bfLive=true;
       try{stat('round_live',{...(S.me&&S.me.pid?{pid:S.me.pid,pkey:myKey()}:{}),
