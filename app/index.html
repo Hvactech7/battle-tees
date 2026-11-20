@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'sha256-AXpDzkhPdOalu8iqEDZx03z2C98AIqpDQ0GoksQ+KdQ=' 'sha256-aOPW5hOsKhd+Evjv8FNrlbIIuxxTpasytonHpHXfimo=' 'sha256-79uSLRUH3SESf+LkHGPxuR5ePnvAiW5Wl+C02STXxXY=' https://static.cloudflareinsights.com; object-src 'none'; base-uri 'none'">
+<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'sha256-AXpDzkhPdOalu8iqEDZx03z2C98AIqpDQ0GoksQ+KdQ=' 'sha256-DvstXI/+PXYJUtkTa9i0dPuEnpPQu+Xf7/j+HwggIs8=' 'sha256-79uSLRUH3SESf+LkHGPxuR5ePnvAiW5Wl+C02STXxXY=' https://static.cloudflareinsights.com; object-src 'none'; base-uri 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#0f1522">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -2006,7 +2006,7 @@ var BF_DOCS={},
     bfHeld=new Set(),
     bfDBp=null,
     statMem=[];
-const BUILD='1795134423';
+const BUILD='1795157392';
 const HOLES=18;
 
 function courseTealBend(){return {id:'teal-bend',name:'Teal Bend GC',loc:[38.6972,-121.6173],
@@ -11840,13 +11840,13 @@ function bfRxHTML(code,t,fit){
   const r=(o.r||{})[t]||{},mine=(o.mine||{})[t],n=(o.n||{})[t]||0;
   const C=bfArg(code),T=bfArg(t);
   const pills=BF_ICONS.filter(([id])=>(r[id]||[]).length).map(([id,nm])=>
-    `<button class="bfpill${mine===id?' mine':''}" aria-label="${nm}, ${r[id].length}" onclick="event.stopPropagation();bfPillTap('${btId(C)}','${btId(T)}','${btId(id)}')">${bfIcon(id)}${r[id].length}</button>`).join('');
+    `<button class="bfpill${mine===id?' mine':''}" aria-label="${nm}, ${r[id].length}" onclick="event.stopPropagation();bfPillTap('${C}','${T}','${btId(id)}')">${bfIcon(id)}${r[id].length}</button>`).join('');
   const open=bfPick&&bfPick.code===code&&bfPick.t===t;
   const order=fit?[...BF_ICONS.filter(i=>i[0]===fit),...BF_ICONS.filter(i=>i[0]!==fit)]:BF_ICONS;
   const pop=open?`<div class="bfpop" role="menu" onclick="event.stopPropagation()">${order.map(([id,nm])=>
-    `<button class="bfpick${id===fit?' fit':''}${mine===id?' mine':''}" role="menuitem" aria-label="${nm}" onclick="event.stopPropagation();bfReact('${btId(C)}','${btId(T)}','${btId(id)}')">${bfIcon(id)}<small>${nm}</small></button>`).join('')}</div>`:'';
-  return `<div class="bfrx">${pop}${pills}<button class="bfadd" aria-haspopup="true" aria-expanded="${!!open}" onclick="event.stopPropagation();bfPickToggle('${btId(C)}','${btId(T)}')">+ React</button>`
-    +`<button class="bfcbtn" onclick="event.stopPropagation();openBfComments('${btId(C)}','${btId(T)}')">${BF_BUBBLE}${n?n+(n===1?' comment':' comments'):'Comment'}</button></div>`;
+    `<button class="bfpick${id===fit?' fit':''}${mine===id?' mine':''}" role="menuitem" aria-label="${nm}" onclick="event.stopPropagation();bfReact('${C}','${T}','${btId(id)}')">${bfIcon(id)}<small>${nm}</small></button>`).join('')}</div>`:'';
+  return `<div class="bfrx">${pop}${pills}<button class="bfadd" aria-haspopup="true" aria-expanded="${!!open}" onclick="event.stopPropagation();bfPickToggle('${C}','${T}')">+ React</button>`
+    +`<button class="bfcbtn" onclick="event.stopPropagation();openBfComments('${C}','${T}')">${BF_BUBBLE}${n?n+(n===1?' comment':' comments'):'Comment'}</button></div>`;
 }
 function bfRoundHTML(code){
   if(!bfSoc[code])return '';
