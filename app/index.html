@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'sha256-MZZG9FQBw7GvDJfXZB0tlUibNRmF0NA/52xp4Yd+aeA=' 'sha256-DjnzN2sJXLrPFQ5/rsvmM0bSb1TXpyfQrP7ruXHeDDI=' 'sha256-79uSLRUH3SESf+LkHGPxuR5ePnvAiW5Wl+C02STXxXY=' https://static.cloudflareinsights.com; object-src 'none'; base-uri 'none'">
+<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'sha256-MZZG9FQBw7GvDJfXZB0tlUibNRmF0NA/52xp4Yd+aeA=' 'sha256-GSXIyru8a55bu4aUr60gNE+ATG6LcA1WmNMS+dnwyHk=' 'sha256-79uSLRUH3SESf+LkHGPxuR5ePnvAiW5Wl+C02STXxXY=' https://static.cloudflareinsights.com; object-src 'none'; base-uri 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#0f1522">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -2060,7 +2060,7 @@ var BF_DOCS={},
     bfHeld=new Set(),
     bfDBp=null,
     statMem=[];
-const BUILD='1795259580';
+const BUILD='1795264707';
 const HOLES=18;
 
 function courseTealBend(){return {id:'teal-bend',name:'Teal Bend GC',loc:[38.6972,-121.6173],
@@ -3048,6 +3048,7 @@ function applyOp(k,v,defer){
 function onStateDoc(doc){
   if(S.share&&S.share.awaitDoc&&!S.share.creator&&!(doc&&doc.meta)){S.share.noDoc=Date.now();render();return;}
   Object.entries(doc||{}).forEach(([k,v])=>applyOp(k,v,true));
+  try{optOffSettle(doc);}catch(e){}
   try{bankFreeze();}catch(e){}
   if(S.share)delete S.share.awaitDoc;
   try{if(S.round&&S.round.started&&!S.round._optSnap)S.round._optSnap=optSnap();}catch(e){}
@@ -9928,9 +9929,12 @@ function bkDbl(h,i){reviewTouch();
     if(!bkArm||bkArm.h!==h){bkArm={h};render();setTimeout(()=>{if(bkArm&&bkArm.h===h){bkArm=null;render();}},4000);return;}
     bkArm=null;
   }
-  set(()=>{const b=bankerOf(h);if(rec.bkWho==null&&(rec.bkAt==null||i===b))bkLock(rec,b,i===b?BK_DBL:BK_BET);
+  set(()=>{const b=bankerOf(h);
+    if(i===b){if(!(rec.bkAt===b&&rec.bkAtK&&rec.bkAtK[0]>=BK_DBL))bkLock(rec,b,BK_DBL);}
+    else if(rec.bkWho==null&&rec.bkAt==null)bkLock(rec,b,BK_BET);
     const a=statArr(rec,'bkDbl');a[i]=a[i]?0:1;stampStat(rec,i);});}
-function bkWho(h,i){const l=bankerLock(S.round.holes[h],h);if(l==='closed'||l==='banker')return;
+function bankBetsIn(rec){return !!(rec&&rec.bkAt!=null&&rec.bkAtK&&rec.bkAtK[0]>=BK_BET);}
+function bkWho(h,i){const l=bankerLock(S.round.holes[h],h);if(l==='closed'||l==='banker'||bankBetsIn(S.round.holes[h]))return;
   reviewTouch();set(()=>{const rec=S.round.holes[h];if(rec&&!rec.bkToss){rec.bkWho=i;rec.bkWhoK=[1,Date.now()];}});}
 function bankerCardHTML(rec,h){
   if(!stackHas('banker')||sinceSkip('banker',h)||!rec)return '';
@@ -9958,7 +9962,7 @@ function bankerCardHTML(rec,h){
     ${rows}
     <div class="row"><span class="muted">${nm(b)} doubles everyone’s</span>
       ${bcan?`<button class="ghost ${armed?'sel':''}" onclick="bkDbl(${h},${b})">${armed?'Final? Tap again':'×2'}</button>`:`<b>${bd?'On':'Off'}</b>`}</div>
-    ${rec.confirmed||lock?'':rec.bkToss?`<div class="tiny mt">Picked by the tee toss.</div>`:`<div class="tiny mt">Banker this hole: ${seats.map(i=>`<button class="ghost ${i===b?'sel':''}" style="padding:4px 10px;margin:2px" onclick="bkWho(${h},${i})">${nm(i)}</button>`).join('')}</div>`}
+    ${rec.confirmed||lock?'':rec.bkToss?`<div class="tiny mt">Picked by the tee toss.</div>`:bankBetsIn(rec)?`<div class="tiny mt">Banker set — bets are in.</div>`:`<div class="tiny mt">Banker this hole: ${seats.map(i=>`<button class="ghost ${i===b?'sel':''}" style="padding:4px 10px;margin:2px" onclick="bkWho(${h},${i})">${nm(i)}</button>`).join('')}</div>`}
   </div>`;
 }
 function setSnakeLast(h,i){reviewTouch();set(()=>{const r=S.round.holes[h];if(r)r.snakeLast=i;});}
@@ -10901,7 +10905,8 @@ function gameOpsMerge(v){
 const OPT_NOT=['n','revealed','mystery','toss','lowNet','lateTeams'];
 function optKeyVals(snap){
   const s=snap||optSnap();if(!s)return null;const o={};
-  Object.keys(s.c).forEach(k=>{if(k!=='games')o['c.'+k]=JSON.stringify(s.c[k]);});
+  const leaf=(v,p)=>{if(v&&typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).length)Object.keys(v).forEach(k=>leaf(v[k],p+'.'+k));else o['c.'+p]=JSON.stringify(v);};
+  Object.keys(s.c).forEach(k=>{if(k!=='games')leaf(s.c[k],k);});
   Object.keys(s.rates).forEach(g=>{o['r.'+g]=JSON.stringify(+s.rates[g]||0);});
   o.dpp=JSON.stringify(s.dollarPerPt);
   return o;
@@ -10909,9 +10914,41 @@ function optKeyVals(snap){
 function optVal(k,cfg,rates,dpp){
   if(k==='dpp')return JSON.stringify(+dpp||0);
   if(k.startsWith('r.'))return JSON.stringify(+((rates||{})[k.slice(2)])||0);
-  const raw=(cfg||{})[k.slice(2)];if(raw===undefined)return 'null';
-  const v=clone(raw);if(v&&typeof v==='object'&&!Array.isArray(v))OPT_NOT.forEach(x=>delete v[x]);
+  const path=k.slice(2),raw=getPath(cfg||{},path);if(raw===undefined)return 'null';
+  const v=clone(raw);if(v&&typeof v==='object'&&!Array.isArray(v)&&!path.includes('.'))OPT_NOT.forEach(x=>delete v[x]);
   return JSON.stringify(v);
+}
+function optLeafCopy(nc,src,path){
+  const top=path.split('.')[0];
+  if(!nc[top]||typeof nc[top]!=='object'||Array.isArray(nc[top])){const sb=(src||{})[top];if(sb===undefined)delete nc[top];else nc[top]=clone(sb);return;}
+  nc[top]=clone(nc[top]);
+  const v=getPath(src||{},path);
+  if(v!==undefined)setPath(nc,path,clone(v));
+  else{const ks=path.split('.'),last=ks.pop(),par=getPath(nc,ks.join('.'));if(par&&typeof par==='object')delete par[last];}
+}
+function optKeyOrder(a,b){return a.split('.').length-b.split('.').length;}
+const OPT_KEY_GAME={pts:'wolf',carryTies:'wolf',last2LastPlace:'wolf',nines:'nines',vegas:'vegas',stroke:'stroke',stbl:'stableford',quota:'quota',
+  sixes:'sixes',hammer:'bestball',bestball:'bestball',umbrella:'umbrella',scramble:'scramble',bbb:'bbb',nassau:'nassau',skins:'skins',
+  junk:'junk',snake:'snake',rabbit:'rabbit',banker:'banker'};
+function optKeyGame(path){return OPT_KEY_GAME[String(path).split('.')[0]]||null;}
+function optOffSettle(doc){
+  const off=S.round&&S.round.optOff;if(!off)return;
+  const keys=Object.keys(off);delete S.round.optOff;if(!keys.length||!S.round.started)return;
+  const m=(doc&&doc.meta)||{},rc=m.config||{},ra=m.optAt||{},o=playOrder();
+  let back=[];
+  keys.forEach(k=>{
+    if((+(S.round.optAt||{})[k]||0)!==+off[k])return;
+    const path=k.slice(2),g=optKeyGame(path);
+    const roomIn=o.some(h=>{const d=doc&&doc['h'+h];return !!(d&&d.confirmed)&&!(g&&sinceSkip(g,h));});
+    if(!roomIn)return;
+    const nc=Object.assign({},S.config);
+    if(path.includes('.'))optLeafCopy(nc,rc,path);else if(rc[path]===undefined)delete nc[path];else nc[path]=clone(rc[path]);
+    S.config=nc;
+    const at=S.round.optAt=Object.assign({},S.round.optAt);if(ra[k]!=null)at[k]=ra[k];else delete at[k];
+    back.push(g?gameNameSafe(g):'Round');
+  });
+  if(back.length){S.round._optSnap=optSnap();
+    try{const gs=[...new Set(back)].join(', ');setTimeout(()=>{try{shotToast(`${gs}: your change with no signal came after the first hole was in — the group's settings stand.`,6500);}catch(e){}},60);}catch(e){}}
 }
 function optStampLocal(){
   try{
@@ -10919,8 +10956,11 @@ function optStampLocal(){
     const now=optKeyVals(),was=S.round._optSnap&&optKeyVals(S.round._optSnap);if(!now)return;
     if(was){
       const t=stampAfter(S.shareMetaTs),dflt=k=>k.startsWith('r.')?'0':undefined;
+      const off=!sockOpen&&S.share&&S.share.on;
       Object.keys(Object.assign({},was,now)).forEach(k=>{
-        if((was[k]??dflt(k))!==(now[k]??dflt(k)))(S.round.optAt=Object.assign({},S.round.optAt))[k]=t;
+        if((was[k]??dflt(k))===(now[k]??dflt(k)))return;
+        (S.round.optAt=Object.assign({},S.round.optAt))[k]=t;
+        if(off&&k.startsWith('c.')){const g=optKeyGame(k.slice(2));if(!(g?optsLocked(g):roundLocked()))(S.round.optOff=Object.assign({},S.round.optOff))[k]=t;}
       });
     }
   }catch(e){}
@@ -10932,7 +10972,8 @@ function optKeepMine(v){
 }
 function optMergeCfg(vc,keep){
   const nc=Object.assign({},vc);
-  keep.filter(k=>k.startsWith('c.')).forEach(k=>{
+  keep.filter(k=>k.startsWith('c.')).sort(optKeyOrder).forEach(k=>{
+    if(k.slice(2).includes('.'))return optLeafCopy(nc,S.config,k.slice(2));
     const key=k.slice(2),mine=S.config[key],theirs=(vc||{})[key];
     if(mine&&typeof mine==='object'&&!Array.isArray(mine)){
       const m=clone(mine);if(theirs&&typeof theirs==='object')OPT_NOT.forEach(x=>{if(theirs[x]!==undefined)m[x]=clone(theirs[x]);else delete m[x];});
@@ -10957,8 +10998,9 @@ function optTakeNewer(v){
     const mine=S.round.optAt||{},take=Object.keys(v.optAt).filter(k=>(+v.optAt[k]||0)>(+mine[k]||0));
     if(take.length){
       const nc=Object.assign({},S.config);
-      take.filter(k=>k.startsWith('c.')).forEach(k=>{
-        const key=k.slice(2),theirs=(v.config||{})[key],cur=S.config[key];
+      take.filter(k=>k.startsWith('c.')).sort(optKeyOrder).forEach(k=>{
+        if(k.slice(2).includes('.'))return optLeafCopy(nc,v.config,k.slice(2));
+        const key=k.slice(2),theirs=(v.config||{})[key],cur=nc[key];
         if(theirs&&typeof theirs==='object'&&!Array.isArray(theirs)){const m=clone(theirs);if(cur&&typeof cur==='object')OPT_NOT.forEach(x=>{if(cur[x]!==undefined)m[x]=clone(cur[x]);else delete m[x];});nc[key]=m;}
         else if(theirs===undefined)delete nc[key];else nc[key]=clone(theirs);
       });
@@ -18000,14 +18042,22 @@ const OPT_GAME={pts:'Wolf',stbl:'Stableford',quota:'Quota',skins:'Skins',nines:"
   bestball:'Best Ball',umbrella:'Umbrella',bbb:'Bingo Bango Bongo',sixes:'Sixes',scramble:'Scramble',ctpMoney:'Closest to pin',stroke:'Stroke',
   junk:'Junk',snake:'Snake',rabbit:'Rabbit',banker:'Banker'};
 const OPT_DEFAULT={'snake.tie':'last','snake.grow':true};
-const OPT_VALUE={'snake.tie':{last:'Last out',short:'Shortest 1st putt'},'recLens':{net:'Net',gross:'Gross'}};
+const OPT_VALUE={'snake.tie':{last:'Last out',short:'Shortest 1st putt'},'recLens':{net:'Net',gross:'Gross'},'lens':{both:'Both',net:'Net',gross:'Gross'},
+  'nassau.press':{off:'Off',manual:'Anytime',auto2:'2-down auto'},'vegas.rotate':{none:'Off',six:'On'},
+  'rabbit.split':{nines:'Front & back',all:'One for 18'},'scramble.teams':{duo:'Just us 2','2v2':'2 v 2',solo:'All 4'}};
+const OPT_PTS={alba:'Albatross',eagle:'Eagle',birdie:'Birdie',par:'Par',bogey:'Bogey',dbl:'Double bogey or worse'};
 const OPT_LABEL={'snake.tie':'Snake · 3-putt tie','pts.partnerWin':'Wolf · partner win','pts.fieldBeatsPartners':'Wolf · beating the wolf team','pts.loneWin':'Wolf · lone wolf win',
   'pts.fieldBeatsLone':'Wolf · beating a lone wolf','pts.blindWin':'Wolf · blind wolf win','pts.fieldBeatsBlind':'Wolf · beating a blind wolf',
   'pts.ctp':'Wolf · closest to pin','allowance':'Handicap %','recLens':'Round scored','lens':'Scores shown','carryTies':'Ties carry',
   'ctpAll':'Closest to pin','ctpMoney.amt':'Closest to pin points','ctpMoney.carry':'Closest to pin carry','skins.amt':'Skins points',
   'skins.carry':'Skins carry-overs','skins.per':'Skins hole values','dollarPerPt':'What each point counts','games':'Games',
-  'snake.grow':'Snake · grows with every 3-putt','rabbit.steal':'Rabbit · steal','rabbit.split':'Rabbit · front & back / one for 18',
-  'banker.min':'Banker · fewest points','banker.max':'Banker · most points','banker.rotate':'Banker · rotates'};
+  'snake.grow':'Snake · grows with every 3-putt','rabbit.steal':'Rabbit · steal','rabbit.split':'Rabbit · rabbits',
+  'banker.min':'Banker · fewest points','banker.max':'Banker · most points','banker.rotate':'Banker · rotates',
+  'carryTies':'Wolf · ties carry over','last2LastPlace':'Wolf · last place is wolf on the leftover holes',
+  'nassau.press':'Nassau · presses','vegas.rotate':'Vegas · swap partners every 6 holes','vegas.flip':'Vegas · birdie flips the other number',
+  'vegas.ctp':'Vegas · closest to pin +1','nines.blitz':"9's · blitz",'nines.ctp':"9's · closest to pin +1",'hammer.on':'The Hammer',
+  'scramble.teams':'Scramble · format','skins.per':'Skins · custom points per hole','sixes.pairing':'Sixes · starting partners'};
+function optPairSay(p){try{const T=PAIRINGS[((+p||0)%3+3)%3][0],nm=i=>(((S.players[i]||{}).name||'Player '+(i+1)).split(' ')[0]);return nm(T[0])+' & '+nm(T[1]);}catch(e){return String(p);}}
 var propBusy=false,propDraft=null,propScope='next';
 const PROP_BLOCK=/(^|\.)(pairing|rotate|teams|toss|lowNet|mystery|revealed|lateTeams|n|games|game|span|track|bf|fullHcp|hcp9|groupName|_v)$/;
 const PROP_WHOLE=/^c\.(skins|nassau|rabbit|snake|ctpMoney|lens|recLens)(\.|$)|^rates\.|^dpp$/;
@@ -18194,12 +18244,27 @@ function optDiff(a,b){
     if((x===undefined&&isObj(y))||(y===undefined&&isObj(x)))return;
     if(x&&y&&typeof x==='object'&&typeof y==='object'&&!Array.isArray(x)&&!Array.isArray(y)){
       Object.keys(Object.assign({},x,y)).forEach(k=>walk(x[k],y[k],path?path+'.'+k:k));return;}
-    const key=path.replace(/^c\./,'');
+    const key=path.replace(/^c\./,''),[g0,...rest]=key.split('.'),gNm=OPT_GAME[g0]||g0;
     if(x===undefined&&OPT_DEFAULT[key]!==undefined)x=OPT_DEFAULT[key];
+    if(key==='skins.per'&&Array.isArray(x)&&Array.isArray(y)){
+      y.forEach((v,h)=>{if(+v!==+x[h])out.push(`Skins · hole ${h+1} points ${fmt(x[h])} → ${fmt(v)}`);});return;}
+    if(key==='skins.per'){x=Array.isArray(x)?'On':'Off';y=Array.isArray(y)?'On':'Off';}
+    if(rest[0]==='segs'&&rest.length===1){
+      const L=(()=>{try{return segLen();}catch(e){return 6;}})(),o=(()=>{try{return playOrder();}catch(e){return [];}})();
+      const B=Array.isArray(y)?y:[],p0=+getPath(a,'c.'+g0+'.pairing')||0;
+      const A=Array.isArray(x)?x:B.map((_,i)=>(p0+i)%3);
+      B.forEach((v,i)=>{if(v!==A[i]){const hs=o.slice(i*L,(i+1)*L);out.push(`${gNm} · partners${hs.length?` on ${hs[0]+1}–${hs[hs.length-1]+1}`:''} ${A[i]==null?'—':optPairSay(A[i])} → ${optPairSay(v)}`);}});
+      return;}
+    if(rest.length===1&&rest[0]==='pairing'){x=x==null?x:optPairSay(x);y=y==null?y:optPairSay(y);}
     if(OPT_VALUE[key]){const m=OPT_VALUE[key];x=m[x]!=null?m[x]:x;y=m[y]!=null?m[y]:y;}
+    if(g0==='junk'&&rest[0]==='pts'){const w=v=>typeof v==='number'?(v===0?'Off':v<0?'−'+(-v):v):v;x=w(x);y=w(y);}
     let lbl=OPT_LABEL[key];
     if(!lbl&&key.startsWith('rates.'))lbl=gameNameSafe(key.slice(6))+' points';
-    if(!lbl){const [g,...rest]=key.split('.');lbl=(OPT_GAME[g]||g)+(rest.length?' · '+rest.filter(r=>r!=='pts').join(' '):'');}
+    if(!lbl&&rest.length===1&&rest[0]==='pairing')lbl=gNm+' · partners';
+    if(!lbl&&g0==='junk'&&rest[0]==='pts'){const it=(JUNK_ITEMS.find(([k])=>k===rest[1])||[0,rest[1]])[1];lbl='Junk · '+it;}
+    if(!lbl&&(g0==='stbl'||g0==='quota')&&rest[0]==='pts')lbl=gNm+' · '+(OPT_PTS[rest[1]]||rest[1]);
+    if(!lbl)lbl=gNm+(rest.length?' · '+rest.filter(r=>r!=='pts').join(' '):'');
+    if(fmt(x)===fmt(y))return;
     out.push(lbl+' '+(key==='allowance'?fmt(x)+'% → '+fmt(y)+'%':fmt(x)+' → '+fmt(y)));
   };
   walk(a,b,'');
