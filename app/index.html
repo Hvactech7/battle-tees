@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'sha256-RY+jjSNPH1ntCkjsMxvrQT1ARfcASLHxiWx9ViXobhA=' 'sha256-2+WRfd7bXrAESqRTCaGFFsea/0kk1rUoSHU4vmqnX4I=' 'sha256-79uSLRUH3SESf+LkHGPxuR5ePnvAiW5Wl+C02STXxXY=' https://static.cloudflareinsights.com; object-src 'none'; base-uri 'none'">
+<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'sha256-RY+jjSNPH1ntCkjsMxvrQT1ARfcASLHxiWx9ViXobhA=' 'sha256-IBfrVU/H+q7FaxyczOVP06kfiDvLvW0YQf/oRW8cGj0=' 'sha256-79uSLRUH3SESf+LkHGPxuR5ePnvAiW5Wl+C02STXxXY=' https://static.cloudflareinsights.com; object-src 'none'; base-uri 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#0f1522">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -2054,7 +2054,7 @@ var BF_DOCS={},
     bfHeld=new Set(),
     bfDBp=null,
     statMem=[];
-const BUILD='1795246517';
+const BUILD='1795248053';
 const HOLES=18;
 
 function courseTealBend(){return {id:'teal-bend',name:'Teal Bend GC',loc:[38.6972,-121.6173],
@@ -2837,7 +2837,10 @@ function btCleanCourse(c){if(!c||typeof c!=='object')return c;
   if(c.id!=null)c.id=btId(c.id);
   if(c.geoUrl!=null&&!(typeof c.geoUrl==='string'&&BT_GEO_RE.test(c.geoUrl)&&c.geoUrl.indexOf('..')<0))delete c.geoUrl;
   if(Array.isArray(c.holes))c.holes=c.holes.map(h=>{if(!h||typeof h!=='object')return h;['par','si','hcp'].forEach(k=>{if(h[k]!=null)h[k]=btN(h[k]);});if(Array.isArray(h.yards))h.yards=btNA(h.yards);return h;});
-  if(Array.isArray(c.teeSets))c.teeSets=c.teeSets.map(t=>{if(!t||typeof t!=='object')return t;if(t.id!=null)t.id=btId(t.id);['rating','slope','par','yards'].forEach(k=>{if(t[k]!=null&&!Array.isArray(t[k]))t[k]=btN(t[k]);});return t;});
+  if(Array.isArray(c.teeSets))c.teeSets=c.teeSets.map(t=>{if(!t||typeof t!=='object')return t;if(t.id!=null)t.id=btId(t.id);['rating','slope','par','yards'].forEach(k=>{if(t[k]!=null&&!Array.isArray(t[k]))t[k]=btN(t[k]);});
+    if(t.n9!=null){const n={};['f','b'].forEach(w=>{const v=t.n9&&t.n9[w];if(n9Ok(v))n[w]=[+v[0],+v[1]];});if(n.f||n.b)t.n9=n;else delete t.n9;}
+    return t;});
+  if(c.n9at!=null)c.n9at=btN(c.n9at);
   return c;}
 function btNumObj(o){if(!o||typeof o!=='object'||Array.isArray(o))return o;Object.keys(o).forEach(k=>{const x=o[k];if(x!=null&&typeof x!=='object'&&typeof x!=='boolean')o[k]=btN(x);else if(x&&typeof x==='object')btNumObj(x);});return o;}
 function btScrubOp(k,v){
@@ -2889,8 +2892,10 @@ function applyOp(k,v,defer){
         try{optKeep=optKeepMine(v);nc=optMergeCfg(v.config,optKeep);}catch(e){optKeep=[];nc=v.config;}
         try{freezeForIncoming(nc);}catch(e){}
         try{const myBf=S.config&&S.config.bf;if(nc&&typeof nc==='object'){nc=Object.assign({},nc);if(myBf)nc.bf=myBf;else delete nc.bf;}}catch(e){}
-        if(typeof coursePreview!=='undefined'&&coursePreview){coursePreview.keep=v.course;S.players=v.players;S.config=nc;}
+        let n9fix=false;
+        if(typeof coursePreview!=='undefined'&&coursePreview){n9fix=nineKeep(coursePreview.keep,v.course);coursePreview.keep=v.course;S.players=v.players;S.config=nc;}
         else{
+          n9fix=nineKeep(S.course,v.course);
           S.course=v.course;S.players=v.players;S.config=nc;
           if(wasBlack){S.course.geo=blackout;if(parked)S.course.geoReal=parked;}
         }
@@ -2961,7 +2966,7 @@ function applyOp(k,v,defer){
         if(v.optBy)S.round.optBy=v.optBy;
         optNoticeRemote(optBefore,v);
         localContent[k]=sentCache[k]=contentKey(k);
-        if(rowFix||widened||gfix||optFix||hfix){sentCache[k]='(merge-pending)';S.shareMetaTs=Math.max(Date.now(),(v._ts||0)+1);}
+        if(rowFix||widened||gfix||optFix||hfix||n9fix){sentCache[k]='(merge-pending)';S.shareMetaTs=Math.max(Date.now(),(v._ts||0)+1);}
       }else if(S.round.started&&Array.isArray(v.players)){
         const ph=p=>p&&/^Player \d$/.test((p.name||'').trim())&&!p.pid&&!p.ownerDev;
         const has=q=>S.players.some(p=>p&&((q.pid&&p.pid===q.pid)||((p.name||'').trim().toLowerCase()===(q.name||'').trim().toLowerCase())));
@@ -5026,13 +5031,107 @@ function hcpLockMerge(inc){
   return JSON.stringify(out)!==JSON.stringify(inc);
 }
 function hcpLiveCH(){
-  const pt=parTotal(),sn=cardN();
-  return S.players.map(p=>{
-    const t=teeOf(p)||{};
-    const tp=+t.par||pt;
-    if(sn)return Math.round(p.index*((+t.slope||113)/113)+shortRateAdj(t,tp,sn));
-    return Math.round(p.index*((+t.slope||113)/113)+((+t.rating||tp)-tp));
+  const sp=hcpSpanLive(),on=hcp9On();
+  return S.players.map(p=>hcpCH(p.index,hcpBasis(S.course,teeOf(p)||{},sp,on,true)));
+}
+function hcp9On(){return !(S.round&&S.round.started)||!!(S.config&&S.config.hcp9);}
+function nineCardOf(c){return !!(c&&!cardN(c)&&(c.nineCard||(c.holes||[]).length===9||(c.loop9&&(c.teeSets||[]).some(t=>t&&(t.nine||(Array.isArray(t.yds)&&t.yds.length===9))))));}
+function n9Ok(v){return Array.isArray(v)&&v.length>=2&&+v[0]>=15&&+v[0]<=50&&+v[1]>=55&&+v[1]<=155;}
+function n9Of(t,w){const v=t&&t.n9&&t.n9[w];return n9Ok(v)?[+v[0],+v[1]]:null;}
+function hcpKind(c,sp,on){
+  if(cardN(c))return {k:'short',base:0};
+  const nine=!!sp&&+sp.count===9,base=(nine&&+sp.start>=9)?9:0,nc=nineCardOf(c);
+  if(on&&nc)return nine?{k:9,base}:{k:'loop',base:0};
+  return {k:nine?'n18':18,base,nc};
+}
+function hcpSpanLive(){return (S.round&&S.round.started&&S.round.span)||nineSpan(shortSpan(S.config.span||{count:18,start:0}));}
+function hcpKindLive(){return hcpKind(S.course,hcpSpanLive(),hcp9On());}
+function hcpTee18(c,t,live){
+  t=t||{};
+  if(live){const n=cardN(c),hs=(c&&c.holes)||[];const pt=(n?hs.slice(0,n):hs).reduce((a,h)=>a+h.par,0),tp=+t.par||pt;
+    return {cr:+t.rating||tp,sl:+t.slope||113,par:tp};}
+  const hs=(c&&c.holes&&c.holes.length)?c.holes:Array.from({length:18},(_,i)=>({par:4,si:i+1}));
+  const pt=hs.reduce((a,h)=>a+(h.par||4),0),tp=(+t.par>=27)?+t.par:pt;
+  return {cr:(isFinite(+t.rating)&&+t.rating>40)?+t.rating:tp,sl:(isFinite(+t.slope)&&+t.slope>=55)?+t.slope:113,par:tp};
+}
+function nineOf(c,t){
+  t=t||{};const f=n9Of(t,'f'),r=+t.rating,s=+t.slope,tp=+t.par;
+  const card=((c&&c.holes)||[]).slice(0,9).reduce((a,h)=>a+((h&&+h.par)||4),0);
+  const par=(tp>=27&&tp<=45)?tp:tp>=54?tp/2:card;
+  return {cr:f?f[0]:(r>0?(r<45?r:r/2):par),sl:f?f[1]:((s>=55&&s<=155)?s:113),par};
+}
+function hcpBasis(c,t,sp,on,live){
+  const K=hcpKind(c,sp,on);
+  if(K.k===9||K.k==='loop'){const n=nineOf(c,t),two=K.k==='loop';
+    return Object.assign(K,{mul:two?1:0.5,sl:n.sl,adj:two?2*n.cr-2*n.par:n.cr-n.par,cr:two?2*n.cr:n.cr,par:two?2*n.par:n.par});}
+  const b=hcpTee18(c,t,live);
+  return Object.assign(K,{mul:1,sl:b.sl,cr:b.cr,par:b.par,adj:K.k==='short'?shortRateAdj(t||{},b.par,cardN(c)):b.cr-b.par});
+}
+function hcpCH(idx,b){return Math.round(idx*b.mul*(b.sl/113)+b.adj);}
+function nineRank(c,h,base){
+  const hs=(c&&c.holes)||[],L=hs.length||1,v=k=>{const x=+((hs[(base+k)%L]||{}).si);return x>0?x:99;},i=h-base,me=v(i);
+  let r=1;for(let k=0;k<9;k++)if(k!==i&&(v(k)<me||(v(k)===me&&k<i)))r++;return r;}
+function nineDots(s,r){s=Math.trunc(+s||0);if(s===0)return 0;
+  if(s>0)return Math.floor(s/9)+((s%9)>=r?1:0);
+  const a=-s;return -(Math.floor(a/9)+((a%9)>=10-r?1:0));}
+function strokesOn(c,s,h,K){
+  if(cardN(c))return shortDots(c,s,h);
+  const k=K&&K.k;
+  if(k===9){const b=K.base;return (h>=b&&h<b+9)?nineDots(s,nineRank(c,h,b)):0;}
+  if(k==='loop'){const r=nineRank(c,h%9,0);return holeDots(s,h<9?2*r-1:2*r);}
+  return holeDots(s,c.holes[h].si);
+}
+function nineName(s){return String(s||'').toLowerCase().replace(/\(w\)\s*$/,'').replace(/[^a-z0-9]+/g,'');}
+function nineWanted(c){return !!(c&&/^nat\d{1,6}$/.test(String(c.id||''))&&!cardN(c)&&!c.n9at&&(c.teeSets||[]).some(t=>t&&+t.rating>0&&+t.slope>0&&!t.n9));}
+function nineAgrees(t,x){
+  const r=+t.rating,s=+t.slope,f=n9Ok(x.f)?x.f:null,b=n9Ok(x.b)?x.b:null;
+  if(!(r>0&&s>0))return false;
+  const cr=+x.cr>0?+x.cr:(f&&b?f[0]+b[0]:f?f[0]:0);if(!(cr>0))return false;
+  if(Math.abs((cr<45?cr*2:cr)-(r<45?r*2:r))>1.5)return false;
+  const sl=+x.sl>0?+x.sl:(f?f[1]:0);if(sl>0&&Math.abs(sl-s)>8)return false;
+  return !(f&&b&&+x.cr>=45&&Math.abs(f[0]+b[0]-x.cr)>1);
+}
+function nineApply(c,tees){
+  let n=0;const nine=nineCardOf(c);
+  ((c&&c.teeSets)||[]).forEach(t=>{
+    if(!t||t.n9)return;
+    const side=/\(w\)\s*$/i.test(t.name||'')?'f':'m',nm=nineName(t.name);if(!nm)return;
+    const hit=tees.filter(x=>x&&x.gender===side&&nineName(x.name)===nm);
+    if(hit.length!==1||!nineAgrees(t,hit[0]))return;
+    const x=hit[0],n9={};
+    if(n9Ok(x.f))n9.f=[+x.f[0],+x.f[1]];
+    if(n9Ok(x.b)&&!nine)n9.b=[+x.b[0],+x.b[1]];
+    if(n9.f||n9.b){t.n9=n9;n++;}
   });
+  return n;
+}
+async function nineEnsure(c){
+  const busy=nineEnsure.busy||(nineEnsure.busy={});let id='';
+  try{
+    if(!nineWanted(c))return;
+    id=String(c.id);if(busy[id]){id='';return;}
+    if((typeof previewSandboxed==='function'&&previewSandboxed())||ageOffline()||(S.round&&S.round.started&&S.round.gpsOnly)){id='';return;}
+    busy[id]=1;
+    const r=await relayBattle({op:'nine',id});
+    if(!r||!(r.ok||r.error==='unknown course'))return;
+    const tees=(r.ok&&Array.isArray(r.tees))?btScrub(r.tees).filter(x=>x&&typeof x==='object'):[];
+    const cur=(S.course&&S.course.id===id)?S.course:null,lib=(S.courses||[]).find(x=>x&&x.id===id)||null;
+    const keep=(typeof coursePreview!=='undefined'&&coursePreview&&coursePreview.keep&&coursePreview.keep.id===id)?coursePreview.keep:null;
+    if(!cur&&!lib&&!keep)return;
+    const at=Date.now();
+    [cur,lib,keep].forEach(x=>{if(x){nineApply(x,tees);x.n9at=at;}});
+    if(cur&&S.round&&S.round.started)set(()=>{});
+    else{save();if(S.screen==='setup'||S.screen==='start')render();}
+  }catch(e){}finally{if(id)delete busy[id];}
+}
+function nineKeep(old,c){
+  try{
+    if(!old||!c||old.id!==c.id||!Array.isArray(old.teeSets)||!Array.isArray(c.teeSets))return false;
+    let add=false;
+    c.teeSets.forEach(t=>{if(!t||t.n9)return;const o=old.teeSets.find(x=>x&&x.id===t.id&&x.n9&&+x.rating===+t.rating&&+x.slope===+t.slope);if(o){t.n9=clone(o.n9);add=true;}});
+    if(old.n9at&&!c.n9at)c.n9at=old.n9at;
+    return add;
+  }catch(e){return false;}
 }
 function hcpKey(p){return (p&&p.pid)||('nm:'+String((p&&p.name)||'').trim().toLowerCase());}
 function hcpRoundKey(entry){return (entry.code||('d'+String(devId()).slice(0,8)))+':'+(entry.startedAt||0);}
@@ -5051,33 +5150,44 @@ function hcpDiffFor(entry,mi){
     if(cardN(course)||cardN(entry.courseSnap))return null;
     const hs=(course&&course.holes&&course.holes.length)?course.holes
       :Array.from({length:18},(_,i)=>({par:4,si:i+1}));
-    const pt=hs.reduce((a,h)=>a+(h.par||4),0);
     const tee=(course&&(course.teeSets||[]).find(t=>t.id===snap.tee))||(course&&(course.teeSets||[])[0])||null;
-    const tp=(tee&&+tee.par>=27)?+tee.par:pt;
-    const rating=(tee&&isFinite(+tee.rating)&&+tee.rating>40)?+tee.rating:tp;
-    const slope=(tee&&isFinite(+tee.slope)&&+tee.slope>=55)?+tee.slope:113;
     const sp=(entry.round&&entry.round.span)||{count:18,start:0};
-    const span=sp.count===9?Array.from({length:9},(_,k)=>(sp.start||0)+k):[...Array(18).keys()];
+    const B=hcpBasis(course,tee,sp,!!(entry.config&&entry.config.hcp9),false),rating=B.cr,slope=B.sl;
+    const span=sp.count===9?(b=>Array.from({length:9},(_,k)=>b+(((sp.start||0)-b+k)%9+9)%9))(B.base):[...Array(18).keys()];
     const holes=(entry.round&&entry.round.holes)||[];
     const idx=+snap.index;
     const lk=entry.round&&entry.round.hcpLock&&(entry.round.hcpLock.s||[])[mi];
-    const ch=hcpSameSeat(lk,snap)?lk.ch:isFinite(idx)?Math.round(idx*(slope/113)+(rating-tp)):null;
-    const strokes=h=>{const si=(hs[h%hs.length]||{}).si||((h%18)+1);
-      if(ch==null)return 0;
+    const ch=hcpSameSeat(lk,snap)?lk.ch:isFinite(idx)?hcpCH(idx,B):null;
+    const nineK=B.k===9||B.k==='loop';
+    const strokes=h=>{if(ch==null)return 0;
+      if(nineK)return strokesOn({holes:hs},ch,h,B);
+      const si=(hs[h%hs.length]||{}).si||((h%18)+1);
       return holeDots(ch,si);};
+    const parOf=h=>(hs[h%hs.length]||{}).par||4;
     let ags=0,scored=0;
     span.forEach(h=>{
-      const r=holes[h],par=(hs[h%hs.length]||{}).par||4;
+      const r=holes[h],par=parOf(h);
       const g=(r&&r.confirmed&&r.gross&&r.gross[mi]!=null)?r.gross[mi]:null;
       if(g!=null){scored++;ags+=Math.min(g,ch==null?par+5:par+2+strokes(h));}
       else ags+=par+strokes(h);
     });
     if(scored<9)return null;
-    if(sp.count===9){
-      [...Array(18).keys()].filter(h=>!span.includes(h)).forEach(h=>{
-        ags+=((hs[h%hs.length]||{}).par||4)+strokes(h);});
+    const R=x=>Math.round(x*10)/10;
+    if(B.k===9){
+      let np=0;span.forEach(h=>{np+=parOf(h)+strokes(h);});
+      return R((113/slope)*(ags-rating)+(113/slope)*(np-rating));
     }
-    return Math.round((113/slope)*(ags-rating)*10)/10;
+    if(sp.count===9&&!nineK){
+      const other=[...Array(18).keys()].filter(h=>!span.includes(h));
+      const P=(!B.nc&&+(tee&&tee.rating)>40)?n9Of(tee,B.base?'b':'f'):null,O=(!B.nc&&+(tee&&tee.rating)>40)?n9Of(tee,B.base?'f':'b'):null;
+      if(P||O){
+        let np=0;other.forEach(h=>{np+=parOf(h)+strokes(h);});
+        const p=P||[rating-O[0],slope],o=O||[rating-P[0],slope];
+        return R((113/p[1])*(ags-p[0])+(113/o[1])*(np-o[0]));
+      }
+      other.forEach(h=>{ags+=parOf(h)+strokes(h);});
+    }
+    return R((113/slope)*(ags-rating));
   }catch(e){return null;}
 }
 const HCP_MIN_ROUNDS=8;
@@ -5221,8 +5331,7 @@ function fullStrokes(){
   return ch.map(c=>Math.round(c*S.config.allowance/100));
 }
 function fullDotsOn(pi,h){
-  const st=fullStrokes()[pi], si=S.course.holes[h].si;
-  return cardN()?shortDots(S.course,st,h):holeDots(st,si);
+  return strokesOn(S.course,fullStrokes()[pi],h,hcpKindLive());
 }
 function fmtIdx(v){const n=+v;if(v==null||v===''||!isFinite(n))return v==null?'':String(v);return n<0?'+'+(Math.round(-n*10)/10):String(Math.round(n*10)/10);}
 function dotsHTML(d){return d>0?`<span class="dots">${'●'.repeat(d)}</span>`:d<0?`<span class="dots" title="gives a stroke back">+${-d}</span>`:'';}
@@ -5230,8 +5339,7 @@ function holeDots(s,si){s=Math.trunc(+s||0);if(s===0)return 0;
   if(s>0)return Math.floor(s/18)+((s%18)>=si?1:0);
   const a=-s;return -(Math.floor(a/18)+((a%18)>=19-si?1:0));}
 function dotsOn(pi,h){
-  const s=playingStrokes()[pi], si=S.course.holes[h].si;
-  return cardN()?shortDots(S.course,s,h):holeDots(s,si);
+  return strokesOn(S.course,playingStrokes()[pi],h,hcpKindLive());
 }
 function activeLenses(){return S.config.lens==='both'?['net','gross']:[S.config.lens];}
 function recLens(){return S.config.recLens==='gross'?'gross':'net';}
@@ -5680,7 +5788,7 @@ function scrambleStrokes(){
   const m=Math.min(...tch);
   return tch.map(c=>Math.max(0,c-m));
 }
-function scrambleDots(k,h){const st=scrambleStrokes()[k],si=S.course.holes[h].si;return cardN()?shortDots(S.course,st,h):holeDots(st,si);}
+function scrambleDots(k,h){return strokesOn(S.course,scrambleStrokes()[k],h,hcpKindLive());}
 function computeScramble(){
   const T=scrambleTeams(),capt=T.map(t=>t[0]);
   const ledgers={net:[0,0,0,0],gross:[0,0,0,0]},par={net:[0,0,0,0],gross:[0,0,0,0]};
@@ -5704,8 +5812,8 @@ function quotaBogeyOne(s){
   }catch(e){}
 }
 function quotaTargets(){
-  const ch=courseHandicaps(),n=playOrder().length;
-  return ch.map(c=>Math.round(n*2-c*(n/18)));
+  const ch=courseHandicaps(),n=playOrder().length,nine=hcpKindLive().k===9;
+  return ch.map(c=>Math.round(n*2-(nine?c:c*(n/18))));
 }
 function computeQuota(){
   const pts=[0,0,0,0];
@@ -7460,7 +7568,11 @@ async function refreshStaleCards(){
         const t=recTees(rec);
         const mine=!!(S.course&&S.course.id===c.id);
         const inUse=mine?(S.players||[]).map(p=>p&&p.tee).filter(Boolean):[];
-        if(t.length&&inUse.every(id=>t.some(x=>x.id===id)))c.teeSets=t;
+        if(t.length&&inUse.every(id=>t.some(x=>x.id===id))){
+          t.forEach(x=>{const o=(c.teeSets||[]).find(y=>y&&y.id===x.id&&y.n9&&+y.rating===+x.rating&&+y.slope===+x.slope);if(o)x.n9=o.n9;});
+          if(t.some(x=>x&&+x.rating>0&&+x.slope>0&&!x.n9))delete c.n9at;
+          c.teeSets=t;
+        }
       }
       if(!c.nameEdit&&rec.name)c.name=rec.name;
       if(!rec.cardGuess)delete c._cardGuess;
@@ -11482,7 +11594,7 @@ const FAQ=[
   ['Net or gross',
    'Every round starts as Net. To play it gross, switch <b>Scored as</b> to <b>Gross</b> under <b>Scoring options</b> in the game’s options, before the first hole (after that, the group approves it). That’s the group’s call — it sets the win–loss record. Settle the Score has its own <b>Settling on</b> Net / Gross toggle so you can see it both ways; if your pick differs from the round’s, it says <b>Your phone only</b>. Gross and net are kept side by side all round.'],
   ['Course handicap and strokes',
-   'Each golfer’s course handicap comes from their index and the tees they play: index × slope ÷ 113, plus rating minus par, rounded. A 10.0 from tees rated 71.5 / 125 on a par 72 is an 11. Every net game gives each golfer their full course handicap, one stroke a hole on the hardest holes by the card’s stroke index — the best player included. Nate is a 4 and Greg a 12, so Nate gets strokes on stroke index 1 to 4 and Greg on 1 to 12. Past 18 strokes, a golfer gets one on every hole and two on the hardest. Quota builds it into each golfer’s target, Scramble uses team allowances, and Bingo Bango Bongo needs none. Handicaps are set for the round once the second hole is confirmed.'],
+   'Each golfer’s course handicap comes from their index and the tees they play: index × slope ÷ 113, plus rating minus par, rounded. A 10.0 from tees rated 71.5 / 125 on a par 72 is an 11. On a 9-hole course a 9-hole round plays half your index: a 10.0 from tees rated 35.8 / 114 on a par 36 is a 5, its strokes on the nine’s hardest holes (a nine of an 18-hole course keeps the 18-hole number). Every net game gives each golfer their full course handicap, one stroke a hole on the hardest holes by the card’s stroke index — the best player included. Nate is a 4 and Greg a 12, so Nate gets strokes on stroke index 1 to 4 and Greg on 1 to 12. Past 18 strokes, a golfer gets one on every hole and two on the hardest. Quota builds it into each golfer’s target, Scramble uses team allowances, and Bingo Bango Bongo needs none. Handicaps are set for the round once the second hole is confirmed.'],
   ['Handicap allowance',
    '<b>Handicap allowance</b>, under <b>Scoring options</b>, scales every golfer’s strokes from 100% down to 50%, in 5% steps. At 90%, Greg’s 8 strokes become 7 (7.2, rounded). Set it before the first hole, in the game’s options. Changing it mid-round asks the group, and it can count for just the holes still to play. The allowance you set carries over to the next round you start; Scored as goes back to Net every round.'],
   ['Plus handicaps',
@@ -12859,6 +12971,7 @@ function withDoc(doc,fn){
   S.course=course;
   S.players=players;
   S.config=Object.assign({},S.config,meta.config||{});
+  if(meta.config&&!meta.config.hcp9)delete S.config.hcp9;
   S.round=Object.assign(blankRound(),{started:true,game:(meta.games&&meta.games[0])||(meta.config&&meta.config.game)||'stroke',
     games:meta.games||null,span:meta.span||{count:18,start:0},startedAt:meta.startedAt||0,holes,
     dollarPerPt:meta.dollarPerPt||0,rates:meta.rates||{},since:meta.since||null,hcpLock:meta.hcpLock||null});
@@ -13991,13 +14104,9 @@ function exFullStrokes(e,cs,me){
     const lk=e.round&&e.round.hcpLock&&(e.round.hcpLock.s||[])[(e.playersSnap||[]).indexOf(me)];
     if(holes.length&&hcpSameSeat(lk,me))return Math.round(lk.ch*allow0/100);
     if(!holes.length||me.index==null)return null;
-    const sn=cardN(cs);
-    const parTot=(sn?holes.slice(0,sn):holes).reduce((a,h)=>a+((h&&h.par)||0),0);
     const ts=cs.teeSets||[];
     const tee=ts.find(t=>t.id===me.tee)||ts[0]||null;
-    const tp=(tee&&+tee.par)||parTot;
-    const slope=(tee&&+tee.slope)||113, rating=(tee&&+tee.rating)||tp;
-    const ch=Math.round((+me.index)*(slope/113)+(sn?shortRateAdj(tee,tp,sn):(rating-tp)));
+    const ch=hcpCH(+me.index,hcpBasis(cs,tee||{},(e.round&&e.round.span)||{count:18,start:0},!!(e.config&&e.config.hcp9),true));
     const allow=(e.config&&e.config.allowance!=null)?+e.config.allowance:100;
     return Math.round(ch*allow/100);
   }catch(err){return null;}
@@ -14032,6 +14141,7 @@ function exportTables(only){
     let eag=0,bird=0,prs=0,bog=0,dbl=0;
     let anyPutt=false,anyFwGir=false,anyX=false,lastFinish=null;
     const fullSt=exFullStrokes(e,cs,me);
+    const exK=hcpKind(cs,(e.round&&e.round.span)||{count:18,start:0},!!(e.config&&e.config.hcp9));
     let net=0,netOk=(fullSt!=null);
     holes.forEach((r,h)=>{
       if(!r||!r.confirmed||!r.gross||r.gross[mi]==null)return;
@@ -14049,7 +14159,7 @@ function exportTables(only){
       const d=gross-p;
       if(netOk){
         const si=hole.si!=null?hole.si:18;
-        net+=gross-(cardN(cs)?shortDots(cs,fullSt,h):holeDots(fullSt,si));
+        net+=gross-((exK.k===9||exK.k==='loop')?strokesOn(cs,fullSt,h,exK):cardN(cs)?shortDots(cs,fullSt,h):holeDots(fullSt,si));
       }
       if(d<=-2)eag++;else if(d===-1)bird++;else if(d===0)prs++;else if(d===1)bog++;else dbl++;
       n++;g+=gross;par+=p;
@@ -14667,6 +14777,7 @@ async function natUse(id,auto){
       S.course=clone(course);
     });
     if(!auto)finder={status:'idle',choices:[],error:''};
+    nineEnsure(S.course);
     ensureCourseGeo();
     render();
   }catch(e){if(!auto){finder={status:'error',error:'Could not load that course — check your signal.'};render();}}
@@ -15016,8 +15127,9 @@ function roundSummary(){
         longShot={yds:s2.yds,club:s2.club||null,hole:(s2.h||0)+1};});}catch(e){}
     let net=gross;
     try{
-      const st=fullStrokes()[mi];
-      const dots=h=>{const si=(S.course.holes[h]||{si:18}).si;
+      const st=fullStrokes()[mi],K=hcpKindLive();
+      const dots=h=>{if(K.k===9||K.k==='loop')return strokesOn(S.course,st,h,K);
+        const si=(S.course.holes[h]||{si:18}).si;
         return cardN()?shortDots(S.course,st,h):holeDots(st,si);};
       net=holes.reduce((t,h)=>t+S.round.holes[h].gross[mi]-dots(h),0);
     }catch(e){}
@@ -15323,6 +15435,7 @@ function pickCourse(i,auto){set(()=>{
   if(wiz&&!auto)wiz.courseTouched=true;
   syncLib();
   S.course=clone(S.courses[i]);
+  nineEnsure(S.course);
   applyTeePrefs();
 });setTimeout(()=>naipEnsure(S.course),800);}
 let armDelCourse=-1;
@@ -15556,7 +15669,7 @@ function chPar(i,d){set(()=>{const hd=S.course.holes[i];hd.par=Math.min(6,Math.m
   if((cardN()?cardHoles(S.course):(S.course.holes||[])).every(x=>x&&x.parOk))delete S.course._cardGuess;});}
 function chSI(i,v){set(()=>{const hd=S.course.holes[i];
   hd.si=Math.min(18,Math.max(1,Math.round(+v||1)));hd.siOk=true;});}
-function chTee(i,k,v){set(()=>{S.course.teeSets[i][k]=k==='name'?v:+v;S.course.teeEdit=true;});}
+function chTee(i,k,v){set(()=>{S.course.teeSets[i][k]=k==='name'?v:+v;S.course.teeEdit=true;if(k!=='name')delete S.course.teeSets[i].n9;});}
 function addTee(){set(()=>{S.course.teeSets.push({id:'t'+Date.now(),name:'New',rating:72.0,slope:120});S.course.teeEdit=true;});}
 function delTee(i){if(S.course.teeSets.length<=1)return;set(()=>{S.course.teeSets.splice(i,1);S.course.teeEdit=true;});}
 
@@ -15805,6 +15918,7 @@ function gameOptionsHTML(){
 function vSetup(){
   nbShown=onlineList();
   const ch=courseHandicaps(), mg=gameOn(), st=(mg==='quota'||mg==='bbb')?ch.map(()=>0):mg==='stableford'?fullStrokes():playingStrokes();
+  const hk9=hcpKindLive().k===9;
   const stWhy=mg==='quota'?'Quota builds it into the target':mg==='bbb'?'Bingo Bango Bongo uses none':(mg==='stroke'||mg==='stableford'||fullHcpOn())?'full course handicap':'off the low man';
   const nines=stackHas('nines');
   const vegas=stackHas('vegas');
@@ -15842,7 +15956,7 @@ function vSetup(){
         <div></div>
       </div>
       <div class="tiny mt">${cardN()?(k=>`Course hcp <b>${ch[i]}</b> → plays with <b>${k}</b> stroke${k===1?'':'s'} on ${cardN()} holes (${stWhy}).`)(shortStrokes(st[i],cardN()))
-        :`Course hcp <b>${ch[i]}</b> → plays with <b>${st[i]}</b> stroke${st[i]===1?'':'s'} (${stWhy}).`}${i===0?' Handicaps adjust themselves as rounds are saved.':''}</div>
+        :`Course hcp <b>${ch[i]}</b> → plays with <b>${st[i]}</b> stroke${st[i]===1?'':'s'}${hk9?' on 9 holes':''} (${stWhy}).`}${i===0?' Handicaps adjust themselves as rounds are saved.':''}</div>
     </div>`;
   }).join('');
   const P=S.config.pts;
@@ -16882,6 +16996,7 @@ function startRound(){
     quotaBogeyOne(S);
     S.round.span=clone(nineSpan(shortSpan(S.config.span||{count:18,start:0})));S.round.startedAt=Date.now();S.round.myStartedAt=Date.now();
     S.config.fullHcp=1;
+    S.config.hcp9=1;
     if(S.config.banker){S.config.banker.toss=1;S.config.banker.lowNet=1;}
     S.round.cur=playOrder()[0];mapHole=S.round.cur;S.screen='map';clearStage();
     try{windFetch(true);}catch(e){}
@@ -16889,6 +17004,7 @@ function startRound(){
     if(S.config.game!=='wolf'&&!gpsOnlyRound)prefillNines(S.round.cur);});
   S.round._sharedAtStart=!!S.share.on;
   try{S.round._optSnap=optSnap();}catch(e){}
+  nineEnsure(S.course);
   if(gpsOnlyRound)stat('gps_start',{course:S.course.name});
   else stat('round_start',{...(S.me&&S.me.pid?{pid:S.me.pid,pkey:myKey()}:{}),game:S.round.game,course:S.course.name,holes:S.round.span.count,firstTee:S.round.span.start+1,
     lens:S.config.lens,players:NP(),shared:!!S.share.on,stack:(S.round.games||[]).join('+'),
@@ -17741,7 +17857,7 @@ function joinPlay(k){
   try{stat('join_play',{k,game:gameOn()});}catch(e){}
 }
 
-const RULES_VER=20261117;
+const RULES_VER=20261120;
 const RULES_SHORT=RULES_VER+0.5;
 function rulesShortRound(){let c=S.course;try{if(coursePreview&&coursePreview.keep)c=coursePreview.keep;}catch(e){}return !!cardN(c);}
 function rulesVer(){return rulesShortRound()?RULES_SHORT:RULES_VER;}
@@ -17803,7 +17919,7 @@ const OPT_LABEL={'snake.tie':'Snake · 3-putt tie','pts.partnerWin':'Wolf · par
   'snake.grow':'Snake · grows with every 3-putt','rabbit.steal':'Rabbit · steal','rabbit.split':'Rabbit · front & back / one for 18',
   'banker.min':'Banker · fewest points','banker.max':'Banker · most points','banker.rotate':'Banker · rotates'};
 var propBusy=false,propDraft=null,propScope='next';
-const PROP_BLOCK=/(^|\.)(pairing|rotate|teams|toss|lowNet|mystery|revealed|lateTeams|n|games|game|span|track|bf|fullHcp|groupName|_v)$/;
+const PROP_BLOCK=/(^|\.)(pairing|rotate|teams|toss|lowNet|mystery|revealed|lateTeams|n|games|game|span|track|bf|fullHcp|hcp9|groupName|_v)$/;
 const PROP_WHOLE=/^c\.(skins|nassau|rabbit|snake|ctpMoney|lens|recLens)(\.|$)|^rates\.|^dpp$/;
 function propLive(){try{return !!(S.round&&S.round.started&&!isReview()&&!gpsOnly()&&roundLocked0());}catch(e){return false;}}
 function propFlat(cfg,rates,dpp){
@@ -17975,7 +18091,7 @@ function optSnapOf(cfg,rates,dpp){
   try{
     const c=clone(cfg||{});
     Object.keys(c).forEach(k=>{const v=c[k];if(v&&typeof v==='object'&&!Array.isArray(v)){delete v.n;delete v.revealed;delete v.mystery;delete v.toss;delete v.lowNet;delete v.lateTeams;}});
-    delete c.game;delete c.games;delete c.span;delete c.track;delete c.bf;delete c._v;delete c.groupName;delete c.fullHcp;
+    delete c.game;delete c.games;delete c.span;delete c.track;delete c.bf;delete c._v;delete c.groupName;delete c.fullHcp;delete c.hcp9;
     return {c,dollarPerPt:+dpp||0,rates:clone(rates||{}),games:clone((S.round&&S.round.games)||[])};
   }catch(e){return null;}
 }
