@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'sha256-MZZG9FQBw7GvDJfXZB0tlUibNRmF0NA/52xp4Yd+aeA=' 'sha256-uirq8e2ST4wyUgteZaQhOp6wAscACXbwXc0jZ3OISug=' 'sha256-79uSLRUH3SESf+LkHGPxuR5ePnvAiW5Wl+C02STXxXY=' https://static.cloudflareinsights.com; object-src 'none'; base-uri 'none'">
+<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'sha256-MZZG9FQBw7GvDJfXZB0tlUibNRmF0NA/52xp4Yd+aeA=' 'sha256-RjOWur1tVNrEIQFztoJA3KugrI/itM/PyFqVrV7KgVk=' 'sha256-79uSLRUH3SESf+LkHGPxuR5ePnvAiW5Wl+C02STXxXY=' https://static.cloudflareinsights.com; object-src 'none'; base-uri 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#0f1522">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -2060,7 +2060,7 @@ var BF_DOCS={},
     bfHeld=new Set(),
     bfDBp=null,
     statMem=[];
-const BUILD='1795402673';
+const BUILD='1795417022';
 const HOLES=18;
 
 function courseTealBend(){return {id:'teal-bend',name:'Teal Bend GC',loc:[38.6972,-121.6173],
@@ -10794,6 +10794,10 @@ function gamePickWhy(g){
   const seat=seatWhy(g,NP());
   if(seat)return seat;
   {const hw=holeWhy(g);if(hw)return hw;}
+  if(isReview()){
+    if(g==='wolf'||g==='banker')return 'needs picks made during play';
+    if(g==='bbb'||g==='junk'||g==='snake')return 'needs taps made during play';
+  }
   if(START_ONLY.includes(g))return '';
   if(!STACK_GUESTS.includes(g))return 'start only';
   const sel=gamePick?gamePick.sel:{};
@@ -11044,6 +11048,9 @@ function gamePickSheetHTML(){
 function gamePickCardHTML(){
   if(mainGameNow()==='scramble')return '';
   const n=gamesOn().length;
+  if(isReview())return `<div class="card"><h2>🤔 What If You'd Played a Different Game..?</h2>
+    <div class="tiny">Want to know how this round would have turned out with a different game, or one more added? Pick it here — Standings scores it off this same card.</div>
+    <button class="ghost mt" style="width:100%" onclick="openGamePick()">Choose Game(s)</button></div>`;
   return `<div class="card"><h2>⚔️ Wanna Play More Than One Game..?</h2>
     <div class="tiny">One scorecard, every game scored its own way — Settle the Score nets the whole pile into one total.${n>1?` You're playing <b>${n}</b> right now.`:''}</div>
     <button class="ghost mt" style="width:100%" onclick="openGamePick()">Choose Game(s)</button></div>`;
