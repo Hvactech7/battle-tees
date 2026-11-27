@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'sha256-MZZG9FQBw7GvDJfXZB0tlUibNRmF0NA/52xp4Yd+aeA=' 'sha256-RjOWur1tVNrEIQFztoJA3KugrI/itM/PyFqVrV7KgVk=' 'sha256-79uSLRUH3SESf+LkHGPxuR5ePnvAiW5Wl+C02STXxXY=' https://static.cloudflareinsights.com; object-src 'none'; base-uri 'none'">
+<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'sha256-MZZG9FQBw7GvDJfXZB0tlUibNRmF0NA/52xp4Yd+aeA=' 'sha256-CodlykJYFHJ1HI17d8k/plW3zv2w39FQQcKvfJ/GTGw=' 'sha256-79uSLRUH3SESf+LkHGPxuR5ePnvAiW5Wl+C02STXxXY=' https://static.cloudflareinsights.com; object-src 'none'; base-uri 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#0f1522">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -2060,7 +2060,7 @@ var BF_DOCS={},
     bfHeld=new Set(),
     bfDBp=null,
     statMem=[];
-const BUILD='1795417022';
+const BUILD='1795770624';
 const HOLES=18;
 
 function courseTealBend(){return {id:'teal-bend',name:'Teal Bend GC',loc:[38.6972,-121.6173],
@@ -2845,6 +2845,7 @@ function btCleanCourse(c){if(!c||typeof c!=='object')return c;
   if(Array.isArray(c.holes))c.holes=c.holes.map(h=>{if(!h||typeof h!=='object')return h;['par','si','hcp'].forEach(k=>{if(h[k]!=null)h[k]=btN(h[k]);});if(Array.isArray(h.yards))h.yards=btNA(h.yards);return h;});
   if(Array.isArray(c.teeSets))c.teeSets=c.teeSets.map(t=>{if(!t||typeof t!=='object')return t;if(t.id!=null)t.id=btId(t.id);['rating','slope','par','yards'].forEach(k=>{if(t[k]!=null&&!Array.isArray(t[k]))t[k]=btN(t[k]);});
     if(t.n9!=null){const n={};['f','b'].forEach(w=>{const v=t.n9&&t.n9[w];if(n9Ok(v))n[w]=[+v[0],+v[1]];});if(n.f||n.b)t.n9=n;else delete t.n9;}
+    if(t.si!=null){if(Array.isArray(t.si)&&t.si.length<=27)t.si=t.si.map(v=>btN(v));else delete t.si;}
     return t;});
   if(c.n9at!=null)c.n9at=btN(c.n9at);
   if(c.n9v!=null)c.n9v=btN(c.n9v);
@@ -4926,6 +4927,11 @@ function lobbyClose(){
 }
 
 function teeOf(p){return S.course.teeSets.find(t=>t.id===p.tee)||S.course.teeSets[0];}
+function teeSiOk(si,n){if(!Array.isArray(si)||!(n>0)||si.length!==n)return false;const seen=new Set();
+  for(const v of si){const x=+v;if(!Number.isInteger(x)||x<1||x>n||seen.has(x))return false;seen.add(x);}return true;}
+function teeSi(c,t){return (c&&t&&Array.isArray(c.holes)&&!cardN(c)&&teeSiOk(t.si,c.holes.length))?t.si.map(Number):null;}
+function plSi(pi){const p=(S.players||[])[pi];if(!p||!S.course||!(S.course.teeSets||[]).length)return null;return teeSi(S.course,teeOf(p));}
+function mySi(h,hole){const i=mySeatIdx(),t=i>=0?plSi(i):null;return t?t[h]:(hole||{}).si;}
 function parTotal(){
   if(cardN())return S.course.holes.slice(0,cardN()).reduce((a,h)=>a+h.par,0);
   return S.course.holes.reduce((a,h)=>a+h.par,0);}
@@ -4954,7 +4960,9 @@ function normalizeNine(c){
   const sis=c.holes.map(h=>+h.si||0), maxSi=Math.max(...sis);
   const odd=sis.every(s=>s%2===1), even=sis.every(s=>s>0&&s%2===0);
   c.holes=c.holes.concat(c.holes.map((h,i)=>({par:h.par,si:maxSi<=9?sis[i]+9:odd?sis[i]+1:even?sis[i]-1:sis[i]})));
-  (c.teeSets||[]).forEach(t=>{if(t.rating&&t.rating<45){t.rating=Math.round(t.rating*2*10)/10;t.nine=true;}});
+  (c.teeSets||[]).forEach(t=>{if(t.rating&&t.rating<45){t.rating=Math.round(t.rating*2*10)/10;t.nine=true;}
+    if(Array.isArray(t.si)&&t.si.length===9){const a=t.si.map(v=>+v||0),mx=Math.max(...a),od=a.every(x=>x%2===1),ev=a.every(x=>x>0&&x%2===0);
+      t.si=a.concat(a.map(x=>mx<=9?x+9:od?x+1:ev?x-1:x));}});
   c.loop9=true;c.nineCard=true;
   return c;
 }
@@ -5076,18 +5084,18 @@ function hcpBasis(c,t,sp,on,live){
   return Object.assign(K,{mul:1,sl:b.sl,cr:b.cr,par:b.par,adj:K.k==='short'?shortRateAdj(t||{},b.par,cardN(c)):b.cr-b.par});
 }
 function hcpCH(idx,b){return Math.round(idx*b.mul*(b.sl/113)+b.adj);}
-function nineRank(c,h,base){
-  const hs=(c&&c.holes)||[],L=hs.length||1,v=k=>{const x=+((hs[(base+k)%L]||{}).si);return x>0?x:99;},i=h-base,me=v(i);
+function nineRank(c,h,base,tsi){
+  const hs=(c&&c.holes)||[],L=hs.length||1,v=k=>{const x=+(tsi?tsi[(base+k)%L]:(hs[(base+k)%L]||{}).si);return x>0?x:99;},i=h-base,me=v(i);
   let r=1;for(let k=0;k<9;k++)if(k!==i&&(v(k)<me||(v(k)===me&&k<i)))r++;return r;}
 function nineDots(s,r){s=Math.trunc(+s||0);if(s===0)return 0;
   if(s>0)return Math.floor(s/9)+((s%9)>=r?1:0);
   const a=-s;return -(Math.floor(a/9)+((a%9)>=10-r?1:0));}
-function strokesOn(c,s,h,K){
+function strokesOn(c,s,h,K,tsi){
   if(cardN(c))return shortDots(c,s,h);
   const k=K&&K.k;
-  if(k===9){const b=K.base;return (h>=b&&h<b+9)?nineDots(s,nineRank(c,h,b)):0;}
-  if(k==='loop'){const r=nineRank(c,h%9,0);return holeDots(s,h<9?2*r-1:2*r);}
-  return holeDots(s,c.holes[h].si);
+  if(k===9){const b=K.base;return (h>=b&&h<b+9)?nineDots(s,nineRank(c,h,b,tsi)):0;}
+  if(k==='loop'){const r=nineRank(c,h%9,0,tsi);return holeDots(s,h<9?2*r-1:2*r);}
+  return holeDots(s,tsi?tsi[h]:c.holes[h].si);
 }
 const NINE_V=2;
 function nineName(s){return String(s||'').toLowerCase().replace(/\(w\)\s*$/,'').replace(/[^a-z0-9]+/g,'');}
@@ -5174,9 +5182,10 @@ function hcpDiffFor(entry,mi){
     const lk=entry.round&&entry.round.hcpLock&&(entry.round.hcpLock.s||[])[mi];
     const ch=hcpSameSeat(lk,snap)?lk.ch:isFinite(idx)?hcpCH(idx,B):null;
     const nineK=B.k===9||B.k==='loop';
+    const tsi=teeSi({holes:hs},tee);
     const strokes=h=>{if(ch==null)return 0;
-      if(nineK)return strokesOn({holes:hs},ch,h,B);
-      const si=(hs[h%hs.length]||{}).si||((h%18)+1);
+      if(nineK)return strokesOn({holes:hs},ch,h,B,tsi);
+      const si=(tsi?tsi[h%tsi.length]:(hs[h%hs.length]||{}).si)||((h%18)+1);
       return holeDots(ch,si);};
     const parOf=h=>(hs[h%hs.length]||{}).par||4;
     let ags=0,scored=0;
@@ -5346,7 +5355,7 @@ function fullStrokes(){
   return ch.map(c=>Math.round(c*S.config.allowance/100));
 }
 function fullDotsOn(pi,h){
-  return strokesOn(S.course,fullStrokes()[pi],h,hcpKindLive());
+  return strokesOn(S.course,fullStrokes()[pi],h,hcpKindLive(),plSi(pi));
 }
 function fmtIdx(v){const n=+v;if(v==null||v===''||!isFinite(n))return v==null?'':String(v);return n<0?'+'+(Math.round(-n*10)/10):String(Math.round(n*10)/10);}
 function dotsHTML(d){return d>0?`<span class="dots">${'●'.repeat(d)}</span>`:d<0?`<span class="dots" title="gives a stroke back">+${-d}</span>`:'';}
@@ -5354,7 +5363,7 @@ function holeDots(s,si){s=Math.trunc(+s||0);if(s===0)return 0;
   if(s>0)return Math.floor(s/18)+((s%18)>=si?1:0);
   const a=-s;return -(Math.floor(a/18)+((a%18)>=19-si?1:0));}
 function dotsOn(pi,h){
-  return strokesOn(S.course,playingStrokes()[pi],h,hcpKindLive());
+  return strokesOn(S.course,playingStrokes()[pi],h,hcpKindLive(),plSi(pi));
 }
 function activeLenses(){return S.config.lens==='both'?['net','gross']:[S.config.lens];}
 function recLens(){return S.config.recLens==='gross'?'gross':'net';}
@@ -7469,8 +7478,8 @@ function vMap(){
     <div class="tiny" style="color:var(--ink2);white-space:nowrap;font-size:12px">${myTot} strokes</div></div>`:'';
   const greadH=greadBtnHTML(bbbBtnOn(mapHole)?170:116);
   return topbar(`Hole ${mapHole+1} · Par ${hole.par}${(!gpsOnly()&&(S.round.holes[mapHole]||{}).confirmed)?' ✓':''}`,
-    gpsOnly()?`Handicap ${hole.si} · rangefinder`
-             :`Handicap ${hole.si}${(S.round.holes[mapHole]||{}).confirmed?' · scored':' · NOT scored yet'}`,'','hero maphero',
+    gpsOnly()?`Handicap ${mySi(mapHole,hole)} · rangefinder`
+             :`Handicap ${mySi(mapHole,hole)}${(S.round.holes[mapHole]||{}).confirmed?' · scored':' · NOT scored yet'}`,'','hero maphero',
     `<div style="display:flex;align-items:center;margin-left:auto;gap:10px">${myScore}${
       codeShown?`<div onclick="inviteFromMap()" style="text-align:center;flex:none;margin-right:4px;color:var(--gold,#e8c552);font-family:Rajdhani,Inter,sans-serif;font-weight:700;line-height:1.05;cursor:pointer">
         <div style="font-size:10px;font-weight:600;opacity:.85;letter-spacing:.5px">${S.share.bf?'TAP TO INVITE':'JOIN CODE'}</div>
@@ -7518,7 +7527,7 @@ function vMap(){
   </div>`;
 }
 function vMapPreview(hole){
-  return topbar(`Hole ${mapHole+1} · Par ${hole.par}`,`Handicap ${hole.si} · ${S.course.name||''}`,'','hero maphero',
+  return topbar(`Hole ${mapHole+1} · Par ${hole.par}`,`Handicap ${mySi(mapHole,hole)} · ${S.course.name||''}`,'','hero maphero',
     `<div style="display:flex;align-items:center;margin-left:auto;gap:10px"><span class="pill gray" style="flex:none;letter-spacing:.6px">PREVIEW</span></div>`)+`
   <div id="holemap"></div>${satCreditHTML(false,true)}
   <button onclick="closeCoursePreview()" class="mapback">Back</button>
@@ -7566,7 +7575,7 @@ async function refreshStaleCards(){
       }catch(e){continue;}
       if(rec&&Array.isArray(rec.holes)&&rec.holes.length&&!(c.holes||[]).length){
         c.holes=rec.holes.map(h=>({par:h.par,si:h.si}));
-        if(!c.teeEdit&&Array.isArray(rec.teeSets))c.teeSets=rec.teeSets.map(x=>Object.assign({id:x.id,name:x.name,rating:x.rating,slope:x.slope,yds:x.yds||null},x.par?{par:x.par}:{}));
+        if(!c.teeEdit&&Array.isArray(rec.teeSets))c.teeSets=rec.teeSets.map(x=>Object.assign({id:x.id,name:x.name,rating:x.rating,slope:x.slope,yds:x.yds||null},x.par?{par:x.par}:{},Array.isArray(x.si)?{si:x.si.slice()}:{}));
       }
       if(rec&&Array.isArray(rec.holes)&&rec.holes.length&&normalizeShort({holes:rec.holes.slice()}).nHoles&&!cardN(c)
         &&(c.holes||[]).length===18&&!(c.holes||[]).some(h=>h&&(h.parOk||h.siOk))){
@@ -14271,6 +14280,7 @@ function exportTables(only){
     const snap=e.playersSnap||[];
     const me=snap[mi]||{};
     const tee=(cs.teeSets||[]).find(t=>t.id===me.tee)||null;
+    const exSi=teeSi(cs,tee);
     const day=exDay(e.startedAt||e.endedAt);
     const cname=cs.name||e.courseName||'';
     const holes=((e.round&&e.round.holes)||[]);
@@ -14297,8 +14307,8 @@ function exportTables(only){
       if(fin)lastFinish=fin;
       const d=gross-p;
       if(netOk){
-        const si=hole.si!=null?hole.si:18;
-        net+=gross-((exK.k===9||exK.k==='loop')?strokesOn(cs,fullSt,h,exK):cardN(cs)?shortDots(cs,fullSt,h):holeDots(fullSt,si));
+        const si=exSi?exSi[h]:hole.si!=null?hole.si:18;
+        net+=gross-((exK.k===9||exK.k==='loop')?strokesOn(cs,fullSt,h,exK,exSi):cardN(cs)?shortDots(cs,fullSt,h):holeDots(fullSt,si));
       }
       if(d<=-2)eag++;else if(d===-1)bird++;else if(d===0)prs++;else if(d===1)bog++;else dbl++;
       n++;g+=gross;par+=p;
@@ -14310,7 +14320,7 @@ function exportTables(only){
       if(bv||cv||xv)anyX=true;
       bunk+=bv;chip+=cv;pen+=xv;
       if(isCtp)ctp++;
-      H.push([day,cname,h+1,p,hole.si!=null?hole.si:'',yds||'',gross,d,
+      H.push([day,cname,h+1,p,exSi?exSi[h]:hole.si!=null?hole.si:'',yds||'',gross,d,
               pv!=null?pv:'',(p>=4)?(fv?'Y':'N'):'',gv?'Y':'N',bv||'',cv||'',xv||'',isCtp?'Y':'',
               r.mode||'',(r.partner!=null&&snap[r.partner])?((snap[r.partner]||{}).name||''):'',
               Array.isArray(r.passes)?r.passes.length:'',
@@ -14885,7 +14895,8 @@ function sameCourseIdx(loc,name,notId){
 }
 function recTees(rec){
   const ts=((rec&&rec.teeSets)||[]).filter(t=>t&&t.id).map(t=>{const ok=!!(t.rating&&t.slope);
-    return Object.assign({id:t.id,name:t.name,rating:ok?t.rating:null,slope:ok?t.slope:null,yds:t.yds||null},t.par?{par:t.par}:{});});
+    return Object.assign({id:t.id,name:t.name,rating:ok?t.rating:null,slope:ok?t.slope:null,yds:t.yds||null},t.par?{par:t.par}:{},
+      Array.isArray(t.si)?{si:t.si.slice()}:{});});
   return ts.filter(t=>t.rating).concat(ts.filter(t=>!t.rating));
 }
 async function natUse(id,auto){
@@ -15266,9 +15277,9 @@ function roundSummary(){
         longShot={yds:s2.yds,club:s2.club||null,hole:(s2.h||0)+1};});}catch(e){}
     let net=gross;
     try{
-      const st=fullStrokes()[mi],K=hcpKindLive();
-      const dots=h=>{if(K.k===9||K.k==='loop')return strokesOn(S.course,st,h,K);
-        const si=(S.course.holes[h]||{si:18}).si;
+      const st=fullStrokes()[mi],K=hcpKindLive(),tsi=plSi(mi);
+      const dots=h=>{if(K.k===9||K.k==='loop')return strokesOn(S.course,st,h,K,tsi);
+        const si=tsi?tsi[h]:(S.course.holes[h]||{si:18}).si;
         return cardN()?shortDots(S.course,st,h):holeDots(st,si);};
       net=holes.reduce((t,h)=>t+S.round.holes[h].gross[mi]-dots(h),0);
     }catch(e){}
@@ -17251,7 +17262,7 @@ function vHole(){
         :`${confirmBlockHTML(done)}${reorderHTML()}`}
     `;
   }
-  return topbar(`Hole ${h+1} · Par ${hole.par}`,`Handicap ${hole.si}${S.share.on?` · ${esc(S.share.code)} ${sockOpen?'●':'○ will sync'}`:''}`,'','hero',`<div style="display:flex;align-items:center;margin-left:auto;gap:12px">${gameBadgeHTML()}</div>`)+`<main>
+  return topbar(`Hole ${h+1} · Par ${hole.par}`,`Handicap ${mySi(h,hole)}${S.share.on?` · ${esc(S.share.code)} ${sockOpen?'●':'○ will sync'}`:''}`,'','hero',`<div style="display:flex;align-items:center;margin-left:auto;gap:12px">${gameBadgeHTML()}</div>`)+`<main>
     ${reviewBanner()}${runningTotalsCard()}
     <div class="wolfcard">
       <div style="flex:1;min-width:0"><b>${esc(names[rec.wolfAt??wolf])} is the Wolf</b>
@@ -17996,7 +18007,7 @@ function joinPlay(k){
   try{stat('join_play',{k,game:gameOn()});}catch(e){}
 }
 
-const RULES_VER=20261120;
+const RULES_VER=20261126;
 const RULES_SHORT=RULES_VER+0.5;
 function rulesShortRound(){let c=S.course;try{if(coursePreview&&coursePreview.keep)c=coursePreview.keep;}catch(e){}return !!cardN(c);}
 function rulesVer(){return rulesShortRound()?RULES_SHORT:RULES_VER;}
@@ -18452,7 +18463,7 @@ function vHoleNines(){
       ?`${isReview()?'':`<button class="big" onclick="nextHole()">${posOf(h)<playOrder().length-1?'Next hole →':'Finish round'}</button>`}
         <button class="ghost mt" style="width:100%" onclick="unconfirm()">Edit this hole</button>`
       :`${confirmBlockHTML(done)}`}`;
-  return topbar(`Hole ${h+1} · Par ${hole.par}`,`Handicap ${hole.si}${S.share.on?` · ${esc(S.share.code)} ${sockOpen?'●':'○ will sync'}`:''}`,'','hero',`<div style="display:flex;align-items:center;margin-left:auto;gap:12px">${gameBadgeHTML()}</div>`)+`<main>
+  return topbar(`Hole ${h+1} · Par ${hole.par}`,`Handicap ${mySi(h,hole)}${S.share.on?` · ${esc(S.share.code)} ${sockOpen?'●':'○ will sync'}`:''}`,'','hero',`<div style="display:flex;align-items:center;margin-left:auto;gap:12px">${gameBadgeHTML()}</div>`)+`<main>
     ${reviewBanner()}${runningTotalsCard()}
     ${isN?`<div class="ninecard">
       <div style="flex:1;min-width:0"><b>9 points on this hole</b>
@@ -18529,7 +18540,7 @@ function vHoleVegas(){
     }).join('');
   }
   const extrasCard=extrasCardHTML([0,1,2,3], rec);
-  return topbar(`Hole ${h+1} · Par ${hole.par}`,`Handicap ${hole.si}${S.share.on?` · ${esc(S.share.code)} ${sockOpen?'●':'○ will sync'}`:''}`,'','hero',`<div style="display:flex;align-items:center;margin-left:auto;gap:12px">${gameBadgeHTML()}</div>`)+`<main>
+  return topbar(`Hole ${h+1} · Par ${hole.par}`,`Handicap ${mySi(h,hole)}${S.share.on?` · ${esc(S.share.code)} ${sockOpen?'●':'○ will sync'}`:''}`,'','hero',`<div style="display:flex;align-items:center;margin-left:auto;gap:12px">${gameBadgeHTML()}</div>`)+`<main>
     ${reviewBanner()}${runningTotalsCard()}
     <div class="vegascard">
       <div style="flex:1;min-width:0"><b>Vegas — low number wins the difference</b>
@@ -18562,7 +18573,7 @@ function vHoleScramble(){
       </div>
     </div>`;}).join('');
   const done=capt.every(i=>stagedG(rec,h,i)!=null);
-  return topbar(`Hole ${h+1} · Par ${hole.par}`,`Handicap ${hole.si}${S.share.on?` · ${esc(S.share.code)} ${sockOpen?'●':'○ will sync'}`:''}`,'','hero',`<div style="display:flex;align-items:center;margin-left:auto;gap:12px">${gameBadgeHTML()}</div>`)+`<main>
+  return topbar(`Hole ${h+1} · Par ${hole.par}`,`Handicap ${mySi(h,hole)}${S.share.on?` · ${esc(S.share.code)} ${sockOpen?'●':'○ will sync'}`:''}`,'','hero',`<div style="display:flex;align-items:center;margin-left:auto;gap:12px">${gameBadgeHTML()}</div>`)+`<main>
     ${reviewBanner()}${runningTotalsCard()}
     <div class="card">
       <div class="tiny mb">${T.length>1?'One score per team — everyone plays from the best shot.'
@@ -18627,8 +18638,9 @@ function scCell(g,par){
   return `<td><span class="scm${c?' '+c:''}">${g}</span></td>`;
 }
 function scHcpRow(hs,groups){
+  const live=!!(S.course&&hs===S.course.holes);
   return '<tr class="hcprow"><td class="nm">HCP</td>'
-    +groups.map(g=>g==null?'<td></td>':`<td>${hs[g]&&hs[g].si!=null?hs[g].si:''}</td>`).join('')+'</tr>';
+    +groups.map(g=>g==null?'<td></td>':`<td>${hs[g]&&hs[g].si!=null?(live?mySi(g,hs[g]):hs[g].si):''}</td>`).join('')+'</tr>';
 }
 function scorecardHTML(lens){
   const hs=S.course.holes;
