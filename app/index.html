@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'sha256-MZZG9FQBw7GvDJfXZB0tlUibNRmF0NA/52xp4Yd+aeA=' 'sha256-CodlykJYFHJ1HI17d8k/plW3zv2w39FQQcKvfJ/GTGw=' 'sha256-79uSLRUH3SESf+LkHGPxuR5ePnvAiW5Wl+C02STXxXY=' https://static.cloudflareinsights.com; object-src 'none'; base-uri 'none'">
+<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'sha256-MZZG9FQBw7GvDJfXZB0tlUibNRmF0NA/52xp4Yd+aeA=' 'sha256-Xhsh3NCKLEyssm31uR2cXUn5NrQ62FjFqUSpNjLRIYc=' 'sha256-79uSLRUH3SESf+LkHGPxuR5ePnvAiW5Wl+C02STXxXY=' https://static.cloudflareinsights.com; object-src 'none'; base-uri 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#0f1522">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -2060,7 +2060,7 @@ var BF_DOCS={},
     bfHeld=new Set(),
     bfDBp=null,
     statMem=[];
-const BUILD='1795770624';
+const BUILD='1795773922';
 const HOLES=18;
 
 function courseTealBend(){return {id:'teal-bend',name:'Teal Bend GC',loc:[38.6972,-121.6173],
@@ -5166,8 +5166,12 @@ function hcpDedupeLog(log){
     if((x.at||0)>=(hit.at||0)){hit.d=x.d;hit.at=x.at;}});
   return out;}
 function hcpDedupeAll(){try{Object.keys(S.hcpLog||{}).forEach(k=>{S.hcpLog[k]=hcpDedupeLog(S.hcpLog[k]);});}catch(e){}}
+function entryScramble(e){const c=(e&&e.config)||{},r=(e&&e.round)||{};
+  return c.game==='scramble'||r.game==='scramble'||(c.games||[]).includes('scramble')||(r.games||[]).includes('scramble')
+    ||!!(r.since&&r.since.scramble!=null)||!!(r.gameOps&&r.gameOps.scramble);}
 function hcpDiffFor(entry,mi){
   try{
+    if(entryScramble(entry))return null;
     const snap=(entry.playersSnap||[])[mi];if(!snap)return null;
     const course=S.courses.find(c=>c.id===entry.courseId)||entry.courseSnap;
     if(cardN(course)||cardN(entry.courseSnap))return null;
@@ -5257,6 +5261,12 @@ function hcpAfterArchive(entry){
   try{
     if(!entry||!entry.playersSnap)return;
     if(!S.hcpLog)S.hcpLog={};
+    if(entryScramble(entry)){
+      const rk=hcpRoundKey(entry);
+      (entry.playersSnap||[]).slice(0,4).forEach(snap=>{if(!snap||!snap.name)return;const key=hcpKey(snap),log=S.hcpLog[key];
+        if(Array.isArray(log))S.hcpLog[key]=log.filter(x=>!(x&&(x.id===rk||x.id===entry.id||hcpSameRound(x.id,rk))));});
+      return;
+    }
     (entry.playersSnap||[]).slice(0,4).forEach((snap,mi)=>{
       if(!snap||!snap.name)return;
       if(/^Player \d$/.test(snap.name.trim())&&!snap.pid)return;
@@ -14489,6 +14499,7 @@ function vStats(){
   const meNm=(S.me&&S.me.name||'').trim().toLowerCase();
   const rounds=[];
   (S.history||[]).forEach(e=>{
+    if(entryScramble(e))return;
     const snap=e.playersSnap||[];
     let mi=S.me&&S.me.pid?snap.findIndex(pl=>pl.pid===S.me.pid):-1;
     if(mi<0)mi=snap.findIndex(pl=>(pl.name||'').trim().toLowerCase()===meNm);
@@ -15220,6 +15231,8 @@ function roundSplashHTML(){
       <div class="tiny" style="letter-spacing:1px;opacity:.8">ROUND COMPLETE · ${x.holes} HOLE${x.holes===1?'':'S'}</div>
       ${x.closedBy?`<div class="tiny" style="margin-top:2px;color:var(--amber-bd)">closed by ${esc(x.closedBy)}</div>`:''}
       <h2 class="vfTitle" style="margin:6px 0 2px">${esc(x.courseName||'')}</h2>
+      ${Array.isArray(x.team)&&x.team.length?`<div class="tiny" style="margin-top:2px">Scramble · <b>${x.team.map(esc).join(' &amp; ')}</b></div>
+        <div class="tiny" style="color:var(--ink3)">The team's score. Doesn't count toward handicaps or stats.</div>`:''}
       ${res}
       <div style="display:flex;gap:18px;justify-content:center;margin:12px 0 6px">
         <div><div class="num" style="font-size:44px;line-height:1">${esc(x.gross)}</div>
@@ -15252,7 +15265,9 @@ function dismissRoundSplash(){
 }
 function roundSummary(){
   try{
-    const mi=myPlayerIdx(), act=actIdx();
+    const act=actIdx();let mi=myPlayerIdx(),team=null;
+    if(gameOn()==='scramble'){try{const T=scrambleTeams(),k=T.findIndex(t=>t.includes(mi));
+      if(k>=0){mi=T[k][0];team={k,names:T[k].map(i=>((S.players[i]||{}).name||'').trim()).filter(Boolean)};}}catch(e){}}
     const holes=playOrder().filter(h=>{const r=S.round.holes[h];return r&&r.confirmed&&r.gross&&r.gross[mi]!=null;});
     if(!holes.length)return null;
     let gross=0,par=0,eagles=0,birdies=0,pars=0,bogeys=0;
@@ -15278,7 +15293,8 @@ function roundSummary(){
     let net=gross;
     try{
       const st=fullStrokes()[mi],K=hcpKindLive(),tsi=plSi(mi);
-      const dots=h=>{if(K.k===9||K.k==='loop')return strokesOn(S.course,st,h,K,tsi);
+      const dots=h=>{if(team)return scrambleDots(team.k,h);
+        if(K.k===9||K.k==='loop')return strokesOn(S.course,st,h,K,tsi);
         const si=tsi?tsi[h]:(S.course.holes[h]||{si:18}).si;
         return cardN()?shortDots(S.course,st,h):holeDots(st,si);};
       net=holes.reduce((t,h)=>t+S.round.holes[h].gross[mi]-dots(h),0);
@@ -15303,7 +15319,7 @@ function roundSummary(){
       fw:tracked&&fwN?{hit:fwHit,of:fwN}:null,
       gir:tracked&&girN?{hit:girHit,of:girN}:null,
       putts:puttHoles?{n:putts,holes:puttHoles,full:puttHoles===holes.length}:null, ctp:ctps, longShot,
-      players:act.length,game:gameOn(),result};
+      players:act.length,game:gameOn(),result,team:team?team.names:null};
   }catch(e){return null;}
 }
 function ledgerKeyFor(p){
